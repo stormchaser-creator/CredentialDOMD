@@ -14,7 +14,7 @@
 import { ruleSetFor, DEFAULT_APP_RULES } from "./ruleResolver.js";
 import { topicApplicability } from "./conditionalCme.js";
 import {
-  MATE_TOPICS, MATE_HOURS, MS_PER_DAY, cmeTopics, parseLocalDate, inWindow, showDate, topicPeriodLabel, round2,
+  MATE_TOPICS, MATE_HOURS, MS_PER_DAY, cmeTopics, parseLocalDate, inWindow, showDate, topicPeriodLabel, round2, taggedOutsidePeriod,
 } from "./cmeCore.js";
 import { PHARMACOLOGY_HOURS_FIELD } from "../constants/credentialTypes.js";
 import { QUESTION_FIELDS, forRenewalField } from "../constants/recordQuestions.js";
@@ -196,7 +196,7 @@ export function computeAppCompliance(cmeEntries, state, degreeType, opts = {}) {
 
   // ── Topics ──
   const evaluated = (rule.topics || []).map((t) => {
-    let pool, period;
+    let pool, period, from = null, through = null;
     // A one-time course counts from any date, so it needs no counting window.
     if (t.period === "lifetime") { pool = cmeEntries || []; period = "lifetime"; }
     else if (t.period && typeof t.period === "object" && t.period.years > 0 && t.period.fromToday === true) {
@@ -207,6 +207,7 @@ export function computeAppCompliance(cmeEntries, state, degreeType, opts = {}) {
       const pStart = new Date(today.getFullYear() - t.period.years, today.getMonth(), today.getDate());
       pool = (cmeEntries || []).filter((c) => inWindow(c, pStart, today));
       period = { years: t.period.years, fromToday: true };
+      from = pStart; through = today;
     } else if (t.period && typeof t.period === "object" && t.period.years > 0 && parseLocalDate(t.period.anchor)) {
       // Fixed due dates (New York prescriber training: July 1, 2017, then
       // every three years). The duty follows the due dates, not the licence:
@@ -221,6 +222,7 @@ export function computeAppCompliance(cmeEntries, state, degreeType, opts = {}) {
       const next = due <= effectiveEnd ? plus(due, t.period.years) : null;
       const pStart = plus(due, -t.period.years);
       pool = (cmeEntries || []).filter((c) => inWindow(c, pStart, due));
+      from = pStart; through = due;
       period = { years: t.period.years, due: dayOf(due), ...(next ? { next: dayOf(next) } : {}) };
     } else if (!windowKnown) { pool = null; period = t.period || null;
     } else if (t.period && typeof t.period === "object" && t.period.years > 0) {
@@ -228,7 +230,8 @@ export function computeAppCompliance(cmeEntries, state, degreeType, opts = {}) {
       pStart.setFullYear(pStart.getFullYear() - t.period.years);
       pool = (cmeEntries || []).filter((c) => inWindow(c, pStart, effectiveEnd));
       period = { years: t.period.years };
-    } else { pool = windowed; period = null; }
+      from = pStart; through = effectiveEnd;
+    } else { pool = windowed; period = null; from = windowStart; through = effectiveEnd; }
     // Verified on the hours route only (California PA geriatric share): on the
     // certification route the share is not yet verified, so it is listed, not counted.
     const certRouteOpen = lieuApplies && !!t.unverifiedUnderCertification;
@@ -266,6 +269,8 @@ export function computeAppCompliance(cmeEntries, state, degreeType, opts = {}) {
       topic: t.topic, informational: false, condition: t.condition || null, applicability,
       checkedOn: null, effectiveFrom: null, effectiveThrough: null,
       required: verified ? t.hours : null, earned, checklist, met,
+      // Tagged courses this period leaves out (ticket 53890221); null when none.
+      outsidePeriod: windowPending || t.measure ? null : taggedOutsidePeriod(cmeEntries, pool, tags, t.acceptedCategories, from, through),
       note: t.note, period, periodLabel: topicPeriodLabel(period, cycle || 0),
       cite: t.cite || rule.source || "", url: t.url || rule.sourceUrl || "",
       citeInherited: !t.cite, sourceInherited: !t.url || t.url === rule.sourceUrl,

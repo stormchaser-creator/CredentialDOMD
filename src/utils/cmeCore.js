@@ -114,3 +114,63 @@ export function topicPeriodLabel(period, cycleYears) {
  * and read as unmet.
  */
 export const round2 = (n) => Math.round((Number(n) || 0) * 100) / 100;
+
+/**
+ * Courses tagged with a topic that its counting period leaves out (ticket
+ * 53890221). A physician tags a course "Controlled Substances", the edit form
+ * shows the tag, and the requirement still reads 0 of 2 because the course is
+ * dated before the period the rule counts. Unexplained, the tag looks lost.
+ *
+ * `pool` is the entries the period counts (the same objects as `entries`),
+ * `tags` the topic and any alternate tags, `start`/`end` the period's bounds
+ * (null for a one-time rule, whose pool is every entry). Returns null when
+ * every tagged course is counted, else the hours left out and how many
+ * courses fall before the period, after it, or carry no date.
+ */
+export function taggedOutsidePeriod(entries, pool, tags, acceptedCategories, start, end) {
+  if (!Array.isArray(pool)) return null;
+  const counted = new Set(pool);
+  const out = { hours: 0, before: 0, after: 0, undated: 0, from: start ? localISO(start) : null, through: end ? localISO(end) : null };
+  for (const c of entries || []) {
+    if (counted.has(c)) continue;
+    if (!cmeTopics(c).some((t) => tags.includes(t))) continue;
+    if (acceptedCategories && !acceptedCategories.includes(c.category)) continue;
+    out.hours += parseFloat(c.hours) || 0;
+    const bucket = start && end ? cycleBucket(c, start, end) : (parseLocalDate(c.date) ? "before" : "undated");
+    if (bucket === "undated") out.undated += 1;
+    else if (bucket === "after") out.after += 1;
+    else out.before += 1;
+  }
+  out.hours = round2(out.hours);
+  return out.before + out.after + out.undated > 0 ? out : null;
+}
+
+function localISO(d) {
+  const t = d instanceof Date ? d : new Date(d);
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+}
+
+/**
+ * What a topic row says about tagged courses its period leaves out, or "" when
+ * there are none. Read under an unmet requirement so a tag that shows in the
+ * edit form but not in the total is explained, not mysterious.
+ */
+export function outsidePeriodText(topic, out) {
+  if (!out) return "";
+  const parts = [];
+  const dated = out.before + out.after;
+  if (dated > 0) {
+    const from = out.from ? showDate(parseLocalDate(out.from)) : null;
+    const through = out.through ? showDate(parseLocalDate(out.through)) : null;
+    const noun = dated === 1 ? "1 course" : `${dated} courses`;
+    const when = from && through
+      ? `dated outside the period this requirement counts (${from} to ${through})`
+      : "dated outside the period this requirement counts";
+    parts.push(`${noun} you tagged ${topic} ${dated === 1 ? "is" : "are"} ${when}, so ${dated === 1 ? "it does" : "they do"} not count here.`);
+  }
+  if (out.undated > 0) {
+    const noun = out.undated === 1 ? "1 course" : `${out.undated} courses`;
+    parts.push(`${noun} tagged ${topic} ${out.undated === 1 ? "has" : "have"} no completion date. Add the date to count ${out.undated === 1 ? "it" : "them"}.`);
+  }
+  return parts.join(" ");
+}

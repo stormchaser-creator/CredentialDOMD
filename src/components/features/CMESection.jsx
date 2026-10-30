@@ -28,11 +28,12 @@ import { getCmeTopics } from "../../constants/cmeTopics";
 import { getCMECategories, PHARMACOLOGY_HOURS_FIELD, NCCPA_ACTIVITY_FIELD, NCCPA_ACTIVITIES } from "../../constants/credentialTypes";
 import { isAdvancedPractice, practiceKindsFor } from "../../constants/professions";
 import { ruleSetFor } from "../../utils/ruleResolver";
+import { outsidePeriodText } from "../../utils/cmeCore.js";
 import { BOARD_REQS_META } from "../../constants/boardRequirements";
 import { getStateEntry, hasSeparateBoards, STATE_REQS_META } from "../../constants/stateRequirements";
 import { STATE_NAMES } from "../../constants/states";
 import { generateId, formatDate } from "../../utils/helpers";
-import { complianceFor, complianceListFor, mainCardFor, windowNotes, cycleBucket, round2 } from "../../utils/compliance";
+import { complianceFor, complianceListFor, mainCardFor, windowNotes, cardWindowNotes, topicOutsidePeriod, cycleBucket, round2 } from "../../utils/compliance";
 import { boardComplianceFor, effectiveBoardSpecialties, aoaNationalEntry } from "../../utils/boardCompliance";
 import { certificationCards } from "../../utils/certCompliance";
 import { stateTranscriptModel, boardTranscriptOptions, boardTranscriptModel, shareTranscriptPdf, certificateDocsForModels, prefetchCertificates, certificateSummary, certificatesNotIncludedMessage } from "../../utils/cmeTranscriptPdf";
@@ -610,7 +611,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
                 backgroundColor: T.input, borderRadius: 8, padding: "8px 10px", marginBottom: 12,
               }}>
                 <span style={{ fontWeight: 700, color: T.text }}>{comp.windowLabel}.</span>
-                {windowNotes(comp).map((n, i) => (
+                {cardWindowNotes(comp).map((n, i) => (
                   <div key={i} style={{ marginTop: 3, color: comp.cycleStartIgnored && i === 1 ? T.warning : T.textDim }}>{n}</div>
                 ))}
               </div>
@@ -649,6 +650,9 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
               {comp.topicResults.map(tr => (
                 <div key={tr.topic}>
                   <ComplianceBar label={tr.topic} earned={tr.earned} required={tr.required} met={tr.met} note={tr.note} />
+                  {!tr.met && topicOutsidePeriod(comp, tr, data.cme) && (
+                    <div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.45, margin: "2px 2px 4px" }}>{outsidePeriodText(tr.topic, topicOutsidePeriod(comp, tr, data.cme))}</div>
+                  )}
                   <TopicProvenance
                     periodLabel={tr.periodLabel}
                     cite={tr.cite}

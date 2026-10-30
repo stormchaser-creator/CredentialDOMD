@@ -10,7 +10,7 @@ import {
 } from "../constants/professions.js";
 import { ruleSetFor } from "./ruleResolver.js";
 import {
-  MATE_TOPICS, MATE_HOURS, MS_PER_DAY, cmeTopics, parseLocalDate, cycleBucket, splitByCycle, inWindow,
+  MATE_TOPICS, MATE_HOURS, MS_PER_DAY, cmeTopics, parseLocalDate, cycleBucket, splitByCycle, inWindow, taggedOutsidePeriod,
   wholeMonthsBetween, showDate, topicPeriodLabel, round2,
 } from "./cmeCore.js";
 
@@ -398,6 +398,46 @@ export function windowNotes(comp) {
 // "medical" keeps the exact test it always had; a PA or NP kind matches by
 // licence kind (src/constants/professions.js licenseKindOf).
 const ofKind = (l, kind) => (kind === "medical" ? /medical license/i.test(l?.type || "") : licenseKindOf(l?.type) === kind);
+
+/**
+ * Tagged courses a topic's counting period leaves out, for the card to say why
+ * a tag did not count (ticket 53890221). Derived from the periods the engine
+ * already reports, so computeCompliance's output (pinned by the MD/DO goldens)
+ * is unchanged. A PA/NP result carries its own `outsidePeriod`. Null when
+ * nothing tagged is left out or the period is unknown.
+ */
+export function topicOutsidePeriod(comp, tr, cmeEntries) {
+  if (!comp || !tr) return null;
+  if (tr.outsidePeriod !== undefined) return tr.outsidePeriod;
+  if (tr.informational || tr.period === "lifetime") return null;
+  const end = comp.windowEnd ? new Date(comp.windowEnd) : null;
+  if (!end || Number.isNaN(end.getTime())) return null;
+  let start;
+  if (tr.period && typeof tr.period === "object" && tr.period.years > 0) {
+    start = new Date(end);
+    start.setFullYear(start.getFullYear() - tr.period.years);
+  } else {
+    start = comp.windowStart ? new Date(comp.windowStart) : null;
+  }
+  if (!start || Number.isNaN(start.getTime())) return null;
+  const pool = (cmeEntries || []).filter(c => inWindow(c, start, end));
+  return taggedOutsidePeriod(cmeEntries, pool, [tr.topic], null, start, end);
+}
+
+/**
+ * The window notes a card shows: the engine's own (windowNotes, pinned by the
+ * goldens) plus, when the period has not begun (a license renewed early, as
+ * in ticket 53890221), a line saying so instead of letting every hour read
+ * as a shortfall.
+ */
+export function cardWindowNotes(comp, now = new Date()) {
+  const notes = windowNotes(comp);
+  const start = comp?.windowStart ? new Date(comp.windowStart) : null;
+  if (start && !Number.isNaN(start.getTime()) && start > now) {
+    notes.push(`This period has not started yet. It begins ${showDate(start)}; CME you complete from then counts toward it.`);
+  }
+  return notes;
+}
 
 export function findStateLicense(licenses, state, kind = "medical") {
   const candidates = (licenses || []).filter(l =>

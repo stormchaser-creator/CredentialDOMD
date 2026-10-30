@@ -111,7 +111,7 @@ import RecordQuestions from "./components/shared/RecordQuestions";
 import ProfessionReviewCard from "./components/shared/ProfessionReviewCard";
 import CmeReviewSummary from "./components/shared/CmeReviewSummary";
 import { cmeReviewSummary, cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE, rollingWindowLabel, appCardTitle, appRenewalLine, anchoredRenewalLine, certificationMetLine } from "./utils/cmePresentation";
-import { complianceFor, complianceListFor, standingScore, windowNotes, splitByCycle, alertingStates, resolvePendingLicense, undatedLicenseOnFile, cmeTopics } from "./utils/compliance";
+import { complianceFor, complianceListFor, standingScore, windowNotes, cardWindowNotes, splitByCycle, alertingStates, resolvePendingLicense, undatedLicenseOnFile, cmeTopics } from "./utils/compliance";
 import { isPracticeLicense, isAdvancedPractice } from "./constants/professions";
 import { getEducationTypes } from "./constants/credentialTypes";
 import { professionMismatches } from "./utils/professionReview";
@@ -1672,7 +1672,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
                 <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginBottom: 12 }}>
                   <strong style={{ color: T.text }}>{comp.windowLabel}.</strong>
                   {(comp.periodDaysLeft ?? comp.daysLeft) != null && ` ${comp.periodDaysLeft ?? comp.daysLeft} days left.`} Only hours dated inside this window count toward this renewal.
-                  {windowNotes(comp).map((n, i) => (
+                  {cardWindowNotes(comp).map((n, i) => (
                     <div key={i} style={{ marginTop: 4, color: comp.cycleStartIgnored && i === 1 ? T.warning : T.textDim }}>{n}</div>
                   ))}
                 </div>
