@@ -371,6 +371,9 @@ test('one record under every pool name is looked up once, and lookups stop when 
   const started = Date.now();
   stopRecordedClusters(other, { waitMs: 0, budgetMs: 150, command: pid => { calls.push(pid); sleepSync(100); return null; } });
   assert.ok(calls.length >= 1 && calls.length <= 2, `${calls.length} lookups within a 150 ms budget of 100 ms lookups`);
-  assert.ok(Date.now() - started < 1500);
+  // The lookup count above is what proves the budget stops the lookups. This
+  // only proves nothing hangs: a fixed 1.5 s failed the runner's suite gate
+  // when the full suite ran sandboxed under load (2026-10-29, ticket c3f23aa8).
+  assert.ok(Date.now() - started < 10_000);
   assert.equal(running(f.fake.pid), true);
 });

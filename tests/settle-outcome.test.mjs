@@ -47,7 +47,10 @@ test('the hardened tests pass with every timer and file read delayed', { timeout
   const { NODE_TEST_CONTEXT: _context, ...env } = process.env;
   const run = spawnSync(process.execPath, ['--experimental-vm-modules', '--test', '--test-reporter=spec', ...files], {
     cwd: root, encoding: 'utf8', timeout: 110_000,
-    env: { ...env, LC_ALL: 'C', RACE_DELAY_MS: '150', NODE_OPTIONS: `--import ${fileURLToPath(new URL('./helpers/race-delay.mjs', import.meta.url))}` },
+    // NODE_OPTIONS is split on spaces, so a checkout under a path with one
+    // (the ticket runner's gates live under "Application Support") lost the
+    // preload and every run failed the suite gate. A file URL has no spaces.
+    env: { ...env, LC_ALL: 'C', RACE_DELAY_MS: '150', NODE_OPTIONS: `--import ${new URL('./helpers/race-delay.mjs', import.meta.url).href}` },
   });
   const summary = (run.stdout || '').split('\n').filter((l) => /^ℹ (tests|pass|fail)/.test(l)).join('\n');
   assert.equal(run.status, 0, `${summary}\n${(run.stdout || '').slice(-3000)}\n${run.stderr || ''}`);
