@@ -33,7 +33,7 @@ import { BOARD_REQS_META } from "../../constants/boardRequirements";
 import { getStateEntry, hasSeparateBoards, STATE_REQS_META } from "../../constants/stateRequirements";
 import { STATE_NAMES } from "../../constants/states";
 import { generateId, formatDate } from "../../utils/helpers";
-import { complianceFor, complianceListFor, mainCardFor, windowNotes, cardWindowNotes, topicOutsidePeriod, cycleBucket, round2 } from "../../utils/compliance";
+import { complianceFor, complianceListFor, mainCardFor, cardWindowNotes, topicOutsidePeriod, cycleBucket, round2 } from "../../utils/compliance";
 import { boardComplianceFor, effectiveBoardSpecialties, aoaNationalEntry } from "../../utils/boardCompliance";
 import { certificationCards } from "../../utils/certCompliance";
 import { stateTranscriptModel, boardTranscriptOptions, boardTranscriptModel, shareTranscriptPdf, certificateDocsForModels, prefetchCertificates, certificateSummary, certificatesNotIncludedMessage } from "../../utils/cmeTranscriptPdf";

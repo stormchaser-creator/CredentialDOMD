@@ -111,7 +111,7 @@ import RecordQuestions from "./components/shared/RecordQuestions";
 import ProfessionReviewCard from "./components/shared/ProfessionReviewCard";
 import CmeReviewSummary from "./components/shared/CmeReviewSummary";
 import { cmeReviewSummary, cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE, rollingWindowLabel, appCardTitle, appRenewalLine, anchoredRenewalLine, certificationMetLine } from "./utils/cmePresentation";
-import { complianceFor, complianceListFor, standingScore, windowNotes, cardWindowNotes, splitByCycle, alertingStates, resolvePendingLicense, undatedLicenseOnFile, cmeTopics } from "./utils/compliance";
+import { complianceFor, complianceListFor, standingScore, cardWindowNotes, splitByCycle, alertingStates, resolvePendingLicense, undatedLicenseOnFile, cmeTopics } from "./utils/compliance";
 import { isPracticeLicense, isAdvancedPractice } from "./constants/professions";
 import { getEducationTypes } from "./constants/credentialTypes";
 import { professionMismatches } from "./utils/professionReview";
