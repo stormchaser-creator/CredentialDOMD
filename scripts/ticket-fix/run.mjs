@@ -327,7 +327,7 @@ export async function runTicket(o) {
 }
 async function workTicket(o, atEnd) {
   const { ticket, contextFile, outputFile, runFile, runId, runDir, repo, work, state, fixState = null, committer, notify = null,
-    workerSeconds = 1500, reproSeconds = 900, reviewSeconds = 1200, repairSeconds = 600, reviseSeconds = 1200, extractSeconds = 600, commands = DEFAULT_COMMANDS, binary = 'git',
+    workerSeconds = 2700, reproSeconds = 900, reviewSeconds = 1200, repairSeconds = 600, reviseSeconds = 1200, extractSeconds = 600, commands = DEFAULT_COMMANDS, binary = 'git',
     env = process.env, home = os.homedir(), fetch = true, installNodeModules, releaseOptions = {}, runStarted = new Date().toISOString().slice(0, 19) + 'Z',
     log = defaultLog, send = null, fetchBuild, autoMerge = false, attachmentsDir = null, attachmentsManifest = null } = o;
   if (!UUID.test(ticket || '') || !/^[0-9a-f]{16}$/.test(runId || '')) throw Error('work needs --ticket UUID and --run-id <16 hex>');

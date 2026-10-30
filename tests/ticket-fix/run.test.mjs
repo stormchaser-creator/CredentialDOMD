@@ -463,7 +463,7 @@ test('a resume that changes code gets reviseSeconds (1200 s); a structured-resul
     r = await runStub(p, standardScript({ repro: (opts, n) => { p.write(opts.cwd, n === 1 ? passing : REPRO_FILES); return { ...REPRO_RESULT_COPY }; }, review: () => reviews.shift() }));
     assert.equal((await readRun(p.work, NAME)).status, 'held', r.logs.join('\n'));
     assert.deepEqual(r.calls.filter(c => c.role === 'repro').map(c => [Boolean(c.resume), c.timeoutMs]), [[false, 900000], [true, 1200000]]);
-    assert.deepEqual(r.calls.filter(c => c.role === 'worker').map(c => [Boolean(c.resume), c.timeoutMs]), [[false, 1500000], [true, 1200000]]);
+    assert.deepEqual(r.calls.filter(c => c.role === 'worker').map(c => [Boolean(c.resume), c.timeoutMs]), [[false, 2700000], [true, 1200000]]);
     // A refused reply is repaired at 600 s; the gate repair after it has 1200 s.
     const weakened = { 'tests/join.test.mjs': REPRO_FILES['tests/join.test.mjs'].replace("'first\\nsecond'", "'first second'") };
     const change = { subject: 'Join summary lines with line breaks', tests: [] };
@@ -478,7 +478,7 @@ test('a resume that changes code gets reviseSeconds (1200 s); a structured-resul
     const worker = s.calls.filter(c => c.role === 'worker');
     assert.match(worker[1].input, /^The trusted host refused the structured result/);
     assert.match(worker[2].input, /^The host ran the gates on your change/);
-    assert.deepEqual(worker.map(c => [Boolean(c.resume), c.timeoutMs]), [[false, 1500000], [true, 600000], [true, 1200000]]);
+    assert.deepEqual(worker.map(c => [Boolean(c.resume), c.timeoutMs]), [[false, 2700000], [true, 600000], [true, 1200000]]);
   } finally { r?.cleanup(); s?.cleanup(); p.cleanup(); q.cleanup(); }
 });
 
