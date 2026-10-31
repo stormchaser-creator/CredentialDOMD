@@ -19,7 +19,7 @@ const pyMessage = rows => {
   const code = `import importlib.util,json,sys
 spec=importlib.util.spec_from_file_location('sn', ${JSON.stringify(path.join(root, 'scripts/signup-notify.py'))})
 m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
-sys.stdout.write(m.message(json.loads(sys.stdin.read())))`;
+sys.stdout.write(m.compose(json.loads(sys.stdin.read())))`;
   const r = spawnSync(python, ['-c', code], { input: JSON.stringify(rows), encoding: 'utf8' });
   assert.equal(r.status, 0, r.stderr);
   return r.stdout;

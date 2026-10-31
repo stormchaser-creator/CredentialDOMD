@@ -8,7 +8,9 @@
 // (owner_notify_prepare), sends it to the one owner address through Resend
 // with the send's own idempotency key, and records the answer.
 //
-// The iMessage notifier on the Mac Studio keeps running as a backup.
+// The database claims only owner_notify_email_kinds() (20261031200000):
+// signups, guides, payments and fixes, never anything technical. The
+// iMessage notifier on the Mac Studio texts the same signups and payments.
 
 /** The one place the owner's address is written. */
 export const OWNER_NOTIFY_TO = 'stormchaser@elryx.com';
@@ -77,7 +79,7 @@ export function ownerNotifyEmail(rows) {
   const text = ownerNotifyMessage(rows);
   if (!text) return null;
   const subject = text.split('\n')[0].slice(0, 300);
-  return { subject, text: `${text}\n\nSent by the owner-notify job in Supabase every 10 minutes. The iMessage notifier on the Mac Studio sends the same notices as a backup.` };
+  return { subject, text: `${text}\n\nSent by the owner-notify job in Supabase every 10 minutes: signups, guides, payments and fixes. Technical issues are handled by the scheduled agents.` };
 }
 
 function sameSecret(presented, expected) {

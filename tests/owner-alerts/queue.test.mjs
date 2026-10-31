@@ -187,11 +187,14 @@ python3 -c 'import json,sys; print(json.dumps({"message": sys.argv[1], "parent":
   const env = extra => ({ HOME: home, PATH: [bin, pythonDir, '/usr/bin', '/bin'].join(':'), LC_ALL: 'C', ...extra });
   const job = path.join(scripts, 'signup-notify.sh');
   const logFile = path.join(home, '.credentialdomd-signup-notify.log');
+  const opsFile = path.join(home, 'Library', 'Application Support', 'CredentialDOMD', 'ops', 'queue.jsonl');
   return {
     job,
     run: (state, extra = {}) => spawnSync(zsh, [job], { env: env({ OWNER_ALERT_STATE: state, ...extra }), encoding: 'utf8', timeout: 60000 }),
     start: state => spawn(zsh, [job], { env: env({ OWNER_ALERT_STATE: state }), stdio: 'ignore' }),
     sent: () => lines(record).map(line => JSON.parse(line)),
+    ops: () => lines(opsFile).map(line => JSON.parse(line)),
+    opsDir: path.dirname(opsFile),
     log: () => (existsSync(logFile) ? readFileSync(logFile, 'utf8') : ''),
     flag: (name, on) => (on ? writeFileSync(flag(name), '') : rmSync(flag(name), { force: true })),
     flagged: name => existsSync(flag(name)),
@@ -333,7 +336,9 @@ test('drain bookkeeping: refuses a queue other users could reach, and does nothi
   } finally { state.cleanup(); }
 });
 
-test('the job drains: its own zsh starts the notifier (python3 never does), one message, marked sent, never twice', { skip: jobSkip }, async () => {
+// Owner, 2026-10-31: the technical side is the scheduled agents'. The runner's
+// alerts go to the ops queue the supervisor works through, never to his phone.
+test('the job hands the runner\'s alerts to the ops queue: never texted, marked, never twice', { skip: jobSkip }, async () => {
   const state = stateDir();
   try {
     const copy = jobCopy(state.base);
@@ -343,90 +348,62 @@ test('the job drains: its own zsh starts the notifier (python3 never does), one 
     });
     const first = copy.run(state.dir);
     assert.equal(first.status, 0, first.stderr + copy.log());
-    const [sent] = copy.sent();
-    assert.equal(copy.sent().length, 1);
-    assert.match(sent.message, /^CredentialDOMD ticket agent: 2 alerts\n/);
-    // macOS allows the job's /bin/zsh to drive Messages and refused node; the
-    // Command Line Tools' python3 is no more a system binary than node is.
-    assert.ok(Number.isInteger(first.pid) && first.pid > 0);
-    assert.equal(sent.parent, first.pid, 'the notifier is a direct child of the job\'s zsh, the one this test started');
+    assert.equal(copy.sent().length, 0, 'no text');
+    const ops = copy.ops();
+    assert.equal(ops.length, 1);
+    assert.equal(ops[0].kind, 'runner_alerts');
+    assert.match(ops[0].detail, /^CredentialDOMD ticket agent: 2 alerts /);
+    assert.equal(statSync(copy.opsDir).mode & 0o777, 0o700, 'the ops directory is owner-only');
     assert.match(copy.log(), /owner alerts: sent 2 \(parked [0-9a-f]{8}, change_refused [0-9a-f]{8}\)/);
     assert.deepEqual(new Set(sentIds(state.dir)), new Set(queue(state.dir).map(e => e.id)));
     assert.equal(copy.run(state.dir).status, 0);
-    assert.equal(copy.sent().length, 1, 'nothing is sent twice');
+    assert.equal(copy.ops().length, 1, 'nothing is handed over twice');
+    assert.equal(copy.sent().length, 0);
   } finally { state.cleanup(); }
 });
 
-// The check above has teeth: the first version's mistake, put back in a copy
-// of the job, is caught (the notifier's parent is python3, not the job's zsh).
-test('the parent check catches a notifier python3 starts', { skip: jobSkip }, async () => {
-  const state = stateDir();
-  try {
-    const copy = jobCopy(state.base);
-    const script = readFileSync(copy.job, 'utf8');
-    const direct = '"$NOTIFY" "$2" </dev/null';
-    assert.ok(script.includes(direct), 'the job starts the notifier itself');
-    writeFileSync(copy.job, script.replace(direct, `python3 -c 'import subprocess,sys; sys.exit(subprocess.call(sys.argv[1:]))' ${direct}`));
-    await quietly(() => raise(state.dir, 'parked', `ticket=${T8}`, 'CredentialDOMD ticket agent: parked.'));
-    const r = copy.run(state.dir);
-    assert.equal(r.status, 0, r.stderr + copy.log());
-    const [sent] = copy.sent();
-    assert.equal(copy.sent().length, 1);
-    assert.ok(Number.isInteger(sent.parent) && sent.parent > 0);
-    assert.notEqual(sent.parent, r.pid, 'python3 started it, not the job\'s zsh');
-  } finally { state.cleanup(); }
-});
-
-test('the job drains: a refused or hung send keeps every alert queued for the next run', { skip: jobSkip }, async () => {
+test('the job hands over: a refused ops queue keeps every alert queued for the next run', { skip: jobSkip }, async () => {
   const state = stateDir();
   try {
     const copy = jobCopy(state.base);
     await quietly(() => raise(state.dir, 'parked', `ticket=${T8}`, 'CredentialDOMD ticket agent: parked.'));
-    copy.flag('fail', true);
+    mkdirSync(copy.opsDir, { recursive: true, mode: 0o700 });
+    chmodSync(copy.opsDir, 0o755);
     assert.equal(copy.run(state.dir).status, 0);
-    assert.match(copy.log(), /owner alerts: the notifier did not deliver them \(exit 1\); they stay queued\n.*owner alerts: not drained this run; they stay queued/);
+    assert.match(copy.log(), /owner alerts: not handed to the ops queue \(exit 3\); they stay queued\n.*owner alerts: not drained this run; they stay queued/);
     assert.deepEqual(sentIds(state.dir), []);
-    copy.flag('fail', false);
-
-    // A permission prompt nobody answers: killed after the limit.
-    copy.flag('hang', true);
-    const started = Date.now();
-    assert.equal(copy.run(state.dir, { OWNER_ALERT_SEND_SECONDS: '1' }).status, 0);
-    assert.ok(Date.now() - started < 15000, `returned in ${Date.now() - started} ms`);
-    assert.match(copy.log(), /did not deliver them \(exit 137\)/);
-    assert.deepEqual(sentIds(state.dir), []);
-    copy.flag('hang', false);
-
+    chmodSync(copy.opsDir, 0o700);
     assert.equal(copy.run(state.dir).status, 0);
-    assert.equal(copy.sent().length, 1);
+    assert.equal(copy.ops().length, 1);
     assert.equal(sentIds(state.dir).length, 1);
+    assert.equal(copy.sent().length, 0);
   } finally { state.cleanup(); }
 });
 
-test('the job drains: a second run while one is sending sends nothing, and the lock outlives the send', { skip: jobSkip }, async () => {
+test('the job hands over: a second run while one holds the drain lock hands over nothing', { skip: jobSkip }, async () => {
   const state = stateDir();
   try {
     const copy = jobCopy(state.base);
     await quietly(() => raise(state.dir, 'parked', `ticket=${T8}`, 'CredentialDOMD ticket agent: parked.'));
-    copy.flag('hold', true);
-    const slow = copy.start(state.dir);
-    const exited = new Promise(resolve => slow.on('exit', resolve));
+    const lock = path.join(state.dir, 'owner-alerts.lock');
+    writeFileSync(lock, '', { mode: 0o600 });
+    const held = path.join(state.base, 'held flag');
+    const holder = spawn(zsh, ['-c', `zmodload zsh/system; zsystem flock -f fd ${JSON.stringify(lock)} && : > ${JSON.stringify(held)} && sleep 30`], { stdio: 'ignore' });
     try {
-      await until(() => copy.flagged('started'));
+      await until(() => existsSync(held));
       const busy = copy.run(state.dir);
       assert.equal(busy.status, 0, busy.stderr);
       assert.match(copy.log(), /owner alerts: another drain is running/);
-      assert.equal(copy.sent().length, 0);
-    } finally { copy.flag('hold', false); }
-    assert.equal(await exited, 0);
-    assert.equal(copy.sent().length, 1);
-    assert.equal(sentIds(state.dir).length, 1);
+      assert.equal(copy.ops().length, 0);
+    } finally { holder.kill('SIGKILL'); }
+    await new Promise(resolve => (holder.exitCode !== null || holder.signalCode ? resolve() : holder.on('exit', resolve)));
     assert.equal(copy.run(state.dir).status, 0);
-    assert.equal(copy.sent().length, 1, 'the second run did not send the same batch');
+    assert.equal(copy.ops().length, 1);
+    assert.equal(sentIds(state.dir).length, 1);
   } finally { state.cleanup(); }
 });
 
-test('the job drains: a queue other users could reach is refused and nothing is sent', { skip: jobSkip }, async () => {
+test('the job drains: a queue other users could reach is refused and nothing is handed over', { skip: jobSkip }, async () => {
   const state = stateDir();
   try {
     const copy = jobCopy(state.base);
@@ -434,6 +411,7 @@ test('the job drains: a queue other users could reach is refused and nothing is 
     chmodSync(path.join(state.dir, QUEUE_FILE), 0o644);
     assert.equal(copy.run(state.dir).status, 0);
     assert.match(copy.log(), /refused: owner-alerts\.jsonl must be a regular file only its owner can read\n.*not drained this run/);
+    assert.equal(copy.ops().length, 0);
     assert.equal(copy.sent().length, 0);
     const before = copy.log();
     assert.equal(copy.run(path.join(state.base, 'no such dir')).status, 0);

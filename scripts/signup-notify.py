@@ -40,7 +40,15 @@ everything that is not a network call or the iMessage itself:
       are those in (since, now]: consecutive runs tile time with no gap and
       no overlap.
   signup-notify.py format --seen FILE   (the query's rows as JSON on stdin)
-      Prints the iMessage, or nothing when there is nothing new.
+      Prints the iMessage, or nothing when there is nothing new. Only rows of
+      TEXT_KINDS are texted (owner, 2026-10-31: texts are for people who sign
+      up and get guides; the technical side is the scheduled agents').
+  signup-notify.py handoff --seen FILE --queue FILE (the same rows on stdin)
+      Appends every other new row to the ops queue that the scheduled
+      supervisor (scripts/ops-supervisor.sh) works through. Never texted.
+  signup-notify.py ops-note --queue FILE --kind KIND --text TEXT
+      Appends one note to the ops queue: the runner's alerts and the
+      notifier's own health, which were texted before 2026-10-31.
   signup-notify.py remember --seen FILE (the same rows on stdin)
       After a send: records the money events just reported.
 
@@ -141,7 +149,14 @@ OPTIONAL = tuple(OPTIONAL_PARTS)
 PARTS = {**CORE, **OPTIONAL_PARTS}
 
 SIGNUP_KINDS = ('waitlist', 'founding', 'app profile', 'FAILED ATTEMPT')
+# What is texted to the owner (2026-10-31: "i should get text messages about
+# people who sign up and get guides, the techinical side should be handled by
+# scheduled agents"): people signing up, getting a guide or paying, and a
+# refund only the owner can finish (no agent moves money). Everything else
+# goes to the ops queue for the scheduled supervisor.
 ACTIVITY_PREFIXES = ('TICKET', 'CLIENT', 'BETA', 'guide only', 'FEEDBACK', 'FIXED')
+TEXT_KINDS = ('waitlist', 'guide only', 'founding', 'app profile', 'BETA JOINED', 'CHECKOUT STARTED', 'PAID',
+              'LIFETIME GIFT CLAIMED', 'REFUND NEEDS SUPPORT', 'REFUND UNFINISHED')
 MONEY = {
     'PAID': ('paid', 'paid'),
     'CHECKOUT STARTED': ('checkout started', 'checkouts started'),
@@ -588,7 +603,39 @@ def who(row):
     return name or email or '(no name)'
 
 
+def texted(row):
+    return (row.get('kind') or '') in TEXT_KINDS
+
+
+def handoff(rows, queue, now=None):
+    """Appends the rows that are not texted to the ops queue, one JSON line
+    each. Returns how many."""
+    owner_only_dir(os.path.dirname(queue))
+    stamp = (now or dt.datetime.now(dt.timezone.utc)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    lines = [json.dumps({'v': 1, 'at': stamp, 'source': 'notifier', 'kind': clean(row.get('kind') or ''),
+                         'who': clean(who(row)), 'detail': clean(row.get('extra') or ''),
+                         'when': str(row.get('created_at') or '')}, sort_keys=True) + '\n'
+             for row in rows if not texted(row)]
+    if lines:
+        append_private(queue, ''.join(lines))
+    return len(lines)
+
+
+def ops_note(queue, kind, text, now=None):
+    owner_only_dir(os.path.dirname(queue))
+    stamp = (now or dt.datetime.now(dt.timezone.utc)).strftime('%Y-%m-%dT%H:%M:%SZ')
+    append_private(queue, json.dumps({'v': 1, 'at': stamp, 'source': 'notifier', 'kind': clean(kind), 'detail': clean(text)},
+                                     sort_keys=True) + '\n')
+
+
 def message(rows):
+    """The iMessage: only the rows of TEXT_KINDS."""
+    return compose([row for row in rows if texted(row)])
+
+
+def compose(rows):
+    """One message for these rows. The owner-notify email
+    (supabase/functions/_shared/ownerNotify.mjs) says the same, line for line."""
     if not rows:
         return ''
     money = {}
@@ -674,10 +721,16 @@ def main(argv):
         text = message(fresh_rows(read_rows(), load_seen(options['seen'])))
         if text:
             print(text)
+    elif command == 'handoff':
+        count = handoff(fresh_rows(read_rows(), load_seen(options['seen'])), options['queue'])
+        if count:
+            print(f'handed {count} to the ops queue')
+    elif command == 'ops-note':
+        ops_note(options['queue'], options.get('kind', ''), options.get('text', ''))
     elif command == 'remember':
         remember(read_rows(), options['seen'])
     else:
-        raise ValueError('usage: signup-notify.py drain-lock|drain-prepare|drain-mark|probe|present|drifted|query|format|remember ...')
+        raise ValueError('usage: signup-notify.py drain-lock|drain-prepare|drain-mark|probe|present|drifted|query|format|handoff|ops-note|remember ...')
     return 0
 
 

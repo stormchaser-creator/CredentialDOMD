@@ -80,11 +80,12 @@ host_fingerprint() {
 # stored, every run stopped by the usage limit for 6 h):
 # scripts/ticket-fix/alert.mjs writes $CASE_STATE/alerts.log and
 # $CASE_STATE/status.json and queues each one in
-# $CASE_STATE/owner-alerts.jsonl, which signup-notify.sh (a launchd job macOS
-# lets drive Messages; this one's node is refused) sends within 10 minutes.
-# A direct send through $NOTIFY is tried first, killed after 15 s. Ids and
-# counts only.
-NOTIFY="$HOST/notify-owner.sh"
+# $CASE_STATE/owner-alerts.jsonl, which signup-notify.sh hands to the ops
+# queue within 10 minutes for the scheduled supervisor
+# (scripts/ops-supervisor.sh). Ids and counts only. No direct send: owner,
+# 2026-10-31, texts are for people who sign up and get guides, and the
+# technical side is the scheduled agents'.
+NOTIFY=""
 ALERT="$HOST/ticket-fix/alert.mjs"
 
 # Skip this fire entirely if the previous run is still going. The lock records

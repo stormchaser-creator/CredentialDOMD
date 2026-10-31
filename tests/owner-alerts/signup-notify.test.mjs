@@ -13,10 +13,11 @@
 //   migration) is skipped instead of failing every notification, and so is
 //   one whose columns changed: the probe checks every column each part reads
 //   (before, one renamed column failed the whole query, silently);
-//   (a) the ticket runner's queued alerts go out through this job, sent by
-//       the job's own zsh (never from python3, which macOS would refuse);
-//   a notifier that keeps failing, or keeps skipping a part, tells the owner
-//   after 3 runs, once, and again when it works.
+//   only signups, guides and payments are texted (owner, 2026-10-31); the
+//   ticket runner's queued alerts and every technical row go to the ops
+//   queue the scheduled supervisor works through, each once;
+//   a notifier that keeps failing, or keeps skipping a part, tells the
+//   supervisor after 3 runs, once, and again when it works. Never a text.
 import test from 'node:test';
 import { createHash } from 'node:crypto';
 import assert from 'node:assert/strict';
@@ -189,30 +190,52 @@ test('signup notifier SQL on PostgreSQL: member replies only, money events, miss
       'a send still in flight is not reported yet; one stuck for 20 minutes is');
   });
 
-  await t.test('the message: money first in the header, one line each, a key reported once, no em dash', async () => {
+  // Owner, 2026-10-31: "i should get text messages about people who sign up
+  // and get guides, the techinical side should be handled by scheduled
+  // agents". Only those rows are texted; every other one goes to the ops
+  // queue the scheduled supervisor works through.
+  await t.test('the text: signups, guides and payments only, money first in the header, a key reported once, no em dash', async () => {
     const rows = await activity(pg);
     const seen = path.join(pg.base, 'seen keys.json');
     const msg = py(['format', '--seen', seen], JSON.stringify(rows)).trim();
     const [header, ...body] = msg.split('\n');
-    assert.equal(header, 'CredentialDOMD money: 1 paid, 2 checkouts started, 1 subscription active without a recorded payment, 1 lifetime gift claimed, 2 invitations sent, 1 invitation unconfirmed, 1 invitation failed, plus 2 other');
+    assert.equal(header, 'CredentialDOMD money: 1 paid, 2 checkouts started, 1 lifetime gift claimed');
     assert.equal(body.filter(l => l.startsWith('• [PAID] ')).length, 1, 'one key, one line');
     assert.ok(body.includes('• [PAID] Synthetic Buyer (buyer@example.test): Core, founding, $99/yr'), body.join('\n'));
-    assert.ok(body.includes('• [TICKET REPLY] Synthetic Member (member@example.test): Synthetic export question: The export still shows the old date.'), body.join('\n'));
-    assert.ok(body.includes('• [INVITE SENT] Synthetic Colleague (colleague@example.test): founding, $99/yr offer'), body.join('\n'));
     assert.ok(body.includes('• [LIFETIME GIFT CLAIMED] Synthetic Gifted (gifted@example.test)'), body.join('\n'));
+    for (const technical of ['TICKET', 'TICKET REPLY', 'INVITE SENT', 'INVITE FAILED', 'INVITE UNCONFIRMED', 'SUBSCRIPTION ACTIVE', 'FEEDBACK', 'FAILED ATTEMPT', 'FIXED']) {
+      assert.ok(!body.some(l => l.startsWith(`• [${technical}] `)), `${technical} is not texted:\n${msg}`);
+    }
     assert.doesNotMatch(msg, /\u2014/);
+    // Everything not texted is handed to the ops queue, once per key.
+    const opsDir = fs.mkdtempSync(path.join(pg.base, 'ops-'));
+    const queue = path.join(opsDir, 'queue.jsonl');
+    py(['handoff', '--seen', seen, '--queue', queue], JSON.stringify(rows));
+    const handed = fs.readFileSync(queue, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+    assert.equal(fs.statSync(queue).mode & 0o777, 0o600);
+    assert.ok(handed.some(e => e.kind === 'TICKET REPLY' && e.detail === 'Synthetic export question: The export still shows the old date.'), JSON.stringify(handed));
+    assert.ok(handed.some(e => e.kind === 'INVITE FAILED' && e.who === 'bounced@example.test'), JSON.stringify(handed));
+    assert.ok(handed.some(e => e.kind === 'SUBSCRIPTION ACTIVE'), JSON.stringify(handed));
+    assert.ok(handed.every(e => e.v === 1 && e.source === 'notifier' && !['PAID', 'CHECKOUT STARTED', 'LIFETIME GIFT CLAIMED'].includes(e.kind)));
+    assert.equal(handed.length + body.length, rows.filter((r, i) => !r.key || rows.findIndex(o => o.key === r.key) === i).length, 'every row is texted or handed over, none both');
     py(['remember', '--seen', seen], JSON.stringify(rows));
     assert.equal(fs.statSync(seen).mode & 0o777, 0o600);
     // The next run: keyed rows are not repeated; the time-window ones have moved on.
     const next = await activity(pg, iso(1), iso(61));
     assert.ok(next.length > 0, 'the money rows are still inside the lookback');
     assert.equal(py(['format', '--seen', seen], JSON.stringify(next)), '', 'and nothing is sent twice');
-    // A late invitation outcome is a new key; a stuck send later marked
-    // 'unknown' by the invite function is the same key and stays quiet.
+    // A late invitation outcome is a new key: handed over, not texted.
     await pg.sql(`update invite_to_join_sends set status = 'unknown', updated_at = now() where id in ('${id(503)}', '${id(504)}')`);
     const later = await activity(pg, iso(1), iso(61));
-    assert.equal(py(['format', '--seen', seen], JSON.stringify(later)).trim(),
-      'CredentialDOMD: 1 invitation unconfirmed\n• [INVITE UNCONFIRMED] maybe@example.test: founding, $99/yr offer, no confirmation it went out');
+    assert.equal(py(['format', '--seen', seen], JSON.stringify(later)), '');
+    const before = fs.readFileSync(queue, 'utf8').split('\n').length;
+    py(['handoff', '--seen', seen, '--queue', queue], JSON.stringify(later));
+    const added = fs.readFileSync(queue, 'utf8').trim().split('\n').slice(before - 1).map(l => JSON.parse(l));
+    assert.deepEqual(added.map(e => [e.kind, e.who]), [['INVITE UNCONFIRMED', 'maybe@example.test']]);
+    // A queue in a directory other users can reach is refused.
+    fs.chmodSync(opsDir, 0o755);
+    assert.throws(() => py(['handoff', '--seen', seen, '--queue', queue], JSON.stringify(later)));
+    fs.chmodSync(opsDir, 0o700);
   });
 
   await t.test('timed rows tile (since, now]: a row at a run\'s start is reported once, a failed attempt 3 minutes later, never skipped', async () => {
@@ -401,7 +424,7 @@ test('signup notifier SQL on PostgreSQL: member replies only, money events, miss
 
   // ─── The real zsh script, end to end ─────────────────────────────────────
   const shellSkip = fs.existsSync('/bin/zsh') ? false : 'the job runs under /bin/zsh, which is not installed here';
-  await t.test('signup-notify.sh: drains the runner\'s queue, reports activity and money once, and keeps both on a failed send', { skip: shellSkip }, async () => {
+  await t.test('signup-notify.sh: texts signups and payments only, hands everything technical to the ops queue, each once, and keeps both on a failure', { skip: shellSkip }, async () => {
     // A copy of the job as launchd runs it, in folders with spaces, with
     // stand-ins for the keychain, the network and Messages.
     const job = path.join(pg.base, 'job copy', 'scripts');
@@ -447,6 +470,9 @@ sys.stdout.write(r.stdout.strip())
     };
     const sent = () => records().map(r => r.message);
     const log = () => fs.readFileSync(path.join(home, '.credentialdomd-signup-notify.log'), 'utf8');
+    const opsQueue = path.join(home, 'Library', 'Application Support', 'CredentialDOMD', 'ops', 'queue.jsonl');
+    const ops = () => (fs.existsSync(opsQueue) ? fs.readFileSync(opsQueue, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)) : []);
+    const opsOf = kind => ops().filter(e => e.kind === kind);
 
     // The runner's state directory where launchd's job looks for it.
     const alertState = path.join(home, 'Library', 'Application Support', 'CredentialDOMD', 'ticket-context');
@@ -464,89 +490,123 @@ sys.stdout.write(r.stdout.strip())
 
     const first = runJob();
     assert.equal(first.status, 0, first.stderr + first.stdout);
-    const [alerts, activityMsg] = sent();
-    assert.equal(sent().length, 2, JSON.stringify(sent()));
-    assert.match(alerts, /^CredentialDOMD ticket agent: 2 alerts\n• .+: the change for ticket a1b2c3d4 was not merged\.\n• .+: ticket a1b2c3d4 is parked after 3 rejected runs\.$/);
-    assert.equal(fs.readFileSync(path.join(alertState, SENT_FILE), 'utf8').split('\n').filter(Boolean).length, 2);
+    assert.equal(sent().length, 1, JSON.stringify(sent()));
+    const [activityMsg] = sent();
     assert.match(activityMsg, /^CredentialDOMD money: 1 paid, 2 checkouts started, /);
-    assert.equal(activityMsg.split('\n').filter(l => l.startsWith('• [TICKET REPLY]')).length, 1, activityMsg);
-    assert.doesNotMatch(activityMsg, /CredentialDOMD Support|verified reply|legacy support reply/);
-    assert.doesNotMatch(alerts + activityMsg, /\u2014/);
+    assert.doesNotMatch(activityMsg, /TICKET|INVITE|SUBSCRIPTION ACTIVE|FEEDBACK|FAILED ATTEMPT|ticket agent|CredentialDOMD Support|verified reply|legacy support reply/);
+    assert.doesNotMatch(activityMsg, /\u2014/);
+    // The runner's alerts and the technical rows went to the ops queue.
+    const [handedAlerts] = opsOf('runner_alerts');
+    assert.match(handedAlerts.detail, /^CredentialDOMD ticket agent: 2 alerts • .+: the change for ticket a1b2c3d4 was not merged\. • .+: ticket a1b2c3d4 is parked after 3 rejected runs\.$/);
+    assert.equal(fs.readFileSync(path.join(alertState, SENT_FILE), 'utf8').split('\n').filter(Boolean).length, 2);
     assert.match(log(), /owner alerts: sent 2 \(change_refused [0-9a-f]{8}, parked [0-9a-f]{8}\)/);
+    assert.equal(opsOf('TICKET REPLY').length, 1, JSON.stringify(ops()));
     assert.ok(fs.readFileSync(curlLog, 'utf8').startsWith('select part, coalesce('), 'the probe runs first');
-    // Both sends came from the job's own zsh: the queued alerts as well.
-    assert.deepEqual(records().map(r => r.parent), [first.pid, first.pid]);
+    // The text came from the job's own zsh.
+    assert.deepEqual(records().map(r => r.parent), [first.pid]);
     const since = fs.readFileSync(path.join(home, '.credentialdomd-signup-notify'), 'utf8').trim();
     assert.notEqual(since, EARLIER, 'the window moved on');
 
-    // Nothing new: nothing sent, and nothing sent twice.
+    // Nothing new: nothing sent, and nothing handed over twice.
+    const handedFirst = ops().length;
     const second = runJob();
     assert.equal(second.status, 0, second.stderr);
-    assert.equal(sent().length, 2);
+    assert.equal(sent().length, 1);
+    assert.equal(ops().length, handedFirst);
     const afterSecond = fs.readFileSync(path.join(home, '.credentialdomd-signup-notify'), 'utf8').trim();
 
-    // Messages refuses: the new alert and the new member reply both wait.
+    // Messages refuses: the new signup waits. The runner's new alert and the
+    // member's new reply are handed over regardless; the reply again later.
     await new Promise(resolve => setTimeout(resolve, 1100));
     console.log = () => {};
     try { await raise(alertState, 'stale_lock', 'age_hours=5', 'CredentialDOMD ticket agent: the run lock has been held 5 h.'); } finally { console.log = quiet; }
-    await pg.sql(`insert into support_messages(id, ticket_id, author_id, body) values ('${id(208)}', '${TICKET}', '${MEMBER}', 'One more member reply.')`);
-    // A run reports up to its own start, in whole seconds: begin after the reply.
+    await pg.sql(`insert into support_messages(id, ticket_id, author_id, body) values ('${id(208)}', '${TICKET}', '${MEMBER}', 'One more member reply.');
+      insert into early_access_leads(email, name, source, waitlist) values ('newlead@example.test', 'Synthetic New Lead', '/states/texas', false)`);
+    // A run reports up to its own start, in whole seconds: begin after the rows.
     await new Promise(resolve => setTimeout(resolve, 1100));
     fs.writeFileSync(failFlag, '');
     const refused = runJob();
     assert.equal(refused.status, 1);
-    assert.equal(sent().length, 2);
-    assert.match(log(), /owner alerts: not drained this run; they stay queued/);
+    assert.equal(sent().length, 1);
+    assert.match(opsOf('runner_alerts')[1].detail, /^CredentialDOMD ticket agent: the run lock has been held 5 h\. \(raised /);
     assert.equal(fs.readFileSync(path.join(home, '.credentialdomd-signup-notify'), 'utf8').trim(), afterSecond, 'the window did not move');
     fs.rmSync(failFlag);
     const recovered = runJob();
     assert.equal(recovered.status, 0, recovered.stderr);
-    assert.equal(sent().length, 4);
-    assert.match(sent()[2], /^CredentialDOMD ticket agent: the run lock has been held 5 h\. \(raised /);
-    assert.equal(sent()[3], 'CredentialDOMD activity\n• [TICKET REPLY] Synthetic Member (member@example.test): Synthetic export question: One more member reply.');
+    assert.equal(sent().length, 2);
+    assert.equal(sent()[1], 'CredentialDOMD activity\n• [guide only] Synthetic New Lead (newlead@example.test) via /states/texas');
+    assert.equal(opsOf('runner_alerts').length, 2, 'the alert once');
+    assert.ok(opsOf('TICKET REPLY').some(e => e.detail.endsWith('One more member reply.')));
     assert.equal(fs.readFileSync(path.join(alertState, QUEUE_FILE), 'utf8').split('\n').filter(Boolean).length, 3);
     assert.equal(fs.readFileSync(path.join(alertState, SENT_FILE), 'utf8').split('\n').filter(Boolean).length, 3);
 
-    // A broken notifier says so. A column type changed under the query (the
-    // probe checks names, not types): the API refuses it, its message is
-    // logged, the window stays, and after 3 runs in a row the owner is told,
-    // once. Before this change the only trace was a curl error in /tmp.
+    // A broken notifier says so, to the supervisor. A column type changed
+    // under the query (the probe checks names, not types): the API refuses
+    // it, its message is logged, the window stays, and after 3 runs in a row
+    // the ops queue is told, once. Never a text.
     const windowFile = path.join(home, '.credentialdomd-signup-notify');
     const windowBefore = fs.readFileSync(windowFile, 'utf8').trim();
     await pg.sql('alter table invite_to_join_sends alter column explicit_resend type text using explicit_resend::text');
     const failing = [runJob(), runJob(), runJob(), runJob()];
     assert.deepEqual(failing.map(r => r.status), [1, 1, 1, 1]);
-    assert.equal(sent().length, 5, 'told once, on the third run');
-    assert.match(sent()[4], /^CredentialDOMD notifier: since \d\d:\d\d \(3 runs in a row\), the activity query fails\. Signups, tickets and payments are held until it works\. Details in ~\/\.credentialdomd-signup-notify\.log$/);
+    assert.equal(sent().length, 2, 'never texted');
+    assert.equal(opsOf('notifier_failing').length, 1, 'told once, on the third run');
+    assert.match(opsOf('notifier_failing')[0].detail, /^CredentialDOMD notifier: since \d\d:\d\d \(3 runs in a row\), the activity query fails\. Signups, tickets and payments are held until it works\. Details in ~\/\.credentialdomd-signup-notify\.log$/);
     assert.match(log(), /activity: the activity query failed: \{"message": "Failed to run sql query: .*argument of CASE\/WHEN must be type boolean/);
     assert.equal(fs.readFileSync(windowFile, 'utf8').trim(), windowBefore, 'the window did not move');
-    await pg.sql(`insert into support_messages(id, ticket_id, author_id, body) values ('${id(210)}', '${TICKET}', '${MEMBER}', 'A reply while the notifier was down.')`);
+    await pg.sql(`insert into profiles(id, name, email) values ('${id(77)}', 'Synthetic Late Signup', 'late@example.test')`);
     await pg.sql('alter table invite_to_join_sends alter column explicit_resend type boolean using explicit_resend::boolean');
     await new Promise(resolve => setTimeout(resolve, 1100));
     const fixed = runJob();
     assert.equal(fixed.status, 0, fixed.stderr);
-    assert.equal(sent().length, 7);
-    assert.equal(sent()[5], 'CredentialDOMD activity\n• [TICKET REPLY] Synthetic Member (member@example.test): Synthetic export question: A reply while the notifier was down.', 'held, not lost');
-    assert.match(sent()[6], /^CredentialDOMD notifier: working again \(a problem since \d\d:\d\d\)\.$/);
+    assert.equal(sent().length, 3);
+    assert.equal(sent()[2], 'CredentialDOMD signup\n• [app profile] Synthetic Late Signup (late@example.test)', 'held, not lost');
+    assert.equal(opsOf('notifier_recovered').length, 1);
+    assert.match(opsOf('notifier_recovered')[0].detail, /^CredentialDOMD notifier: working again \(a problem since \d\d:\d\d\)\.$/);
     assert.equal(runJob().status, 0);
-    assert.equal(sent().length, 7, 'nothing more once it works');
+    assert.equal(sent().length, 3, 'nothing more once it works');
+    assert.equal(opsOf('notifier_recovered').length, 1);
 
     // An optional table's columns changed: the rest still reports, the part
-    // is named in the log every run, and the owner is told after 3.
+    // is named in the log every run, and the supervisor is told after 3.
     await pg.sql('alter table invite_to_join_sends rename column offer_phase to phase');
     const drifting = [runJob(), runJob(), runJob()];
     assert.deepEqual(drifting.map(r => r.status), [0, 0, 0]);
-    assert.equal(sent().length, 8);
-    assert.match(sent()[7], /^CredentialDOMD notifier: since \d\d:\d\d \(3 runs in a row\), invite_to_join_sends not reported: columns changed\. Everything else still reports\. Details in ~\/\.credentialdomd-signup-notify\.log$/);
+    assert.equal(opsOf('notifier_failing').length, 2);
+    assert.match(opsOf('notifier_failing')[1].detail, /^CredentialDOMD notifier: since \d\d:\d\d \(3 runs in a row\), invite_to_join_sends not reported: columns changed\. Everything else still reports\. Details in ~\/\.credentialdomd-signup-notify\.log$/);
     assert.equal(log().split('\n').filter(l => l.includes('invite_to_join_sends is not reported until the notifier matches its columns (missing invite_to_join_sends.offer_phase)')).length, 3);
     assert.notEqual(fs.readFileSync(windowFile, 'utf8').trim(), windowBefore, 'the window moves: everything else was reported');
     await pg.sql('alter table invite_to_join_sends rename column phase to offer_phase');
     assert.equal(runJob().status, 0);
-    assert.equal(sent().length, 9);
-    assert.match(sent()[8], /^CredentialDOMD notifier: working again/);
+    assert.equal(opsOf('notifier_recovered').length, 2);
     assert.equal(fs.existsSync(path.join(home, '.credentialdomd-signup-notify.health')), false);
+    assert.equal(sent().length, 3, 'the notifier\'s health is never texted');
     assert.equal(jobs.reduce((n, j) => n + j.parents.length, 0), records().length);
     assert.deepEqual(jobs.flatMap(j => j.parents.filter(p => p !== j.pid)), [], 'every send from the zsh of the run that made it');
-    assert.doesNotMatch(sent().join('\n'), /\u2014/);
+    assert.doesNotMatch(sent().join('\n') + JSON.stringify(ops()), /\u2014/);
   });
+});
+
+// Owner, 2026-10-31: every signup, guide and payment is texted, and nothing
+// else ever is. Each kind the activity query can return is on one side.
+test('the text: each texted kind gets its line, every other kind is handed over, and the two lists cover the query', { skip: !python && 'python3 not found' }, () => {
+  const TEXTED = ['waitlist', 'guide only', 'founding', 'app profile', 'BETA JOINED', 'CHECKOUT STARTED', 'PAID',
+    'LIFETIME GIFT CLAIMED', 'REFUND NEEDS SUPPORT', 'REFUND UNFINISHED'];
+  // Every kind the activity query returns (signup-notify.py query_sql).
+  const QUERY_KINDS = ['waitlist', 'guide only', 'founding', 'app profile', 'FAILED ATTEMPT', 'TICKET', 'TICKET REPLY', 'FIXED BY ITSELF', 'FIXED',
+    'BETA JOINED', 'INVITE SENT', 'FEEDBACK', 'CHECKOUT STARTED', 'PAID', 'SUBSCRIPTION ACTIVE', 'LIFETIME GIFT CLAIMED', 'INVITE FAILED',
+    'INVITE UNCONFIRMED', 'REFUND NEEDS SUPPORT', 'REFUND UNFINISHED'];
+  const source = fs.readFileSync(PY, 'utf8');
+  for (const kind of QUERY_KINDS) assert.ok(source.includes(`'${kind}'`), kind);
+  assert.ok(TEXTED.every(kind => QUERY_KINDS.includes(kind)));
+  const all = QUERY_KINDS;
+  const rows = all.map((kind, i) => ({ kind, name: `Synthetic ${i}`, email: `s${i}@example.test`, extra: 'x', created_at: '2026-10-31T00:00:00Z', key: null }));
+  const seen = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'texted-kinds-')), 'seen.json');
+  const body = py(['format', '--seen', seen], JSON.stringify(rows)).trim().split('\n').slice(1);
+  const kinds = body.map(line => line.match(/^• \[([^\]]+)\] /)[1]);
+  assert.deepEqual(kinds.sort(), [...TEXTED].sort(), 'exactly the signup, guide and payment kinds are texted');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'handed-kinds-'));
+  py(['handoff', '--seen', seen, '--queue', path.join(dir, 'queue.jsonl')], JSON.stringify(rows));
+  const handed = fs.readFileSync(path.join(dir, 'queue.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l).kind);
+  assert.deepEqual(handed.sort(), all.filter(k => !TEXTED.includes(k)).sort(), 'every other kind is handed over');
 });

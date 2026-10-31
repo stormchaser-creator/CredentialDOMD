@@ -320,7 +320,10 @@ test('the runner judges a run with host code copied before the model ran, and ho
   assert.doesNotMatch(sh, /cat "\$REPO\/scripts/);
   for (const step of ['--load', '--record-and-reply']) assert.match(sh, new RegExp(`node "\\$HOST/ticket-agent-context.mjs"[^\\n]*(?:\\\\\\n[^\\n]*)?${step}`), step);
   assert.match(sh, /ALERT="\$HOST\/ticket-fix\/alert.mjs"/);
-  assert.match(sh, /NOTIFY="\$HOST\/notify-owner.sh"/);
+  // Owner, 2026-10-31: the runner never texts; its alerts are queued for the
+  // ops supervisor (signup-notify.sh hands them over).
+  assert.match(sh, /\nNOTIFY=""\n/);
+  assert.doesNotMatch(sh, /NOTIFY="\$HOST\/notify-owner.sh"/);
   assert.match(sh, /PROTECTED=\(scripts\/ticket-fix 'scripts\/ticket-agent\*' scripts\/notify-owner.sh 'supabase\/migrations\/\*support_reply\*' supabase\/functions\/send-ticket-reply\)/);
   assert.match(sh, /if \[ -e "\$HOLD" \]; then[^\n]*\n[^\n]*HOLD[^\n]*\n\s+exit 0/);
   // The reply is recorded against the run's worktree (or the owner checkout

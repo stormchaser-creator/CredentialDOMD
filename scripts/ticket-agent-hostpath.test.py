@@ -211,6 +211,8 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', suffix='0', dir='/p
         sql(MIGRATION)
         sql(HARDENING)
 
+    state_of = {}
+
     def scenario(name, two_owners=False, approved=True, status='open', parked=None, extra=None, payload='{}'):
         reset(two_owners, approved, status, payload)
         run = folder / name
@@ -267,7 +269,6 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', suffix='0', dir='/p
             'CASE_STATE="$HOME/Library/Application Support/CredentialDOMD/ticket-context"': 'CASE_STATE=' + quoted(state),
             'FIX_STATE="$HOME/Library/Application Support/CredentialDOMD/ticket-fix"': 'FIX_STATE=' + quoted(run / 'ticket-fix'),
             'WORK_STATE="$HOME/Library/Application Support/CredentialDOMD/ticket-work"': 'WORK_STATE=' + quoted(run / 'work'),
-            'NOTIFY="$HOST/notify-owner.sh"': 'NOTIFY=' + quoted(binary / 'notify'),
             **(extra or {}),
         }
         for before, after in replacements.items():
@@ -276,6 +277,7 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', suffix='0', dir='/p
             original = original.replace(before, after)
         script = run / 'runner.zsh'
         write(script, original)
+        state_of[run] = state
         return run, state, script, repo
 
     # A whole runner run: its sandboxed sessions take seconds, but a machine
@@ -304,9 +306,13 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', suffix='0', dir='/p
     def log(run):
         return (run / 'runner.log').read_text()
 
+    # Owner, 2026-10-31: the runner never texts; every alert is queued for
+    # the supervisor (via signup-notify.sh). A text would land in notify.log.
     def notified(run):
-        filename = run / 'notify.log'
-        return filename.read_text().splitlines() if filename.exists() else []
+        if (run / 'notify.log').exists():
+            raise AssertionError('the runner texted the owner: ' + (run / 'notify.log').read_text()[:300])
+        filename = state_of[run] / 'owner-alerts.jsonl'
+        return [json.loads(line)['message'] for line in filename.read_text().splitlines()] if filename.exists() else []
 
     def status(state):
         return json.loads((state / 'status.json').read_text())
