@@ -11,7 +11,7 @@ import { scheduledContractsOn } from '../src/utils/scheduledContract.js';
 // the contract last used, and the note under the picker names the others.
 // Synthetic contracts and dates only.
 
-pinClock(test, 'America/Denver', '2026-09-29T10:00:00-06:00');
+const clock = pinClock(test, 'America/Denver', '2026-09-29T10:00:00-06:00');
 const { WorkLog } = await loadScreens('export {default as WorkLog} from "./src/components/features/locum/WorkLog.jsx";');
 const TODAY = '2026-09-29';
 const YESTERDAY = '2026-09-28';
@@ -134,4 +134,22 @@ test('a schedule that loads while the form is open does not swap the form contra
   pressDay(m, 'Yesterday');
   pressDay(m, 'Today');
   assert.equal(formValue(m), EAST.id, 'changing the date looks again');
+});
+
+test("at 3 AM on last night's call the form opens on last night's contract, as the page does", () => {
+  // The page's own rule (scheduledContract.js): at 3 AM he is still on the
+  // previous day's call. Today's calendar date in the form must not jump to
+  // the contract whose day has not started yet.
+  clock.setNow('2026-09-29T03:00:00-06:00');
+  try {
+    const m = work({ scheduleDays: [row(SOUTH.id, YESTERDAY), row(NORTH.id, TODAY)] });
+    assert.equal(picker(m.render()).props.value, SOUTH.id, "the page: last night's call");
+    click(m, 'Log past time');
+    assert.equal(formValue(m), SOUTH.id, 'the form agrees with the page');
+    assert.ok(!formText(m).includes('On your schedule for this date'), 'no note claiming it is booked on the calendar date');
+    pressDay(m, 'Yesterday');
+    assert.equal(formValue(m), SOUTH.id, "yesterday: yesterday's schedule");
+  } finally {
+    clock.setNow('2026-09-29T10:00:00-06:00');
+  }
 });

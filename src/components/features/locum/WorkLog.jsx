@@ -353,6 +353,11 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
     if (!date) return "";
     if (contract && (chosenId === contract.id || timer?.contractId === contract.id)
       && currentCallDay(contract, new Date()) === date) return "";
+    // Today's date at 3 AM: he is still on last night's call, the page's own
+    // rule (scheduled), not on the contract whose day has not begun.
+    const tail = date === localDate(new Date())
+      && scheduled.find(s => s.date !== date && billableContracts.some(c => c.id === s.id));
+    if (tail) return tail.id;
     return scheduledContractsOn(data.scheduleDays, billableContracts, date, { prefer: lastUsedId })[0]?.id || "";
   };
   const dateContractRef = useRef(dateContract);
