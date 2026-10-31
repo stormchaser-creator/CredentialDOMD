@@ -14,10 +14,14 @@ import { sweepHandoffPurges } from "./utils/invoiceHandoffStore.js";
 import { setInvoiceNumberConflictHandler } from "./lib/supabase";
 import { requestRecordsRefresh } from "./utils/serverBilling.js";
 import { startPageDiscardWatch } from "./utils/pageDiscard.js";
+import { markStandalone } from "./utils/phoneViewport.js";
 
 // Global error sink (window.onerror + unhandledrejection -> report-error
 // function -> public.client_errors). Installed before anything renders so a
 // crash inside Clerk or App init is still captured.
+// The home-screen app's height floor (styles/base.css) keys on this, before
+// the first paint.
+markStandalone(window, document);
 captureLaunchInvitation();
 // An email link (#support/<ticket id>, #backups, #requests) is kept for this
 // tab before Clerk can rewrite the hash on the way through sign-in.

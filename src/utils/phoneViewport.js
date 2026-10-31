@@ -32,7 +32,10 @@ export function resetIfStranded(win, doc) {
   const vv = win?.visualViewport;
   // Keyboard still up (the visual viewport is well short of the window).
   if (vv && win.innerHeight && vv.height < win.innerHeight - 120) return false;
-  if (documentScroll(win, doc) <= 0 && !(vv && vv.offsetTop > 0)) return false;
+  // Below zero is the launch offset: the page shown scrolled to -62, where
+  // every tap lands 62 pt above the finger (simulator, 2026-10-30).
+  const below = (Number(win?.scrollY) || 0) < 0 || !!(vv && vv.offsetTop < 0);
+  if (!below && documentScroll(win, doc) <= 0 && !(vv && vv.offsetTop > 0)) return false;
   win.scrollTo(0, 0);
   if (doc?.documentElement) doc.documentElement.scrollTop = 0;
   if (doc?.body) doc.body.scrollTop = 0;
@@ -52,6 +55,7 @@ export function installPhoneViewportReset(win, doc, { delay = 250, schedule = (f
   vv?.addEventListener("resize", later);
   win.addEventListener("orientationchange", later);
   win.addEventListener("pageshow", later);
+  later();
   return () => {
     if (timer !== null) cancel(timer);
     doc.removeEventListener("focusout", later, true);
@@ -68,16 +72,23 @@ export function paintPageBackground(doc, color) {
 }
 
 // The bar was still lifted on the owner's iPhone after the reset above
-// shipped (2026-10-30, his photo): the top of the app in place, the whole
-// app a band of about 62 pt short of the screen, the bar on that short
-// edge. That is iOS, not a scroll: in a home-screen web app, after the
-// keyboard has been up, iOS can leave the layout viewport shorter than the
-// screen, and 100dvh and `position: fixed; bottom: 0` both follow it.
-// So the phone shell takes its height from the screen itself when the app
-// runs from the home screen (no browser bars: the app owns the whole
-// screen), as --app-height, and the bar sits at the bottom of the shell,
-// not of the viewport. Anywhere else (Safari's tab, Android, a window
-// smaller than the screen) nothing is set and 100dvh applies as before.
+// shipped (2026-10-30, his photo), and cut off after a screen-height shell
+// shipped. Reproduced on the iOS 27 simulator as a home-screen app
+// (black-translucent status bar, viewport-fit=cover): the layout viewport is
+// the screen minus the top inset (874 - 62 = 812 on a 402x874 phone). At
+// launch WebKit shows the page scrolled to -62, so it looks full; once the
+// document sits at 0 (the keyboard closing, a scrollTo(0, 0)) the page is
+// 812 tall and iOS draws its own backdrop under it, which no page colour
+// reaches. Nothing is painted past 812, so a taller shell is clipped there
+// (the cut-off bar). This is WebKit bug 301994, open on iOS 27.
+//
+// What held on the simulator, through keyboard cycles and leaving and
+// returning to the app: a floor on the document's height in the home-screen
+// app, html[data-standalone] { min-height: min(100lvh, calc(100% +
+// env(safe-area-inset-top))) } (styles/base.css). With the document at least
+// the screen's height iOS gives the page the whole screen, and a shell that
+// is simply fixed to the viewport's top and bottom fills it. The attribute,
+// not a display-mode media query: the media query read false in the probe.
 
 /** Is this the installed (home-screen) app? */
 export function isStandalone(win) {
@@ -85,51 +96,11 @@ export function isStandalone(win) {
   catch { return false; }
 }
 
-/** The height the phone shell should take, in CSS px, or null for 100dvh. */
-export function fullAppHeight(win) {
-  if (!isStandalone(win)) return null;
-  const sw = Number(win?.screen?.width) || 0, sh = Number(win?.screen?.height) || 0;
-  const iw = Number(win?.innerWidth) || 0, ih = Number(win?.innerHeight) || 0;
-  if (!sw || !sh || !iw || !ih) return null;
-  const landscape = iw > ih;
-  const full = landscape ? Math.min(sw, sh) : Math.max(sw, sh);
-  const across = landscape ? Math.max(sw, sh) : Math.min(sw, sh);
-  // Not the whole screen (an iPad in Split View or Stage Manager): leave it.
-  if (Math.abs(iw - across) > 2) return null;
-  // The bug takes a band, never most of the screen: a height far below the
-  // screen's is a window, not the bug.
-  if (ih < full * 0.75 || ih > full + 2) return null;
-  return full;
-}
-
-export function installAppHeight(win, doc, { delay = 250, schedule = (fn, ms) => win.setTimeout(fn, ms), cancel = (id) => win.clearTimeout(id) } = {}) {
+/** Mark the root so the home-screen height floor in base.css applies. */
+export function markStandalone(win, doc) {
   const root = doc?.documentElement;
-  if (!win || !root?.style) return () => {};
-  let timer = null;
-  const apply = () => {
-    const h = fullAppHeight(win);
-    if (h) root.style.setProperty("--app-height", `${h}px`);
-    else root.style.removeProperty("--app-height");
-  };
-  const later = () => {
-    apply();
-    if (timer !== null) cancel(timer);
-    timer = schedule(() => { timer = null; apply(); }, delay);
-  };
-  apply();
-  const vv = win.visualViewport;
-  win.addEventListener("resize", later);
-  win.addEventListener("orientationchange", later);
-  win.addEventListener("pageshow", later);
-  vv?.addEventListener("resize", later);
-  doc.addEventListener("focusout", later, true);
-  return () => {
-    if (timer !== null) cancel(timer);
-    win.removeEventListener("resize", later);
-    win.removeEventListener("orientationchange", later);
-    win.removeEventListener("pageshow", later);
-    vv?.removeEventListener("resize", later);
-    doc.removeEventListener("focusout", later, true);
-    root.style.removeProperty("--app-height");
-  };
+  if (!root?.dataset) return false;
+  if (isStandalone(win)) { root.dataset.standalone = "true"; return true; }
+  delete root.dataset.standalone;
+  return false;
 }
