@@ -285,6 +285,31 @@ test('failures reach the error reporter once per code, with no account, token or
   assert.doesNotMatch(sent, /user_|Synthetic|@|Bearer|saved records/);
 });
 
+// 2026-10-30: three emails in a day from two iPhones, each a check with no
+// answer (the signal, a timeout) that the next try answered.
+test('a check with no answer that a retry then answers is never reported', async () => {
+  const f = fixture({ answers: [failure('network'), failure('timeout'), snapshot()] });
+  await f.advance(0);
+  await f.advance(10_000);
+  assert.equal(f.value.status, 'ready');
+  assert.deepEqual(f.reports, []);
+  // A later run of the same kind that lasts is still reported, once it lasts.
+  f.queue.push(failure('network'), failure('network'));
+  await f.advance(ACCESS_REFRESH_MS);
+  assert.deepEqual(f.reports, [], 'two failures in a few seconds: not yet');
+});
+
+test('a failure the server answered is reported at once, with the held ones before it', async () => {
+  const f = fixture({ answers: [failure('network'), Object.assign(failure('http'), { httpStatus: 403, code: 'unauthorized' })] });
+  await f.advance(0);
+  await f.advance(1_000);
+  assert.equal(f.calls.length, 2);
+  assert.deepEqual(f.reports.map(([message]) => message), [
+    'Membership check failed (network:membership_information_unavailable)',
+    'Membership check failed (http:403:unauthorized)',
+  ]);
+});
+
 test('the app shows the membership note only for sustained failure, and swaps in an archive only on a server denial', async () => {
   const app = await readFile(new URL('../../src/App.jsx', import.meta.url), 'utf8');
   assert.match(app, /\{\(limitedLaunch\.reconnecting \|\| limitedLaunch\.checking \|\| limitedLaunch\.outdated\) && <LaunchAccessNotice \/>\}/);

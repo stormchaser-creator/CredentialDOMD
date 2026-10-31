@@ -34,13 +34,29 @@ const notAccepted = () => Object.assign(new Error("Membership information could 
   { code: "access_answer_not_accepted", phase: "session", httpStatus: null });
 const clock = () => globalThis.performance?.now?.() ?? Date.now();
 const hidden = () => globalThis.document?.visibilityState === "hidden";
-const freshFailures = () => ({ count: 0, since: 0, shown: false });
+// A check that had no answer from the server (the phone's signal, Clerk's
+// token still waking, an answer cut off) and that a retry then answers is not
+// reported: the member saw nothing, and the owner was emailed for it (three
+// such reports from two iPhones on 2026-10-30, each answered moments later).
+// It is held, and sent once the failures last as long as the reconnecting
+// notice waits. A failure the server answered is sent at once.
+const NO_ANSWER_PHASES = new Set(["token", "network", "timeout", "response", "session"]);
+const noAnswer = error => NO_ANSWER_PHASES.has(describeAccessRefreshFailure(error).phase);
+const lasting = (run, now) => run.count >= RECONNECT_NOTICE_FAILURES && now - run.since >= RECONNECT_NOTICE_MS;
+const freshFailures = () => ({ count: 0, since: 0, shown: false, held: [] });
+// Holds `error` in `run`, and sends everything held once it is lasting or answered.
+function noteFailure(run, error, report, now) {
+  if (run.count === 0) run.since = now;
+  run.count += 1;
+  run.held.push(error);
+  if (lasting(run, now) || !noAnswer(error)) for (const held of run.held.splice(0)) report(held);
+}
 
 export function useLimitedLaunchAccess(accountId, { profileReady = false } = {}) {
   const owner = useRef(null), generation = useRef(0), enrolled = useRef(null);
   // One check in flight per account, where the retry schedule stands, and the
   // run of failures the reconnecting notice waits on.
-  const flight = useRef(null), backoff = useRef(0), failures = useRef(freshFailures());
+  const flight = useRef(null), backoff = useRef(0), failures = useRef(freshFailures()), enrollFailures = useRef(freshFailures());
   const [result, setResult] = useState({ accountId: null, status: "loading", error: null });
   const [, redraw] = useState(0);
   useEffect(() => {
@@ -51,6 +67,7 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
     flight.current = null;
     backoff.current = 0;
     failures.current = freshFailures();
+    enrollFailures.current = freshFailures();
     accessAuthority.reset(accountId || null);
   }, [accountId]);
   const client = useMemo(() => createLimitedLaunchClient({ accountId }), [accountId]);
@@ -67,11 +84,12 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
           await client.bootstrap();
           if (!current()) return;
           enrolled.current = accountId;
+          enrollFailures.current = freshFailures();
         } catch (error) {
           if (!current()) return;
           if (isBackgroundReadAbandoned(error)) throw error;
           enrollmentError = error.code;
-          reportEnrollmentFailure(error);
+          noteFailure(enrollFailures.current, error, reportEnrollmentFailure, clock());
         }
       }
       if (!current()) return;
@@ -96,10 +114,8 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
       // Only a failed check: a save inside the grace is kept on the device.
       accessAuthority.suspendWrites({ outdated, checkFailed: true });
       const run = failures.current, now = clock();
-      if (run.count === 0) run.since = now;
-      run.count += 1;
-      run.shown = run.shown || (run.count >= RECONNECT_NOTICE_FAILURES && now - run.since >= RECONNECT_NOTICE_MS);
-      reportRefreshFailure(error);
+      noteFailure(run, error, reportRefreshFailure, now);
+      run.shown = run.shown || lasting(run, now);
       // A failure after an answer this session does not undo that answer.
       setResult(previous => ({ accountId, status: "error", error: error.message, reconnecting: run.shown && !outdated, outdated,
         answered: previous.accountId === accountId && previous.answered === true }));

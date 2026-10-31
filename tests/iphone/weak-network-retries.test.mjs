@@ -145,7 +145,9 @@ test('a first load whose records read has no answer before its deadline opens th
   assert.equal(f.named('setProfileOwner').at(-1), null, 'no membership check over the device copy');
   assert.ok(f.named('suspendWrites').length >= 1, 'read-only');
   assert.ok(f.named('setLoaded').includes(true), 'the first screen leaves "Loading..."');
-  assert.deepEqual(f.named('report'), [`Account records load used this device's copy, read-only (${ACCOUNT_RECORDS_SUPPORT_REFERENCE}-TIMEOUT).`]);
+  // Reported by the retry only if it does not end the wait (2026-10-30).
+  assert.deepEqual(f.named('report'), []);
+  assert.equal(f.named('setIdentityWaiting').at(-1)?.report, `Account records load used this device's copy, read-only (${ACCOUNT_RECORDS_SUPPORT_REFERENCE}-TIMEOUT).`);
   // Any other failed records read on a first load still stops with its screen.
   const g = load({ ensureProfile: async () => ({ id: 'profile-synthetic' }), loadFromSupabase: async () => { throw Error('refused'); } });
   await g.loadDataForUser(OWNER);

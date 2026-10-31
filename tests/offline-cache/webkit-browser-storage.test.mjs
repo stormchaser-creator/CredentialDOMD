@@ -139,9 +139,9 @@ test('real WebKit: a dead development-era copy and a lost IndexedDB no longer co
     assert.equal(out.deadCopy, false, 'the dead development-era file was released at launch');
     assert.equal(out.save, false, 'the offline copy waits for IndexedDB');
     assert.equal(out.fileInLocal, false, 'and is never put into localStorage');
-    assert.equal(out.report?.extra?.reason, 'indexeddb_unavailable,localstorage_reserved');
-    assert.equal(out.report?.extra?.idbError, 'UnknownError');
-    assert.equal(out.report?.extra?.approxBytes, 3_800_000);
+    // Reopened seconds later and saved: not reported (2026-10-30). The report's
+    // contents are pinned in webkit-quota-dead-copy.test.mjs.
+    assert.equal(out.report, null, 'a lost connection that reopens is not reported');
     assert.deepEqual({ timer: out.timer, note: out.note, hold: out.hold, fence: out.fence, queued: out.queued },
       { timer: true, note: true, hold: true, fence: true, queued: true }, 'everything with nowhere else to go is kept');
     assert.equal(out.retried, true, 'IndexedDB is opened again seconds later, not 30');

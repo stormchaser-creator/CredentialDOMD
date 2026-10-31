@@ -2033,6 +2033,13 @@ function loadTimeoutError() {
   error.code = LOAD_TIMEOUT_CODE;
   return error;
 }
+// A read whose request failed with no answer at all (status 0: the signal
+// dropped, an iPhone resuming before its network did) is the same weak
+// signal as one past its deadline, never a refusal. It used to stop the load
+// on "records could not load" with nothing on screen, and to email the owner
+// (a member's iPhone, 2026-10-30), where a timeout opened the device copy
+// read-only and loaded again by itself.
+const noAnswer = (error, status) => !!error && !status;
 function readWithDeadline(build, limitMs = LOAD_READ_LIMIT_MS) {
   const controller = new AbortController();
   let timer, expire, settled = false;
@@ -2220,14 +2227,14 @@ export async function loadFromSupabase(userId, { readLimitMs = LOAD_READ_LIMIT_M
   // never answers fails the load (AppContext), instead of holding the first
   // screen on "Loading..." for good. A read cut off by it is a timeout, which
   // the load treats as a weak signal, not a refusal.
-  const { data: profile, timedOut: profileTimedOut } = await readWithDeadline(signal => supabase
+  const { data: profile, error: profileError, status: profileStatus, timedOut: profileTimedOut } = await readWithDeadline(signal => supabase
     .from("profiles")
     .select("*")
     .eq("auth_user_id", userId)
     .abortSignal(signal)
     .maybeSingle(), readLimitMs);
 
-  if (profileTimedOut) throw loadTimeoutError();
+  if (profileTimedOut || noAnswer(profileError, profileStatus)) throw loadTimeoutError();
   if (!profile) return null;
 
   const profileId = profile.id;
@@ -2247,7 +2254,7 @@ export async function loadFromSupabase(userId, { readLimitMs = LOAD_READ_LIMIT_M
     const PAGE = 1000;
     let rows = [];
     for (let start = 0; ; start += PAGE) {
-      const { data, error, timedOut } = await readWithDeadline(signal => supabase
+      const { data, error, status, timedOut } = await readWithDeadline(signal => supabase
         .from(tableName(key))
         .select("*")
         .eq("user_id", profileId)
@@ -2255,7 +2262,7 @@ export async function loadFromSupabase(userId, { readLimitMs = LOAD_READ_LIMIT_M
         .order("id", { ascending: true })
         .range(start, start + PAGE - 1)
         .abortSignal(signal), readLimitMs);
-      if (timedOut) timedOutKeys.add(key);
+      if (timedOut || noAnswer(error, status)) timedOutKeys.add(key);
       if (error) return { data: rows.length ? rows : null, error };
       rows = rows.concat(data || []);
       if (!data || data.length < PAGE) {

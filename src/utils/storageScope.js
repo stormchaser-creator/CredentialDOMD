@@ -1208,9 +1208,28 @@ export function storageRefusalKind(refused) {
   return "unavailable";
 }
 
-export function reportStorageRefusal({ store, reason, chars = 0 }) {
+// A connection WebKit took away (offlineStore.js, LOST_ERRORS) reopens on the
+// next write, a couple of seconds later. The refusal it caused is held, and
+// reported only if a write at least this long after it is refused as well;
+// a write that saves first drops it (offlineCopySaved). It used to be emailed
+// to the owner as soon as it happened (his iPhone, 2026-10-30).
+export const LOST_CONNECTION_CONFIRM_MS = 30000;
+let heldLostSince = null;
+/** A write of the offline copy landed: a lost connection held for the report was only that. */
+export function offlineCopySaved() { heldLostSince = null; }
+
+export function reportStorageRefusal({ store, reason, chars = 0 }, now = Date.now()) {
   const event = storageRefusalKind(reason) === "full" ? "storage_full" : "storage_unavailable";
   if (storageReported.has(event) || !storageFullReporter) return false;
+  if (event === "storage_unavailable") {
+    let lost = false;
+    try { lost = offlineStoreState().lost === true; } catch { /* unknown: reported */ }
+    if (lost && (heldLostSince === null || now - heldLostSince < LOST_CONNECTION_CONFIRM_MS)) {
+      heldLostSince ??= now;
+      return false;
+    }
+  }
+  heldLostSince = null;
   storageReported.add(event);
   const approxBytes = Math.round((Math.max(0, Number(chars) || 0) * 2) / 100000) * 100000;
   // What fills localStorage (key bases and sizes, never a value or an account
@@ -1224,7 +1243,7 @@ export function reportStorageRefusal({ store, reason, chars = 0 }) {
   return true;
 }
 /** Tests only: a new session. */
-export function resetStorageFullReport() { storageReported.clear(); }
+export function resetStorageFullReport() { storageReported.clear(); heldLostSince = null; }
 
 function lsText(key) {
   try { return localStorage.getItem(key); } catch { return null; }
@@ -1822,6 +1841,7 @@ export function refusedForSpace(refused) {
 function storeMirrored(key, value, userId) {
   writeOfflineText(key, value, localWriteGuard(userId)).then((result) => {
     if (result.stopped) return;
+    if (result.saved && !result.refused.length) offlineCopySaved();
     if (!result.saved || result.refused.includes("indexeddb_quota")) {
       reportStorageRefusal({ store: key.slice(0, key.indexOf(":")), reason: result.refused.join(","), chars: result.chars });
     }

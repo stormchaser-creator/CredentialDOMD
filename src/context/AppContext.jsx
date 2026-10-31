@@ -109,6 +109,7 @@ const RESUME_REFRESH_MIN_GAP_MS = 30 * 1000;
 // again after these pauses, and whenever the app comes back to the front or
 // online. The last pause repeats.
 const IDENTITY_RETRY_DELAYS_MS = Object.freeze([5000, 15000, 30000, 60000, 120000]);
+const IDENTITY_WAIT_REPORT_TRIES = 3;
 // How long the page load's first membership answer waits for the writes the
 // load before it began (they wait on that answer) to settle before deciding
 // what the load still owes (settleFirstAnswer).
@@ -443,9 +444,19 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
       try { await loadDataForUser(ownerId, { fromWait: true }); } catch { /* the next try */ }
       finally { busy = false; }
     };
+    // The wait is reported once this many timed tries have not ended it
+    // (about 50 s of the app on screen); one a try ends never is.
+    const report = identityWaiting?.report;
     const schedule = () => {
       const wait = IDENTITY_RETRY_DELAYS_MS[Math.min(attempt, IDENTITY_RETRY_DELAYS_MS.length - 1)];
-      timer = setTimeout(async () => { await retry(); attempt += 1; if (!stopped) schedule(); }, wait);
+      timer = setTimeout(async () => {
+        await retry(); attempt += 1;
+        if (stopped) return;
+        // Asked a moment later: a try that just loaded the account ends the
+        // wait (this effect's cleanup) once React has caught up.
+        if (attempt === IDENTITY_WAIT_REPORT_TRIES && report) setTimeout(() => { if (!stopped) reportUnlessLeaving(report); }, 2000);
+        schedule();
+      }, wait);
     };
     const onVisible = () => { if (typeof document === "undefined" || document.visibilityState === "visible") void retry(); };
     const onWake = () => { void retry(); };
@@ -1145,16 +1156,17 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
         const supportReference = profileSupportReference(err);
         accessAuthority.suspendWrites();
         setProfileIssue(null);
-        setIdentityWaiting({ accountId: authUserId, supportReference });
-        reportUnlessLeaving(`Account load used this device's copy, read-only (${supportReference}).`);
+        // Reported by the retry below only if it has not loaded the account
+        // after a few tries: a weak signal it answers is not news.
+        setIdentityWaiting({ accountId: authUserId, supportReference, report: `Account load used this device's copy, read-only (${supportReference}).` });
         if (current()) loadLocalData(authUserId, current, begun);
         return;
       }
       if (fromWait && err.code === "account_records_unavailable" && dataOwnerRef.current === authUserId) {
         accessAuthority.suspendWrites();
         setProfileOwner(null);
-        setIdentityWaiting({ accountId: authUserId, supportReference: ACCOUNT_RECORDS_SUPPORT_REFERENCE });
-        reportUnlessLeaving(`Account records load used this device's copy, read-only (${ACCOUNT_RECORDS_SUPPORT_REFERENCE}).`);
+        setIdentityWaiting({ accountId: authUserId, supportReference: ACCOUNT_RECORDS_SUPPORT_REFERENCE,
+          report: `Account records load used this device's copy, read-only (${ACCOUNT_RECORDS_SUPPORT_REFERENCE}).` });
         return;
       }
       // The records read had no answer before its deadline on a load that is
@@ -1168,8 +1180,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
         accessAuthority.suspendWrites();
         setProfileOwner(null);
         setProfileIssue(null);
-        setIdentityWaiting({ accountId: authUserId, supportReference });
-        reportUnlessLeaving(`Account records load used this device's copy, read-only (${supportReference}).`);
+        setIdentityWaiting({ accountId: authUserId, supportReference, report: `Account records load used this device's copy, read-only (${supportReference}).` });
         if (current()) loadLocalData(authUserId, current, begun);
         return;
       }

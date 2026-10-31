@@ -1,6 +1,6 @@
 import { DEFAULT_DATA } from "../constants/defaults";
 import { BASE_KEYS, scopedKey, purgeForSignOut, localCopyCurrent, hydrateOfflineStores, readOfflineFile, writeOfflineText,
-  localWriteGuard, storageRefusalKind, reportStorageRefusal, offlineCopyUnread, markOfflineCopyUnread, prepareOfflineRead, getActiveUserId, offlineWriteStamp,
+  localWriteGuard, storageRefusalKind, reportStorageRefusal, offlineCopySaved, offlineCopyUnread, markOfflineCopyUnread, prepareOfflineRead, getActiveUserId, offlineWriteStamp,
   deviceOnlySectionsOf, sameDeviceOnlySections, rebaseDeviceOnlySections, holdDeviceOnlyChanges, heldDeviceOnlyChanges,
   withHeldDeviceOnlyChanges, releaseHeldDeviceOnlyChanges, setBeforeDeviceOnlyTrim, writeOwnLocalCopy, rewriteLocalCopy,
   saveStopGuard, holdsDeviceOnlyChangesHere, takeReleasedHoldHere, spillOfflineText, markOfflineCopyBehind,
@@ -527,6 +527,7 @@ async function saveTextNow(key, userId, payload, guard, how, seq, stopSnapshot, 
     reportStorageRefusal({ store: "cache", reason: result.refused.join(","), chars: result.chars });
   }
   if (result.saved) {
+    if (!result.refused.length) offlineCopySaved();
     const final = mergedSections && result.text !== json ? mergedSections : mine;
     storedText.set(key, { text: result.text ?? json, current: localWriteGuard(userId, { adopted: false }) });
     // The copy just written. From the records in memory (saveData): they are

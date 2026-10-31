@@ -145,6 +145,11 @@ test('the owner\'s 01:57: IndexedDB lost after a long suspension, a dead develop
   const edited = { ...FILE, caseLogs: [...FILE.caseLogs, caseLog(999_999)] };
   assert.equal(await storage.saveData(edited, PROD), false, 'the offline copy is not updated while IndexedDB is lost');
   assert.equal(storage.cacheStaleReason(), 'unavailable');
+  // A lost connection usually reopens on the next write: not reported yet
+  // (2026-10-30). Still lost on a write 30 seconds on, it is.
+  assert.equal(reports.length, 0, 'the first refusal after a lost connection is held');
+  clockOffset += scope.LOST_CONNECTION_CONFIRM_MS;
+  assert.equal(await storage.saveData(edited, PROD), false);
   assert.equal(reports.length, 1);
   assert.equal(reports[0].message, 'Offline copy not saved: storage_unavailable');
   assert.equal(reports[0].extra.approxBytes, 3_800_000, 'the same size the owner\'s phone reported');
@@ -237,6 +242,9 @@ test('a lost IndexedDB is opened again within seconds, not 30, and the report na
   loseIndexedDbServer();
   const edited = { ...FILE, caseLogs: [...FILE.caseLogs, caseLog(777_777)] };
   assert.equal(await storage.saveData(edited, PROD), false);
+  assert.equal(reports.length, 0, 'held: a lost connection usually reopens on the next write');
+  clockOffset += scope.LOST_CONNECTION_CONFIRM_MS;
+  assert.equal(await storage.saveData(edited, PROD), false);
   assert.equal(reports[0]?.extra?.idbError, 'UnknownError', 'the report says how IndexedDB failed');
   assert.equal(reports[0]?.extra?.idbLost, true);
   assert.ok(Array.isArray(reports[0]?.extra?.local?.top), 'and what fills localStorage');
@@ -248,5 +256,24 @@ test('a lost IndexedDB is opened again within seconds, not 30, and the report na
   clockOffset += 2_500;
   assert.equal(await storage.retryOfflineSave(PROD), true, 'saved on the next try');
   assert.equal(storage.cacheStaleReason(), null, 'the notice goes');
+  scope.setActiveUserId(null);
+});
+
+// The owner's iPhone, 2026-10-30: one write refused as WebKit took the
+// connection away, the next saved. That is not news, and is never reported.
+test('a lost IndexedDB that reopens before a later write fails is never reported', async () => {
+  freshDevice();
+  scope.setActiveUserId(PROD);
+  assert.equal(await storage.saveData(FILE, PROD), true);
+  loseIndexedDbServer();
+  const edited = { ...FILE, caseLogs: [...FILE.caseLogs, caseLog(888_888)] };
+  assert.equal(await storage.saveData(edited, PROD), false);
+  idb.failOpen = false;
+  clockOffset += 2_500;
+  assert.equal(await storage.retryOfflineSave(PROD), true);
+  loseIndexedDbServer();
+  clockOffset += scope.LOST_CONNECTION_CONFIRM_MS;
+  assert.equal(await storage.saveData({ ...edited, caseLogs: [...edited.caseLogs, caseLog(888_889)] }, PROD), false);
+  assert.equal(reports.length, 0, 'the save between the two started the wait over');
   scope.setActiveUserId(null);
 });

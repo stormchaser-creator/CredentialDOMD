@@ -139,7 +139,7 @@ function fixture({ signup = true, profileReady = true, clerkUser = OWNER, memory
 // A guard, not the owner's confirmed path: production's client checks the
 // Clerk session again after reading the answer (next test), so an answer this
 // late in the round trip is practically never refused here.
-test('an answer the authority does not take (Clerk reports no user as it lands) is a failed check: asked again within a second, and reported once', async () => {
+test('an answer the authority does not take (Clerk reports no user as it lands) is a failed check: asked again within a second, and not reported once the retry answers', async () => {
   const f = fixture({ entitlements: ({ later }) => later(500, () => validateAccessSnapshot(lifetimeAnswer())) });
   assert.equal(f.value.checking, true, 'a cold start with nothing remembered says it is checking');
   await f.advance(0);
@@ -154,7 +154,8 @@ test('an answer the authority does not take (Clerk reports no user as it lands) 
   assert.equal(f.value.status, 'ready');
   assert.equal(f.value.access.lifetime.credential && f.value.access.lifetime.practice, true);
   assert.equal(f.authority.allowsMutation('workLog', { id: 'w1' }), true, 'the fresh answer that was accepted authorizes the write');
-  assert.deepEqual(f.reports.map(([message]) => message), ['Membership check failed (session:access_answer_not_accepted)']);
+  // Answered a second later, so the member saw nothing: not emailed (2026-10-30).
+  assert.deepEqual(f.reports, []);
   assert.deepEqual(f.memory.saved.get(OWNER), { credential: true, practice: true }, 'and remembered for the next launch');
 });
 
@@ -261,10 +262,8 @@ test('with production\'s client, a Clerk session lost while the answer is on its
   assert.equal(f.value.status, 'ready');
   assert.equal(f.value.checking, false);
   assert.equal(f.authority.allowsMutation('workLog', { id: 'w1' }), true);
-  assert.equal(f.reports.length, 1);
-  // A session gone while the answer was read is reported as such (session:200).
-  assert.match(f.reports[0][0], /^Membership check failed \(session:200:/);
-  assert.doesNotMatch(JSON.stringify(f.reports), /access_answer_not_accepted|synthetic-token|user_/);
+  // The retry answered: nothing reported (2026-10-30).
+  assert.deepEqual(f.reports, []);
 });
 
 test('Sign out drops a check still in flight: no answer written back, no failure reported, no retry', async () => {

@@ -76,7 +76,9 @@ test('no answer from the identity check: the device copy opens read-only, with n
   assert.deepEqual(shown.licenses.map(l => l.name), ['QA device license'], 'his records, from this device');
   assert.equal(f.named('setLoadedFrom').at(-1), 'local');
   assert.equal(f.context.dataOwnerRef.current, OWNER);
-  assert.match(f.named('report').at(-1), /read-only \(ID-INIT-UNAVAILABLE-TIMEOUT-NETWORK\)/);
+  // Not sent now: the retry reports it only if a few tries do not end the wait.
+  assert.deepEqual(f.named('report'), []);
+  assert.match(waiting.report, /read-only \(ID-INIT-UNAVAILABLE-TIMEOUT-NETWORK\)/);
 });
 
 test('a server answer about the identity still stops on the screen that says so', async () => {
@@ -114,4 +116,57 @@ test('the app asks the identity check again on its own, on wake and on a timer, 
   assert.match(resume, /loadDataForUser\(ownerId, \{ quiet: true \}\)/);
   for (const event of ['"visibilitychange"', '"pageshow"', '"online"']) assert.ok(resume.includes(event), `reads again on ${event}`);
   assert.match(resume, /force: pendingOpCount\(ownerId\) > 0/, 'back online with saves waiting, at once');
+});
+
+// 2026-10-30: the wait on the device copy used to be emailed to the owner as
+// soon as it began, though the retry usually ends it seconds later. Runs the
+// retry effect cut from AppContext, on a fake clock.
+function waitEffect({ loads }) {
+  const begin = appSource.indexOf('  useEffect(() => {\n    const ownerId = user?.id || null;\n    if (offlineMode || !ownerId || identityWaiting?.accountId');
+  const end = appSource.indexOf('}, [offlineMode, user?.id, identityWaiting?.accountId]);', begin);
+  assert.ok(begin > 0 && end > begin, 'the identity retry effect located');
+  const body = appSource.slice(appSource.indexOf('{', begin), end + 1);
+  let now = 0, next = 1;
+  const timers = new Map(), reports = [];
+  const context = {
+    offlineMode: false, user: { id: OWNER }, identityWaiting: { accountId: OWNER, report: 'Account load used this device\'s copy, read-only (SYNTHETIC).' },
+    IDENTITY_RETRY_DELAYS_MS: [5000, 15000, 30000, 60000, 120000],
+    getActiveUserId: () => OWNER, reportUnlessLeaving: m => reports.push(m),
+    loadDataForUser: async () => loads(),
+    document: { visibilityState: 'visible', addEventListener() {}, removeEventListener() {} },
+    window: { addEventListener() {}, removeEventListener() {} },
+    setTimeout: (fn, ms) => { const id = next++; timers.set(id, { fn, at: now + ms }); return id; },
+    clearTimeout: id => timers.delete(id),
+  };
+  const ids = appSource.match(/const IDENTITY_WAIT_REPORT_TRIES = \d+;/)[0];
+  const cleanup = vm.runInNewContext(`${ids}\n(() => ${body})()`, context);
+  const advance = async ms => {
+    const until = now + ms;
+    for (;;) {
+      const due = [...timers.entries()].filter(([, t]) => t.at <= until).sort((a, b) => a[1].at - b[1].at)[0];
+      if (!due) break;
+      timers.delete(due[0]); now = due[1].at; await due[1].fn();
+      for (let i = 0; i < 5; i++) await new Promise(r => setImmediate(r));
+    }
+    now = until;
+  };
+  return { reports, advance, cleanup };
+}
+
+test('the device-copy wait is reported only when three timed tries have not ended it', async () => {
+  const w = waitEffect({ loads: () => {} });
+  await w.advance(5000 + 15000);
+  assert.deepEqual(w.reports, [], 'two tries in: nothing sent');
+  await w.advance(30000 + 2000);
+  assert.deepEqual(w.reports, ["Account load used this device's copy, read-only (SYNTHETIC)."]);
+  await w.advance(400000);
+  assert.equal(w.reports.length, 1, 'once');
+  w.cleanup();
+});
+
+test('a wait a try ends (the effect cleaned up) is never reported', async () => {
+  let w;
+  w = waitEffect({ loads: () => { w.cleanup(); } });
+  await w.advance(600000);
+  assert.deepEqual(w.reports, []);
 });

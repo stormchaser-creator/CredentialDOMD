@@ -450,6 +450,27 @@ test('a records read that never answers ends the account read at its deadline as
   });
 });
 
+// A member's iPhone, 2026-10-30: the signal dropped during the load, every
+// read failed with no answer at all (WebKit's "Load failed"), and the load
+// stopped on "records could not load" instead of opening the device copy
+// read-only and loading again, as a read past its deadline does.
+test('a records read that fails with no answer at all is a timeout too; a server refusal is not', async () => {
+  for (const drop of ['profile', 'table']) {
+    await withSharedFetch((n, request) => (drop === 'profile' || !request.url.includes('/profiles?'))
+      ? Promise.reject(new TypeError('Load failed')) : Promise.resolve(Response.json({ id: PROFILE_ID, auth_user_id: OWNER })), async f => {
+      const outcome = await within(f.api.loadFromSupabase(OWNER, { readLimitMs: 500 }).then(() => 'loaded', error => error), 2000);
+      assert.equal(outcome.code, 'load_timeout', drop);
+    });
+  }
+  // must-pass: a table the server refused (a status) is an incomplete read, not a weak signal.
+  await withSharedFetch((n, request) => Promise.resolve(request.url.includes('/profiles?')
+    ? Response.json({ id: PROFILE_ID, auth_user_id: OWNER })
+    : Response.json({ code: '42501', message: 'permission denied' }, { status: 403 })), async f => {
+    const value = await within(f.api.loadFromSupabase(OWNER, { readLimitMs: 500 }), 2000);
+    assert.ok(value._errored.size > 0, 'the refused tables are marked failed, and the load is not a timeout');
+  });
+});
+
 // Signup review 2026-10-07 (second pass): the deadline covered the whole
 // transfer, body included, so a large account on a slow but working link
 // (the owner's first page of case logs is about 800 KB) was cancelled while
