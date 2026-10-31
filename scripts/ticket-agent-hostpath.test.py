@@ -427,9 +427,9 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', suffix='0', dir='/p
             handle.write('\n// Synthetic work in progress, uncommitted before the run.\n')
         check('edits already present before the run do not hold it', execute(script).returncode == 0 and count() == 1 and 'PROTECTED' not in log(run))
 
-        run, state, script, repo = scenario('timeout', extra={'WORKER_SECONDS=1500': 'WORKER_SECONDS=2'})
+        run, state, script, repo = scenario('timeout', extra={'WORKER_SECONDS=2700': 'WORKER_SECONDS=2'})
         check('a model killed by the alarm counts toward the breaker', execute(script).returncode != 0 and count() == 0 and (state / 'failed' / f'{T}.count').read_text().strip() == '1' and 'REJECTED — ' + T + ' model run failed or timed out' in log(run) and 'worker session timed out after 2 s' in log(run) and ': worker FAILED timed out after 2 s' in log(run), log(run)[-1500:])
-        run, state, script, repo = scenario('timeout_park', parked=2, extra={'WORKER_SECONDS=1500': 'WORKER_SECONDS=2'})
+        run, state, script, repo = scenario('timeout_park', parked=2, extra={'WORKER_SECONDS=2700': 'WORKER_SECONDS=2'})
         check('the third timeout parks the ticket and alerts the owner', execute(script).returncode != 0 and (state / 'failed' / f'{T}.count').read_text().strip() == '3' and len(notified(run)) == 1 and 'parked' in notified(run)[0])
 
         # The subscription's limit (2026-09-29): every session exits 1 with the

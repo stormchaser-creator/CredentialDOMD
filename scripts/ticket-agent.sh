@@ -25,8 +25,10 @@ FIX_STATE="$HOME/Library/Application Support/CredentialDOMD/ticket-fix"
 # baseline/ and the AUTO_MERGE flag (absent: every merge is held).
 WORK_STATE="$HOME/Library/Application Support/CredentialDOMD/ticket-work"
 HOLD="$CASE_STATE/HOLD-host-code-changed"
-# Per-session limits (seconds) for the model sessions run.mjs starts.
-WORKER_SECONDS=1500
+# Per-session limits (seconds) for the model sessions run.mjs starts. This
+# value overrides run.mjs's own default, so the two must agree: at 1500 a
+# worker on an already-fixed ticket timed out with nothing kept (2026-10-30).
+WORKER_SECONDS=2700
 
 mkdir -p "$(dirname "$LOG")"
 /bin/mkdir -p "$CASE_STATE" && /bin/chmod 700 "$CASE_STATE"

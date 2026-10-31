@@ -269,7 +269,9 @@ test('the runner shell: lock owner, park alert, status on every exit; the model 
   assert.match(sh, /--claude "\$CLAUDE" --committer "\$RUN_COMMITTER" --notify "\$NOTIFY" --worker-seconds "\$WORKER_SECONDS"/);
   assert.match(sh, /--work "\$WORK_STATE" --state "\$CASE_STATE" --fix-state "\$FIX_STATE"/);
   assert.match(sh, /WORK_STATE="\$HOME\/Library\/Application Support\/CredentialDOMD\/ticket-work"/);
-  assert.equal((sh.match(/WORKER_SECONDS=1500/g) || []).length, 1);
+  assert.equal((sh.match(/WORKER_SECONDS=2700/g) || []).length, 1);
+  // The shell's value is what the worker gets: it must match run.mjs's default.
+  assert.match(read('scripts/ticket-fix/run.mjs'), /workerSeconds = 2700,/);
   // Exit codes: every failure counts toward the breaker; runner code holds.
   assert.match(sh, /if host_code_changed \|\| \[ "\$WORK_RC" -eq 4 \]; then hold_run runner_code; RC=1; break; fi/);
   // Exit 6: git state outside the worktree changed (stage 2 review, finding 12).
