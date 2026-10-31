@@ -103,7 +103,9 @@ test('ops supervisor: an idle queue starts no session; entries go to one session
     assert.equal(call.token, 'synthetic-oauth-token');
     assert.equal(call.cwd, path.join(l.ops, 'work'));
     assert.equal(l.cursor(), fs.statSync(l.queue).size);
-    assert.match(l.log(), /START: 2 new entries, sweep=queue\n.*DONE: Synthetic summary: nothing needed\./);
+    // The session's stderr goes to the same log, so a tool's warning may
+    // sit between START and DONE (the macOS sandbox makes python3 warn).
+    assert.match(l.log(), /START: 2 new entries, sweep=queue\n(?:.*\n)*?.* DONE: Synthetic summary: nothing needed\./);
     assert.equal(fs.existsSync(l.lock), false, 'the lock is released');
 
     r = l.run();
