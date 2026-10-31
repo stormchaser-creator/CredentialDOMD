@@ -7,7 +7,7 @@ import { useApp } from "../../context/AppContext";
  * @param {number} size — diameter in px (default 140)
  * @param {number} stroke — stroke width (default 10)
  * @param {string} label — text below the number (default "Compliant")
- * @param {boolean} pending — keep a neutral color while CME questions remain; the percentage still describes deadline status
+ * @param {boolean} pending — CME questions remain: noted in the spoken text, and a complete ring is not shown green
  */
 function ComplianceRing({ percent = 0, size = 140, stroke = 10, label = "Compliant", pending = false }) {
   const { theme: T } = useApp();
@@ -46,10 +46,14 @@ function ComplianceRing({ percent = 0, size = 140, stroke = 10, label = "Complia
     return () => cancelAnimationFrame(rafRef.current);
   }, [safePercent]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Gradient colors based on percentage
-  const neutral = pending || !Number.isFinite(percent);
-  const gradStart = neutral ? T.textMuted : safePercent >= 80 ? "#10b981" : safePercent >= 50 ? "#f59e0b" : "#ef4444";
-  const gradEnd   = neutral ? T.textMuted : safePercent >= 80 ? "#34d399" : safePercent >= 50 ? "#fbbf24" : "#f87171";
+  // Arc color by percentage: green only when complete, yellow above 50,
+  // red at 50 and below. Unanswered CME questions are never an all-clear,
+  // so a complete ring stays yellow while they remain. Neutral only when
+  // there is no number to show.
+  const neutral = !Number.isFinite(percent);
+  const complete = safePercent >= 100 && !pending;
+  const gradStart = neutral ? T.textMuted : complete ? "#10b981" : safePercent > 50 ? "#f59e0b" : "#ef4444";
+  const gradEnd   = neutral ? T.textMuted : complete ? "#34d399" : safePercent > 50 ? "#fbbf24" : "#f87171";
   const trackColor = T.input;
 
   return (

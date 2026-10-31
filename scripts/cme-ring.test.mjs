@@ -60,13 +60,14 @@ test('unanswered CME still displays the animated numeric score and arc with expl
   assert.equal(ring.props.role, 'progressbar');
   assert.equal(ring.props['aria-valuenow'], 50);
   assert.match(ring.props['aria-valuetext'], /CME questions still need answers.*not CME completion/);
-  assert.equal(nodes(ring, 'stop')[0].props.stopColor, 'gray', 'unanswered questions are never an all-clear color');
+  assert.equal(nodes(ring, 'stop')[0].props.stopColor, '#ef4444', '50% is red, open questions or not');
 
   f.render({ ...props, percent: 100 }); f.finishAnimation();
   const full = f.render({ ...props, percent: 100 });
   assert.match(text(full), /100%/);
   assert.equal(nodes(full, 'circle')[1].props.strokeDashoffset, 0);
   assert.match(full.props['aria-valuetext'], /questions still need answers/);
+  assert.equal(nodes(full, 'stop')[0].props.stopColor, '#f59e0b', 'unanswered questions are never an all-clear color');
 });
 
 test('resolved questions preserve numeric animation while invalid percentages remain finite', () => {

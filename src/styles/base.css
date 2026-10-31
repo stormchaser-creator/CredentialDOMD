@@ -265,11 +265,6 @@ img, svg {
   to   { opacity: 1; transform: scale(1) translateY(0); }
 }
 
-@keyframes ringFillAnim {
-  from { stroke-dashoffset: var(--ring-max, 408); }
-  to   { stroke-dashoffset: var(--ring-offset, 0); }
-}
-
 /* ─── Glass / Elevated Surfaces ────────────────────────────── */
 .cmd-glass {
   backdrop-filter: blur(12px);
@@ -395,11 +390,11 @@ img, svg {
   -webkit-backdrop-filter: blur(8px);
 }
 
-/* ─── Compliance Ring Enhancement ───────────────────────────── */
-.cmd-ring-animated circle {
-  animation: ringFillAnim 1s ease-out both;
-  animation-delay: 0.2s;
-}
+/* ─── Compliance Ring ───────────────────────────────────────── */
+/* No CSS animation on the ring's circles. One ending at
+   stroke-dashoffset 0 with fill-mode both outranked the arc's inline
+   offset and drew every ring full: 89% looked complete. ComplianceRing
+   animates its own arc with a transition. */
 
 /* ─── Tab pill indicator ────────────────────────────────────── */
 .cmd-tab-active-pill {
