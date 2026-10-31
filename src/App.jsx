@@ -114,6 +114,7 @@ import ProfessionReviewCard from "./components/shared/ProfessionReviewCard";
 import CmeReviewSummary from "./components/shared/CmeReviewSummary";
 import { cmeReviewSummary, cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE, rollingWindowLabel, appCardTitle, appRenewalLine, anchoredRenewalLine, certificationMetLine } from "./utils/cmePresentation";
 import { complianceFor, complianceListFor, standingScore, cardWindowNotes, splitByCycle, alertingStates, resolvePendingLicense, undatedLicenseOnFile, cmeTopics } from "./utils/compliance";
+import { topicTags } from "./utils/cmeCore.js";
 import { isPracticeLicense, isAdvancedPractice } from "./constants/professions";
 import { getEducationTypes } from "./constants/credentialTypes";
 import { professionMismatches } from "./utils/professionReview";
@@ -1677,7 +1678,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
             // Cat 1" while the engine excluded them. The modal exists to explain
             // the math, so it has to read the math's own inputs.
             const cat1Keys = comp.cat1Keywords || [];
-            const mandateTopics = comp.topicResults.map(t => t.topic);
+            // Every tag a mandate counts (PA pain management also takes opioid
+            // and addiction courses), so a counted course shows its tag.
+            const mandateTopics = comp.topicResults.flatMap(topicTags);
             // The engine's own window test (cycleBucket), so a first-day entry
             // is listed as counted, as the total counts it.
             const { inWin, outWin } = splitByCycle(data.cme, comp.windowStart, comp.windowEnd);

@@ -10,7 +10,7 @@ import {
 } from "../constants/professions.js";
 import { ruleSetFor } from "./ruleResolver.js";
 import {
-  MATE_TOPICS, MATE_HOURS, MS_PER_DAY, cmeTopics, parseLocalDate, cycleBucket, splitByCycle, inWindow, taggedOutsidePeriod,
+  MATE_TOPICS, MATE_HOURS, MS_PER_DAY, cmeTopics, topicTags, parseLocalDate, cycleBucket, splitByCycle, inWindow, taggedOutsidePeriod,
   wholeMonthsBetween, showDate, topicPeriodLabel, round2,
 } from "./cmeCore.js";
 
@@ -51,6 +51,8 @@ export { MATE_HOURS, cmeTopics, cycleBucket, splitByCycle, topicPeriodLabel, rou
  *   - hours > 0 → progress bar toward the mandated hours
  *   - hours === 0 → required checklist item with no fixed hour count
  *     (met when at least one entry in the topic's period is tagged)
+ *   - `alsoTopics` (optional) → other tags the rule lets meet this mandate;
+ *     a course tagged with any of them counts, once
  *   - `cite` / `url` are OPTIONAL per-topic provenance. A state rule set has
  *     one `sourceUrl`, but its topics rarely come from one place: California's
  *     50-hour total is 16 CCR 1336 while its 12-hour pain-management mandate is
@@ -191,7 +193,11 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
       pool = windowed;
       period = null;
     }
-    const tagged = pool.filter(c => cmeTopics(c).includes(t.topic)
+    // A mandate the rule lets other subjects meet (Pennsylvania: pain
+    // management, identification of addiction, or prescribing opioids) names
+    // those tags in alsoTopics, as the PA and NP engine does (ticket 53890221).
+    const tags = topicTags(t);
+    const tagged = pool.filter(c => cmeTopics(c).some(x => tags.includes(x))
       && (!t.acceptedCategories || t.acceptedCategories.includes(c.category)));
     const informational = t.informational === true;
     const earned = informational ? null : round2(tagged.reduce((s, c) => s + hours(c), 0));
@@ -213,6 +219,7 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     const url = t.url || entryUrl;
     return {
       topic: t.topic,
+      ...(tags.length > 1 ? { alsoTopics: tags.slice(1) } : {}),
       informational,
       condition: t.condition || null,
       applicability: topicApplicability(t, opts.topicApplicability),
@@ -421,7 +428,7 @@ export function topicOutsidePeriod(comp, tr, cmeEntries) {
   }
   if (!start || Number.isNaN(start.getTime())) return null;
   const pool = (cmeEntries || []).filter(c => inWindow(c, start, end));
-  return taggedOutsidePeriod(cmeEntries, pool, [tr.topic], null, start, end);
+  return taggedOutsidePeriod(cmeEntries, pool, topicTags(tr), null, start, end);
 }
 
 /**

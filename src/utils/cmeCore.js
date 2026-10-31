@@ -18,6 +18,22 @@ export function cmeTopics(c) {
   return typeof t === "string" ? t.split(/[,;]/).map(x => x.trim()).filter(Boolean) : [];
 }
 
+/**
+ * The tags that count toward one topic mandate: its own name, then any
+ * `alsoTopics` the rule names (Pennsylvania pain management also takes
+ * courses on addiction or opioid prescribing). Takes a rule topic or an
+ * engine topic row; both carry `topic` and `alsoTopics`.
+ */
+export function topicTags(t) {
+  return [t?.topic, ...(Array.isArray(t?.alsoTopics) ? t.alsoTopics : [])].filter(x => typeof x === "string" && x);
+}
+
+/** "Pain Management", or "Pain Management, Opioid Prescribing or Substance Use Disorders". */
+export function topicTagsLabel(t) {
+  const tags = topicTags(t);
+  return tags.length > 1 ? `${tags.slice(0, -1).join(", ")} or ${tags[tags.length - 1]}` : (tags[0] || "");
+}
+
 export const MS_PER_DAY = 86400000;
 
 // Parse a date at LOCAL midnight. A bare "YYYY-MM-DD" otherwise parses as UTC
