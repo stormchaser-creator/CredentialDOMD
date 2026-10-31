@@ -149,14 +149,21 @@ async function withPhone(fn) {
 }
 
 const shot = async (page, name) => { if (shots) { mkdirSync(shots, { recursive: true }); await page.screenshot({ path: join(shots, `${name}.png`) }); } };
-// Smooth scrolling: wait until the scroller has stopped moving.
-const still = (page, sel) => page.waitForFunction((s) => {
-  const el = document.querySelector(s);
-  const now = el.scrollTop;
-  const was = el.__last;
-  el.__last = now;
-  return was === now;
-}, sel, { polling: 150, timeout: 5000 });
+// Smooth scrolling: wait until the scroller has stopped moving. Two equal
+// readings 150 ms apart were also true BEFORE a smooth scroll had started
+// (both 0), so the test measured mid-scroll and failed about one run in
+// three (ticket agent gate, 2026-10-31). It now waits for the scroll to
+// start (up to 1 s; some cases never scroll), then for three still readings.
+const still = async (page, sel) => {
+  await page.waitForFunction((s) => document.querySelector(s).scrollTop > 0, sel, { polling: 50, timeout: 1000 }).catch(() => {});
+  await page.waitForFunction((s) => {
+    const el = document.querySelector(s);
+    const now = el.scrollTop;
+    el.__still = el.__last === now ? (el.__still || 0) + 1 : 0;
+    el.__last = now;
+    return el.__still >= 3;
+  }, sel, { polling: 150, timeout: 5000 });
+};
 
 test('real WebKit at 390x844: the preview question comes into view with Yes and No above the fold', { skip, timeout: 120_000 }, async () => {
   await withPhone(async (page) => {
