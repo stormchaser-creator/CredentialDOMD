@@ -85,7 +85,7 @@ import { useIsAdmin } from "./lib/admin";
 import AdminPreviewBanner, { ADMIN_PREVIEW_BANNER_CLEARANCE } from "./components/pages/AdminPreview";
 import { isNonExpiring, mailtoHref, copyToClipboard, avatarInitials } from "./utils/helpers";
 import { referenceSharePayload } from "./utils/referenceDraft.js";
-import { installPhoneViewportReset, paintPageBackground } from "./utils/phoneViewport.js";
+import { installAppHeight, installPhoneViewportReset, paintPageBackground } from "./utils/phoneViewport.js";
 import { referencesShareTitle, referencesShareText, followUpEmail } from "./utils/shareText";
 import { buildSetup, setupOwns, dateless, setupSurfaceCounts } from "./utils/setupTasks";
 import { historySummary, DEFAULT_LOOKBACK_YEARS, ADDRESS_KIND_OPTIONS, isWorkAddress } from "./utils/addressHistory";
@@ -330,6 +330,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   // keyboard left scrolled goes back to the top (utils/phoneViewport.js).
   useEffect(() => { paintPageBackground(document, T.bg); }, [T.bg]);
   useEffect(() => (isDesktop ? undefined : installPhoneViewportReset(window, document)), [isDesktop]);
+  useEffect(() => (isDesktop ? undefined : installAppHeight(window, document)), [isDesktop]);
   const draftResumeOwner = useRef(null);
   useEffect(() => {
     if (!loaded || !authChecked || credentialReadOnly || !user?.id || !userIdRef?.current) return;
@@ -3361,7 +3362,12 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
       backgroundColor: T.bg, minHeight: "100vh", position: "relative",
     } : {
       fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
-      backgroundColor: T.bg, height: "100dvh", maxWidth: 480, margin: "0 auto", position: "relative",
+      // Pinned to the top of the screen, as tall as the screen in the
+      // home-screen app (--app-height, utils/phoneViewport.js), so a
+      // viewport iOS left short never shortens the app. Fixed, it adds no
+      // height to the document, so the document still never scrolls.
+      backgroundColor: T.bg, height: "var(--app-height, 100dvh)", maxWidth: 480, margin: "0 auto",
+      position: "fixed", top: 0, left: 0, right: 0,
       // Phone content scrolls in its own div below, not the document. Keeping
       // html/body from ever scrolling removes the rubber-band/momentum-scroll
       // bounce that drags a `position: fixed` bottom bar along with it on iOS
@@ -3392,15 +3398,16 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
 
       {/* ─── BOTTOM TAB BAR (phone only) ───────────────── */}
       {!isDesktop && <div style={{
-        position: "fixed", bottom: 0, left: "50%",
-        // translate3d (not translateX) promotes this to its own GPU
-        // compositing layer — without it, iOS Safari repaints the "fixed"
-        // bar in software on every scroll frame, which reads as the bar
-        // drifting/scrolling before snapping back into place.
-        transform: "translate3d(-50%, 0, 0)",
-        WebkitTransform: "translate3d(-50%, 0, 0)",
+        // At the bottom of the shell, not of the viewport: iOS can leave the
+        // viewport short in the home-screen app, and a `position: fixed`
+        // bar then floats above a band (owner ticket 23920b06). The shell
+        // does not scroll (its content div does), so this never moves.
+        // translate3d keeps it on its own compositing layer.
+        position: "absolute", bottom: 0, left: 0, right: 0,
+        transform: "translate3d(0, 0, 0)",
+        WebkitTransform: "translate3d(0, 0, 0)",
         willChange: "transform",
-        width: "100%", maxWidth: 480,
+        width: "100%",
         backgroundColor: T.tabBar, borderTop: `1px solid ${T.tabBorder}`,
         display: "flex", justifyContent: "space-around", alignItems: "center",
         // Safe-area padding must ADD to the bar height (border-box would
