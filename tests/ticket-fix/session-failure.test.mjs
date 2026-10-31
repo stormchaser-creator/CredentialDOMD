@@ -127,7 +127,7 @@ test('runSession reads the result event of a session that exits non-zero and kee
     assert.equal(statSync(stderrFile).mode & 0o777, 0o600);
     assert.equal(statSync(path.dirname(stderrFile)).mode & 0o777, 0o700);
     const kept = readFileSync(stderrFile, 'utf8');
-    assert.match(kept, /debug: role with schema keys kind,reason,tests/);
+    assert.match(kept, /debug: role with schema keys kind,reason,needs_device,tests/);
     assert.match(kept, /debug: credential \[redacted\]/, 'the credential the CLI was handed on its pipe');
     assert.deepEqual(leaks(kept), []);
     assert.deepEqual(leaks(JSON.stringify(r.session)), []);

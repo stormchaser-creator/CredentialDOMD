@@ -515,3 +515,94 @@ test('slot probe', () => {
     assert.equal(existsSync(seen.dir), false, 'the host removed the run\'s slot directory');
   } finally { rmSync(path.join(owner, 'slot-probe-planted'), { force: true }); r?.cleanup(); p.cleanup(); }
 });
+
+// Review of the hourly agent (2026-10-30): why no run ever shipped a fix.
+const MISSED = { file: 'src/format.js', line: 2, snippet: "export const title = 'Synthetic summary line';", why: 'synthetic finding' };
+test('a review may send the worker back twice; the review after the second revision is final', async () => {
+  const p = project(), q = project();
+  let r, s;
+  try {
+    const reviews = [approve({ verdict: 'revise', missed_paths: [MISSED] }), approve({ verdict: 'revise', missed_paths: [{ ...MISSED, why: 'second synthetic finding' }] }), approve()];
+    r = await runStub(p, standardScript({ review: () => reviews.shift() }));
+    assert.equal(r.calls.filter(c => c.role === 'worker').length, 3);
+    assert.match(r.calls.filter(c => c.role === 'worker')[2].input, /second synthetic finding/);
+    assert.equal(r.calls.filter(c => c.role === 'review').length, 3);
+    assert.equal((await readRun(p.work, NAME)).status, 'held');
+    // Three asks for changes: two revisions, then the third review refuses.
+    const again = [1, 2, 3].map(() => approve({ verdict: 'revise', missed_paths: [MISSED] }));
+    s = await runStub(q, standardScript({ review: () => again.shift() }));
+    assert.equal(s.calls.filter(c => c.role === 'worker').length, 3, 'no third revision');
+    assert.equal(s.calls.filter(c => c.role === 'review').length, 3);
+    assert.equal(s.facts.code_outcome, 'refused');
+  } finally { r?.cleanup(); s?.cleanup(); p.cleanup(); q.cleanup(); }
+});
+
+test('the worker\'s scratch probes are never part of the change the gates and the reviewer see', async () => {
+  const p = project();
+  let r;
+  try {
+    r = await runStub(p, standardScript({ worker: opts => {
+      p.write(opts.cwd, { ...FIX_FILES, 'tests/.scratch/probe.test.mjs': "import test from 'node:test';\ntest('synthetic probe', () => {});\n", 'tests/_probe.test.mjs': '' });
+      return workerResult({ done: true, change: { subject: 'Join summary lines with line breaks', tests: [] } });
+    } }));
+    assert.equal(r.code, EXIT.ok, r.logs.join('\n'));
+    const run = await readRun(p.work, NAME);
+    assert.equal(run.status, 'held');
+    assert.deepEqual(sh(run.worktree, ['diff', '--name-only', run.base, run.commit]).split('\n'), ['src/format.js', 'tests/join.test.mjs']);
+    assert.doesNotMatch(r.calls.find(c => c.role === 'review').input, /_probe\.test|\.scratch\//, 'the reviewer reads no probe');
+  } finally { r?.cleanup(); p.cleanup(); }
+});
+
+test('a worker that only wrote probes made no change', async () => {
+  const p = project();
+  let r;
+  try {
+    r = await runStub(p, standardScript({ repro: () => ({ kind: 'no_code', reason: 'Synthetic.', tests: [] }),
+      worker: opts => { p.write(opts.cwd, { 'tests/.scratch/probe.test.mjs': '// probe\n', 'tests/_probe.test.mjs': '' }); return workerResult(); } }));
+    assert.equal(r.code, EXIT.ok, r.logs.join('\n'));
+    assert.ok(r.logs.some(l => l.startsWith(`NO CODE — ${TICKET}`)), r.logs.join('\n'));
+    assert.equal(r.calls.filter(c => c.role === 'review').length, 0);
+    assert.equal(r.facts.code_outcome, 'none');
+  } finally { r?.cleanup(); p.cleanup(); }
+});
+
+test('an item base already meets is closed by a test-only change: its test green at head, the reviewer judges it met, the change is held', async () => {
+  const p = project();
+  let r;
+  const PINNED = 'tests/pinned.test.mjs::the summary title is pinned';
+  const PIN = { 'tests/pinned.test.mjs': "import test from 'node:test';\nimport assert from 'node:assert/strict';\nimport { title } from '../src/format.js';\n\ntest('the summary title is pinned', () => {\n  assert.equal(title, 'Synthetic summary line');\n});\n" };
+  try {
+    r = await runStub(p, standardScript({ repro: () => ({ kind: 'no_code', reason: 'Synthetic: base already does it.', tests: [] }),
+      worker: opts => { p.write(opts.cwd, PIN); return workerResult({ change: { subject: 'Pin the summary title', tests: [{ file: 'tests/pinned.test.mjs', name: 'the summary title is pinned', ac_id: 'AC-1' }] },
+        checklist: [{ ac_id: 'AC-1', state: 'done', remaining: '', tests: [PINNED] }], claims: [{ ac_id: 'AC-1', text: 'The summary title is shown as before', evidence: { test: PINNED } }] }); },
+      review: () => approve({ items: [{ ac_id: 'AC-1', requirement: 'Summary title', verdict: 'met', citations: [{ file: 'tests/pinned.test.mjs', line: 6, snippet: "assert.equal(title, 'Synthetic summary line');" }] }] }) }));
+    assert.equal(r.code, EXIT.ok, r.logs.join('\n'));
+    assert.match(r.calls.find(c => c.role === 'worker').input, /you may make a test-only change/);
+    const run = await readRun(p.work, NAME);
+    assert.equal(run.gates_pass, true, JSON.stringify(run.gates_failures));
+    assert.equal(run.review.pass, true);
+    assert.equal(run.status, 'held');
+    assert.deepEqual(run.review.items, { 'AC-1': 'met' });
+    assert.deepEqual(r.stage3.final.items.map(f => [f.id, f.state]), [['AC-1', 'in_progress']]);
+  } finally { r?.cleanup(); p.cleanup(); }
+});
+
+test('a device-only bug ends after the reproduction as "needs a device reproduction" (exit 9): no worker, nothing changed', async () => {
+  const p = project();
+  let r, s;
+  try {
+    r = await runStub(p, standardScript({ repro: () => ({ kind: 'no_code', reason: 'Synthetic: a viewport symptom.', tests: [], needs_device: true }) }));
+    assert.equal(r.code, EXIT.device);
+    assert.equal(EXIT.device, 9);
+    assert.deepEqual(r.calls.map(c => c.role), ['extract', 'repro']);
+    assert.ok(r.logs.some(l => l.includes('needs a device reproduction')), r.logs.join('\n'));
+    const run = await readRun(p.work, NAME);
+    assert.equal(run.status, 'needs_device');
+    assert.equal(run.repro.needs_device, true);
+    assert.equal(existsSync(run.worktree), false);
+    // Without the flag, a no_code reproduction goes on to the worker as before.
+    s = await runStub(p, standardScript({ repro: () => ({ kind: 'no_code', reason: 'Synthetic.', tests: [] }), worker: () => workerResult() }), { runId: 'fedcba9876543210' });
+    assert.equal(s.code, EXIT.ok, s.logs.join('\n'));
+    assert.ok(s.calls.some(c => c.role === 'worker'));
+  } finally { r?.cleanup(); s?.cleanup(); p.cleanup(); }
+});

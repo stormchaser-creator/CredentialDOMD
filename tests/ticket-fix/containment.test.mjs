@@ -7,7 +7,7 @@ import { existsSync, lstatSync, readFileSync, writeFileSync, mkdirSync, chmodSyn
 import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import { sessionArgs, sessionSettings, reviewSettings, sessionEnv, gatesEnv, launch, sessionLaunch, WORKER_COMMANDS, REVIEW_MODEL, WORKER_MODEL } from '../../scripts/ticket-fix/worker.mjs';
-import { createWorktree, removeWorktree, changedPaths, classifyChanges, commitWork, addGatesTrailer, trailers, hooksDigest, sanitizeSubject, branchName, isEditable, git, HOST_GIT_CONFIG,
+import { createWorktree, removeWorktree, changedPaths, classifyChanges, commitWork, scratchPaths, addGatesTrailer, trailers, hooksDigest, sanitizeSubject, branchName, isEditable, git, HOST_GIT_CONFIG,
   AGENT_NAME, AGENT_EMAIL } from '../../scripts/ticket-fix/worktree.mjs';
 import { sandboxAvailable, sandboxProfile } from '../../scripts/ticket-fix/sandbox.mjs';
 import { project, sh, COMMITTER, RUN_ID, TICKET } from './stage2-helpers.mjs';
@@ -217,6 +217,27 @@ test('the host commit: one commit on base, editable paths only, agent author, ru
     writeFileSync(path.join(hooks, 'post-checkout'), '#!/bin/sh\n');
     assert.notEqual(hooksDigest(p.repo), before);
     assert.ok(lstatSync(path.join(hooks, 'pre-commit')).isFile());
+  } finally { p.cleanup(); }
+});
+
+// Review of the hourly agent (2026-10-30): the worker cannot delete a file,
+// so a probe it wrote became the "change" the reviewer refused.
+test('the host commit leaves out scratch probes: tests/.scratch/ and new zero-byte files, never a real change', async () => {
+  const p = project();
+  try {
+    const wt = await createWorktree({ repo: p.repo, work: p.work, ticketId: TICKET, runId: RUN_ID });
+    p.write(wt.dir, { 'src/format.js': 'export const title = "changed";\n', 'tests/.scratch/probe.test.mjs': "import test from 'node:test';\ntest('probe', () => {});\n",
+      'tests/_probe.test.mjs': '', 'tests/kept.test.mjs': '// synthetic\n' });
+    // An existing file emptied is a real change, not a probe.
+    p.write(wt.dir, { 'tests/format.test.mjs': '' });
+    const changed = changedPaths(wt.dir, wt.base);
+    assert.deepEqual(scratchPaths(wt.dir, wt.base, changed), ['tests/.scratch/probe.test.mjs', 'tests/_probe.test.mjs']);
+    const head = commitWork({ dir: wt.dir, base: wt.base, subject: 'Synthetic', ticketId: TICKET, runId: RUN_ID, committer: COMMITTER });
+    assert.deepEqual(sh(wt.dir, ['diff', '--name-only', wt.base, head]).split('\n'), ['src/format.js', 'tests/format.test.mjs', 'tests/kept.test.mjs']);
+    // A worktree holding only probes commits nothing.
+    const only = await createWorktree({ repo: p.repo, work: p.work, ticketId: TICKET, runId: 'fedcba9876543210' });
+    p.write(only.dir, { 'tests/.scratch/a.test.mjs': '// probe\n', 'tests/empty.test.mjs': '' });
+    assert.equal(commitWork({ dir: only.dir, base: only.base, subject: 'Synthetic', ticketId: TICKET, runId: 'fedcba9876543210', committer: 'ticket-agent+fedcba9876543210@credentialdomd.invalid' }), null);
   } finally { p.cleanup(); }
 });
 

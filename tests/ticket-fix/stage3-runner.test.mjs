@@ -94,6 +94,19 @@ test('the park alert says why when the checklist could not be extracted, by id p
   } finally { rmSync(state, { recursive: true, force: true }); }
 });
 
+test('the park alert for a device-only bug says it needs a device reproduction, once, by id prefix only (review of 2026-10-30)', async () => {
+  const state = realpathSync(mkdtempSync(path.join(os.tmpdir(), 'ticket-park-')));
+  const sent = [];
+  try {
+    await alert(['park', '--state', state, '--ticket', '00000000-0000-4000-8000-000000000042', '--count', '3', '--why', 'device'], { send: async m => { sent.push(m); return true; } });
+    assert.equal(sent.length, 1);
+    assert.match(sent[0], /ticket 00000000 is parked: it needs a device reproduction\. The bug shows only on a device or browser/);
+    assert.match(sent[0], /skipped until its count file under ticket-context\/failed is removed/);
+    assert.ok(!sent[0].includes('\u2014') && !sent[0].includes('000000000042'));
+    assert.match(readFileSync(path.join(state, 'alerts.log'), 'utf8'), /ALERT parked ticket=00000000 needs=device_reproduction\n$/);
+  } finally { rmSync(state, { recursive: true, force: true }); }
+});
+
 test('the sandbox policy: the attachment root is denied like the run directory, and only this ticket\'s folder re-opened, for sessions', { skip: sandboxAvailable() ? false : 'needs sandbox-exec' }, () => {
   const policy = sandboxPolicy({ work: '/w', state: ['/s'], runDir: '/r', profileDir: '/p', attachments: '/t/credentialdomd-attachments.x/T' });
   assert.ok(policy.denyRead.includes('/t/credentialdomd-attachments.x'));

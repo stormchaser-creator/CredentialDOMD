@@ -193,6 +193,12 @@ A prior completion claim or a resolved related ticket is not itself task verific
    product code: reply with what you found and record the next action.
 4. Implement. Match the file's existing style. Add any further tests you need under `tests/`
    as top-level `test('<unique name>', ...)` calls and run them with `node --test`.
+   You cannot delete, move or empty a file once you write it. Write any scratch probe (a test
+   you run only to investigate) under `tests/.scratch/`, which the host never commits; a
+   probe anywhere else becomes part of your change and the reviewer refuses it. The host also
+   drops a new zero-byte file. If the code on base already does what an item asks, the change
+   may be a test only: add a real test under `tests/` (not `tests/.scratch/`) that pins the
+   behaviour, declare it in `change.tests` for that item, and change no product file.
 5. If the change touches billing/invoice/pay math, exercise the changed function in a test
    with real-shaped (synthetic) data and check the arithmetic.
 6. Do NOT commit, push, deploy or poll `version.json`. The host commits your work as ONE commit,
@@ -202,8 +208,8 @@ A prior completion claim or a resolved related ticket is not itself task verific
    save-and-reload check when you touch TABLE_MAP, defaults, sync code or any
    localStorage/sessionStorage key, the protected-path rules and a blast-radius search. An
    independent reviewer then reads the diff against the ticket. If a gate fails or the
-   reviewer asks for changes or names a path you missed, you are resumed once with the
-   findings. Product code may not look at the test runner (`process.env`, `node:test`,
+   reviewer asks for changes or names a path you missed, you are resumed with the findings
+   (once for a gate failure, up to twice for a review). Product code may not look at the test runner (`process.env`, `node:test`,
    `node:assert`, `NODE_TEST_CONTEXT`) or patch a global; the gates refuse it.
 7. When you changed files, fill `change` in the structured result: `subject` (one line, no
    customer names, emails or numbers from the ticket; the repository is public) and `tests`,

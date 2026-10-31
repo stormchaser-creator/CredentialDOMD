@@ -106,7 +106,7 @@ import { createAttachmentRoot } from './attachment-temp.mjs';
 import { readChecklist, emptyChecklist, newSources, extractionFacts, checkExtraction, confirmPrompt, extendChecklist, writeChecklist, applyAskVerdicts,
   coverageHints, finalStates, unseenItems, untrustedItems, UNTRUSTED_HEADING, CHECKLIST_SCHEMA } from './checklist.mjs';
 import { runBindings, hostBindings, priorBindings, mergeBindings, verifyAgentClaims, baseTestRunner, disputedItems, hostFollowUps, writeStage3 } from './stage3.mjs';
-import { createWorktree, removeWorktree, changedPaths, classifyChanges, commitWork, addGatesTrailer, git, sanitizeSubject, gateWorktree, hooksDigest,
+import { createWorktree, removeWorktree, changedPaths, classifyChanges, commitWork, scratchPaths, addGatesTrailer, git, sanitizeSubject, gateWorktree, hooksDigest,
   checkWorktreeLink, remoteMain, agentCommitsOnMain, GitStateChanged } from './worktree.mjs';
 import { sessionSettings, reviewSettings, extractSettings, streamMessage, runSession, gatesEnv, installSignalHandlers, removeSessionTemps, onStop, limitNotice } from './worker.mjs';
 import { recordReproduction, runTestGates, suiteBaseline, gateFailures, validTestRef, readBaseline, DEFAULT_COMMANDS } from './gates/tests.mjs';
@@ -127,7 +127,14 @@ export const CONFIRM_PROMPT = path.join(HERE, 'confirm-prompt.md');
 const UUID = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/;
 const SHA = /^[0-9a-f]{40}$/;
 const sha256 = text => createHash('sha256').update(text).digest('hex');
-export const EXIT = Object.freeze({ ok: 0, host: 1, refused: 2, model: 3, runnerCode: 4, scope: 5, hostState: 6, checklist: 7, usageLimit: 8 });
+// How many times a review that asks for changes resumes the worker. The
+// review after the last revision is final: what it still finds refuses the
+// change.
+export const REVIEW_REVISIONS = 2;
+// device (9): the reproduction found no code test for a bug only a device
+// or browser shows (needs_device); the ticket waits for a device
+// reproduction (ticket-agent.sh parks it once and tells the owner).
+export const EXIT = Object.freeze({ ok: 0, host: 1, refused: 2, model: 3, runnerCode: 4, scope: 5, hostState: 6, checklist: 7, usageLimit: 8, device: 9 });
 export const CASE_STATE = path.join(os.homedir(), 'Library', 'Application Support', 'CredentialDOMD', 'ticket-context');
 export const FIX_STATE = path.join(os.homedir(), 'Library', 'Application Support', 'CredentialDOMD', 'ticket-fix');
 
@@ -179,21 +186,29 @@ export class UsageLimitReached extends Error {
 
 const str = (max, min = 1) => ({ type: 'string', minLength: min, maxLength: max });
 // Each reproduction test names the checklist item it pins (stage 3).
+// needs_device (with no_code only): the symptom is visual or layout on the
+// customer's device or browser (viewport, safe area, scrolling, keyboard), so
+// no `node --test` test can show it.
 export const REPRO_SCHEMA = { type: 'object', additionalProperties: false, properties: {
-  kind: { enum: ['bug', 'change', 'no_code'] }, reason: str(1500),
+  kind: { enum: ['bug', 'change', 'no_code'] }, reason: str(1500), needs_device: { type: 'boolean' },
   tests: { type: 'array', maxItems: 10, items: { type: 'object', additionalProperties: false,
     properties: { file: str(200), name: str(300), requirement: str(300), ac_id: str(12) }, required: ['file', 'name', 'requirement', 'ac_id'] } },
 }, required: ['kind', 'reason', 'tests'] };
 export function checkRepro(value, ids = null) {
   const ok = value && typeof value === 'object' && !Array.isArray(value) && ['bug', 'change', 'no_code'].includes(value.kind) &&
     typeof value.reason === 'string' && Array.isArray(value.tests) && value.tests.length <= 10 &&
-    Object.keys(value).every(k => ['kind', 'reason', 'tests'].includes(k)) &&
+    Object.keys(value).every(k => ['kind', 'reason', 'tests', 'needs_device'].includes(k)) && (value.needs_device === undefined || typeof value.needs_device === 'boolean') &&
     value.tests.every(t => t && typeof t.requirement === 'string' && validTestRef(t) && Object.keys(t).every(k => ['file', 'name', 'requirement', 'ac_id'].includes(k)));
   if (!ok) throw Error('Unusable reproduction result');
   if (ids && value.tests.some(t => !ids.includes(t.ac_id))) throw Error('A reproduction test names no checklist item');
   if (value.kind !== 'no_code' && !value.tests.length) throw Error('A bug or change needs at least one reproduction test');
+  if (value.kind !== 'no_code' && value.needs_device === true) throw Error('needs_device is for a no_code reproduction only');
   return value;
 }
+// The items a device-only symptom can be: a bug or change the customer saw,
+// or a device probe. A question or owner decision is answered as usual.
+export const DEVICE_KINDS = Object.freeze(['bug', 'change', 'device_probe']);
+export const needsDevice = (repro, items) => repro?.kind === 'no_code' && repro.needs_device === true && items.some(i => DEVICE_KINDS.includes(i.kind));
 
 const stamp = (now = new Date()) => {
   const p = n => String(n).padStart(2, '0');
@@ -258,6 +273,9 @@ function reproFacts({ worktree, base, stage3, history }) {
     `- Working directory: a fresh git worktree at origin/main ${base.slice(0, 12)} (the base). Nothing you do here reaches main or the customer.`,
     `- Worktree path: ${worktree}`, historyFacts(history), checklistFacts(stage3)].join('\n') + checklistWording(stage3.items);
 }
+// An item the code on base already does reaches done only through a test a
+// released run bound to it: a test-only change is how this run gets there.
+export const TEST_ONLY_FACT = 'If the code on base already does what an item asks, you may make a test-only change: a real test under tests/ (not tests/.scratch/) that pins the behaviour and passes at head, declared in change.tests with that item\'s ac_id, and no product file changed. The gates run it at head and the reviewer may judge the item met on it.';
 function hostFacts({ worktree, base, repro, held, stage3, history }) {
   const lines = ['## Host facts for this run (trusted, from the runner)', '',
     `- Working directory: a git worktree on its own branch, at origin/main ${base.slice(0, 12)}. Nothing you do here reaches main or the customer; the host commits, runs the gates and an independent review, and holds the merge for the owner.`];
@@ -267,6 +285,7 @@ function hostFacts({ worktree, base, repro, held, stage3, history }) {
     for (const t of repro.tests) lines.push(`  - ${t.file} :: ${t.name}${t.ac_id ? ` (pins ${t.ac_id})` : ''}`);
   } else if (repro?.kind === 'no_code') lines.push('- The reproduction step found no code change to make. A product change (src, public, landing) will be refused by the gates, because nothing failing was recorded on base first.');
   else lines.push('- No reproduction was recorded on base. A product change (src, public, landing) will be refused by the gates.');
+  if (!repro?.recorded && !held) lines.push(`- ${TEST_ONLY_FACT}`);
   lines.push(`- Worktree path: ${worktree}`);
   lines.push(historyFacts(history));
   lines.push(checklistFacts(stage3));
@@ -568,8 +587,10 @@ async function workTicket(o, atEnd) {
         if (scope.runner_code.length) { log(`PROTECTED — ${ticket} reproduction changed the runner's own code`); return finishWith(EXIT.runnerCode, 'runner_code_changed', { violating: scope.runner_code }); }
         const outside = [...new Set([...changed.filter(f => !f.startsWith('tests/') || f.startsWith('tests/ticket-fix/')), ...scope.special])];
         if (outside.length) { log(`SCOPE — ${ticket} reproduction changed files outside tests/`); await cleanup({ keepBranch: true }); return finishWith(EXIT.scope, 'refused', { reason: 'reproduction changed files outside tests/', violating: outside }); }
-        if (out.kind === 'no_code') { repro = { kind: 'no_code', recorded: false, tests: [], frozen: {} }; break; }
-        const recorded = await recordReproduction({ dir: wt.dir, repo, work, base: wt.base, tests: out.tests, changed, env: gEnv, sandbox: box, modules: wt.modules_source, binary });
+        if (out.kind === 'no_code') { repro = { kind: 'no_code', recorded: false, tests: [], frozen: {}, needs_device: out.needs_device === true }; break; }
+        // Scratch probes are never committed, so they are never frozen either.
+        const probes = new Set(scratchPaths(wt.dir, wt.base, changed, { binary }));
+        const recorded = await recordReproduction({ dir: wt.dir, repo, work, base: wt.base, tests: out.tests, changed: changed.filter(f => !probes.has(f)), env: gEnv, sandbox: box, modules: wt.modules_source, binary });
         await hostCheck('the reproduction record');
         recorded.tests = recorded.tests.map((t, i) => ({ ...t, ac_id: out.tests[i]?.ac_id ?? null }));
         repro = { kind: out.kind, ...recorded };
@@ -579,9 +600,17 @@ async function workTicket(o, atEnd) {
         r = await session({ role: 'repro', resume: r.session_id, cwd: wt.dir, input: `The host ran your tests on base. These did not fail with an assertion (ERR_ASSERTION), so they do not reproduce anything:\n${verdicts}\nFix the tests (not the product) so each fails on the current code with an assertion, then return the structured result again.`,
           schema: REPRO_SCHEMA, settings, sessionDir: path.join(sessions, 'repro'), timeoutMs: reviseSeconds * 1000, baseEnv: env });
       }
-      run.repro = repro ? { kind: repro.kind, recorded: repro.recorded, tests: repro.tests, frozen: repro.frozen } : run.repro;
-      log(`REPRO — ${id8}: ${repro ? (repro.kind === 'no_code' ? 'no code change to reproduce' : `${repro.tests.length} test(s), ${repro.recorded ? 'recorded failing on base' : 'NOT recorded failing on base'}`) : 'none'}`);
+      run.repro = repro ? { kind: repro.kind, recorded: repro.recorded, tests: repro.tests, frozen: repro.frozen, ...(repro.needs_device ? { needs_device: true } : {}) } : run.repro;
+      log(`REPRO — ${id8}: ${repro ? (repro.kind === 'no_code' ? `no code change to reproduce${repro.needs_device ? ' (a device-only symptom)' : ''}` : `${repro.tests.length} test(s), ${repro.recorded ? 'recorded failing on base' : 'NOT recorded failing on base'}`) : 'none'}`);
       await saveRun();
+      // A bug only a device or browser shows: no node test can reproduce it,
+      // so no product change could pass the gates. Working it again every
+      // hour cannot change that; it waits for a device reproduction.
+      if (needsDevice(repro, workerItems)) {
+        log(`DEVICE — ${id8}: needs a device reproduction; no worker session, nothing changed`);
+        await cleanup();
+        return await finishWith(EXIT.device, 'needs_device', { reason: 'needs a device reproduction' });
+      }
     }
 
     // 3. The worker (fixer), then the reply checks with up to two repairs.
@@ -594,8 +623,13 @@ async function workTicket(o, atEnd) {
       return r;
     };
     // Whether the worktree holds a change of the worker's (the frozen
-    // reproduction files are the reproduction session's).
-    const workerChanged = () => changedPaths(wt.dir, wt.base, { binary }).some(f => !Object.hasOwn(repro?.frozen ?? {}, f));
+    // reproduction files are the reproduction session's; scratch probes are
+    // never committed, so they are no change either).
+    const workerChanged = () => {
+      const changed = changedPaths(wt.dir, wt.base, { binary });
+      const scratch = new Set(scratchPaths(wt.dir, wt.base, changed, { binary }));
+      return changed.some(f => !Object.hasOwn(repro?.frozen ?? {}, f) && !scratch.has(f));
+    };
     // What the worker may cite per item before the gates run: this run's
     // reproduction, the tests it declares for a change it actually made, and
     // what released runs bound. The host's decision uses hostBindings().
@@ -734,7 +768,7 @@ async function workTicket(o, atEnd) {
     }
 
     // 6-8. Gates, owner rules and the independent review, with one gate repair
-    // and one review revision. The reviewer works in a fresh worktree of the
+    // and up to REVIEW_REVISIONS review revisions. The reviewer works in a fresh worktree of the
     // commit, so it reads exactly what was committed.
     const reviewLaunch = reviewDir => async (input, { index, attempt }) => session({ role: 'review', cwd: reviewDir, input, schema: REVIEW_SCHEMA,
       settings: reviewSettings({ worktree: reviewDir, home, work, state: denyState, runDir, tmp, attachments: readDir }), sessionDir: path.join(sessions, `review-${Date.now()}-${index}-${attempt}`), timeoutMs: reviewSeconds * 1000, baseEnv: env });
@@ -765,11 +799,12 @@ async function workTicket(o, atEnd) {
         continue;
       }
       const head = step.head;
+      const final = revisions >= REVIEW_REVISIONS || !sessionId;
       review = await reviewIn(head, reviewDir => reviewDiff({ dir: reviewDir, base: wt.base, head, context, gates, protectedReport: owner, blast, launch: reviewLaunch(reviewDir),
-        prompt: readFileSync(REVIEW_PROMPT_FILE, 'utf8'), binary, stage3: stage3Review(step.declared) }));
+        prompt: readFileSync(REVIEW_PROMPT_FILE, 'utf8'), binary, stage3: stage3Review(step.declared), final }));
       await writeRunFile(work, name, `review-${round}.json`, review);
       log(`REVIEW — ${id8} round ${round}: ${review.pass ? 'approve' : `not approved (${review.reviews.map(r => r.verdict).join(', ')})`}${review.count > 1 ? ' [two reviews]' : ''}`);
-      if (!review.pass && review.revise && revisions < 1 && sessionId) {
+      if (!review.pass && review.revise && !final) {
         revisions++;
         const next = await workerCall(reviseInput(review.reviews.map(r => r.review).filter(Boolean)), sessionId, reviseSeconds);
         if (!next.ok) { log(`REVIEW — ${id8}: revision session ${next.reason}`); break; }

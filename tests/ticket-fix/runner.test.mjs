@@ -289,6 +289,9 @@ test('the runner shell: lock owner, park alert, status on every exit; the model 
   assert.match(sh, /3\) reject "model run failed or timed out"; RC=1; break ;;/);
   assert.match(sh, /5\) reject "changed files outside its scope"; RC=1; break ;;/);
   assert.match(sh, /\*\) reject "host step failed \(exit \$WORK_RC\)"; RC=1; break ;;/);
+  // A device-only bug parks once (review of 2026-10-30); SIGTERM from outside counts nothing.
+  assert.match(sh, /9\) echo 3 > "\$FAIL_COUNT"[\s\S]*?park --state "\$CASE_STATE" --ticket "\$TICKET_ID" --count 3 --why device/);
+  assert.match(sh, /143\) echo "[^\n]*terminated from outside \(SIGTERM\); nothing counted"/);
   // A refused change is recorded (the reply claims nothing) but counts.
   assert.match(sh, /if \[ "\$CODE" = refused \]; then[\s\S]*?echo \$\(\(FAILS \+ 1\)\) > "\$FAIL_COUNT"/);
   // Held changes: continuations wait; one code change per scheduled run.
@@ -575,6 +578,17 @@ test('the prompt tells the model the rules the host now enforces', () => {
   assert.match(prompt, /You never push, never deploy, never poll `version.json` or the CDN/);
   assert.match(prompt, /The only\s+commands allowed are `npm test`, `node --test tests\/<file>` and `npm run build:site`/);
   assert.match(prompt, /Those files are frozen/);
+  // Review of 2026-10-30: probes the worker cannot delete, and the test-only path.
+  assert.match(prompt, /Write any scratch probe \(a test\s+you run only to investigate\) under `tests\/\.scratch\/`, which the host never commits/);
+  assert.match(prompt, /the change\s+may be a test only/);
+  assert.match(prompt, /up to twice for a review/);
+  const reviewPrompt = read('scripts/ticket-fix/review-prompt.md');
+  assert.match(reviewPrompt, /\*\*Already met on base\.\*\* A change may be test-only/);
+  assert.match(reviewPrompt, /do not refuse a change for being test-only/);
+  assert.match(reviewPrompt, /on its own it calls for `revise`, not `block`/);
+  const reproPrompt = read('scripts/ticket-fix/repro-prompt.md');
+  assert.match(reproPrompt, /Set `needs_device` to `true` only with `no_code`/);
+  assert.match(reproPrompt, /under `tests\/\.scratch\/`, which the host never commits or records/);
   assert.doesNotMatch(prompt, /push to main/i);
   assert.doesNotMatch(prompt, /Wait for the CDN/);
   for (const text of ['scripts/ticket-agent-prompt.md', 'scripts/ticket-fix/repro-prompt.md', 'scripts/ticket-fix/review-prompt.md', 'scripts/ticket-fix/extract-prompt.md', 'scripts/ticket-fix/confirm-prompt.md']) {
@@ -642,4 +656,44 @@ test('CI runs the whole suite on every push and pull request and deploys nothing
   assert.match(workflow, /npm test/);
   assert.match(workflow, /PG_BIN="\$\(pg_config --bindir/);
   assert.doesNotMatch(workflow, /gh-pages|git push|contents: write|secrets\./, 'tests only: no deploy, no secrets');
+});
+
+// The shell's exit handling, run for real (review of 2026-10-30): a run
+// killed from outside (SIGTERM, 143) is not a rejection, and a device-only
+// bug parks the ticket once instead of being worked every hour.
+test('the runner shell: exit 143 counts nothing and gives back the attempt; exit 9 parks once with one alert; others still reject', { skip: existsSync('/bin/zsh') ? false : 'needs zsh' }, () => {
+  const sh = read('scripts/ticket-agent.sh');
+  const start = sh.indexOf('  case "$WORK_RC" in');
+  const block = sh.slice(start, sh.indexOf('\n  esac\n', start) + '\n  esac\n'.length);
+  assert.ok(start > 0 && block.includes('143)'), 'the case block was found');
+  const state = privateDir('ticket-exit-');
+  try {
+    const runCase = (rc, mode = 'reply') => {
+      const log = path.join(state.dir, `log-${rc}-${mode}`);
+      const script = `LOG=${JSON.stringify(log)}\nFAIL_COUNT=${JSON.stringify(path.join(state.dir, `count-${rc}-${mode}`))}\nTICKET_ID=${T}\nRUN_MODE=${mode}\nRUN_ID=0123456789abcdef\n` +
+        `ATTACHMENTS=${JSON.stringify(path.join(state.dir, 'attachments'))}\nCASE_STATE=${JSON.stringify(state.dir)}\nHOST=/synthetic\nALERT=/synthetic/alert.mjs\nNOTIFY=/synthetic/notify\nRC=0\nFAILS=0\n` +
+        `node() { print -r -- "node $*" >> "$LOG"; }\nreject() { print -r -- "REJECT $1" >> "$LOG"; }\nrun_field() { :; }\n` +
+        `WORK_RC=${rc}\nfor _ in 1; do\n${block}\nprint -r -- "AFTER" >> "$LOG"\ndone\nprint -r -- "RC=$RC" >> "$LOG"\n`;
+      const r = spawnSync('/bin/zsh', ['-f', '-c', script], { encoding: 'utf8' });
+      assert.equal(r.status, 0, r.stderr);
+      return { log: readFileSync(log, 'utf8'), count: existsSync(path.join(state.dir, `count-${rc}-${mode}`)) ? readFileSync(path.join(state.dir, `count-${rc}-${mode}`), 'utf8').trim() : null };
+    };
+    const killed = runCase(143, 'continuation');
+    assert.doesNotMatch(killed.log, /REJECT/, 'a SIGTERM from outside is not a rejection');
+    assert.equal(killed.count, null, 'nothing counted toward parking');
+    assert.match(killed.log, /STOPPED — .* terminated from outside \(SIGTERM\); nothing counted/);
+    assert.match(killed.log, /node \/synthetic\/ticket-agent-context\.mjs --release-attempt/);
+    assert.match(killed.log, /RC=1/);
+    assert.doesNotMatch(runCase(143).log, /release-attempt/, 'only a continuation reserved an attempt');
+    const device = runCase(9);
+    assert.doesNotMatch(device.log, /REJECT/);
+    assert.equal(device.count, '3', 'parked at once, not counted run by run');
+    assert.equal((device.log.match(/alert\.mjs park/g) || []).length, 1, 'the owner is alerted once');
+    assert.match(device.log, /--why device/);
+    assert.match(device.log, /DEVICE — .* needs a device reproduction/);
+    assert.match(device.log, /RC=0/);
+    // The alarm (SIGALRM, 142) and any other host failure still reject.
+    assert.match(runCase(142).log, /REJECT host step failed \(exit 142\)/);
+    assert.match(runCase(3).log, /REJECT model run failed or timed out/);
+  } finally { state.cleanup(); }
 });

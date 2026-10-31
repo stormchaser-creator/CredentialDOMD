@@ -641,17 +641,41 @@ export function commitMessage({ subject, ticketId, runId, gatesSha256 = null }) 
 const agentEnv = (env, committer) => ({ ...env, GIT_AUTHOR_NAME: AGENT_NAME, GIT_AUTHOR_EMAIL: AGENT_EMAIL,
   GIT_COMMITTER_NAME: AGENT_NAME, GIT_COMMITTER_EMAIL: committer });
 
+// The worker's scratch probes, which the host never commits. The worker
+// cannot delete a file (no rm), so a probe it wrote to investigate would
+// otherwise become the change under review: anything under tests/.scratch/
+// (where the prompt tells it to put probes) and any zero-byte regular file
+// that base does not have. An existing file emptied is a real change.
+export const SCRATCH_DIR = 'tests/.scratch/';
+export function scratchPaths(dir, base, files, { binary = 'git' } = {}) {
+  const inBase = new Set();
+  const candidates = files.filter(f => !f.startsWith(SCRATCH_DIR));
+  if (candidates.length) {
+    const listed = git(dir, ['ls-tree', '-r', '--name-only', '-z', base, '--', ...candidates], { binary });
+    for (const f of listed.split('\0').filter(Boolean)) inBase.add(f);
+  }
+  return files.filter(f => {
+    if (f.startsWith(SCRATCH_DIR)) return true;
+    if (inBase.has(f)) return false;
+    let stat;
+    try { stat = lstatSync(path.join(dir, f)); } catch { return false; }
+    return stat.isFile() && stat.size === 0;
+  });
+}
+
 // The host's commit of the model's work: always ONE commit on base, so a
 // repaired or revised run replaces it rather than stacking. Only editable
 // paths are staged, never a git metadata file, a link, a nested repository
-// or a source file with a NUL byte (G0 refuses those before this runs). Returns the commit, or null when nothing changed.
+// or a source file with a NUL byte (G0 refuses those before this runs), and
+// never a scratch probe (scratchPaths). Returns the commit, or null when nothing changed.
 export function commitWork({ dir, base, subject, ticketId, runId, committer, binary = 'git', env = process.env }) {
   if (!RUN_COMMITTER.test(committer || '')) throw Error('The run committer identity is required');
   git(dir, ['reset', '--quiet', '--soft', base], { binary });
   git(dir, ['reset', '--quiet'], { binary });
   const changed = changedPaths(dir, base, { binary });
   const special = new Set(specialPaths(dir, changed));
-  const editable = changed.filter(f => isEditable(f) && !special.has(f));
+  const scratch = new Set(scratchPaths(dir, base, changed, { binary }));
+  const editable = changed.filter(f => isEditable(f) && !special.has(f) && !scratch.has(f));
   if (editable.length) git(dir, ['add', '-A', '--', ...editable], { binary });
   const staged = git(dir, ['diff', '--cached', '--name-only', '-z'], { binary }).split('\0').filter(Boolean);
   if (!staged.length) return null;

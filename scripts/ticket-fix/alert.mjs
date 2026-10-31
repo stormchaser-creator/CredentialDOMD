@@ -29,7 +29,7 @@
 // append racing a rewrite could be lost); at a few alerts a day they grow by
 // kilobytes a month.
 //
-//   alert.mjs park   --state DIR --ticket UUID --count N [--why checklist] [--notify PATH]
+//   alert.mjs park   --state DIR --ticket UUID --count N [--why checklist|device] [--notify PATH]
 //   alert.mjs hold   --state DIR --ticket UUID [--why runner_code|host_state] [--notify PATH]
 //   alert.mjs lock   --state DIR --lock DIR [--notify PATH] [--max-hours 4]
 //   alert.mjs status --state DIR --rc N [--lock DIR]
@@ -249,13 +249,17 @@ export async function main(argv = process.argv.slice(2), { now = Date.now(), sen
   const notify = options.notify || null;
   if (command === 'park') {
     if (!UUID.test(options.ticket || '') || !/^\d+$/.test(options.count || '')) throw Error('park needs --ticket UUID and --count N');
-    if (options.why !== undefined && options.why !== 'checklist') throw Error('park --why is checklist');
+    if (options.why !== undefined && !['checklist', 'device'].includes(options.why)) throw Error('park --why is checklist or device');
     const id8 = options.ticket.slice(0, 8);
     // Stage 3 (design G1): a checklist that could not be extracted twice in
     // one run parks the ticket at once; nothing was worked on.
+    // A device-only bug parks at once too: the reproduction found no code
+    // test, so no run can fix it until someone reproduces it on a device.
     const why = options.why === 'checklist' ? ': its checklist of asks could not be extracted (refused twice in one run), so nothing was worked on'
+      : options.why === 'device' ? ': it needs a device reproduction. The bug shows only on a device or browser, so no automated test can reproduce it and no fix of the agent\'s can pass the gates'
       : ` after ${options.count} rejected runs in a row`;
-    await raise(options.state, 'parked', `ticket=${id8} ${options.why === 'checklist' ? 'checklist=refused' : `rejected_runs=${options.count}`}`,
+    const detail = options.why === 'checklist' ? 'checklist=refused' : options.why === 'device' ? 'needs=device_reproduction' : `rejected_runs=${options.count}`;
+    await raise(options.state, 'parked', `ticket=${id8} ${detail}`,
       `CredentialDOMD ticket agent: ticket ${id8} is parked${why}. It is skipped until its count file under ticket-context/failed is removed; other tickets keep running.`,
       { notify, now, send });
     await writeStatus(options.state, { now });

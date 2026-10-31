@@ -263,6 +263,8 @@ for TARGET in ${(f)TARGETS}; do
   # 8 the subscription's session or usage limit stopped a session: paused,
   # nothing counted, and no later target runs until the next scheduled run
   # (every one of its sessions would fail the same way); this run exits 8.
+  # 9 the ticket needs a device reproduction (parked once, owner alerted);
+  # 143 the run was terminated from outside (nothing counted).
   # The 3-hour alarm is a backstop; every session and gate has its own limit
   # and run.mjs kills whole process groups when it is signalled.
   RUN_STARTED=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
@@ -299,6 +301,24 @@ for TARGET in ${(f)TARGETS}; do
        node "$ALERT" paused --state "$CASE_STATE" --ticket "$TICKET_ID" --detail "$LIMIT_NOTICE" --notify "$NOTIFY" >> "$LOG" 2>&1
        [ "$RC" -eq 0 ] && RC=8
        break ;;
+    # A bug only a device or browser shows (the reproduction found no code
+    # test for it): no run could pass the gates, so working it hourly only
+    # burns sessions. Parked at once, the owner told once (alert.mjs park
+    # --why device); it is skipped until he removes the count file.
+    9) echo 3 > "$FAIL_COUNT"
+       echo "$(date '+%F %T') DEVICE — $TICKET_ID needs a device reproduction; parked, nothing else counted" >> "$LOG"
+       node "$ALERT" park --state "$CASE_STATE" --ticket "$TICKET_ID" --count 3 --why device --notify "$NOTIFY" >> "$LOG" 2>&1
+       /bin/rm -rf "$ATTACHMENTS"
+       continue ;;
+    # SIGTERM from outside the runner (its own 3-hour alarm is SIGALRM, 142):
+    # someone stopped the run, which says nothing about the ticket. Nothing
+    # counted, a continuation's reserved attempt given back, no later target.
+    143) echo "$(date '+%F %T') STOPPED — $TICKET_ID run was terminated from outside (SIGTERM); nothing counted" >> "$LOG"
+       if [ "$RUN_MODE" = continuation ]; then
+         TICKET_RUN_ID="$RUN_ID" node "$HOST/ticket-agent-context.mjs" --release-attempt "$TICKET_ID" "$CASE_STATE" >> "$LOG" 2>&1 ||
+           echo "$(date '+%F %T') WARN — the continuation attempt for $TICKET_ID was not given back" >> "$LOG"
+       fi
+       RC=1; break ;;
     *) reject "host step failed (exit $WORK_RC)"; RC=1; break ;;
   esac
   RECORD_REPO=$(run_field record_repo) && BASE=$(run_field base) && RELEASE_FILE=$(run_field release_file) && CODE=$(run_field code_outcome) &&

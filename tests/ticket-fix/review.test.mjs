@@ -148,3 +148,48 @@ test('the reviewer sees the diff, gates, protected paths, blast radius and threa
   assert.ok(!input.includes('Your report is recorded'), 'no worker reply');
   assert.ok(ctx.prior_reviews.length === 1, 'the caller\'s context is not mutated');
 });
+
+// Review of the hourly agent (2026-10-30): the worker got only part of the
+// reviewer's findings, so its revisions could not address them.
+test('the revision gets every finding: the summary and the items not addressed, which base may already meet', () => {
+  const review = good({ verdict: 'revise', summary: 'Defects to fix: (1) the commit adds an empty file. (2) Seed a second row in the fake client.',
+    items: [{ ac_id: 'AC-1', requirement: 'Void a request', verdict: 'met', citations: [{ file: 'tests/void.test.mjs', line: 3, snippet: "test('voids a request', () => {" }] },
+      { ac_id: 'AC-2', requirement: 'Count topic tags', verdict: 'not_addressed', citations: [] }] });
+  const text = reviseInput([review]);
+  assert.match(text, /Defects to fix: \(1\) the commit adds an empty file\. \(2\) Seed a second row in the fake client\./);
+  assert.match(text, /- AC-2 not_addressed: Count topic tags/);
+  assert.doesNotMatch(text, /- AC-1 met/, 'a met item is not a finding');
+  assert.match(text, /a test only/);
+  assert.match(text, /tests\/\.scratch\//);
+  // Two reviews: each summary, labelled.
+  const two = reviseInput([review, good({ verdict: 'revise', summary: 'Second reviewer synthetic summary.' })]);
+  assert.match(two, /summary \(review 1\):\nDefects to fix/);
+  assert.match(two, /summary \(review 2\):\nSecond reviewer synthetic summary\./);
+});
+
+test('a disputed observation is a revision, not a refusal, until the final review round', async () => {
+  const { p, wt, head } = await fixed();
+  const stage3 = { items: [{ id: 'AC-1', kind: 'bug', source_id: TICKET, requirement: 'x', quote: 'x', surface: 'x' }], bound: {}, non_asks: [], attachments: [],
+    observations: [{ attachment: 'att-1', ac_id: 'AC-1', shows: 'Synthetic: the chip is filled.' }] };
+  const disputed = good({ observations: [{ attachment: 'att-1', verdict: 'disagree', why: 'Synthetic: the chip is outlined, not filled.' }] });
+  const args = { dir: wt.dir, base: wt.base, head, context: context(), gates: gates(), protectedReport: {}, blast: { terms: [], sibling_groups: [] }, prompt: 'Review.', stage3 };
+  try {
+    const early = await reviewDiff({ ...args, launch: stub([disputed]).launch });
+    assert.equal(early.pass, false);
+    assert.equal(early.revise, true, 'an otherwise approved change goes back to correct the observation');
+    assert.deepEqual(early.disputes, ['att-1']);
+    const text = reviseInput(early.reviews.map(r => r.review));
+    assert.match(text, /disputes your observation of att-1: Synthetic: the chip is outlined, not filled\./);
+    assert.match(text, /Read att-1 again and correct your attachment_observations entry/);
+    const last = await reviewDiff({ ...args, final: true, launch: stub([disputed]).launch });
+    assert.equal(last.pass, false, 'still a hard fail when it remains disputed in the final round');
+    assert.equal(last.revise, false);
+    assert.match(last.reasons.join(), /observation att-1 is still disputed in the final review round/);
+    // A block stays a block.
+    const blocked = await reviewDiff({ ...args, launch: stub([{ ...disputed, verdict: 'block' }]).launch });
+    assert.equal(blocked.revise, false);
+    // Agreed in the final round: approved.
+    const agreed = await reviewDiff({ ...args, final: true, launch: stub([good({ observations: [{ attachment: 'att-1', verdict: 'agree', why: 'Synthetic: filled.' }] })]).launch });
+    assert.equal(agreed.pass, true, JSON.stringify(agreed.reasons));
+  } finally { p.cleanup(); }
+});

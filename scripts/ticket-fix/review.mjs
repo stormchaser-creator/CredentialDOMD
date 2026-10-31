@@ -251,16 +251,26 @@ export function reviewInput({ prompt, context, diff, gates, protectedReport, bla
     `### Diff base..head\n\n\`\`\`diff\n${clipped}\`\`\`${facts.untrusted}${EVIDENCE_MARKER}${JSON.stringify(evidence)}`;
 }
 
-// The worker's revise prompt: the reviewer's findings with their citations.
+// The worker's revise prompt: everything the reviewer found, with its
+// citations. Every item not met goes in (a not_addressed item is often one
+// base already does, which a test-only change can pin), and the reviewer's
+// summary, where it lists the defects to fix. A disputed observation is a
+// correction the worker makes in attachment_observations; it refuses the
+// change only if the final review still disputes it.
 export function reviseInput(reviews) {
   const lines = ['An independent reviewer did not approve your change, so nothing was merged. Its findings (file:line: why):'];
-  for (const review of reviews) {
-    for (const item of review.items.filter(i => !['met', 'not_addressed'].includes(i.verdict))) lines.push(`- ${item.ac_id ?? ''} ${item.verdict}: ${item.requirement}${item.citations.length ? ` (${item.citations.map(c => `${c.file}:${c.line}`).join(', ')})` : ''}`);
-    for (const o of (review.observations ?? []).filter(x => x.verdict === 'disagree')) lines.push(`- the reviewer disputes your observation of ${o.attachment}: ${o.why}`);
+  const disputed = [];
+  reviews.forEach((review, i) => {
+    for (const item of review.items.filter(x => x.verdict !== 'met')) lines.push(`- ${item.ac_id ?? ''} ${item.verdict}: ${item.requirement}${item.citations.length ? ` (${item.citations.map(c => `${c.file}:${c.line}`).join(', ')})` : ''}`);
+    for (const o of (review.observations ?? []).filter(x => x.verdict === 'disagree')) { disputed.push(o.attachment); lines.push(`- the reviewer disputes your observation of ${o.attachment}: ${o.why}`); }
     for (const r of review.regressions) lines.push(`- regression (${r.severity}) ${r.file}:${r.line}: ${r.scenario}`);
     for (const m of review.missed_paths) lines.push(`- missed path ${m.file}:${m.line}: ${m.why}`);
     for (const t of review.test_changes.filter(x => x.verdict === 'unjustified')) lines.push(`- unjustified test change ${t.file} "${t.test}": ${t.why}`);
-  }
+    const summary = String(review.summary ?? '').trim();
+    if (summary) lines.push(`The reviewer's summary${reviews.length > 1 ? ` (review ${i + 1})` : ''}:`, summary);
+  });
+  if (disputed.length) lines.push(`Read ${[...new Set(disputed)].join(', ')} again and correct your attachment_observations entry for each to what the file shows. A dispute still standing in the last review round refuses the change.`);
+  lines.push('An item the code on base already does is met by a test only: add a real test under tests/ that pins it, declare it in change.tests for that item, and change no product file. Scratch probes go under tests/.scratch/, which is never committed.');
   lines.push('Change the code and tests to address these, keep the reproduction files as they are, then return the structured result again for the same target_id. Do not claim anything is fixed or released in the reply.');
   return lines.join('\n').slice(0, 12000);
 }
@@ -269,7 +279,9 @@ export function reviseInput(reviews) {
 // { ok, output: { structured_output } , reason, reads }. Each review whose
 // citations do not check out, or that names an ask the host could not add as
 // an item, gets ONE fresh rerun.
-export async function reviewDiff({ dir, base, head, context, gates, protectedReport, blast, launch, prompt = readFileSync(REVIEW_PROMPT, 'utf8'), binary = 'git', risky = null, stage3 = null }) {
+// final: this is the last review round the run allows, so nothing is sent
+// back; a dispute still standing here refuses the change.
+export async function reviewDiff({ dir, base, head, context, gates, protectedReport, blast, launch, prompt = readFileSync(REVIEW_PROMPT, 'utf8'), binary = 'git', risky = null, stage3 = null, final = false }) {
   const diff = git(dir, [...attrFrom(base), 'diff', ...DIFF_TEXT, base, head, '--', '.', ...MEDIA_EXCLUDES], { binary });
   const input = reviewInput({ prompt, context, diff, gates, protectedReport, blast, base, head, stage3 });
   const count = (risky ?? isRisky(gates?.diff?.files ?? [], { persistence: gates?.persistence })) ? 2 : 1;
@@ -295,11 +307,14 @@ export async function reviewDiff({ dir, base, head, context, gates, protectedRep
   if (count > 1 && new Set(verdicts).size > 1) reasons.push(`the two reviews disagree (${verdicts.join(' vs ')})`);
   const pass = reviews.every(r => r.ok && r.pass) && reasons.length === 0;
   // A review that names a missed path, or disputes what an attachment shows,
-  // sends the worker round once, even when its verdict said approve.
-  const revise = !pass && reviews.every(r => r.ok && !r.invented.length) && !verdicts.includes('block') &&
-    (verdicts.includes('revise') || reviews.some(r => r.ok && (r.review.missed_paths.length > 0 || (r.review.observations ?? []).some(o => o.verdict === 'disagree'))));
+  // sends the worker round again, even when its verdict said approve: a
+  // dispute is a correction to make, not a refusal, until the final round.
+  const disputes = [...new Set(reviews.flatMap(r => (r.ok ? (r.review.observations ?? []).filter(o => o.verdict === 'disagree').map(o => o.attachment) : [])))];
+  if (final && !pass) for (const id of disputes) reasons.push(`observation ${id} is still disputed in the final review round`);
+  const revise = !final && !pass && reviews.every(r => r.ok && !r.invented.length) && !verdicts.includes('block') &&
+    (verdicts.includes('revise') || disputes.length > 0 || reviews.some(r => r.ok && r.review.missed_paths.length > 0));
   const ok = reviews.filter(r => r.ok);
-  return { pass, revise, count, reviews: reviews.map(r => (r.ok ? { verdict: r.review.verdict, pass: r.pass, reasons: r.reasons, invented: r.invented, attempts: r.attempt, review: r.review, cost_usd: r.cost_usd, reads: r.reads } : { verdict: 'failed', pass: false, reasons: [r.reason], attempts: r.attempt })), reasons,
+  return { pass, revise, final, disputes, count, reviews: reviews.map(r => (r.ok ? { verdict: r.review.verdict, pass: r.pass, reasons: r.reasons, invented: r.invented, attempts: r.attempt, review: r.review, cost_usd: r.cost_usd, reads: r.reads } : { verdict: 'failed', pass: false, reasons: [r.reason], attempts: r.attempt })), reasons,
     ...combineEdges(ok.map(r => r.review), ok.map(r => r.read)) };
 }
 

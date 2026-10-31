@@ -25,6 +25,12 @@ Nothing you do here reaches the customer or main.
    - `change`: the customer asks for new or different behaviour that a test can pin.
    - `no_code`: a question, a data problem, an owner decision, or nothing a code change
      would settle. Return no tests.
+   Set `needs_device` to `true` only with `no_code`, and only when a checklist bug is a
+   visual or layout symptom that shows on the customer's device or browser (the viewport,
+   the safe area, scrolling, the on-screen keyboard, an installed app's window) and no
+   `node --test` test can show it. The host then stops working the ticket and asks the
+   owner for a reproduction on a device. Leave it out when the code on base already does
+   what the item asks, or when a test could show the symptom.
 3. For `bug` or `change`, write one or more tests under `tests/` (never `tests/ticket-fix/`).
    Each test must:
    - be a top-level `test('<unique name>', ...)` in a `*.test.mjs` file, using
@@ -48,6 +54,8 @@ Nothing you do here reaches the customer or main.
 
 - Edit only files under `tests/`. You cannot run git, shells or network commands; use
   Read, Grep and Glob to look at code. The allowed commands are `node --test tests/<file>`.
+- You cannot delete a file once you write it. Put any probe you run only to investigate
+  under `tests/.scratch/`, which the host never commits or records.
 - The repository is public. Never put a customer's name, email, phone number, licence or
   NPI number, or text copied from the ticket into a test or fixture. Use synthetic values
   (example.com, 555-01xx numbers).
