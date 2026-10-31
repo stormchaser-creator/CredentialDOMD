@@ -3,9 +3,9 @@
 // The document had been left scrolled by the keyboard. These pin the reset.
 import test from "node:test";
 import assert from "node:assert/strict";
-import { installPhoneViewportReset, resetIfStranded, paintPageBackground, isEditing } from "../src/utils/phoneViewport.js";
+import { installPhoneViewportReset, resetIfStranded, paintPageBackground, isEditing, PHONE_SHELL } from "../src/utils/phoneViewport.js";
 
-function fakes({ scrollY = 0, innerHeight = 844, vvHeight = 844, vvOffsetTop = 0, active = null } = {}) {
+function fakes({ scrollY = 0, innerHeight = 844, vvHeight = 844, vvOffsetTop = 0, active = null, shell = true } = {}) {
   const listeners = { win: {}, doc: {}, vv: {} };
   const on = (bag) => (type, fn) => { (bag[type] ||= []).push(fn); };
   const off = (bag) => (type, fn) => { bag[type] = (bag[type] || []).filter((f) => f !== fn); };
@@ -13,6 +13,7 @@ function fakes({ scrollY = 0, innerHeight = 844, vvHeight = 844, vvOffsetTop = 0
   const doc = {
     activeElement: active, documentElement: { scrollTop: scrollY, style: {} }, body: { scrollTop: 0, style: {} },
     addEventListener: on(listeners.doc), removeEventListener: off(listeners.doc),
+    querySelector: (sel) => (shell && sel === PHONE_SHELL ? {} : null),
   };
   const win = {
     scrollY, pageYOffset: scrollY, innerHeight, visualViewport: vv, scrolledTo: null,
@@ -159,5 +160,47 @@ test("real WebKit: the bar ends at the viewport's bottom and the floor holds the
     assert.equal(out.bar, 894, "the bar's bottom is the viewport's bottom");
     assert.equal(out.shell, 894);
     assert.ok(out.html >= 894, `the floor holds the document to at least the viewport (got ${out.html})`);
+  } finally { await browser.close(); }
+});
+
+// Simulator, 2026-10-31: on a phone in Safari the membership page jumped back
+// to the top while it was being scrolled (each toolbar resize ran the reset),
+// so "Continue to secure payment" could not be reached. A screen without the
+// phone shell scrolls the document itself and is left alone.
+test("a screen without the phone shell (the membership page) keeps its scroll; the launch offset is still reset", () => {
+  const gate = fakes({ scrollY: 600, shell: false });
+  assert.equal(resetIfStranded(gate.win, gate.doc), false);
+  assert.equal(gate.win.scrolledTo, null);
+  const stop = installPhoneViewportReset(gate.win, gate.doc);
+  gate.fire("vv", "resize"); gate.fire("doc", "focusout");
+  assert.equal(gate.win.scrolledTo, null, "scrolling the membership page stays where the finger left it");
+  stop();
+  const launch = fakes({ scrollY: -62, shell: false });
+  assert.equal(resetIfStranded(launch.win, launch.doc), true, "a negative offset is never a place to stay");
+});
+
+test("the phone shell carries the marker the reset looks for, and only on phones", () => {
+  const app = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+  assert.equal(PHONE_SHELL, "[data-phone-shell]");
+  assert.match(app, /<div data-phone-shell=\{isDesktop \? undefined : ""\} style=\{isDesktop \? \{/);
+  const gate = app.slice(app.indexOf("if (limitedLaunch.enabled && access !== \"active\""), app.indexOf("<LimitedLaunchMembership"));
+  assert.ok(gate.length > 0 && !gate.includes("data-phone-shell"), "the membership page is not the shell");
+});
+
+test("real WebKit: a scrolled page without the shell stays put through a viewport resize; under the shell it goes back to the top", { skip, timeout: 60000 }, async () => {
+  const source = readFileSync(new URL("../src/utils/phoneViewport.js", import.meta.url), "utf8").replace(/^export /gm, "");
+  const browser = await webkit.launch();
+  try {
+    const page = await (await browser.newContext({ viewport: { width: 402, height: 812 } })).newPage();
+    const run = async (withShell) => {
+      await page.setContent(`<!doctype html><html><body style="margin:0">
+        ${withShell ? '<div data-phone-shell=""></div>' : ""}<div style="height:3000px">membership page</div>
+        <script>${source}; window.__stop = installPhoneViewportReset(window, document, { delay: 0 });</script></body></html>`);
+      await page.evaluate(() => window.scrollTo(0, 600));
+      await page.evaluate(() => new Promise((done) => { window.visualViewport.dispatchEvent(new Event("resize")); setTimeout(done, 50); }));
+      return page.evaluate(() => window.scrollY);
+    };
+    assert.equal(await run(false), 600, "the membership page keeps its scroll");
+    assert.equal(await run(true), 0, "under the phone shell the stranded scroll is reset");
   } finally { await browser.close(); }
 });

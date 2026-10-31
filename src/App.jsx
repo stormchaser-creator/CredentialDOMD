@@ -3360,7 +3360,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   );
 
   return (
-    <div style={isDesktop ? {
+    <div data-phone-shell={isDesktop ? undefined : ""} style={isDesktop ? {
       fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif",
       backgroundColor: T.bg, minHeight: "100vh", position: "relative",
     } : {

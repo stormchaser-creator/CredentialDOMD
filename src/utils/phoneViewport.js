@@ -10,11 +10,18 @@
 //   - paintPageBackground: html and body carry the app's background, so a
 //     moment of gap is never a white band;
 //   - installPhoneViewportReset: once no text field has focus and the visual
-//     viewport is back to (near) full height, a document left scrolled is
-//     returned to the top. Pure apart from the window/document it is given,
+//     viewport is back to (near) full height, a document left scrolled under
+//     the phone shell is returned to the top. Pure apart from the window/document it is given,
 //     so it is tested with fakes.
 
 const FIELD = /^(INPUT|TEXTAREA|SELECT)$/;
+// The phone shell (App.jsx) marks itself. Only while it is on screen is a
+// scrolled document a stranded one: every other screen (the membership page,
+// an error screen) scrolls the document itself, and putting it back to the
+// top after each toolbar resize made the membership page jump to the top
+// while it was being scrolled, so "Continue to secure payment" could not be
+// reached on a phone in Safari (simulator, 2026-10-31).
+export const PHONE_SHELL = "[data-phone-shell]";
 
 export function isEditing(doc) {
   const el = doc?.activeElement;
@@ -35,6 +42,7 @@ export function resetIfStranded(win, doc) {
   // Below zero is the launch offset: the page shown scrolled to -62, where
   // every tap lands 62 pt above the finger (simulator, 2026-10-30).
   const below = (Number(win?.scrollY) || 0) < 0 || !!(vv && vv.offsetTop < 0);
+  if (!below && !doc?.querySelector?.(PHONE_SHELL)) return false;
   if (!below && documentScroll(win, doc) <= 0 && !(vv && vv.offsetTop > 0)) return false;
   win.scrollTo(0, 0);
   if (doc?.documentElement) doc.documentElement.scrollTop = 0;
