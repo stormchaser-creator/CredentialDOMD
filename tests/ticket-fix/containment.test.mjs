@@ -227,13 +227,13 @@ test('the host commit leaves out scratch probes: tests/.scratch/ and new zero-by
   try {
     const wt = await createWorktree({ repo: p.repo, work: p.work, ticketId: TICKET, runId: RUN_ID });
     p.write(wt.dir, { 'src/format.js': 'export const title = "changed";\n', 'tests/.scratch/probe.test.mjs': "import test from 'node:test';\ntest('probe', () => {});\n",
-      'tests/_probe.test.mjs': '', 'tests/kept.test.mjs': '// synthetic\n' });
+      'tests/_probe.test.mjs': '', 'tests/kept.test.mjs': '// synthetic\n', 'public/.marker': '' });
     // An existing file emptied is a real change, not a probe.
     p.write(wt.dir, { 'tests/format.test.mjs': '' });
     const changed = changedPaths(wt.dir, wt.base);
     assert.deepEqual(scratchPaths(wt.dir, wt.base, changed), ['tests/.scratch/probe.test.mjs', 'tests/_probe.test.mjs']);
     const head = commitWork({ dir: wt.dir, base: wt.base, subject: 'Synthetic', ticketId: TICKET, runId: RUN_ID, committer: COMMITTER });
-    assert.deepEqual(sh(wt.dir, ['diff', '--name-only', wt.base, head]).split('\n'), ['src/format.js', 'tests/format.test.mjs', 'tests/kept.test.mjs']);
+    assert.deepEqual(sh(wt.dir, ['diff', '--name-only', wt.base, head]).split('\n'), ['public/.marker', 'src/format.js', 'tests/format.test.mjs', 'tests/kept.test.mjs']);
     // A worktree holding only probes commits nothing.
     const only = await createWorktree({ repo: p.repo, work: p.work, ticketId: TICKET, runId: 'fedcba9876543210' });
     p.write(only.dir, { 'tests/.scratch/a.test.mjs': '// probe\n', 'tests/empty.test.mjs': '' });

@@ -645,7 +645,8 @@ const agentEnv = (env, committer) => ({ ...env, GIT_AUTHOR_NAME: AGENT_NAME, GIT
 // cannot delete a file (no rm), so a probe it wrote to investigate would
 // otherwise become the change under review: anything under tests/.scratch/
 // (where the prompt tells it to put probes) and any zero-byte regular file
-// that base does not have. An existing file emptied is a real change.
+// under tests/ that base does not have. An existing file emptied is a real
+// change, and so is a new empty file elsewhere (a marker such as .nojekyll).
 export const SCRATCH_DIR = 'tests/.scratch/';
 export function scratchPaths(dir, base, files, { binary = 'git' } = {}) {
   const inBase = new Set();
@@ -656,7 +657,7 @@ export function scratchPaths(dir, base, files, { binary = 'git' } = {}) {
   }
   return files.filter(f => {
     if (f.startsWith(SCRATCH_DIR)) return true;
-    if (inBase.has(f)) return false;
+    if (inBase.has(f) || !f.startsWith('tests/')) return false;
     let stat;
     try { stat = lstatSync(path.join(dir, f)); } catch { return false; }
     return stat.isFile() && stat.size === 0;
