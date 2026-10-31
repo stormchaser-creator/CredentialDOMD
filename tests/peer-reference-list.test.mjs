@@ -21,6 +21,18 @@ test('a name keeps only first and last name; the credential after the comma is s
   assert.deepEqual(splitReferenceName('Maria de la Cruz'), { name: 'Maria de la Cruz', credential: '' }, 'a compound surname is not cut');
 });
 
+test('a middle name, a degree typed without a comma and a last-name-first entry still read as first and last name', () => {
+  assert.deepEqual(splitReferenceName('Jane Marie Smith'), { name: 'Jane Smith', credential: '' }, 'a middle name is dropped');
+  assert.deepEqual(splitReferenceName('Jane Smith MD'), { name: 'Jane Smith', credential: 'MD' }, 'a degree after the name is not part of it');
+  assert.deepEqual(splitReferenceName('Jane Smith M.D.'), { name: 'Jane Smith', credential: 'M.D.' });
+  assert.deepEqual(splitReferenceName('Jane Smith Jr.'), { name: 'Jane Smith', credential: '' });
+  assert.deepEqual(splitReferenceName('Jane Smith, Jr., MD'), { name: 'Jane Smith', credential: 'MD' });
+  assert.deepEqual(splitReferenceName('Smith, Jane'), { name: 'Jane Smith', credential: '' }, 'last name first is not read as a credential');
+  assert.deepEqual(splitReferenceName('Ludwig van Beethoven'), { name: 'Ludwig van Beethoven', credential: '' });
+  const [line] = existingReferenceLines([{ id: 'z', name: 'Jane Smith MD', degree: 'MD' }]);
+  assert.equal(`${line.name}, ${line.credential}`, 'Jane Smith, MD', 'the degree is not shown twice');
+});
+
 test('each saved reference becomes one line: name, credential, date added', () => {
   const lines = existingReferenceLines([
     { id: 'b', name: 'Taylor Brooks', degree: 'M.D.', createdAt: '2026-03-04T15:00:00Z', email: 'x@example.test', phone: '555-0100' },
