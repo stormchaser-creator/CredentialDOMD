@@ -195,6 +195,34 @@ test('a reproduction that does not fail on base is sent back once with the host\
     assert.equal((await readRun(p.work, NAME)).repro.recorded, true);
   } finally { r?.cleanup(); p.cleanup(); }
 });
+test('a reproduction that copies the ticket\'s words is sent back once before it is frozen; the rewritten one passes G10', async () => {
+  const p = project();
+  let r;
+  try {
+    // The synthetic ticket body, quoted in a comment: the worker may not edit a frozen file, so G10 could never pass.
+    const quoting = { 'tests/join.test.mjs': REPRO_FILES['tests/join.test.mjs'].replace("test('lines", "// Synthetic body: the summary joins lines with spaces.\ntest('lines") };
+    r = await runStub(p, standardScript({ repro: (opts, n) => { p.write(opts.cwd, n === 1 ? quoting : REPRO_FILES); return { ...REPRO_RESULT_COPY }; } }));
+    assert.equal(r.code, EXIT.ok, r.logs.join('\n'));
+    const repro = r.calls.filter(c => c.role === 'repro');
+    assert.equal(repro.length, 2);
+    assert.match(repro[1].input, /ticket_text in tests\/join\.test\.mjs/);
+    assert.doesNotMatch(repro[1].input, /did not fail with an assertion/);
+    assert.ok(r.logs.some(l => l.includes('ticket_text in tests/join.test.mjs before freezing; resuming once')), r.logs.join('\n'));
+    const run = await readRun(p.work, NAME);
+    assert.equal(run.repro.recorded, true);
+    assert.ok(!(run.gates_failures ?? []).includes('personal_data'), JSON.stringify(run.gates_failures));
+  } finally { r?.cleanup(); p.cleanup(); }
+});
+
+test('a clean reproduction recorded on base is not sent back', async () => {
+  const p = project();
+  let r;
+  try {
+    r = await runStub(p, standardScript());
+    assert.equal(r.calls.filter(c => c.role === 'repro').length, 1);
+    assert.ok(!r.logs.some(l => l.includes('before freezing')));
+  } finally { r?.cleanup(); p.cleanup(); }
+});
 const REPRO_RESULT_COPY = { kind: 'bug', reason: 'Synthetic.', tests: [{ file: 'tests/join.test.mjs', name: 'lines are joined with a line break', requirement: 'Line breaks', ac_id: 'AC-1' }] };
 
 test('a review that asks for changes resumes the worker once with its findings, then reviews again', async () => {

@@ -22,6 +22,7 @@
 // counted (fixtures copy synthetic values); the runner's own credentials and
 // ticket text never get that exemption. The report names rules and files
 // only: a matched value is never logged, written or sent to the model.
+import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { git, attrFrom, DIFF_TEXT, MEDIA_EXCLUDES } from '../worktree.mjs';
 
@@ -118,6 +119,33 @@ export function personalDataReport({ dir, base, head, context = null, secrets = 
   };
   const shingles = evidenceShingles(context);
   for (const [name, lines] of added) {
+    for (const line of lines) {
+      for (const f of lineFindings(line, { secrets })) if (f.never_public || !publicAtBase(f.value)) add(f.rule, name);
+    }
+    if (shingles.size) {
+      const w = words(lines.join('\n'));
+      for (let i = 0; i + 8 <= w.length; i++) if (shingles.has(w.slice(i, i + 8).join(' '))) { add('ticket_text', name); break; }
+    }
+  }
+  return { pass: hits.length === 0, hits, files: files.length };
+}
+
+// The same rules over files in the worktree, committed or not: the lines each
+// adds to its base version. The runner runs it on a reproduction before it
+// freezes it. A frozen file can never be repaired, and the worker is told to
+// leave it alone, so a reproduction that copied the ticket's words (an app
+// error ticket's subject is its error text) failed G10 every round
+// (ticket 7bbd451d, 2026-10-31).
+export function personalDataInFiles({ dir, base, files, context = null, secrets = [], binary = 'git' }) {
+  const hits = [];
+  const add = (rule, file) => { if (!hits.some(h => h.rule === rule && h.file === file)) hits.push({ rule, file }); };
+  const shingles = evidenceShingles(context);
+  const publicAtBase = value => git(dir, ['grep', '-q', '-F', '-e', value, base, '--'], { binary, allowFail: true }) !== null;
+  for (const name of files) {
+    let text;
+    try { text = readFileSync(path.join(dir, name), 'utf8'); } catch { continue; }
+    const before = new Set((git(dir, ['show', `${base}:${name}`], { binary, allowFail: true }) ?? '').split('\n'));
+    const lines = text.split('\n').filter(line => !before.has(line));
     for (const line of lines) {
       for (const f of lineFindings(line, { secrets })) if (f.never_public || !publicAtBase(f.value)) add(f.rule, name);
     }

@@ -111,6 +111,7 @@ import { createWorktree, removeWorktree, changedPaths, classifyChanges, commitWo
 import { sessionSettings, reviewSettings, extractSettings, streamMessage, runSession, gatesEnv, installSignalHandlers, removeSessionTemps, onStop, limitNotice } from './worker.mjs';
 import { recordReproduction, runTestGates, suiteBaseline, gateFailures, validTestRef, readBaseline, DEFAULT_COMMANDS } from './gates/tests.mjs';
 import { protectedReport, blastRadius } from './gates/owner-rules.mjs';
+import { personalDataInFiles, personalDataSummary } from './gates/personal-data.mjs';
 import { reviewDiff, reviseInput, confirmChecklist, REVIEW_SCHEMA, CONFIRM_SCHEMA, EVIDENCE_MARKER } from './review.mjs';
 import { mergeRun, autoMergeEnabled, writeRun, writeRunFile, readRun, runDirectory, checkRunPaths, credentialValues, RUN_NAME, AUTO_MERGE_FLAG } from './merge.mjs';
 import { raise } from './alert.mjs';
@@ -594,10 +595,21 @@ async function workTicket(o, atEnd) {
         await hostCheck('the reproduction record');
         recorded.tests = recorded.tests.map((t, i) => ({ ...t, ac_id: out.tests[i]?.ac_id ?? null }));
         repro = { kind: out.kind, ...recorded };
-        if (recorded.recorded || attempt === 2 || !r.session_id) break;
-        const verdicts = recorded.tests.filter(t => t.on_base !== 'red').map(t => `- ${t.file} :: ${t.name}: ${t.on_base.replace(/_/g, ' ')}`).join('\n');
-        log(`REPRO — ${id8}: ${recorded.tests.filter(t => t.on_base !== 'red').length} test(s) did not fail on base with an assertion; resuming once`);
-        r = await session({ role: 'repro', resume: r.session_id, cwd: wt.dir, input: `The host ran your tests on base. These did not fail with an assertion (ERR_ASSERTION), so they do not reproduce anything:\n${verdicts}\nFix the tests (not the product) so each fails on the current code with an assertion, then return the structured result again.`,
+        // G10 before the files are frozen: the worker may not touch them, so
+        // only this session can take copied ticket text out of them.
+        const personal = personalDataInFiles({ dir: wt.dir, base: wt.base, files: Object.keys(recorded.frozen ?? {}).filter(f => recorded.frozen[f] !== null), context, secrets, binary });
+        if ((recorded.recorded && personal.pass) || attempt === 2 || !r.session_id) break;
+        const notes = [];
+        if (!recorded.recorded) {
+          const verdicts = recorded.tests.filter(t => t.on_base !== 'red').map(t => `- ${t.file} :: ${t.name}: ${t.on_base.replace(/_/g, ' ')}`).join('\n');
+          log(`REPRO — ${id8}: ${recorded.tests.filter(t => t.on_base !== 'red').length} test(s) did not fail on base with an assertion; resuming once`);
+          notes.push(`The host ran your tests on base. These did not fail with an assertion (ERR_ASSERTION), so they do not reproduce anything:\n${verdicts}\nFix the tests (not the product) so each fails on the current code with an assertion.`);
+        }
+        if (!personal.pass) {
+          log(`REPRO — ${id8}: ${personalDataSummary(personal)} before freezing; resuming once`);
+          notes.push(`The host checked your tests for personal data before freezing them, and they cannot be committed to this public repository as they are: ${personalDataSummary(personal)}. ticket_text means 8 or more words in a row copied from the ticket, including an error message or a URL quoted in its subject. Replace each copied value with a short synthetic stand-in (an example.com address, a made-up file name or URL) that still fails on base the same way.`);
+        }
+        r = await session({ role: 'repro', resume: r.session_id, cwd: wt.dir, input: `${notes.join('\n\n')}\nThen return the structured result again.`,
           schema: REPRO_SCHEMA, settings, sessionDir: path.join(sessions, 'repro'), timeoutMs: reviseSeconds * 1000, baseEnv: env });
       }
       run.repro = repro ? { kind: repro.kind, recorded: repro.recorded, tests: repro.tests, frozen: repro.frozen, ...(repro.needs_device ? { needs_device: true } : {}) } : run.repro;
