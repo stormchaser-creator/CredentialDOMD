@@ -59,9 +59,11 @@ test('before the migration widens the check, an info event is kept as an error r
   assert.equal(s.inserts[0].extra.event, 'page_discarded');
 });
 
-test('the owner\'s alert says CLIENT EVENT for an info row, and Admin Errors draws it in a neutral colour', async () => {
+test('a discarded page never reaches the owner\'s alert, and Admin Errors draws an info row in a neutral colour', async () => {
+  // Since 2026-10-30 the alert carries only what was fixed ("Fixed by itself: ...").
   const notify = await readFile(new URL('../../scripts/signup-notify.py', import.meta.url), 'utf8');
-  assert.match(notify, /select case when e\.kind = 'info' then 'CLIENT EVENT' else 'CLIENT ERROR' end/);
+  assert.match(notify, /e\.kind = 'info' and e\.message like 'Fixed by itself: %'/);
+  assert.doesNotMatch(notify, /'CLIENT EVENT'/);
   const admin = await readFile(new URL('../../src/components/pages/AdminErrorReports.jsx', import.meta.url), 'utf8');
   assert.match(admin, /group\.kind === "info" \? T\.textMuted/);
   const migration = await readFile(new URL('../../supabase/migrations/20261002080000_client_events_info.sql', import.meta.url), 'utf8');

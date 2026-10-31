@@ -334,7 +334,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // A cache write the device refused for want of space (IndexedDB and
   // localStorage both, or either one) reaches client_errors once per session:
   // the store, the reason and the size rounded to 100 KB, never contents.
-  useEffect(() => { setStorageFullReporter((message, extra) => reportError(message, "error", extra)); }, []);
+  useEffect(() => { setStorageFullReporter((message, extra, kind = "error") => reportError(message, kind, extra)); }, []);
   // Refused saves, and saves kept on this device for want of a membership
   // answer, reach client_errors too (event, reason code and section only). A
   // refusal the page being left can cause (writes stopped by a load that a
@@ -765,6 +765,9 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
           throw stopped;
         }
         setRecordsLoadIssue(null);
+        // The device-copy wait ended: the owner hears what fixed itself,
+        // not what went wrong (owner, 2026-10-30).
+        if (fromWait) reportUnlessLeaving("Fixed by itself: the account loaded after a connection problem, and replaced the read-only copy on the device.", "info");
         if (sbData) {
           const profileId = sbData._userId;
           delete sbData._userId;

@@ -139,7 +139,7 @@ test('signup notifier SQL on PostgreSQL: member replies only, money events, miss
   await pg.sql(BASE + OPTIONAL + CORE_ROWS + MONEY_ROWS);
 
   await t.test('the probe names every optional table that exists', async () => {
-    assert.equal(await present(pg), 'feedback,limited_billing_quotes,billing_checkout_attempts,limited_paid_purchase_history,access_purchase_receipts,billing_subscriptions,lifetime_gift_reservations,invite_to_join_sends,limited_refund_requests');
+    assert.equal(await present(pg), 'support_reply_verifications,feedback,limited_billing_quotes,billing_checkout_attempts,limited_paid_purchase_history,access_purchase_receipts,billing_subscriptions,lifetime_gift_reservations,invite_to_join_sends,limited_refund_requests');
   });
 
   await t.test('(c) a TICKET REPLY is a member reply only', async () => {
@@ -241,7 +241,7 @@ test('signup notifier SQL on PostgreSQL: member replies only, money events, miss
     const probe = JSON.stringify(await pg.rows(py(['probe']), 'drift'));
     const presentRun = spawnSync(python, [PY, 'present'], { input: probe, encoding: 'utf8' });
     assert.equal(presentRun.status, 0, presentRun.stderr);
-    assert.equal(presentRun.stdout.trim(), 'feedback,limited_billing_quotes,billing_checkout_attempts,limited_paid_purchase_history,access_purchase_receipts,billing_subscriptions,lifetime_gift_reservations,limited_refund_requests');
+    assert.equal(presentRun.stdout.trim(), 'support_reply_verifications,feedback,limited_billing_quotes,billing_checkout_attempts,limited_paid_purchase_history,access_purchase_receipts,billing_subscriptions,lifetime_gift_reservations,limited_refund_requests');
     assert.equal(presentRun.stderr.trim(), 'signup-notify: invite_to_join_sends is not reported until the notifier matches its columns (missing invite_to_join_sends.offer_annual_cents)');
     assert.equal(py(['drifted'], probe).trim(), 'invite_to_join_sends');
     const rows = await pg.rows(py(['query', '--since', EARLIER, '--now', iso(60), '--present', presentRun.stdout.trim()]), 'drift');
@@ -373,14 +373,21 @@ test('signup notifier SQL on PostgreSQL: member replies only, money events, miss
   // (kind 'info', message "Funnel: ...", src/utils/funnelEvents.js), one per
   // step per page. They are for counting, not for the owner's phone: the
   // alerts stay what they were, and every other client event or error still goes.
-  await t.test('signup funnel steps are not alerts; other client events and errors still are', async () => {
+  // Owner, 2026-10-30: emails say what was fixed, not what is wrong. Errors
+  // become tickets for the ticket agent (migration 20261031010000).
+  await t.test('what fixed itself and what was resolved are alerts; errors, funnel steps and other events are not', async () => {
     await pg.sql('create database funnel');
     await pg.sql(BASE + CORE_ROWS + `insert into client_errors(auth_user_id, kind, message) values
       ('user_synthetic1', 'info', 'Funnel: price shown'), ('user_synthetic1', 'info', 'Funnel: sent to Stripe Checkout'),
-      ('user_synthetic1', 'info', 'Page discarded by the browser'), ('user_synthetic1', 'error', 'Account load still waiting after 15 s (account).')`, 'funnel');
+      ('user_synthetic1', 'info', 'Page discarded by the browser'), ('user_synthetic1', 'error', 'Account load still waiting after 15 s (account).'),
+      ('user_synthetic1', 'info', 'Fixed by itself: the membership check answered after a connection problem.');
+      insert into support_tickets(id, user_id, subject, status, resolved_at) values
+        ('00000000-0000-4000-8000-000000000f01', null, 'Synthetic resolved question', 'resolved', now());`, 'funnel');
     const rows = await pg.rows(py(['query', '--since', EARLIER, '--now', iso(60), '--present', '']), 'funnel');
-    assert.deepEqual(lines(rows, 'CLIENT EVENT').map(r => r.extra), ['info: Page discarded by the browser']);
-    assert.deepEqual(lines(rows, 'CLIENT ERROR').map(r => r.extra), ['error: Account load still waiting after 15 s (account).']);
+    assert.deepEqual(lines(rows, 'FIXED BY ITSELF').map(r => r.extra), ['the membership check answered after a connection problem.']);
+    assert.deepEqual(lines(rows, 'FIXED').map(r => r.extra), ['Synthetic resolved question']);
+    assert.deepEqual(lines(rows, 'CLIENT ERROR'), []);
+    assert.deepEqual(lines(rows, 'CLIENT EVENT'), []);
   });
 
   await t.test('the query refuses a malformed last-run time and an unknown table name', () => {

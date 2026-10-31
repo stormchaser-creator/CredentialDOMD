@@ -27,6 +27,9 @@ import { BASE, OPTIONAL } from './notifierSchema.mjs';
 
 const root = fileURLToPath(new URL('../../', import.meta.url));
 const MIGRATION = fs.readFileSync(path.join(root, 'supabase/migrations/20261014110000_owner_notify_email.sql'), 'utf8');
+// The latest migration that defines owner_notify_rows: its body is the one
+// signup-notify.py must generate.
+const ROWS_MIGRATION = fs.readFileSync(path.join(root, 'supabase/migrations/20261031010000_self_heal_alerts.sql'), 'utf8');
 const ROLLBACK = fs.readFileSync(path.join(root, 'docs/rollback/20261014110000_owner_notify_email.rollback.sql'), 'utf8');
 const python = (() => {
   const r = spawnSync('python3', ['-c', 'import sys; print(sys.executable)'], { encoding: 'utf8' });
@@ -89,7 +92,7 @@ sys.stdout.write(m.query_sql('2000-01-01T00:00:00Z', list(m.OPTIONAL)))`;
   assert.ok(r.stdout.endsWith('\norder by created_at'));
   const expected = r.stdout.slice(0, -'\norder by created_at'.length).replaceAll("'2000-01-01T00:00:00Z'", 'p_since')
     .split('\n').map(line => `    ${line}`).join('\n');
-  assert.ok(MIGRATION.includes(`  from (\n${expected}\n  ) as r(kind, name, email, extra, created_at, key)`),
+  assert.ok(ROWS_MIGRATION.includes(`  from (\n${expected}\n  ) as r(kind, name, email, extra, created_at, key)`),
     'regenerate the body from scripts/signup-notify.py when its query changes');
   assert.doesNotMatch(MIGRATION, /^\s*(begin|commit|rollback)\s*;/im, 'no top-level transaction');
 });

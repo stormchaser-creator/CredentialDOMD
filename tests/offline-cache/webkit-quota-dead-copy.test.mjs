@@ -55,7 +55,7 @@ const supabase = await import('../../src/lib/supabase.js');
 const { BASE_KEYS, scopedKey } = scope;
 
 const reports = [];
-scope.setStorageFullReporter((message, extra) => reports.push({ message, extra }));
+scope.setStorageFullReporter((message, extra, kind = 'error') => reports.push({ message, extra, kind }));
 
 const PROD = 'user_SYNTHPROD000000000000000000';
 const DEV = 'user_SYNTHDEV0000000000000000000';
@@ -274,6 +274,8 @@ test('a lost IndexedDB that reopens before a later write fails is never reported
   loseIndexedDbServer();
   clockOffset += scope.LOST_CONNECTION_CONFIRM_MS;
   assert.equal(await storage.saveData({ ...edited, caseLogs: [...edited.caseLogs, caseLog(888_889)] }, PROD), false);
-  assert.equal(reports.length, 0, 'the save between the two started the wait over');
+  assert.deepEqual(reports.map(r => r.message), ["Fixed by itself: the offline copy saved again after iOS closed the phone's storage."],
+    'no error: the save between the two started the wait over, and was reported as a fix');
+  assert.equal(reports[0].kind, 'info');
   scope.setActiveUserId(null);
 });

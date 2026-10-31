@@ -44,6 +44,14 @@ const NO_ANSWER_PHASES = new Set(["token", "network", "timeout", "response", "se
 const noAnswer = error => NO_ANSWER_PHASES.has(describeAccessRefreshFailure(error).phase);
 const lasting = (run, now) => run.count >= RECONNECT_NOTICE_FAILURES && now - run.since >= RECONNECT_NOTICE_MS;
 const freshFailures = () => ({ count: 0, since: 0, shown: false, held: [] });
+// A check that answered after failing: what fixed itself, for the owner
+// (2026-10-30: "i want emails telling me what was fixed"). Once a session each.
+const fixedSent = new Set();
+function reportFixed(run, message) {
+  if (run.count === 0 || fixedSent.has(message)) return;
+  fixedSent.add(message);
+  try { reportUnlessLeaving(message, "info", { event: "access_recovered", failedTries: run.count }); } catch { /* reporting never blocks */ }
+}
 // Holds `error` in `run`, and sends everything held once it is lasting or answered.
 function noteFailure(run, error, report, now) {
   if (run.count === 0) run.since = now;
@@ -84,6 +92,7 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
           await client.bootstrap();
           if (!current()) return;
           enrolled.current = accountId;
+          reportFixed(enrollFailures.current, "Fixed by itself: membership enrollment went through after a connection problem.");
           enrollFailures.current = freshFailures();
         } catch (error) {
           if (!current()) return;
@@ -97,6 +106,7 @@ export function useLimitedLaunchAccess(accountId, { profileReady = false } = {})
       if (!current()) return;
       if (!accessAuthority.accept(accountId, value)) throw notAccepted();
       backoff.current = 0;
+      reportFixed(failures.current, "Fixed by itself: the membership check answered after a connection problem.");
       failures.current = freshFailures();
       setResult({ accountId, status: "ready", error: null, enrollmentError, reconnecting: false, answered: true });
     } catch (error) {

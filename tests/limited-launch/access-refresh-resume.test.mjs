@@ -292,11 +292,12 @@ test('a check with no answer that a retry then answers is never reported', async
   await f.advance(0);
   await f.advance(10_000);
   assert.equal(f.value.status, 'ready');
-  assert.deepEqual(f.reports, []);
-  // A later run of the same kind that lasts is still reported, once it lasts.
+  // What fixed itself is reported instead, as an event (kind info), once.
+  const fixed = ['Fixed by itself: the membership check answered after a connection problem.', 'info', { event: 'access_recovered', failedTries: 2 }];
+  assert.deepEqual(JSON.parse(JSON.stringify(f.reports)), [fixed]);
   f.queue.push(failure('network'), failure('network'));
   await f.advance(ACCESS_REFRESH_MS);
-  assert.deepEqual(f.reports, [], 'two failures in a few seconds: not yet');
+  assert.deepEqual(JSON.parse(JSON.stringify(f.reports)), [fixed], 'two failures in a few seconds: no error yet, and the fix is not sent twice');
 });
 
 test('a failure the server answered is reported at once, with the held ones before it', async () => {

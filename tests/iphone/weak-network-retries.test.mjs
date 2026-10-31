@@ -171,3 +171,20 @@ test('a pending account is not read again on return to the front; an active one 
     assert.equal(active.calls.length, 1, 'an active account is read again');
   } finally { delete globalThis.accessAuthority; }
 });
+
+// Owner, 2026-10-30: "i want emails telling me what was fixed". The retry
+// that loads the account in place of the read-only device copy says so, as
+// an event; a first load that simply works says nothing.
+test('a retry that loads the account in place of the device copy reports what fixed itself; a plain load does not', async () => {
+  const answer = () => ({ _userId: 'profile-synthetic', settings: { accessStatus: 'active' }, licenses: [], _errored: new Set() });
+  const retried = load({ ensureProfile: async () => ({ id: 'profile-synthetic' }), loadFromSupabase: async () => answer() });
+  await retried.loadDataForUser(OWNER, { fromWait: true });
+  await settle();
+  // (This cut of the load stops after the records read; only its reports of a fix are compared.)
+  const fixes = f => f.named('report').filter(m => m.startsWith('Fixed by itself'));
+  assert.deepEqual(fixes(retried), ['Fixed by itself: the account loaded after a connection problem, and replaced the read-only copy on the device.']);
+  const plain = load({ ensureProfile: async () => ({ id: 'profile-synthetic' }), loadFromSupabase: async () => answer() });
+  await plain.loadDataForUser(OWNER);
+  await settle();
+  assert.deepEqual(fixes(plain), []);
+});

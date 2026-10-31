@@ -111,7 +111,7 @@ CORE = {
     'founding_signups': ({'founding_signups': ('name', 'email', 'created_at')}, ()),
     'profiles': ({'profiles': ('name', 'email', 'created_at')}, ()),
     'waitlist_attempts': ({'waitlist_attempts': ('name', 'email', 'stage', 'created_at'), 'early_access_leads': ('email', 'created_at')}, ()),
-    'support_tickets': ({'support_tickets': ('user_id', 'subject', 'created_at'), 'profiles': PROFILE}, (IS_ADMIN,)),
+    'support_tickets': ({'support_tickets': ('id', 'user_id', 'subject', 'status', 'resolved_at', 'created_at'), 'profiles': PROFILE}, (IS_ADMIN,)),
     'support_messages': ({'support_messages': ('ticket_id', 'author_id', 'body', 'created_at'), 'support_tickets': ('id', 'subject'),
                           'profiles': PROFILE}, (IS_ADMIN,)),
     'client_errors': ({'client_errors': ('auth_user_id', 'kind', 'message', 'created_at'), 'profiles': ('auth_user_id', 'name', 'email')}, ()),
@@ -119,6 +119,8 @@ CORE = {
 }
 # Read only when they can be. Each is named for its table.
 OPTIONAL_PARTS = {
+    'support_reply_verifications': ({'support_reply_verifications': ('id', 'ticket_id', 'report', 'used_at'), 'support_tickets': ('id', 'user_id', 'subject'),
+                                     'profiles': PROFILE}, ()),
     'feedback': ({'feedback': ('user_id', 'rating', 'message', 'context_page', 'created_at'), 'profiles': PROFILE}, (IS_ADMIN,)),
     'limited_billing_quotes': ({'limited_billing_quotes': ('attempt_id', 'profile_id', 'livemode', 'offer_id', 'price_phase', 'annual_cents', 'created_at'),
                                 'profiles': PROFILE}, ()),
@@ -139,7 +141,7 @@ OPTIONAL = tuple(OPTIONAL_PARTS)
 PARTS = {**CORE, **OPTIONAL_PARTS}
 
 SIGNUP_KINDS = ('waitlist', 'founding', 'app profile', 'FAILED ATTEMPT')
-ACTIVITY_PREFIXES = ('TICKET', 'CLIENT', 'BETA', 'guide only', 'FEEDBACK')
+ACTIVITY_PREFIXES = ('TICKET', 'CLIENT', 'BETA', 'guide only', 'FEEDBACK', 'FIXED')
 MONEY = {
     'PAID': ('paid', 'paid'),
     'CHECKOUT STARTED': ('checkout started', 'checkouts started'),
@@ -445,18 +447,32 @@ def query_sql(since, present, now=None):
     and (to_jsonb(m)->>'verification_id') is null
     and coalesce(m.body, '') not ilike 'CredentialDOMD Support%'
     and coalesce((to_jsonb(m)->>'is_admin_reply')::boolean, false) = false""",
-        # kind 'info' is an event, not a fault (a page the browser discarded):
-        # said as such (migration 20261002080000). The signup funnel's steps
-        # (kind 'info', "Funnel: ...", src/utils/funnelEvents.js) are for
-        # counting in the table, not alerts (2026-10-07).
-        f"""select case when e.kind = 'info' then 'CLIENT EVENT' else 'CLIENT ERROR' end, coalesce(p.name, e.auth_user_id, 'signed-out'), coalesce(p.email,''), e.kind || ': ' || left(regexp_replace(e.message, '\\s+', ' ', 'g'),90), e.created_at, null
+        # Owner, 2026-10-30: "i dont want emails telling me what is wrong, i
+        # want emails telling me what was fixed". An app error is filed as a
+        # ticket for the ticket agent instead (file_client_error_tickets,
+        # migration 20261031010000), and what the app fixed by itself (kind
+        # 'info', "Fixed by itself: ...") is what reaches the owner. Other
+        # events (a discarded page, the funnel's steps) stay in the table.
+        f"""select 'FIXED BY ITSELF', coalesce(p.name, e.auth_user_id, 'signed-out'), coalesce(p.email,''), left(regexp_replace(substr(e.message, 18), '\\s+', ' ', 'g'),120), e.created_at, null
   from client_errors e left join profiles p on p.auth_user_id = e.auth_user_id
-  where e.created_at > {s}{upto('e.created_at')} and not (e.kind = 'info' and e.message like 'Funnel: %')""",
+  where e.created_at > {s}{upto('e.created_at')} and e.kind = 'info' and e.message like 'Fixed by itself: %'""",
+        # A ticket marked resolved (reply-ticket, Admin): a fix, said as one.
+        f"""select 'FIXED', {person('p')}, left(coalesce(t.subject,''),80), t.resolved_at, 'resolved:' || t.id::text || ':' || to_char(t.resolved_at at time zone 'UTC', 'YYYY-MM-DD"T"HH24:MI:SS.US')
+  from support_tickets t left join profiles p on p.id = t.user_id
+  where t.status = 'resolved' and t.resolved_at > {s}{upto('t.resolved_at')}""",
         f"select 'BETA JOINED', coalesce(name,''), coalesce(email,''), '', activated_at, null from beta_access where activated_at > {s}{upto('activated_at')}",
         # An invitation sent through Admin > Users (send-invite).
         f"""select 'INVITE SENT', {person('b')}, 'beta invitation', b.invite_sent_at, 'beta-invite:' || b.id::text || ':' || b.invite_sent_at::text
   from beta_access b where b.invite_sent_at > {back}""",
     ]
+    if 'support_reply_verifications' in has:
+        # A reply the ticket agent posted with every item of the ticket
+        # verified done: a fix, said to the owner as one.
+        parts.append(f"""select 'FIXED', {person('p')}, left(coalesce(t.subject,''),80), v.used_at, 'fixed:' || v.id::text
+  from support_reply_verifications v join support_tickets t on t.id = v.ticket_id left join profiles p on p.id = t.user_id
+  where v.used_at > {s}{upto('v.used_at')}
+    and jsonb_typeof(v.report->'items') = 'array' and jsonb_array_length(v.report->'items') > 0
+    and not exists (select 1 from jsonb_array_elements(v.report->'items') i where i->>'state' is distinct from 'done')""")
     if 'feedback' in has:
         parts.append(f"""select 'FEEDBACK', {person('p')},
   coalesce(f.rating::text || '/5 ', '') || coalesce('(' || nullif(left(f.context_page, 40), '') || ') ', '') || left(regexp_replace(f.message, '\\s+', ' ', 'g'), 80),
@@ -585,6 +601,9 @@ def message(rows):
         others = len(rows) - sum(money.values())
         paid_side = any(not k.startswith('INVITE') for k in money)
         header = ('CredentialDOMD money: ' if paid_side else 'CredentialDOMD: ') + ', '.join(counts) + (f', plus {others} other' if others else '')
+    elif all((row.get('kind') or '').startswith('FIXED') for row in rows):
+        # Only fixes (owner, 2026-10-30: emails say what was fixed).
+        header = f"CredentialDOMD fixed: {len(rows)} {'issue' if len(rows) == 1 else 'issues'}"
     elif any((row.get('kind') or '').startswith(ACTIVITY_PREFIXES) for row in rows):
         header = 'CredentialDOMD activity'
     else:

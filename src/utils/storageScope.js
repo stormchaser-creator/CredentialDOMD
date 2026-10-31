@@ -1215,8 +1215,18 @@ export function storageRefusalKind(refused) {
 // to the owner as soon as it happened (his iPhone, 2026-10-30).
 export const LOST_CONNECTION_CONFIRM_MS = 30000;
 let heldLostSince = null;
-/** A write of the offline copy landed: a lost connection held for the report was only that. */
-export function offlineCopySaved() { heldLostSince = null; }
+/**
+ * A write of the offline copy landed: a lost connection held for the report
+ * was only that, and is reported as fixed (once a session).
+ */
+export function offlineCopySaved() {
+  if (heldLostSince === null) return;
+  heldLostSince = null;
+  if (storageReported.has("storage_recovered") || !storageFullReporter) return;
+  storageReported.add("storage_recovered");
+  try { storageFullReporter("Fixed by itself: the offline copy saved again after iOS closed the phone's storage.", { event: "storage_recovered" }, "info"); }
+  catch { /* reporting never blocks */ }
+}
 
 export function reportStorageRefusal({ store, reason, chars = 0 }, now = Date.now()) {
   const event = storageRefusalKind(reason) === "full" ? "storage_full" : "storage_unavailable";

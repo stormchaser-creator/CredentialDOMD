@@ -35,7 +35,17 @@ const SAMPLES = [
   [row('INVITE SENT', 'Colleague', 'colleague@example.test', 'founding, $99/yr offer', 'invite:1:sent')],
   [row('REFUND NEEDS SUPPORT', '', '', '$99, needs support', 'refund:1:x'), row('guide only', 'G', 'g@example.test', 'guide')],
   [row('BETA JOINED', 'B', 'b@example.test')],
+  // What was fixed (2026-10-30): its own headline when nothing else came, an activity line when something did.
+  [row('FIXED BY ITSELF', 'Synthetic Member', 'member@example.test', 'the membership check answered after a connection problem.')],
+  [row('FIXED', 'Synthetic Member', 'member@example.test', 'Synthetic CME question', 'fixed:1'), row('FIXED BY ITSELF', 'signed-out', '', 'x')],
+  [row('FIXED', 'Synthetic Member', 'member@example.test', 'Synthetic CME question', 'fixed:2'), row('app profile', 'New', 'new@example.test')],
 ];
+
+test('a batch of fixes alone is headed with how many were fixed', () => {
+  assert.match(ownerNotifyMessage(SAMPLES.at(-2)), /^CredentialDOMD fixed: 2 issues\n/);
+  assert.match(ownerNotifyMessage(SAMPLES.at(-3)), /^CredentialDOMD fixed: 1 issue\n• \[FIXED BY ITSELF\] /);
+  assert.match(ownerNotifyMessage(SAMPLES.at(-1)), /^CredentialDOMD activity\n/);
+});
 
 test('the email says exactly what the iMessage says, line for line', { skip: !python && 'python3 not found' }, () => {
   for (const rows of SAMPLES) assert.equal(ownerNotifyMessage(rows), pyMessage(rows), JSON.stringify(rows));

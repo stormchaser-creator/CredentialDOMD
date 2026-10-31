@@ -154,8 +154,9 @@ test('an answer the authority does not take (Clerk reports no user as it lands) 
   assert.equal(f.value.status, 'ready');
   assert.equal(f.value.access.lifetime.credential && f.value.access.lifetime.practice, true);
   assert.equal(f.authority.allowsMutation('workLog', { id: 'w1' }), true, 'the fresh answer that was accepted authorizes the write');
-  // Answered a second later, so the member saw nothing: not emailed (2026-10-30).
-  assert.deepEqual(f.reports, []);
+  // Answered a second later, so the member saw nothing: no error, only what fixed itself (2026-10-30).
+  assert.deepEqual(f.reports.filter(([, kind]) => kind !== 'info'), []);
+  assert.deepEqual(f.reports.map(([message]) => message), ['Fixed by itself: the membership check answered after a connection problem.']);
   assert.deepEqual(f.memory.saved.get(OWNER), { credential: true, practice: true }, 'and remembered for the next launch');
 });
 
@@ -262,8 +263,10 @@ test('with production\'s client, a Clerk session lost while the answer is on its
   assert.equal(f.value.status, 'ready');
   assert.equal(f.value.checking, false);
   assert.equal(f.authority.allowsMutation('workLog', { id: 'w1' }), true);
-  // The retry answered: nothing reported (2026-10-30).
-  assert.deepEqual(f.reports, []);
+  // The retry answered: no error, only what fixed itself (2026-10-30).
+  assert.deepEqual(f.reports.filter(([, kind]) => kind !== 'info'), []);
+  assert.equal(f.reports.length, 1);
+  assert.match(f.reports[0][0], /^Fixed by itself: /);
 });
 
 test('Sign out drops a check still in flight: no answer written back, no failure reported, no retry', async () => {

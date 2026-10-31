@@ -16,7 +16,7 @@ export const OWNER_NOTIFY_FROM = 'CredentialDOMD Notifier <whit@credentialdomd.c
 
 // As signup-notify.py (SIGNUP_KINDS, ACTIVITY_PREFIXES, MONEY), in its order.
 const SIGNUP_KINDS = ['waitlist', 'founding', 'app profile', 'FAILED ATTEMPT'];
-const ACTIVITY_PREFIXES = ['TICKET', 'CLIENT', 'BETA', 'guide only', 'FEEDBACK'];
+const ACTIVITY_PREFIXES = ['TICKET', 'CLIENT', 'BETA', 'guide only', 'FEEDBACK', 'FIXED'];
 const MONEY = [
   ['PAID', 'paid', 'paid'],
   ['CHECKOUT STARTED', 'checkout started', 'checkouts started'],
@@ -54,6 +54,9 @@ export function ownerNotifyMessage(rows) {
     const others = rows.length - [...money.values()].reduce((a, b) => a + b, 0);
     const paidSide = [...money.keys()].some(kind => !kind.startsWith('INVITE'));
     header = (paidSide ? 'CredentialDOMD money: ' : 'CredentialDOMD: ') + counts.join(', ') + (others ? `, plus ${others} other` : '');
+  } else if (rows.every(row => (row.kind || '').startsWith('FIXED'))) {
+    // Only fixes (owner, 2026-10-30: emails say what was fixed).
+    header = `CredentialDOMD fixed: ${rows.length} ${rows.length === 1 ? 'issue' : 'issues'}`;
   } else if (rows.some(row => ACTIVITY_PREFIXES.some(prefix => (row.kind || '').startsWith(prefix)))) {
     header = 'CredentialDOMD activity';
   } else {

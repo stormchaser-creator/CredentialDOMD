@@ -8,13 +8,16 @@ create function public.is_admin(p uuid) returns boolean language sql stable as $
 create table early_access_leads(id uuid primary key default gen_random_uuid(), email text, name text, source text, waitlist boolean, created_at timestamptz default now());
 create table founding_signups(id uuid primary key default gen_random_uuid(), name text, email text, created_at timestamptz default now());
 create table waitlist_attempts(id uuid primary key default gen_random_uuid(), name text, email text, stage text, created_at timestamptz default now());
-create table support_tickets(id uuid primary key, user_id uuid, subject text, created_at timestamptz default now());
+create table support_tickets(id uuid primary key default gen_random_uuid(), user_id uuid, subject text, body text, category text, priority text default 'normal',
+  status text default 'open', resolved_at timestamptz, archived_at timestamptz, context_payload jsonb default '{}', created_at timestamptz default now());
 create table support_messages(id uuid primary key, ticket_id uuid, author_id uuid, body text not null, is_admin_reply boolean default false,
   created_at timestamptz default now(), attachment_path text, client_request_id uuid, verification_id uuid, emailed_at timestamptz);
-create table client_errors(id uuid primary key default gen_random_uuid(), auth_user_id text, kind text, message text, created_at timestamptz default now());
+create table client_errors(id uuid primary key default gen_random_uuid(), auth_user_id text, kind text, message text, user_agent text, build text, extra jsonb,
+  ip_hash text, created_at timestamptz default now());
 create table beta_access(id uuid primary key default gen_random_uuid(), email text, name text, status text, invite_sent_at timestamptz, activated_at timestamptz);
 `;
 export const OPTIONAL = `
+create table support_reply_verifications(id uuid primary key default gen_random_uuid(), ticket_id uuid, report jsonb, created_at timestamptz default now(), used_at timestamptz);
 create table feedback(id uuid primary key default gen_random_uuid(), user_id uuid, rating smallint, message text, context_page text, created_at timestamptz default now());
 create table billing_checkout_attempts(profile_id uuid, livemode boolean, attempt_id uuid unique, offer_id text, state text, created_at timestamptz default now(), primary key(profile_id, livemode));
 create table limited_billing_quotes(attempt_id uuid primary key, profile_id uuid, livemode boolean, offer_id text, price_phase text, annual_cents integer, created_at timestamptz default now());

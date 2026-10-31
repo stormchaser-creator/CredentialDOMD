@@ -104,7 +104,7 @@ test('real WebKit: a dead development-era copy and a lost IndexedDB no longer co
       const wideCharsFit = lo;
       localStorage.clear();
       const reports = [];
-      scope.setStorageFullReporter((message, extra) => reports.push({ message, extra }));
+      scope.setStorageFullReporter((message, extra, kind = 'error') => reports.push({ message, extra, kind }));
       scope.setActiveUserId(PROD);
       const file = fileOf(1_900_000);
       const firstSave = await storage.saveData(file, PROD);
@@ -130,7 +130,7 @@ test('real WebKit: a dead development-era copy and a lost IndexedDB no longer co
       window.__idb.restore();
       window.__clock.forward(2500);
       const retried = await storage.retryOfflineSave(PROD);
-      return { wideCharsFit, firstSave, left, save, report: reports[0] || null, fileInLocal: localStorage.getItem(`credentialdomd-data:${PROD}`) !== null,
+      return { wideCharsFit, firstSave, left, save, report: reports.find(r => r.kind !== 'info') || null, fixed: reports.filter(r => r.kind === 'info').map(r => r.message), fileInLocal: localStorage.getItem(`credentialdomd-data:${PROD}`) !== null,
         deadCopy: localStorage.getItem(`credentialdomd-data:${DEV}`) !== null, timer, note, hold, fence, queued, retried, stale: storage.cacheStaleReason() };
     });
     assert.ok(out.wideCharsFit > 2_600_000 && out.wideCharsFit < 2_630_000, `WebKit fits ${out.wideCharsFit} wide characters (5 MiB at 2 bytes each)`);
@@ -142,6 +142,7 @@ test('real WebKit: a dead development-era copy and a lost IndexedDB no longer co
     // Reopened seconds later and saved: not reported (2026-10-30). The report's
     // contents are pinned in webkit-quota-dead-copy.test.mjs.
     assert.equal(out.report, null, 'a lost connection that reopens is not reported');
+    assert.deepEqual(out.fixed, ["Fixed by itself: the offline copy saved again after iOS closed the phone's storage."], 'its fix is');
     assert.deepEqual({ timer: out.timer, note: out.note, hold: out.hold, fence: out.fence, queued: out.queued },
       { timer: true, note: true, hold: true, fence: true, queued: true }, 'everything with nowhere else to go is kept');
     assert.equal(out.retried, true, 'IndexedDB is opened again seconds later, not 30');
