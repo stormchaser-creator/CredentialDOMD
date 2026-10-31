@@ -60,12 +60,34 @@ test('real worker: a CDN-pinned bare script reproduces stale offline code; build
           await navigator.serviceWorker.ready;
         }, { build, fixed });
       };
+      // The page's controller switches when activation BEGINS, before the
+      // activate handler deletes the old build's cache, and the new cache is
+      // listed from the start of install. Going offline inside that window
+      // serves the old cache; under load the window is long enough to hit.
+      // So wait for the settled registration: an activated worker controlling
+      // the page, nothing installing or waiting. Polled here, not with
+      // page.waitForFunction: that takes an async predicate's Promise as a
+      // truthy result and returns at once, so it never waited at all.
+      const settled = async () => {
+        for (const end = Date.now() + 20000; !(await page.evaluate(async () => {
+          const reg = await navigator.serviceWorker.getRegistration('/app/');
+          return reg?.active?.state === 'activated' && !reg.installing && !reg.waiting && navigator.serviceWorker.controller?.scriptURL === reg.active.scriptURL;
+        }));) {
+          if (Date.now() > end) assert.fail(`worker never settled: ${JSON.stringify(await page.evaluate(async () => {
+            const reg = await navigator.serviceWorker.getRegistration('/app/');
+            return ['active', 'waiting', 'installing'].map(k => reg?.[k] && `${k} ${reg[k].scriptURL} ${reg[k].state}`).filter(Boolean);
+          }))}`);
+          await new Promise(resolve => setTimeout(resolve, 50));
+        }
+      };
+      const cacheKeys = () => page.evaluate(async () => (await caches.keys()).filter(k => /^credentialdomd-fixture-/.test(k)).sort());
       await register('A');
-      await page.waitForFunction(async () => !!navigator.serviceWorker.controller && (await caches.keys()).includes('credentialdomd-fixture-A'));
+      await settled();
+      assert.deepEqual(await cacheKeys(), ['credentialdomd-fixture-A']);
       current = 'B';
       await register('B');
-      if (fixed) await page.waitForFunction(async () => navigator.serviceWorker.controller?.scriptURL.includes('build=fixture-B') && (await caches.keys()).includes('credentialdomd-fixture-B'));
-      else assert.equal(await page.evaluate(async () => (await caches.keys()).includes('credentialdomd-fixture-B')), false);
+      await settled();
+      assert.deepEqual(await cacheKeys(), [fixed ? 'credentialdomd-fixture-B' : 'credentialdomd-fixture-A']);
       await context.setOffline(true);
       await page.reload();
       await page.locator('#artifact').waitFor();
