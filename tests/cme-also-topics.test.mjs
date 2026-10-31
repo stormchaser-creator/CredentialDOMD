@@ -7,6 +7,7 @@
 // reads them. Synthetic records only (the repository is public).
 import test from "node:test";
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import { computeCompliance, complianceListFor, topicOutsidePeriod } from "../src/utils/compliance.js";
 import { topicTags, topicTagsLabel, outsidePeriodText } from "../src/utils/cmeCore.js";
 import { getStateEntry } from "../src/constants/stateRequirements.js";
@@ -62,4 +63,9 @@ test("topicTags reads a missing or null alsoTopics as the topic alone", () => {
   assert.deepEqual(topicTags({ topic: "Ethics" }), ["Ethics"]);
   assert.deepEqual(topicTags({ topic: "Ethics", alsoTopics: null }), ["Ethics"]);
   assert.equal(topicTagsLabel({ topic: "Ethics" }), "Ethics");
+});
+
+test("the state detail view tags a counted course with every tag its mandates count", () => {
+  const src = readFileSync(new URL("../src/App.jsx", import.meta.url), "utf8");
+  assert.match(src, /const mandateTopics = comp\.topicResults\.flatMap\(topicTags\);/);
 });
