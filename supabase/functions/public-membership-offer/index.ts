@@ -4,7 +4,7 @@ import { createPublicMembershipOfferHandler } from '../_shared/publicMembershipO
 
 let database: ReturnType<typeof createClient>;
 serve(createPublicMembershipOfferHandler({
-  origins: ['https://credentialdomd.com', 'https://credentialfile.app', 'https://www.credentialfile.app'],
+  origins: ['https://credentialdomd.com', 'https://credentialfile.app', 'https://www.credentialfile.app', 'https://credentialdomd-human-landing.stormchaser519736.chatgpt.site'],
   readOffer: async () => {
   database ||= createClient(Deno.env.get('SUPABASE_URL')!, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!);
   const { data, error } = await database.rpc('public_membership_offer');

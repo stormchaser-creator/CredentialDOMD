@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createPublicMembershipOfferHandler } from '../supabase/functions/_shared/publicMembershipOffer.mjs';
 
-const origins = ['https://credentialdomd.com', 'https://credentialfile.app', 'https://www.credentialfile.app'];
+const origins = ['https://credentialdomd.com', 'https://credentialfile.app', 'https://www.credentialfile.app', 'https://credentialdomd-human-landing.stormchaser519736.chatgpt.site'];
 const quote = { schemaVersion: 1, phase: 'founding', annualCents: 9900, checkoutEnabled: true, availability: 'available', bundleAvailable: false };
 test('both front doors receive the same public offer and exact CORS origin', async () => {
   let reads = 0;
