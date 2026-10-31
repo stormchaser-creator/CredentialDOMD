@@ -56,6 +56,7 @@ import { ScreeningsSection } from "./components/features";
 import { AssistantSection } from "./components/features";
 import CPTLookup from "./components/features/CPTLookup";
 import PeerNotify from "./components/features/PeerNotify";
+import ExistingReferences from "./components/features/ExistingReferences";
 import HomeSearch, { SECTIONS } from "./components/features/HomeSearch";
 import RenewalInfo from "./components/features/RenewalInfo";
 import SetupCard from "./components/features/SetupCard";
@@ -2763,7 +2764,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
       // relationship; peer_references.relationship is NOT NULL, so that
       // reference was refused whole and lived on one device.
       return (<>
-        <CrudSection title="Peer References" sectionKey="peerReferences" favoritable {...crudTarget("peerReferences")} items={data.peerReferences || []} {...crud("peerReferences")} onShare={openShare} onShareMany={shareManyReferences} emptyIcon={"\ud83d\udc65"} emptyTitle="No references" emptySub="Store peer references needed for credentialing applications." contactImport fields={[{ key: "name", label: "Full Name", placeholder: "e.g. Jane Smith, MD" }, { key: "degree", label: "Degree/Credential", placeholder: "MD, DO, etc." }, { key: "specialty", label: "Specialty" }, { key: "institution", label: "Institution/Hospital" }, { key: "relationship", label: "Relationship", type: "select", options: REFERENCE_RELATIONSHIPS, required: true }, { key: "email", label: "Email" }, { key: "phone", label: "Phone" }, { key: "knownSince", label: "Known Since (month & year)", type: "month" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => <PeerNotify peer={item} />} />
+        <CrudSection title="Peer References" sectionKey="peerReferences" favoritable {...crudTarget("peerReferences")} items={data.peerReferences || []} {...crud("peerReferences")} onShare={openShare} onShareMany={shareManyReferences} addHeader={<ExistingReferences items={data.peerReferences || []} />} emptyIcon={"\ud83d\udc65"} emptyTitle="No references" emptySub="Store peer references needed for credentialing applications." contactImport fields={[{ key: "name", label: "Full Name", placeholder: "e.g. Jane Smith, MD" }, { key: "degree", label: "Degree/Credential", placeholder: "MD, DO, etc." }, { key: "specialty", label: "Specialty" }, { key: "institution", label: "Institution/Hospital" }, { key: "relationship", label: "Relationship", type: "select", options: REFERENCE_RELATIONSHIPS, required: true }, { key: "email", label: "Email" }, { key: "phone", label: "Phone" }, { key: "knownSince", label: "Known Since (month & year)", type: "month" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => <PeerNotify peer={item} />} />
       </>);
     }
     if (sub === "malpracticeHistory") {

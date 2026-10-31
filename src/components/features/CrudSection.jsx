@@ -68,7 +68,7 @@ function choiceOptions(f, form) {
   return Array.isArray(opts) ? opts.filter(o => o && o.value != null) : [];
 }
 
-function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, onShareMany, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, onAutoEditClosed, autoFocusField, autoViewId, onAutoViewDone, filterTabs, prefillItem, onPrefillDone, contactImport, deskColumns, deskDefaultSort, favoritable = false, draftKey = null, draftItems = null }) {
+function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete, onShare, onShareMany, renderExtra, emptyIcon, emptyTitle, emptySub, autoOpen, onAutoOpenDone, autoEditId, onAutoEditDone, onAutoEditClosed, autoFocusField, autoViewId, onAutoViewDone, filterTabs, prefillItem, onPrefillDone, contactImport, deskColumns, deskDefaultSort, favoritable = false, draftKey = null, draftItems = null, addHeader = null }) {
   const { data, setData, addItem, theme: T , user, isDesktop, toggleFavorite, navigate, loadedFrom } = useApp();
   const iS = useInputStyle();
   // Whole numbers only where the database column is an integer.
@@ -810,6 +810,7 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
       )}
 
       <Modal open={showForm} onClose={closeForm} title={editItem ? "Edit" : "Add"}>
+        {!editItem && addHeader}
         {contactImport && (
           <div style={{ marginBottom: 14 }}>
             {!isContactPickerSupported() && (
