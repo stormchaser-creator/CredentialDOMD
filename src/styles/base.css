@@ -52,6 +52,15 @@ html {
   overscroll-behavior-y: none;
 }
 
+/* The home-screen app on iOS 26/27 lays the page out short of the screen by
+   the top inset once the document sits at its top, and draws nothing below
+   (WebKit bug 301994; utils/phoneViewport.js). A document at least the
+   screen's height gets the whole screen back. data-standalone is set in
+   main.jsx before the first render. */
+html[data-standalone] {
+  min-height: min(100lvh, calc(100% + env(safe-area-inset-top, 0px)));
+}
+
 #root {
   /* `clip`, not `hidden`. CSS says an element with overflow hidden on one
      axis and visible on the other computes the visible axis to `auto`, which
