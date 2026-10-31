@@ -16,6 +16,8 @@ import { computeGolden, BASE_COMMIT } from './golden-cases.mjs';
 const golden = JSON.parse(readFileSync(new URL('./golden/md-do.json', import.meta.url), 'utf8'));
 const reviewedCopy = JSON.parse(readFileSync(new URL('./golden/qa-ca-view-copy.json', import.meta.url), 'utf8'));
 const reviewedReferences = JSON.parse(readFileSync(new URL('./golden/qa-reference-urls.json', import.meta.url), 'utf8'));
+// Ticket 53890221: a deliberate rule fix, reviewed case by case (PA only).
+const reviewedPaPainTags = JSON.parse(readFileSync(new URL('./golden/ticket-53890221-pa-pain-tags.json', import.meta.url), 'utf8'));
 const full = JSON.parse(readFileSync(new URL('./golden/md-do-full.json', import.meta.url), 'utf8'));
 
 test('goldens were captured at the base commit', () => {
@@ -23,9 +25,9 @@ test('goldens were captured at the base commit', () => {
   assert.ok(Object.keys(golden.hashes).length >= 2500, 'the case set is the full one');
 });
 
-test('every MD and DO calculation matches its golden; only exact reviewed display copy and reference URLs differ', async () => {
+test('every MD and DO calculation matches its golden; only exact reviewed display copy, reference URLs and rule fixes differ', async () => {
   const { hashes, full: now } = await computeGolden();
-  const reviewed = [...reviewedCopy.entries, ...reviewedReferences.entries];
+  const reviewed = [...reviewedCopy.entries, ...reviewedReferences.entries, ...reviewedPaPainTags.entries];
   const allowed = new Map(reviewed.map(entry => [entry.key, entry]));
   assert.equal(allowed.size, reviewed.length, 'reviewed cases cannot silently replace another exception');
   for (const entry of allowed.values()) {

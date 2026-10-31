@@ -1,0 +1,173 @@
+{
+  "reason": "Ticket 53890221: Pennsylvania pain management (49 Pa. Code 16.19, 25.271) is met by pain management, identification of addiction, or prescribing opioids. The rule row now names Opioid Prescribing and Substance Use Disorders in alsoTopics and the MD/DO engine counts them. Only the PA pain management row changes; every other state and field is unchanged.",
+  "entries": [
+    {
+      "key": "rules:getStateReq:PA:MD",
+      "originalHash": "204e9258698f8201bbb713c065e89e633fec00cf9cdd268bf14e5cc1e5dbbc13",
+      "reviewedHash": "dabd0eb6bcd784c9fbb5cb0328ccce758b1ee6d7011dfc43405cc49c296271be",
+      "change": "Pain Management alsoTopics added; no counted hours change"
+    },
+    {
+      "key": "rules:getStateEntry:PA:MD",
+      "originalHash": "3243bbbab13fe784e0d48751373af93369fca85c05bf16b62c5d539edf66d279",
+      "reviewedHash": "85d8683aaaa0f0bd2149c8c6ec09f9a4a1714a42fedb096497bde19ada148be6",
+      "change": "Pain Management alsoTopics added; no counted hours change"
+    },
+    {
+      "key": "engine:PA:MD:empty:rolling",
+      "originalHash": "c2bb14c2d54a23b9e14cbf2e2632c72974804650afbea6a0c6a8be53334e1f2a",
+      "reviewedHash": "14b455ce837333e3849356475c0e88478c7e8bb2c98c972f7af5edec6a29e23f",
+      "change": "Pain Management alsoTopics added; no counted hours change"
+    },
+    {
+      "key": "engine:PA:MD:empty:anchored",
+      "originalHash": "ee917c3c9ab5760860976541e9e8de3792b532e71cb8990433357e956bdd1a22",
+      "reviewedHash": "24d5977b00e4f94634286c5b59181e1f283ab9e4e2b379e6cc2197bc4b561662",
+      "change": "Pain Management alsoTopics added; no counted hours change"
+    },
+    {
+      "key": "engine:PA:MD:empty:custom",
+      "originalHash": "b3dc52623d4563f17482b0265ad1919c008736f8427f0000ae175cece496d748",
+      "reviewedHash": "5c3b9b3c0b0707e6fcff0f3d0202db4b0413bb973056cd094c002690b7b16cbc",
+      "change": "Pain Management alsoTopics added; no counted hours change"
+    },
+    {
+      "key": "engine:PA:MD:empty:badStart",
+      "originalHash": "8758374ae6c0f603adbbe64e65ce176a1007b5588a8cf8f3d14f93560208700f",
+      "reviewedHash": "dd26046a957e931e1c9fe92c575199aa0238679f32c932db56b96c590ce1256e",
+      "change": "Pain Management alsoTopics added; no counted hours change"
+    },
+    {
+      "key": "engine:PA:MD:mixed:rolling",
+      "originalHash": "698192dd6579dde9e6082e3030ce7e53378f44bcbbcb17d8396f356d6258e55f",
+      "reviewedHash": "2e356e110fbef21bb5b22a0fdee8abe980b43fadab377b0f9d4e741e3914ee0a",
+      "change": "Pain Management alsoTopics added; earned 1 -> 4.5, met false -> true (the fixture logs Opioid Prescribing and Substance Use Disorders courses)"
+    },
+    {
+      "key": "engine:PA:MD:mixed:anchored",
+      "originalHash": "cd4df5555ffe5fe0e3d44995086f521b0d911728d95d16fc23bc4ba33d2e4044",
+      "reviewedHash": "dc08a936ec57e282ad027889e928249a2a2a3d88c40ecdf9e8a91f0d3f5e9346",
+      "change": "Pain Management alsoTopics added; earned 1 -> 4.5, met false -> true (the fixture logs Opioid Prescribing and Substance Use Disorders courses)"
+    },
+    {
+      "key": "engine:PA:MD:mixed:custom",
+      "originalHash": "259cf47a4f6d1db2c93376aeff589548d23d4e0aad9f19f7d27c63b248d5e399",
+      "reviewedHash": "df1d85e1be71fc0e6b965c9eef5027fda66144b6ca3884d7d3f457d21caea93c",
+      "change": "Pain Management alsoTopics added; earned 1 -> 4.5, met false -> true (the fixture logs Opioid Prescribing and Substance Use Disorders courses)"
+    },
+    {
+      "key": "engine:PA:MD:mixed:badStart",
+      "originalHash": "fec771ad68d7616e2a0f744f4aeb65f8ab9f305dc08f6ac6f1280322fc01beb7",
+      "reviewedHash": "cca0f2dcd51c3bec6f5c1351551b0bf76e0ffe9cec4991336fab1da87a543eac",
+      "change": "Pain Management alsoTopics added; earned 1 -> 4.5, met false -> true (the fixture logs Opioid Prescribing and Substance Use Disorders courses)"
+    },
+    {
+      "key": "engine:PA:MD:boundary:rolling",
+      "originalHash": "fbf113e7e83d03969edf0be866ae200d9878de16e7d7549376f6f72ef336b327",
+      "reviewedHash": "0d4b5700d58370b6ca674780b788c0ecc300de12ddb613f63ef7079e92eb1d33",
+      "change": "Pain Management alsoTopics added; no counted hours change"
+    },
+    {
+      "key": "engine:PA:MD:boundary:anchored",
+      "originalHash": "fca48c25a1edacef477949ac6b1164fa87c74c415ffb742fe076fef519fde836",
+      "reviewedHash": "580a71b06ab8f5cbee176767c11e82ce5948a24d24069eb690ea034ccc95ca97",
+      "change": "Pain Management alsoTopics added; no counted hours change"
+    },
+    {
+      "key": "engine:PA:MD:boundary:custom",
+      "originalHash": "b801a642fca110a01310cdef1781c4bfbef95c6c3977482169573be26c71f50b",
+      "reviewedHash": "a4cdc9a907fde7626a2e6508c3c514a947970989382674ee1e16cc63859311ad",
+      "change": "Pain Management alsoTopics added; no counted hours change"
+    },
+    {
+      "key": "engine:PA:MD:boundary:badStart",
+      "originalHash": "ced6677baa772ee95ed05fece9c364a83baf345716782001f3315848125b1bc2",
+      "reviewedHash": "35ce27ff10b78136099c00a16c90e91a0b4df03c09af1b64fc62b674f346d8a2",
+      "change": "Pain Management alsoTopics added; no counted hours change"
+    },
+    {
+      "key": "rules:getStateReq:PA:DO",
+      "originalHash": "bba02af13af6b6c526b8b7f968a6fb5a041076ad461fd72413aa21158c0e91db",
+      "reviewedHash": "6aa96ad37f3e5bc0dbe64c087ef593cc7c2db7ae007223f036e626b588a357b1",
+      "change": "Pain Management alsoTopics added; no counted hours change"
+    },
+    {
+      "key": "rules:getStateEntry:PA:DO",
+      "originalHash": "31febd95710c5eb4c6b225223074b2110280098eb4f58572d891947d8f024566",
+      "reviewedHash": "87088004ebca582286432765519ef894f7c0f4c8dbe5ad13d0faf92b7ea4bc22",
+      "change": "Pain Management alsoTopics added; no counted hours change"
+    },
+    {
+      "key": "engine:PA:DO:empty:rolling",
+      "originalHash": "d7d9be56c65fab468fab95c1d5880a80c64b4f27687027e9107e8a204663224b",
+      "reviewedHash": "b2fe3d12e6656729a4d2c895d692304aee599c3dd3cff5201996a38f5d6ffa84",
+      "change": "Pain Management alsoTopics added; no counted hours change"
+    },
+    {
+      "key": "engine:PA:DO:empty:anchored",
+      "originalHash": "ec2211da5f4e5b0a659323b252be1d3b97dad0750fc18aee46377eca75a95a5f",
+      "reviewedHash": "ef9e17492b25aee7e2c67aff66d29461aeb0b0c18bdfeba1f420d4e3d5819740",
+      "change": "Pain Management alsoTopics added; no counted hours change"
+    },
+    {
+      "key": "engine:PA:DO:empty:custom",
+      "originalHash": "5ca2823560ef97eceadfa95f48c68a240fb5d13337418f474618a864ac7ec9c6",
+      "reviewedHash": "92b3a56f45bb6ba4e06b79b58d8e41a6a3694b366b14bb5f85608ae03b9eb93a",
+      "change": "Pain Management alsoTopics added; no counted hours change"
+    },
+    {
+      "key": "engine:PA:DO:empty:badStart",
+      "originalHash": "b841bc8b8e42998b4a5db9805913482313bdc28ad30ec48b8e6743adee6fa78b",
+      "reviewedHash": "3cf96a01d5b600644a763451b0c9f444ff2b88b5bd4f1dbd6dee6b401ebb463e",
+      "change": "Pain Management alsoTopics added; no counted hours change"
+    },
+    {
+      "key": "engine:PA:DO:mixed:rolling",
+      "originalHash": "fac864c8b3687fbd42ed1956bbb1400a6f46837efa20146dd1b6670d20949f81",
+      "reviewedHash": "15b7eab79aec4e4864102934c444f4b5721940e021fd2aa25047a1b805645d3a",
+      "change": "Pain Management alsoTopics added; earned 1 -> 4.5, met false -> true (the fixture logs Opioid Prescribing and Substance Use Disorders courses)"
+    },
+    {
+      "key": "engine:PA:DO:mixed:anchored",
+      "originalHash": "219ddf3f38ab4c5c2b64eb6eecf82d33aa5ab0f9d82710635d9131a69c6e0873",
+      "reviewedHash": "5a2f4e64fc9ac90a3b150e142e948c87c5ce57503f6d3d7d4504efdb5988c6bc",
+      "change": "Pain Management alsoTopics added; earned 1 -> 4.5, met false -> true (the fixture logs Opioid Prescribing and Substance Use Disorders courses)"
+    },
+    {
+      "key": "engine:PA:DO:mixed:custom",
+      "originalHash": "7b55e8b1972fb90ef0bd1bfa41f8bd9f786c8b8b710369e698dd352858a48a89",
+      "reviewedHash": "0a368bbb488a1951ce36f93028c0ba7ebf8bf59b957107d926e3d8a580d0ca0d",
+      "change": "Pain Management alsoTopics added; earned 1 -> 4.5, met false -> true (the fixture logs Opioid Prescribing and Substance Use Disorders courses)"
+    },
+    {
+      "key": "engine:PA:DO:mixed:badStart",
+      "originalHash": "320c7cd9676ec2d996d9d95286709f2118c36c766144d006b52fb6a222eb0ea9",
+      "reviewedHash": "db1e7fdea5079a238588b06fd0956a0209fa78df89cb3ba05f5eee0b6d06b2d2",
+      "change": "Pain Management alsoTopics added; earned 1 -> 4.5, met false -> true (the fixture logs Opioid Prescribing and Substance Use Disorders courses)"
+    },
+    {
+      "key": "engine:PA:DO:boundary:rolling",
+      "originalHash": "7e2b8e435693b825635871dfae808d7cb5ba5fa5ef56ac8c865b89839615eec8",
+      "reviewedHash": "c24178db0c424d169a11fb6b990fb3504c55dd584a13574a5eb4f1b33c17877e",
+      "change": "Pain Management alsoTopics added; no counted hours change"
+    },
+    {
+      "key": "engine:PA:DO:boundary:anchored",
+      "originalHash": "fb9a74868d75afb9b37d01d70afa58371d369cced070c5a9add8897f5ac24506",
+      "reviewedHash": "7eae4c43f3775d80c979f7cde86adffb903ce7064defe72571469071fcd5a33c",
+      "change": "Pain Management alsoTopics added; no counted hours change"
+    },
+    {
+      "key": "engine:PA:DO:boundary:custom",
+      "originalHash": "765bf01d0c46c11e597834ab1bbea2219b887e248690fb941a325696d9957b95",
+      "reviewedHash": "21053b0eeec2a838babc626b26d90c20baa144cf0c6d3c421d2bc90426a89b6b",
+      "change": "Pain Management alsoTopics added; no counted hours change"
+    },
+    {
+      "key": "engine:PA:DO:boundary:badStart",
+      "originalHash": "a83a29a0957631e9a437d625d4c1621b9334d79119f6e6b02f8b642b7961238a",
+      "reviewedHash": "dadfa6fd32b80903094f21ff2eb70250e02fdad534d4acedc09880d55977167f",
+      "change": "Pain Management alsoTopics added; no counted hours change"
+    }
+  ]
+}

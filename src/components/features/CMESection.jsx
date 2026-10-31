@@ -28,7 +28,7 @@ import { getCmeTopics } from "../../constants/cmeTopics";
 import { getCMECategories, PHARMACOLOGY_HOURS_FIELD, NCCPA_ACTIVITY_FIELD, NCCPA_ACTIVITIES } from "../../constants/credentialTypes";
 import { isAdvancedPractice, practiceKindsFor } from "../../constants/professions";
 import { ruleSetFor } from "../../utils/ruleResolver";
-import { outsidePeriodText, mateProgress, countingTopics } from "../../utils/cmeCore.js";
+import { outsidePeriodText, mateProgress, countingTopics, topicTags, topicTagsLabel } from "../../utils/cmeCore.js";
 import { BOARD_REQS_META } from "../../constants/boardRequirements";
 import { getStateEntry, hasSeparateBoards, STATE_REQS_META } from "../../constants/stateRequirements";
 import { STATE_NAMES } from "../../constants/states";
@@ -144,7 +144,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
       // Every licence kind a PA or NP holds: an NP's RN topics are theirs too.
       ? practiceKindsFor(deg).flatMap(kind => ruleSetFor(st, deg, kind)?.topics || [])
       : getStateEntry(st, deg)?.topics || []
-    ).map(t => t.topic)))],
+    ).flatMap(topicTags)))],
     [allTrackedStates, deg, appProfession]
   );
   // What a tag on a course counts toward: a tracked state's topic, or the DEA
@@ -655,7 +655,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
                 <div key={tr.topic}>
                   <ComplianceBar label={tr.topic} earned={tr.earned} required={tr.required} met={tr.met} note={tr.note} />
                   {!tr.met && topicOutsidePeriod(comp, tr, data.cme) && (
-                    <div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.45, margin: "2px 2px 4px" }}>{outsidePeriodText(tr.topic, topicOutsidePeriod(comp, tr, data.cme))}</div>
+                    <div style={{ fontSize: 12, color: T.textDim, lineHeight: 1.45, margin: "2px 2px 4px" }}>{outsidePeriodText(topicTagsLabel(tr), topicOutsidePeriod(comp, tr, data.cme))}</div>
                   )}
                   <TopicProvenance
                     periodLabel={tr.periodLabel}
