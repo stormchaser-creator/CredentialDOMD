@@ -106,8 +106,15 @@ what happened.
      (`support_tickets` with `context_payload->>'source' = 'client_error'`
      and status open): make sure they are being worked, or work them;
    - disk space on `/` (df) above 15%.
-6. Append to the journal: date, what you found, what you changed (commit
-   hashes), what you left and why. Keep it short and factual. Then print a
+6. Never end a run waiting. Anything still pending (a CI run, a merge to
+   retry, a check to repeat) becomes a follow-up note for your next run:
+   `python3 ~/Projects/CredentialDOMD/scripts/signup-notify.py ops-note
+   --queue "$HOME/Library/Application Support/CredentialDOMD/ops/queue.jsonl"
+   --kind follow_up --text "<what to check, with ids>"`. Release the ticket
+   agent's lock before you finish.
+7. Always, last: append to the journal: date, what you found, what you
+   changed (commit hashes, merged or discarded run ids), what is pending
+   (with its follow-up note) and why. Keep it short and factual. Then print a
    one-paragraph summary as your final output.
 
 ## Rules you never break
