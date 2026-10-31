@@ -72,6 +72,36 @@ export function scheduledContracts(scheduleDays, contracts, now = new Date(), { 
     .map(h => ({ id: h.c.id, date: h.date, kind: h.kind }));
 }
 
+/**
+ * The contracts the schedule shows on calendar date `date` (YYYY-MM-DD, the
+ * date an entry is being logged for), best first, as { id, date, kind }.
+ * Log past time opens on the first one and follows the date as it changes
+ * (ticket 292fcbce). Same rules as scheduledContracts, for one fixed date:
+ * a row with call before a row with only a day, then `prefer` (the contract
+ * last used), then a coverage block before a term, then calendar order. A
+ * contract that has since ended still counts on a date its term covered.
+ */
+export function scheduledContractsOn(scheduleDays, contracts, date, { prefer = "" } = {}) {
+  if (!date) return [];
+  const live = new Map(pickableContracts(contracts, null, { date }).map(c => [c.id, c]));
+  const hits = new Map();
+  (scheduleDays || []).forEach((row, order) => {
+    if (!row || !row.contractId || row.kind === "vacation" || row.date !== date) return;
+    const c = live.get(row.contractId);
+    if (!c) return;
+    const hit = hits.get(c.id);
+    if (hit) hit.kind = mergeKinds(hit.kind, row.kind);
+    else hits.set(c.id, { c, date, kind: row.kind || "", order });
+  });
+  const fit = (h) => (coversDate(h.c, h.date) ? specificity(h.c, h.date) : 4);
+  return [...hits.values()]
+    .sort((a, b) => kindRank(a.kind) - kindRank(b.kind)
+      || (a.c.id === prefer ? 0 : 1) - (b.c.id === prefer ? 0 : 1)
+      || fit(a) - fit(b)
+      || a.order - b.order)
+    .map(h => ({ id: h.c.id, date: h.date, kind: h.kind }));
+}
+
 /** The ids of scheduledContracts, best first. */
 export function scheduledContractIds(scheduleDays, contracts, now = new Date(), opts = {}) {
   return scheduledContracts(scheduleDays, contracts, now, opts).map(h => h.id);

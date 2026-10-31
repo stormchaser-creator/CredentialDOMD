@@ -47,7 +47,7 @@ import {
   startedCoverageDays, stipendMinutesOf, outsideChargeOf, coveragePartsOf, callDayCuts,
 } from "../../../utils/billing";
 import { hasTimedPeriods, isTimedPeriod, periodHasCallDay, clockLabel, contractZone } from "../../../utils/coverageBlocks";
-import { scheduledContracts, readContractPick, contractPickValue, pickHolds, callDaysKey } from "../../../utils/scheduledContract";
+import { scheduledContracts, scheduledContractsOn, readContractPick, contractPickValue, pickHolds, callDaysKey } from "../../../utils/scheduledContract";
 import { invoiceSenderFields } from "../../../utils/invoiceArgs";
 import InvoiceEmailModal from "./InvoiceEmailModal";
 import InvoiceEmailIt from "../../shared/InvoiceEmailIt";
@@ -341,6 +341,27 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
   if (busy && !heldId && resolved) setHeldId(resolved.id);
   if (!busy && heldId) setHeldId(null);
   const contract = (busy && heldId && contracts.find(c => c.id === heldId)) || resolved;
+  // Log past time bills the contract the schedule shows on the entry's own
+  // date (ticket 292fcbce), worked out when the form opens and each time its
+  // date changes (manual.dateContractId), so a schedule that loads while the
+  // form is open never swaps it. A contract picked in the form wins, and so
+  // does a contract picked on the page (or a running timer's) on its own
+  // call day in progress. Several on the date: the first scheduledContractsOn
+  // gives (call before a day-only row, then the contract last used). None:
+  // "", and the form keeps the page's contract, as before.
+  const dateContract = (date) => {
+    if (!date) return "";
+    if (contract && (chosenId === contract.id || timer?.contractId === contract.id)
+      && currentCallDay(contract, new Date()) === date) return "";
+    // Today's date at 3 AM: he is still on last night's call, the page's own
+    // rule (scheduled), not on the contract whose day has not begun.
+    const tail = date === localDate(new Date())
+      && scheduled.find(s => s.date !== date && billableContracts.some(c => c.id === s.id));
+    if (tail) return tail.id;
+    return scheduledContractsOn(data.scheduleDays, billableContracts, date, { prefer: lastUsedId })[0]?.id || "";
+  };
+  const dateContractRef = useRef(dateContract);
+  useEffect(() => { dateContractRef.current = dateContract; });
 
   // Invoices for this agreement that went out unrecorded and were left
   // behind (closed, reloaded): kept on the device until they are on the
@@ -492,6 +513,7 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
         type: parsed.type,
         otherType: parsed.type !== "CallDay" && !WORK_TYPES.includes(parsed.type),
         date: parsed.date,
+        dateContractId: dateContractRef.current(parsed.date),
         exact: !!parsed.start,
         start: parsed.start,
         end: parsed.end,
@@ -507,7 +529,7 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
       // note (this device only), and the reason shows inside the form (a
       // notice banner renders under the open modal and clears itself).
       setManual({
-        type: "Call", date: localDate(new Date()), exact: true, description: "", privateNote: words,
+        type: "Call", date: localDate(new Date()), dateContractId: dateContractRef.current(localDate(new Date())), exact: true, description: "", privateNote: words,
         dictationNote: `${err2.message ? `${String(err2.message).replace(/\.?\s*$/, ".")} ` : ""}Your words are in the private note, kept on this device. Copy what belongs on the invoice into the billing note and fill in the rest.`,
       });
       setShowManual(true);
@@ -724,7 +746,8 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
         // Edits resolve to the entry's OWN contract — and if that contract
         // is gone, they stop rather than fall through to a different one.
         ? contracts.find(x => x.id === editOrig.contractId)
-        : (contract?.payModel !== "daily" ? contract : timeContracts[0]));
+        : (billableContracts.find(x => x.id === manual.dateContractId)
+          || (contract?.payModel !== "daily" ? contract : timeContracts[0])));
     if (!target) {
       // alert, not the notice banner: the banner renders under the open
       // modal and auto-clears — the user would never see it.
@@ -885,12 +908,16 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
     // engine that entry will actually land in, while the form is open. It is
     // the contract last used, not a pick for today: saving the entry decides
     // that (by its call day), and closing the form puts the view back.
-    const draftTarget = billableContracts.some(c => c.id === billDraft.contractId)
-      ? billDraft.contractId
-      : ((contract?.payModel !== "daily" ? contract?.id : null) || timeContracts[0]?.id || "");
+    // With no pick of its own, the draft follows its date's schedule first,
+    // as Log past time does (dateContractId), and its date as it changes.
+    const ownPick = billableContracts.some(c => c.id === billDraft.contractId) ? billDraft.contractId : "";
+    const dateId = ownPick ? "" : dateContractRef.current(billDraft.date);
+    const draftTarget = ownPick || dateId
+      || ((contract?.payModel !== "daily" ? contract?.id : null) || timeContracts[0]?.id || "");
     if (contract?.payModel === "daily" && draftTarget) { rememberContract(draftTarget, ""); setHeldId(draftTarget); }
     setManual({
-      contractId: draftTarget,
+      contractId: dateId ? "" : draftTarget,
+      dateContractId: dateId,
       type: billDraft.type || "Call",
       otherType: billDraft.type ? !WORK_TYPES.includes(billDraft.type) : false,
       date: billDraft.date,
@@ -934,7 +961,8 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
   // too, except on a day-rate contract, where DutyLog's own "Log a day"
   // is the Add control on view and registers itself.
   const openPastTime = useCallback(() => {
-    setManual({ type: "Call", date: localDate(new Date()), exact: true });
+    const date = localDate(new Date());
+    setManual({ type: "Call", date, dateContractId: dateContractRef.current(date), exact: true });
     setShowManual(true);
   }, []);
   // A new Log past time entry is kept as it is typed (utils/formDrafts.js)
@@ -2200,7 +2228,16 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
   // The manual form's contract picker: what it shows selected, what it offers
   // (a contract in force on the entry's date stays offered even if it ended),
   // and how many ended ones it is holding back.
-  const manualValue = manual.contractId || (contract?.payModel !== "daily" ? contract?.id : timeContracts[0]?.id) || "";
+  const manualValue = manual.contractId
+    || (!manual.editId && billableContracts.some(c => c.id === manual.dateContractId) ? manual.dateContractId : "")
+    || (contract?.payModel !== "daily" ? contract?.id : timeContracts[0]?.id) || "";
+  // Under the form's picker when it shows the date's scheduled contract, and
+  // every other one booked that date, so the pick is never silent.
+  const formBookings = !manual.contractId && !manual.editId && manualValue === manual.dateContractId
+    ? scheduledContractsOn(data.scheduleDays, billableContracts, manual.date, { prefer: lastUsedId }) : [];
+  const formOthers = formBookings.filter(s => s.id !== manualValue);
+  const formScheduleNote = !formBookings.some(s => s.id === manualValue) ? ""
+    : `On your schedule for this date${formOthers.length ? `. Also scheduled: ${formOthers.map(bookedAs).join(", ")}` : ""}`;
   const manualOptions = pickableContracts(billableContracts, manualValue, { showEnded, date: manual.date });
   const manualHidden = hiddenEndedCount(billableContracts, manualValue, { showEnded, date: manual.date });
 
@@ -2424,6 +2461,9 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
               {manualOptions.map(c => <option key={c.id} value={c.id}>{c.facility}</option>)}
               {manualHidden > 0 && <option value={SHOW_ENDED}>{showEndedLabel(manualHidden)}</option>}
             </select>
+            {formScheduleNote && (
+              <div style={{ fontSize: 12, color: T.textMuted, marginTop: 4 }}>{formScheduleNote}</div>
+            )}
           </Field>
         )}
 
@@ -2471,7 +2511,7 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
         <Field label="Date">
           <div style={{ display: "flex", gap: 6, alignItems: "center" }}>
             {[{ l: "Today", d: localDate(new Date()) }, { l: "Yesterday", d: localDate(Date.now() - 86400000) }].map(o => (
-              <button key={o.l} onClick={() => setManual(m2 => ({ ...m2, date: o.d, pickDate: false }))} style={{
+              <button key={o.l} onClick={() => setManual(m2 => ({ ...m2, date: o.d, dateContractId: dateContract(o.d), pickDate: false }))} style={{
                 flex: 1, padding: "10px 0", borderRadius: 10, fontSize: 14, fontWeight: 700, cursor: "pointer",
                 border: `1px solid ${manual.date === o.d && !manual.pickDate ? T.accent : T.border}`,
                 backgroundColor: manual.date === o.d && !manual.pickDate ? T.accent : "transparent",
@@ -2485,7 +2525,7 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
             }}>Other…</button>
           </div>
           {manual.pickDate && (
-            <input type="date" value={manual.date || ""} onChange={e => setManual(m2 => ({ ...m2, date: e.target.value }))} style={{ ...iS, marginTop: 6 }} />
+            <input type="date" value={manual.date || ""} onChange={e => { const d = e.target.value; setManual(m2 => ({ ...m2, date: d, dateContractId: dateContract(d) })); }} style={{ ...iS, marginTop: 6 }} />
           )}
         </Field>
 
