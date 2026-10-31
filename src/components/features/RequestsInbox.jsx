@@ -320,10 +320,18 @@ function RequestsInbox({ onAskVera, onReplyEmail, initialOpenId, onOpened }) {
     const prev = rows;
     setRows((rs) => rs.map((r) => r.id === req.id ? { ...r, status, updated_at: new Date().toISOString() } : r));
     try {
-      const { error } = await supabase.from("document_requests")
+      // The write lands only on a row still in the status this screen shows,
+      // and it must land: filtered on id alone, a Dismiss tapped on a stale
+      // list turned another device's reply into "dismissed", and a write that
+      // changed no row still read as closed here and came back on reload.
+      const { data: moved, error } = await supabase.from("document_requests")
         .update({ status, updated_at: new Date().toISOString() })
-        .eq("id", req.id);
+        .eq("id", req.id).eq("status", req.status).select("id");
       if (error) throw error;
+      if (!moved || !moved.length) {
+        load({ quiet: true });
+        throw new Error("This request was already answered or dismissed. Refresh the list.");
+      }
       try { window.dispatchEvent(new CustomEvent(REQUESTS_CHANGED_EVENT, { detail: { id: req.id, status } })); } catch { /* no window */ }
       if (status === "dismissed") {
         setOpenId(null);
