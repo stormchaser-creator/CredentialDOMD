@@ -40,10 +40,22 @@ test('the clock starts at 00:00 when the Work tab was opened a while before Star
   m.render();
   clock.setNow('2026-09-10T10:29:30-05:00'); // five minutes on the page
   try {
-    click(m, 'Got a call? Start the timer');
+    click(m, 'Start the work timer');
     const page = textOf(m.render());
     assert.match(page, /Call in progress/);
     assert.match(page, /(^|[^\d:])00:00([^:\d]|$)/, 'the clock reads 00:00');
     assert.doesNotMatch(page, /-\d+:-?\d+/, 'no negative clock');
   } finally { clock.setNow('2026-09-10T10:24:30-05:00'); }
+});
+
+// Owner, 2026-11-01: one "Start the work timer" button, then Log past time.
+// The Procedure, Rounding and Orientation timer buttons are gone (those
+// types stay in Log past time and the entry editor).
+test('the timer card offers Start the work timer and Log past time only', () => {
+  const m = mount(WorkLog, { data: { locumContracts: [CONTRACT], workLog: [] }, storage: { lastContract: 'c1' } });
+  const page = textOf(m.render());
+  assert.match(page, /Start the work timer/);
+  assert.match(page, /Log past time/);
+  assert.doesNotMatch(page, /Got a call/);
+  for (const t of ['Procedure', 'Rounding', 'Orientation']) assert.doesNotMatch(page, new RegExp(`\\b${t}\\b`), t);
 });

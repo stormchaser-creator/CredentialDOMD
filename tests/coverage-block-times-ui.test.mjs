@@ -226,7 +226,7 @@ test('a timer started at 5:30 AM on the day a 6:00 AM block starts is inside the
   clock.setNow('2026-11-12T05:30:00-06:00');
   try {
     const m = mount('WorkLog', { contracts: [SIX] });
-    click(m, 'Got a call');
+    click(m, 'Start the work timer');
     assert.equal(m.storage?.timer?.contractId ?? 'c1', 'c1');
     assert.doesNotMatch(m.html(), /isn't inside a scheduled coverage block/);
   } finally { clock.setNow('2026-11-20T12:00:00-06:00'); }

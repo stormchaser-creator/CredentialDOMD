@@ -86,7 +86,7 @@ test('F1: the picker stays on the overnight call when midnight passes, and a 2 A
     assert.ok(textOf(m.render()).includes('On your schedule today'));
     clock.setNow('2026-10-16T02:00:00-06:00');
     minuteChecks.at(-1)();
-    click(m, 'Got a call? Start the timer');
+    click(m, 'Start the work timer');
     assert.equal(m.storage.timer?.contractId, D.id, 'the 2 AM consult bills D');
   } finally { clock.setNow('2026-09-29T10:00:00-06:00'); }
 });
@@ -101,7 +101,7 @@ test('F3: time logged for another day is the contract last used; the view goes b
   assert.equal(shown(m), SOUTH.id, 'this visit: today\'s schedule once the form closes');
   assert.equal(m.storage.lastContract, EAST.id, 'remembered as the contract last used');
   assert.equal(m.storage.contractPick, undefined, 'and not as a pick for any day');
-  click(m, 'Got a call? Start the timer');
+  click(m, 'Start the work timer');
   assert.equal(m.storage.timer?.contractId, SOUTH.id, 'the next timer bills the scheduled contract');
   assert.equal(shown(work({ scheduleDays: days, storage: { lastContract: EAST.id } })), SOUTH.id, 'the next visit agrees');
 });

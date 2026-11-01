@@ -171,7 +171,7 @@ test("4: stopping or discarding last night's timer after its call day ended hand
     }
     assert.equal(shown(m), SOUTH.id, `${end}: the Sep 28 call day is over, so the Sep 29 schedule`);
     assert.equal(m.storage.contractPick, undefined, 'nothing is held for today');
-    click(m, 'Got a call? Start the timer');
+    click(m, 'Start the work timer');
     assert.equal(m.storage.timer?.contractId, SOUTH.id, 'the next timer bills the scheduled contract');
   }
 });
@@ -190,7 +190,7 @@ test('4: a timer started on this visit keeps its contract when the call day turn
   try {
     const m = work({ scheduleDays: [row(NORTH.id, '2026-09-28'), row(SOUTH.id)] });
     assert.equal(shown(m), NORTH.id, "last night's call");
-    click(m, 'Got a call? Start the timer');
+    click(m, 'Start the work timer');
     clock.setNow('2026-09-29T07:10:00-06:00');
     m.render();
     assert.equal(shown(m), NORTH.id, 'still on the timer while it runs');

@@ -30,7 +30,7 @@ test('a timer the full device refuses is kept in this tab, he is told as it star
   try {
     const m = work();
     globalThis.__screen.storageFull = true;
-    click(m, 'Got a call? Start the timer');
+    click(m, 'Start the work timer');
     assert.match(m.html(), /could not save this timer on this phone, so it is kept only while the app stays open in this window/);
     assert.doesNotMatch(m.html(), /storage is full|Free space/, 'nothing untrue, and nothing he cannot do');
     const note = find(settle(m), n => n.type === 'textarea' || (n.type === 'input' && /note/i.test(n.props?.placeholder || '')), 'billing note');
@@ -48,7 +48,7 @@ test('with room on the device nothing is said and nothing stays in the tab', () 
   globalThis.sessionStorage = memoryTab();
   try {
     const m = work();
-    click(m, 'Got a call? Start the timer');
+    click(m, 'Start the work timer');
     assert.doesNotMatch(m.html(), /could not save this timer/);
     assert.ok(m.storage.timer, 'on the device');
     assert.equal(globalThis.sessionStorage.m.size, 0);

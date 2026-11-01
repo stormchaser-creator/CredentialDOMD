@@ -2339,16 +2339,8 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
               background: "linear-gradient(135deg, #10b981, #059669)", color: "#fff",
               fontSize: 18, fontWeight: 800, cursor: "pointer", marginBottom: 8,
             }}>
-              📞 Got a call? Start the timer
+              Start the work timer
             </button>
-            <div style={{ display: "flex", gap: 6, marginBottom: 8 }}>
-              {["Procedure", "Rounding", "Orientation"].map(t2 => (
-                <button key={t2} onClick={() => startTimer(t2)} style={{
-                  flex: 1, padding: "10px 0", borderRadius: 10, border: `1px solid ${T.border}`,
-                  backgroundColor: "transparent", color: T.text, fontSize: 13, fontWeight: 700, cursor: "pointer",
-                }}>{t2}</button>
-              ))}
-            </div>
             <button onClick={openPastTime} style={{
               width: "100%", padding: "12px", borderRadius: 12, marginTop: 8,
               border: `1px solid ${T.border}`, backgroundColor: T.input,
