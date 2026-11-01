@@ -389,8 +389,13 @@ for (const engine of ['chromium', 'webkit']) {
     const fixed = await updateRace({ engine, tellWorker: true });
     assert.equal(fixed, 'ok', 'offline: the PA and NP rules load from the cache');
     // The control, as e1f4b4c9 shipped (the flag only): the same sequence loses the chunk.
-    const before = await updateRace({ engine, tellWorker: false });
-    assert.match(String(before), /^failed/, 'the race the review found is reproduced here');
+    // It is a race on 1 s timers: under a loaded full suite the worker's
+    // activation can see the flag in time and win it, so up to three tries
+    // (the ticket runner's gates refused 7bbd451d runs 0293134f and 61ef7274
+    // on a single lost try).
+    const tries = [];
+    for (let i = 0; i < 3 && !String(tries.at(-1)).startsWith('failed'); i += 1) tries.push(await updateRace({ engine, tellWorker: false }));
+    assert.match(String(tries.at(-1)), /^failed/, `the race the review found is reproduced here (tries: ${tries.join(', ')})`);
   });
 }
 
