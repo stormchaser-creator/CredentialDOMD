@@ -184,6 +184,14 @@ test('fallback: without IndexedDB a file that fits is kept in localStorage; one 
   // to show "storage is full" again, the owner's ticket, with the wrong cause).
   assert.equal(storage.cacheStaleReason(), 'unavailable', 'the notice shows, and says why');
   assert.equal(storage.isCacheFull(), false, 'not as "storage is full"');
+  // Held while the app's own retries may fix it (storageScope.js
+  // LOST_CONNECTION_CONFIRM_MS); still refused a write that long on, reported.
+  assert.equal(reports.length, 0, 'the first refusal is held for the retries');
+  const realNow = Date.now;
+  const later = realNow() + 30000;
+  Date.now = () => later;
+  try { assert.equal(await storage.saveData(BIG, A), false); }
+  finally { Date.now = realNow; }
   assert.equal(reports.length, 1, 'the refusal reached client_errors');
   const [{ message, extra }] = reports;
   assert.equal(message, 'Offline copy not saved: storage_unavailable');
