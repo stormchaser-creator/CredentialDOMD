@@ -229,9 +229,12 @@ function AuthPage() {
               fallbackRedirectUrl="/app/"
               appearance={{
                 elements: {
-                  rootBox: { width: "100%" },
+                  rootBox: { width: "100%", minWidth: 0 },
+                  // Match the offer column; Clerk otherwise keeps a 400px card aligned left.
+                  cardBox: { width: "100%", maxWidth: "100%", minWidth: 0, marginInline: "auto", boxSizing: "border-box" },
                   ...HIDE_SOCIAL_ELEMENTS,
                   card: {
+                    width: "100%", maxWidth: "100%", margin: 0, boxSizing: "border-box",
                     backgroundColor: T.card,
                     border: `1px solid ${T.border}`,
                     boxShadow: T.shadow2,
