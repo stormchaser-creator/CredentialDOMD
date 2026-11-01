@@ -131,11 +131,11 @@ test('share stamps on the number ledger: owner only, ended by the invoice, clear
   await t.test('a stamp sent late is dated when the device shared it, held to the last 60 days and never ahead, and refused from before a data deletion', async () => {
     // Shared with no signal two days ago; the stamp lands today.
     const n = await allocate(A);
-    assert.equal(await markAt(A, n, `now() - interval '2 days'`), 't');
+    assert.equal(await markAt(A, n, `now() - interval '48 hours'`), 't');
     assert.equal(await sharedAgo(A, n), '48', 'the share date, not the arrival');
     // A device-made number, shared yesterday.
     const own = `INV-${day}-60-K7Q`;
-    assert.equal(await markAt(A, own, `now() - interval '1 day'`), 't');
+    assert.equal(await markAt(A, own, `now() - interval '24 hours'`), 't');
     assert.equal(await sharedAgo(A, own), '24');
     // A clock ahead is held to now; no time at all is now.
     assert.equal(await markAt(A, n, `now() + interval '3 days'`), 't');
@@ -163,7 +163,7 @@ test('share stamps on the number ledger: owner only, ended by the invoice, clear
     // Made and shared with no signal three days ago (no ledger row); the
     // app next runs online today and sends the owed stamp, dated then.
     const own = `INV-${dayAgo(3)}-03-K7Q`;
-    assert.equal(await markAt(A, own, `now() - interval '3 days'`), 't', 'taken, not refused as "not from today"');
+    assert.equal(await markAt(A, own, `now() - interval '72 hours'`), 't', 'taken, not refused as "not from today"');
     assert.equal(await sharedAgo(A, own), '72', 'dated at the hand-off');
     // Still refused: a number of that day stamped as shared now, and today's
     // number claimed as shared ten days ago.
