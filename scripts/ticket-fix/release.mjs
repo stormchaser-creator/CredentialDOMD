@@ -2,8 +2,10 @@
 // is live until this passed for its fix commit:
 //   build    version.json (polled every 20 s for up to 15 minutes) names a
 //            build whose commit descends from the fix commit
-//            (git merge-base --is-ancestor). A deploy run for the commit that
-//            failed stops the wait at once.
+//            (git merge-base --is-ancestor), or an older build that differs
+//            from the fix only in files the deploy workflow ignores (a
+//            test-only fix starts no deploy). A deploy run for the commit
+//            that failed stops the wait at once.
 //   bundle   up to 5 strings the diff added to src/** (absent at base) are in
 //            the live app bundle, and up to 5 it removed (absent at the fix)
 //            are not. A diff with no usable string relies on the build check.
@@ -90,6 +92,28 @@ export function releaseCandidates({ dir, base, fix, binary = 'git', builtText })
   return { present: all.present.filter(s => builtText.includes(s)).slice(0, MAX_PROBES), absent: all.absent.filter(s => !builtText.includes(s)).slice(0, MAX_PROBES) };
 }
 
+// Whether a fix starts a deploy: does it touch a path in the `paths:` filter
+// of the deploy workflow, read at the fix commit? A fix touching none of them
+// (tests, runner scripts, docs) never reaches the live site, so there is no
+// release to wait for: G7 passes on the live build it already matches instead
+// of failing after 15 minutes. An unreadable or unfamiliar filter counts as a
+// deploy.
+export const DEPLOY_WORKFLOW = '.github/workflows/deploy-gh-pages.yml';
+export function deployPaths(yml) {
+  const block = /\n {4}paths:\n((?:[ \t]*(?:#[^\n]*|- [^\n]+)?\n)+)/.exec(String(yml))?.[1];
+  if (!block) return null;
+  const paths = [...block.matchAll(/^\s*- ['"]?([^'"\s#]+)['"]?\s*$/gm)].map(m => m[1]);
+  return paths.length ? paths : null;
+}
+const pathMatcher = glob => /^[^*?[\]!]+\/\*\*$/.test(glob) ? f => f.startsWith(glob.slice(0, -2)) : /[*?[\]!]/.test(glob) ? () => true : f => f === glob;
+export function deploysChange(dir, base, fix, { binary = 'git' } = {}) {
+  const paths = deployPaths(git(dir, ['cat-file', '-p', `${fix}:${DEPLOY_WORKFLOW}`], { binary, allowFail: true }) ?? '');
+  if (!paths) return true;
+  const files = git(dir, [...attrFrom(base), 'diff', '--name-only', '-z', base, fix], { binary }).split('\0').filter(Boolean);
+  const matchers = paths.map(pathMatcher);
+  return files.some(f => matchers.some(m => m(f)));
+}
+
 const parseBuild = data => /^\d{8}T\d{4}-([0-9a-f]{7,40})$/.exec(typeof data?.build === 'string' ? data.build : '')?.[1] ?? null;
 
 // gh run list for the commit; 'failure' ends the wait. Absent gh: unknown.
@@ -144,6 +168,12 @@ export async function verifyRelease({ dir, fix, base, fetchImpl = globalThis.fet
           let commit = git(dir, ['rev-parse', '--verify', '--quiet', `${short}^{commit}`], { binary, allowFail: true })?.trim();
           if (!commit && fetchOrigin) { git(dir, ['fetch', '--quiet', 'origin', '+refs/heads/main:refs/remotes/origin/main'], { binary, allowFail: true }); commit = git(dir, ['rev-parse', '--verify', '--quiet', `${short}^{commit}`], { binary, allowFail: true })?.trim(); }
           if (commit && git(dir, ['merge-base', '--is-ancestor', fix, commit], { binary, allowFail: true }) !== null) { deployed = commit; record.build = build; break; }
+          // A build older than the fix whose difference from it is only files
+          // that never deploy (tests, runner scripts): no deploy will come, and
+          // every deployed file of the fix is already the live one.
+          if (commit && git(dir, ['merge-base', '--is-ancestor', commit, fix], { binary, allowFail: true }) !== null && !deploysChange(dir, commit, fix, { binary })) {
+            deployed = commit; record.build = build; record.same_deployed_files = true; break;
+          }
         } }
     } catch { /* retry until the deadline */ }
     const status = deployStatus(fix);

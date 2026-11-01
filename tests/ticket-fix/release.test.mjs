@@ -4,7 +4,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import http from 'node:http';
-import { verifyRelease, probeStrings, fetchBundle } from '../../scripts/ticket-fix/release.mjs';
+import { readFileSync } from 'node:fs';
+import { verifyRelease, probeStrings, fetchBundle, deploysChange, deployPaths, DEPLOY_WORKFLOW } from '../../scripts/ticket-fix/release.mjs';
 import { project, sh } from './stage2-helpers.mjs';
 
 function server(routes) {
@@ -125,5 +126,50 @@ test('the release check uses the probes the gates chose', async () => {
     const r = await verifyRelease({ dir: p.repo, fix, base, versionUrl: `${s.url}/app/version.json`, appUrl: `${s.url}/app/`, ...fast, probes: { present: ['Chosen synthetic probe'], absent: [] } });
     assert.equal(r.verified, true, r.reason);
     assert.deepEqual(r.probes.present, [{ text: 'Chosen synthetic probe', found: true }]);
+  } finally { await s.close(); p.cleanup(); }
+});
+
+const WORKFLOW = "on:\n  push:\n    branches: [main]\n    paths:\n      # synthetic\n      - 'src/**'\n      - 'package.json'\n      - 'scripts/build.mjs'\n  workflow_dispatch: {}\n";
+
+test('a fix that touches no path in the deploy workflow\'s filter starts no deploy, so there is no release to check', () => {
+  const { p, base, fix } = fixture();
+  try {
+    const at = name => sh(p.repo, ['rev-parse', name]);
+    const commit = (files, message) => { const before = at('HEAD'); p.write(p.repo, files); sh(p.repo, ['add', '-A']); sh(p.repo, ['commit', '-qm', message]); return [before, at('HEAD')]; };
+    assert.equal(deploysChange(p.repo, base, fix), true, 'no workflow to read: counted as a deploy');
+    commit({ [DEPLOY_WORKFLOW]: WORKFLOW }, 'Workflow');
+    const [s0, s1] = commit({ 'src/notice.js': "export const notice = 'Third synthetic notice';\n" }, 'Src');
+    assert.equal(deploysChange(p.repo, s0, s1), true, 'a src change deploys');
+    const [t0, t1] = commit({ 'tests/notice.test.mjs': '// synthetic\n', 'scripts/tool.mjs': '// synthetic\n', 'srcx/a.js': '1;\n' }, 'Tests only');
+    assert.equal(deploysChange(p.repo, t0, t1), false, 'tests, other scripts and a look-alike folder do not deploy');
+    const [b0, b1] = commit({ 'scripts/build.mjs': '// synthetic\n' }, 'Build script');
+    assert.equal(deploysChange(p.repo, b0, b1), true, 'a listed file deploys');
+  } finally { p.cleanup(); }
+});
+
+test('the deploy filter is read from the real workflow', () => {
+  const paths = deployPaths(readFileSync(new URL(`../../${DEPLOY_WORKFLOW}`, import.meta.url), 'utf8'));
+  assert.ok(paths.includes('src/**') && paths.includes('package.json') && paths.includes(DEPLOY_WORKFLOW), JSON.stringify(paths));
+  assert.ok(!paths.some(f => f.startsWith('tests/')), 'tests never deploy');
+  assert.equal(deployPaths('on:\n  push:\n    branches: [main]\n'), null, 'no filter: unknown, so counted as a deploy');
+});
+
+test('a test-only fix passes on the live build it already matches; a src fix on the same build still waits', async () => {
+  const { p } = fixture();
+  const at = name => sh(p.repo, ['rev-parse', name]);
+  const commit = (files, message) => { p.write(p.repo, files); sh(p.repo, ['add', '-A']); sh(p.repo, ['commit', '-qm', message]); return at('HEAD'); };
+  const live = commit({ [DEPLOY_WORKFLOW]: WORKFLOW }, 'Workflow');
+  const testsOnly = commit({ 'tests/notice.test.mjs': '// synthetic\n' }, 'Tests only');
+  const s = await server({ '/app/version.json': build(live), '/app/': INDEX });
+  const opts = { dir: p.repo, versionUrl: `${s.url}/app/version.json`, appUrl: `${s.url}/app/`, ...fast };
+  try {
+    const passed = await verifyRelease({ ...opts, fix: testsOnly, base: live, timeoutMs: 60000 });
+    assert.equal(passed.verified, true, JSON.stringify(passed));
+    assert.equal(passed.deployed_commit, live);
+    assert.equal(passed.same_deployed_files, true);
+    const srcFix = commit({ 'src/notice.js': "export const notice = 'Fourth synthetic notice';\n" }, 'Src fix');
+    const waited = await verifyRelease({ ...opts, fix: srcFix, base: testsOnly });
+    assert.equal(waited.verified, false);
+    assert.match(waited.reason, /did not contain the fix/);
   } finally { await s.close(); p.cleanup(); }
 });
