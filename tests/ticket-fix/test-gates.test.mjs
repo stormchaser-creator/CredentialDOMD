@@ -4,7 +4,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorktree, commitWork, changedPaths } from '../../scripts/ticket-fix/worktree.mjs';
-import { recordReproduction, runTestGates, suiteBaseline, redVerdict, suiteCounts, productHunks, gateFailures } from '../../scripts/ticket-fix/gates/tests.mjs';
+import { recordReproduction, runTestGates, suiteBaseline, redVerdict, suiteCounts, productHunks, gateFailures, savesAndReloads } from '../../scripts/ticket-fix/gates/tests.mjs';
 import { gatesEnv } from '../../scripts/ticket-fix/worker.mjs';
 import { project, gatesSandbox, COMMANDS, COMMITTER, RUN_ID, TICKET } from './stage2-helpers.mjs';
 
@@ -437,4 +437,12 @@ test('review of 2026-09-30: with a sandbox the built scripts are read under it, 
     for (let i = 0; i < 30; i++) assert.doesNotMatch(await builtAssets(b.g, { sandbox, tmp: b.tmp }) ?? '', /SYNTHETIC-OWNER-TEXT/, `read ${i}`);
     assert.ok(readdirSync(sandbox.profileDir).some(n => /^gates-.*\.sb$/.test(n)), 'the reads ran under a gates profile');
   } finally { flipper.kill(); b.cleanup(); }
+});
+
+test('a test whose fake store defines setItem and getItem as arrow properties counts as saving and reloading', () => {
+  const fakeStore = "const store = new Map();\nglobalThis.sessionStorage = {\n  getItem: key => (store.has(key) ? store.get(key) : null),\n  setItem: (key, value) => { store.set(key, value); },\n};\nawait mountTwice();\n";
+  assert.equal(savesAndReloads(fakeStore), true);
+  assert.equal(savesAndReloads("store.setItem('k', '1');\nassert.equal(store.getItem('k'), '1');\n"), true);
+  // Plain option values are not calls: a bundler option list saves nothing.
+  assert.equal(savesAndReloads("build({ write: false, loader: 'jsx' });\nassert.equal(total, 2);\n"), false);
 });

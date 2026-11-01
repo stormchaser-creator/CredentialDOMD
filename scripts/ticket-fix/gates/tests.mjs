@@ -64,8 +64,12 @@ export const PERSISTENCE_FILES = Object.freeze(['src/constants/defaults.js', 'sr
   'src/utils/recordWrite.js', 'src/utils/accountRecordsLoad.js', 'src/utils/storageScope.js', 'src/context/AppContext.jsx', 'src/utils/favorites.js',
   'src/utils/pausedApplicationRecords.js', 'src/utils/offlineSession.js']);
 const PERSISTENCE_TEXT = /\bTABLE_MAP\b|\blocalStorage\b|\bsessionStorage\b|\.(?:setItem|getItem|removeItem)\(/;
-const SAVES = /\b(?:save\w*|setItem|upsert|persist\w*|write\w*)\s*\(/i;
-const RELOADS = /\b(?:reload\w*|fresh\w*|load\w*|getItem|remount\w*|reopen\w*)\s*\(|new\s+\w*(?:Store|Storage)\b/i;
+// A call, or a stand-in defined as a property (`setItem: (key, value) =>`),
+// the way a test fakes a store; a shorthand method already reads as a call.
+const CALLED = String.raw`(?:\s*\(|\s*:\s*(?:async\s*)?(?:function\b|\(|\w+\s*=>))`;
+const SAVES = new RegExp(String.raw`\b(?:save\w*|setItem|upsert|persist\w*|write\w*)` + CALLED, 'i');
+const RELOADS = new RegExp(String.raw`\b(?:reload\w*|fresh\w*|load\w*|getItem|remount\w*|reopen\w*)` + CALLED + String.raw`|new\s+\w*(?:Store|Storage)\b`, 'i');
+export const savesAndReloads = text => SAVES.test(text) && RELOADS.test(text);
 export const TEST_FILE = /^(?:tests\/(?!ticket-fix\/).+|scripts\/[^/]+)\.test\.m?js$/;
 // Product code that looks at, or patches, the test runner can make a
 // reproduction pass while the product stays wrong; the hunk-revert check
@@ -524,7 +528,7 @@ export async function runTestGates({ dir, repo = null, work, base, head, repro, 
         persistence.registry.push({ file, pass: run.exit === 0 && run.tests.every(t => t.status !== 'fail') });
       }
       // The committed test, never the worktree file the suite left.
-      const reload = allTests.find(t => { const text = committedText(source, head, t.file, binary); return SAVES.test(text) && RELOADS.test(text); });
+      const reload = allTests.find(t => { const text = committedText(source, head, t.file, binary); return savesAndReloads(text); });
       persistence.reload_test = reload ? `${reload.file}::${reload.name}` : null;
       check('save_and_reload', persistence.registry.every(r => r.pass) && persistence.reload_test !== null,
         persistence.reload_test ? persistence.registry.filter(r => !r.pass).map(r => r.file).join(', ') : `${reasons.join('; ')}: no reproduction or declared test saves and then reloads from a fresh store`);
