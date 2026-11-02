@@ -207,3 +207,25 @@ export function mateProgress(entries) {
 export function countingTopics(requiredTopics, hasDea) {
   return new Set([...(requiredTopics || []), ...(hasDea ? MATE_TOPICS : [])]);
 }
+
+/**
+ * The topics a CME entry outside the renewal window still counts toward,
+ * because the topic's own period is one-time or longer than the cycle
+ * (California pain management, ticket 53890221). Mirrors the engine's pool
+ * for those topics so the CME math panel does not list a course that meets a
+ * one-time mandate as simply "not counting". Like topicOutsidePeriod, it
+ * reads the engine row, which carries no category limit (no physician topic
+ * with a period has one).
+ */
+export function stillCountingTopics(entry, topicResults, windowEnd) {
+  const tags = cmeTopics(entry);
+  if (!tags.length) return [];
+  return (topicResults || []).filter(t => {
+    if (t.informational || !t.period) return false;
+    if (!topicTags(t).some(x => tags.includes(x))) return false;
+    if (t.period === "lifetime") return true;
+    const start = new Date(windowEnd);
+    start.setFullYear(start.getFullYear() - t.period.years);
+    return inWindow(entry, start, windowEnd);
+  }).map(topicTagsLabel);
+}

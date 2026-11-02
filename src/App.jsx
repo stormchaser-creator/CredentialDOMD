@@ -114,7 +114,7 @@ import ProfessionReviewCard from "./components/shared/ProfessionReviewCard";
 import CmeReviewSummary from "./components/shared/CmeReviewSummary";
 import { cmeReviewSummary, cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE, rollingWindowLabel, appCardTitle, appRenewalLine, anchoredRenewalLine, certificationMetLine } from "./utils/cmePresentation";
 import { complianceFor, complianceListFor, standingScore, cardWindowNotes, splitByCycle, alertingStates, resolvePendingLicense, undatedLicenseOnFile, cmeTopics } from "./utils/compliance";
-import { topicTags } from "./utils/cmeCore.js";
+import { topicTags, stillCountingTopics } from "./utils/cmeCore.js";
 import { isPracticeLicense, isAdvancedPractice } from "./constants/professions";
 import { getEducationTypes } from "./constants/credentialTypes";
 import { professionMismatches } from "./utils/professionReview";
@@ -1758,7 +1758,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
                     <div style={{ fontSize: 12, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0 6px" }}>
                       Not counting toward this renewal ({outWin.length})
                     </div>
-                    {outWin.map(c => (
+                    {outWin.map(c => {
+                      const stillCounts = stillCountingTopics(c, comp.topicResults, comp.windowEnd);
+                      return (
                       <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px dashed ${T.border}`, marginBottom: 6, opacity: 0.75 }}>
                         <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13 }}>
                           <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
@@ -1769,8 +1771,14 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
                             : c._bucket === "after" ? `${c.date}, after this renewal closes`
                             : "No date on the entry. Add one so it can count."}
                         </div>
+                        {stillCounts.length > 0 && (
+                          <div style={{ fontSize: 11, color: T.accent, fontWeight: 700, marginTop: 3 }}>
+                            Not counted in this renewal's hours, but still counts toward {stillCounts.join(", ")}.
+                          </div>
+                        )}
                       </div>
-                    ))}
+                      );
+                    })}
                   </>
                 )}
 
