@@ -130,13 +130,44 @@ Never give a policy, licence, certificate, DEA or NPI number, or any other ident
 // ─── What the model is shown ─────────────────────────────────────────────────
 
 // Keys of a scanner result that hold an identifying number or a personal
-// detail. They are never shown to the model and never checked against.
-const SCAN_SECRET = /number|npi|dea|ssn|dob|birth|account|member|patient|mrn|billto|email|phone|address|signature/i;
+// detail. They are never shown to the model and never checked against. A
+// fact's label is held to the same list ("Registration", "License", "ID #").
+const SCAN_SECRET = /number|npi|dea|ssn|dob|birth|account|member|patient|mrn|billto|email|phone|address|signature|licen[cs]e|registration|certificate|policy|\bid\b|#/i;
 
 // The most of one attachment's words that are shown and checked against.
 export const MAX_ATTACHMENT_WORDS = 4000;
 const MAX_SCAN_NOTES = 2000;
 const MAX_FACTS = 60;
+// An address or a link in an attachment's line: never shown, never quoted.
+const CONTACT_RE = /[A-Za-z0-9._%+'-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|\bhttps?:\/\/|\bwww\./i;
+// "Label: value" at the head of a line of the scan's notes, the label a few words.
+const NOTE_LABEL_RE = /^([A-Za-z][A-Za-z .'/&()-]{0,40}):\s+(\S.*)$/;
+
+/**
+ * Do these words of an attachment carry an identifier: anything
+ * identifierReason names (SSN, date of birth, a patient identifier, an
+ * account, licence or passport number), a number ID_VALUE_RE or longNumber
+ * reads as one (a DEA number, an NPI, "licence MD-48213"), or an address or
+ * a link? `label` is the field or fact label the words sit under, when any.
+ * The same check the records path holds a quote to (carriesIdentifier).
+ */
+export function attachmentWordsIdentify(label, words) {
+  const v = String(words ?? "");
+  if (CONTACT_RE.test(v) || carriesIdentifier(null, v)) return true;
+  return !!label && !!identifierReason(label, v);
+}
+
+/** A line of the scan's notes that carries an identifier, under its own label when it has one ("Date of Birth: March 14, 1961"). */
+function noteLineIdentifies(line) {
+  if (attachmentWordsIdentify("notes", line)) return true;
+  const m = line.match(NOTE_LABEL_RE);
+  if (!m) return false;
+  const label = m[1].trim();
+  // A short label is a field's ("Patient: ...", "Email: ..."); a longer one
+  // is the letter's own sentence ("Please provide the following: ...").
+  if (label.split(/\s+/).length <= 3 && SCAN_SECRET.test(label)) return true;
+  return attachmentWordsIdentify(label, m[2]);
+}
 
 /**
  * An attachment's words as the scanner read them, numbers that identify
@@ -146,34 +177,52 @@ const MAX_FACTS = 60;
  * "other" document's facts as label: value. Until 2026-11-05 only the flat
  * fields were read, so a request letter whose words the scanner put in notes
  * or facts reached neither the reading nor the host's check of its quotes.
- * Every label passes SCAN_SECRET and every value identifierReason, the
- * notes one line at a time, so one line that names a number does not take
- * the rest with it.
+ * Every label passes SCAN_SECRET; every value of the notes and the facts is
+ * held to attachmentWordsIdentify, the notes one line at a time, so one line
+ * that names a number does not take the rest with it. Whole lines are
+ * checked before anything is cut, and a line that does not fit is left out
+ * rather than cut, so no cut can leave part of a number behind.
  */
 export function attachmentText(scan) {
   if (!scan || typeof scan !== "object" || scan.patientRecord) return "";
   const ex = scan.extracted && typeof scan.extracted === "object" ? scan.extracted : {};
   const flat = (v) => String(v).replace(/\s+/g, " ").trim();
+  const clip = (v, n) => (v.length > n ? v.slice(0, n) : v);
   const out = [];
   for (const [k, v] of Object.entries(ex)) {
     if (SCAN_SECRET.test(k) || v === null || v === undefined || v === "" || typeof v === "object") continue;
-    const s = flat(v).slice(0, 700);
-    if (s && !identifierReason(k, s)) out.push(`${k}: ${s}`);
+    const s = flat(v);
+    if (s && !identifierReason(k, s)) out.push(`${k}: ${clip(s, 700)}`);
   }
   // The notes keep their lines: a listed item stays an item of its own.
-  const lines = typeof scan.notes === "string" && flat(scan.notes) !== flat(ex.notes ?? "")
-    ? scan.notes.slice(0, MAX_SCAN_NOTES).split(/\r?\n/).map(flat).filter((l) => l && !identifierReason("notes", l))
-    : [];
+  const lines = [];
+  if (typeof scan.notes === "string" && flat(scan.notes) !== flat(ex.notes ?? "")) {
+    let size = 0;
+    for (const l of scan.notes.split(/\r?\n/).map(flat)) {
+      if (!l || noteLineIdentifies(l)) continue;
+      if (size + l.length + 1 > MAX_SCAN_NOTES) break;
+      lines.push(l);
+      size += l.length + 1;
+    }
+  }
   if (lines.length === 1) out.push(`notes: ${lines[0]}`);
   else if (lines.length) out.push("notes:", ...lines);
   for (const f of (Array.isArray(ex.facts) ? ex.facts : []).slice(0, MAX_FACTS)) {
     if (!f || typeof f !== "object") continue;
     const label = flat(f.label ?? "").slice(0, 80);
-    const value = f.value === null || f.value === undefined || typeof f.value === "object" ? "" : flat(f.value).slice(0, 300);
-    if (!label || !value || SCAN_SECRET.test(label) || identifierReason(label, value)) continue;
-    out.push(`${label}: ${value}`);
+    const value = f.value === null || f.value === undefined || typeof f.value === "object" ? "" : flat(f.value);
+    if (!label || !value || SCAN_SECRET.test(label) || attachmentWordsIdentify(label, value)) continue;
+    out.push(`${label}: ${clip(value, 300)}`);
   }
-  return out.join("\n").slice(0, MAX_ATTACHMENT_WORDS);
+  // Whole lines up to the cap.
+  const kept = [];
+  let size = 0;
+  for (const l of out) {
+    if (size + l.length + (kept.length ? 1 : 0) > MAX_ATTACHMENT_WORDS) break;
+    kept.push(l);
+    size += l.length + (kept.length > 1 ? 1 : 0);
+  }
+  return kept.join("\n");
 }
 
 const briefly = (row, section) => {

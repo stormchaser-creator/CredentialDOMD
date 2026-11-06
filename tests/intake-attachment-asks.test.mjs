@@ -100,7 +100,7 @@ test("an ask quoted from the attachment's words is kept, marked as the attachmen
   assert.equal(invented.needsRules, true);
 });
 
-test("a listed item with no asking words counts only when the attachment is the list of what is asked, or the message points to it", () => {
+test("a listed item with no asking words counts only under an asking line of its attachment, or as a checklist the message points to", () => {
   const words = [attachmentText(LETTER_SCAN)];
   const item = "Current CPR/BLS certification card";
   const subject = "Reappointment file";
@@ -110,15 +110,96 @@ test("a listed item with no asking words counts only when the attachment is the 
   assert.equal(v.asks.length, 2);
   assert.deepEqual(v.asks.map((a) => a.from), ["message", "attachment"]);
 
-  // The reading called the file a checklist; the message says nothing of it.
+  // A bare list (no line of the file asks): only as a checklist the message points to.
+  const bare = [attachmentText({ documentType: "other", extracted: {}, notes: "Reappointment items\n- Current CPR/BLS certification card\n- Updated CV" })];
   const silent = { note: "", message: "Thank you for your time this week.", history: "" };
-  const checklist = verifyUnderstanding(reading([item], "request_checklist"), { subject, parts: silent, attachmentCount: 1, facts: factsFor(silent, subject, words) });
-  assert.deepEqual(checklist.asks.map((a) => a.quote), [item]);
+  const see = { note: "", message: "See attached.", history: "" };
+  const at = (parts, role) => verifyUnderstanding(reading([item], role), { subject, parts, attachmentCount: 1, facts: factsFor(parts, subject, bare) });
+  assert.deepEqual(at(see, "request_checklist").asks.map((a) => a.quote), [item], "a checklist the message points to");
+  for (const [parts, role, why] of [[silent, "request_checklist", "a checklist the message never mentions"], [see, "informational", "a file the reading took for something to read"], [see, "credential_for_physician", "a credential"]]) {
+    const r = at(parts, role);
+    assert.equal(r.asks.length, 0, why);
+    assert.deepEqual(r.dropped, [{ quote: item, why: DROP.notOwnWords }], `${why}: not the email's own asking words, so the rules read it`);
+    assert.equal(r.needsRules, true, why);
+  }
+});
 
-  // Neither: a file read as something to read, under a message that does not point to it.
-  const neither = verifyUnderstanding(reading([item], "informational"), { subject, parts: silent, attachmentCount: 1, facts: factsFor(silent, subject, words) });
-  assert.equal(neither.asks.length, 0);
-  assert.deepEqual(neither.dropped, [{ quote: item, why: DROP.notAsking }]);
+test("a delivered card and an informational certificate stay what they were: nothing in an attachment makes them a request", () => {
+  // The reviewers' regression against the commit before: a renewed BLS card
+  // forwarded for the file, read (wrongly) as a request quoting the issuer.
+  const card = [attachmentText({ documentType: "license", extracted: { issuer: "Example Heart Association", name: "BLS Provider" } })];
+  const delivered = { note: "", message: "Attached is your renewed BLS card for your records.", history: "" };
+  const v = verifyUnderstanding({ ...reading(["Example Heart Association"], "credential_for_physician"), asks: [{ quote: "Example Heart Association", kind: "bls", who: "physician" }] },
+    { subject: "BLS card", parts: delivered, attachmentCount: 1, facts: factsFor(delivered, "BLS card", card) });
+  assert.equal(v.asks.length, 0);
+  assert.equal(v.needsRules, true, "the rules read it, as before");
+  const rules = rulesUnderstanding({ subject: "BLS card", body: delivered.message, attachmentNames: ["BLS card.pdf"], attachmentCount: 1, forwarded: true, attachmentWords: card, attachmentTypes: ["license"] });
+  assert.equal(rules.intent, "delivery");
+
+  // A certificate of insurance whose own small print asks for a copy, under
+  // a reading that calls the email informational: entered, not answered.
+  const coi = [attachmentText({ documentType: "insurance", extracted: { provider: "Example Mutual" }, notes: "Please provide a copy of this certificate to the credentialing office." })];
+  const info = { note: "", message: "Here is my updated COI for my file.", history: "" };
+  const quote = "Please provide a copy of this certificate to the credentialing office";
+  const r = verifyUnderstanding({ ...reading([quote], "credential_for_physician"), intent: "informational" }, { subject: "COI", parts: info, attachmentCount: 1, facts: factsFor(info, "COI", coi) });
+  assert.equal(r.intent, "informational");
+  assert.equal(r.asks.length, 0);
+  assert.equal(r.unclear, false);
+
+  // The same certificate when the model call fails: the rules keep it a delivery.
+  const email = { subject: "COI", body: "For my file.", attachmentNames: ["coi.pdf"], attachmentCount: 1 };
+  const fallback = rulesUnderstanding({ ...email, attachmentWords: coi, attachmentTypes: ["insurance"] });
+  assert.equal(fallback.rulesIntent, "delivery");
+  assert.equal(fallback.intent, "delivery");
+  // Only a letter's or a checklist's words are read for asks: the same
+  // asking sentence on a credential leaves the delivery alone, on a letter
+  // under a message that asks nothing itself it makes the email mixed.
+  const words = ["notes: Please send your current DEA registration."];
+  assert.equal(rulesUnderstanding({ ...email, attachmentWords: words, attachmentTypes: ["license"] }).intent, "delivery");
+  assert.equal(rulesUnderstanding({ ...email, attachmentWords: words, attachmentTypes: ["other"] }).intent, "mixed");
+  assert.equal(fallback.asks.filter((a) => a.from === "attachment").length, 0);
+});
+
+test("identifying numbers, names and addresses in a scan's notes and facts never reach the model or a stored ask", () => {
+  const t = attachmentText({
+    documentType: "other",
+    extracted: { facts: [{ label: "Registration", value: "QX1234563" }, { label: "License", value: "MD 12345" }, { label: "Requested by", value: "Medical Staff Office" }] },
+    notes: [
+      "Please send your DEA registration QX1234563.",
+      "NPI 1234567893",
+      "Patient: Pat Q Sample",
+      "Date of Birth: March 14, 1961",
+      "Contact: casey.example@osterly-health.example",
+      "Please send a copy of your current BLS card.",
+    ].join("\n"),
+  });
+  assert.equal(t, "notes: Please send a copy of your current BLS card.\nRequested by: Medical Staff Office");
+
+  // An ask quoted with a number in it is dropped, by the model's check and the rules'.
+  const words = ["notes:\nPlease send your DEA registration QX1234563 (exp 2027-03-31).\nPlease send a copy of your current BLS card."];
+  const parts = { note: "", message: "See attached.", history: "" };
+  const v = verifyUnderstanding(reading(["Please send your DEA registration QX1234563 (exp 2027-03-31).", "Please send a copy of your current BLS card."]), { subject: "Reappointment file", parts, attachmentCount: 1, facts: factsFor(parts, "Reappointment file", words) });
+  assert.deepEqual(v.asks.map((a) => a.quote), ["Please send a copy of your current BLS card."]);
+  assert.deepEqual(v.dropped.map((d) => d.why), [DROP.identifier]);
+  const fromFile = attachmentAsks(words);
+  assert.ok(fromFile.length >= 1 && fromFile.every((a) => !/QX1234563/.test(a)), JSON.stringify(fromFile));
+});
+
+test("attachmentText checks whole lines before it cuts: a cut never leaves part of a number behind", () => {
+  const pad = `${"x ".repeat(993)}`.trim();
+  const t = attachmentText({ documentType: "other", extracted: {}, notes: `${pad}\nSSN 123-45-6789\nPlease send a copy of your current BLS card.` });
+  assert.ok(!/123-45/.test(t), "no part of the SSN");
+  const long = attachmentText({ documentType: "other", extracted: {}, notes: `${"y ".repeat(999).trim()}\nSSN 123-45-6789` });
+  assert.ok(!/\b123\b/.test(long));
+  // A line that does not fit is left out whole, never cut.
+  const many = attachmentText({ documentType: "other", extracted: {}, notes: Array.from({ length: 80 }, (_, i) => `Please send item number ${"z".repeat(30)} ${i}.`).join("\n") });
+  assert.ok(many.split("\n").every((l) => l === "notes:" || /^Please send item number z+ \d+\.$/.test(l)), "every kept line whole");
+});
+
+test("the model is told an ask written in an attachment may be quoted from its words", () => {
+  const r = understanding.buildUnderstandingRequest({ message: "See attached." });
+  assert.match(r.system[0].text, /written inside an attachment/);
+  assert.match(r.system[0].text, /quote the ask from that attachment's words/);
 });
 
 // ── The rules ────────────────────────────────────────────────────────────────
@@ -135,12 +216,15 @@ test("the rules read the attachments' words apart: an asking sentence or a liste
 
   const listed = attachmentAsks(["notes:\nPlease provide the following:\n- Current BLS card\n- Updated CV"]);
   assert.ok(listed.some((a) => /BLS card/.test(a)) && listed.some((a) => /CV/.test(a)), `listed: ${JSON.stringify(listed)}`);
+  // A lead-in is not an ask of its own, and the email's bare pointer gives way to the letter's asks.
+  const lines = rulesUnderstanding({ subject: "Fwd: request", body: "See attached.", attachmentNames: ["letter.pdf"], attachmentCount: 1, attachmentWords: ["notes:\nPlease provide the following:\nCurrent DEA certificate\nCurrent BLS card"] });
+  assert.deepEqual(lines.asks.map((a) => [a.quote, a.from]), [["DEA certificate", "attachment"], ["BLS card", "attachment"]]);
   assert.deepEqual(attachmentAsks(["notes:\n- Current BLS card\n- Updated CV"]), [], "a bare list under nothing that asks");
 });
 
 test("the rules never acknowledge on the attachment's asks alone, and a delivery with an ask in its attachment is mixed", () => {
-  const r = rulesUnderstanding({ subject: "Reappointment", body: "Please see the attached letter regarding your reappointment.", attachmentNames: ["Reappointment letter.pdf"], attachmentCount: 1, forwarded: true, attachmentWords: ["notes: Please send your current DEA registration."] });
-  assert.equal(r.intent, "mixed", "the rules took it for a delivery; the letter asks");
+  const r = rulesUnderstanding({ subject: "Reappointment", body: "Please see the attached letter regarding your reappointment.", attachmentNames: ["Reappointment letter.pdf"], attachmentCount: 1, forwarded: true, attachmentWords: ["notes: Please send your current DEA registration."], attachmentTypes: ["other"] });
+  assert.equal(r.intent, "mixed", "the rules took it for a delivery; the message points to the letter, and the letter asks");
   assert.deepEqual(r.asks.filter((a) => a.from === "attachment").map((a) => a.quote), ["DEA registration"]);
   // The email's own ask names no document; the attachment's does, and does not count.
   const own = { method: "rules", askForm: true, asks: [{ quote: "See attached", kind: null }, { quote: "DEA registration", kind: null, from: "attachment" }] };
@@ -206,4 +290,12 @@ test("end to end: a 400 from the AI service says why in the ledger, and nothing 
   assert.ok(!row.detail.includes("sk-ant-test"), "never the key");
   assert.ok(!/ack sent/i.test(row.detail));
   assert.equal(harness.sent.filter((m) => m.to?.[0] !== ME).length, 0, "nothing goes to the hospital");
+  // The letter's asks, read by the rules, are what the request holds.
+  const [req] = rows("document_requests");
+  const asks = req.proposal.items.map((i) => i.ask);
+  assert.ok(asks.some((a) => /DEA registration/.test(a)), JSON.stringify(asks));
+  assert.ok(asks.some((a) => /BLS certification card/.test(a)), JSON.stringify(asks));
+  assert.ok(!asks.some((a) => /^see attached$/i.test(a)), "the bare pointer is not an ask");
+  assert.equal(req.proposal.source, "rules", "still read by keywords");
+  assert.equal(r.body.one_tap, false);
 });

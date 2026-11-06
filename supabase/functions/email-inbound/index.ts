@@ -2300,11 +2300,13 @@ async function understandEmail(profile: MatchedProfile, ctx: ScanContext, admiss
     physicianName: ctx.physicianName,
   };
   const agencies = (input.rows.locumContracts ?? []).map((c) => String(c.agency ?? "")).filter(Boolean);
-  // The rules read the attachments' words apart from the email: an ask the
+  // The rules read the attachments' words apart from the email, and only a
+  // letter's or a checklist's (the scanner's type for each): an ask the
   // sender put in an attached letter is marked as one (rulesUnderstanding).
+  const types = input.files.map((f) => String(scanOf(f)?.documentType ?? "unknown"));
   const rules = (why: string): Reading => rulesWithFacts(rulesUnderstanding({
     subject: input.subject, body: input.rulesBody, attachmentNames: input.attachmentNames,
-    attachmentCount: input.attachmentCount, forwarded: input.forwarded, why, attachmentWords: words,
+    attachmentCount: input.attachmentCount, forwarded: input.forwarded, why, attachmentWords: words, attachmentTypes: types,
   }), { message: [parts.note, parts.message].filter(Boolean).join("\n\n"), subject: input.subject, agencies, facts }) as Reading;
   if (!admission.ok) return rules(admission.why);
   try {
@@ -2580,14 +2582,24 @@ https://credentialdomd.com`);
     // A model reading hands the matcher its quote-checked asks; without one
     // the matcher reads the email itself, as it always has, and a proposal
     // read by keywords is never offered on one tap (oneTapReady).
+    // A rules reading that found asks in an attached letter hands them over
+    // too (the body alone holds none of them), and the proposal still says
+    // it was read by keywords: never one tap, and the physician is told to
+    // check it (requestPacket.ts oneTapReady, reviewReason).
+    const fromFiles = reading.method === "rules" && reading.asks.some((a) => a.from === "attachment");
     proposal = buildProposal(
       { subject: requestSubject ?? "", body: requestBody, fromName: requesterName ?? "", fromAddr },
       catalogue,
       { name: phys.name, degree: phys.degree },
       undefined,
       reading.method === "model" ? { asks: reading.asks, confidence: reading.confidence, unclear: reading.unclear }
+        : fromFiles ? { asks: reading.asks, confidence: "low", unclear: false }
         : (reading.unclear ? { unclear: true } : null),
     );
+    if (fromFiles) {
+      proposal.source = "rules";
+      proposal.confidence = "keyword";
+    }
     // Whether the forward was positively authenticated travels with the
     // proposal. oneTapReady needs it true: an unverified forward can be a
     // forgery whose "requester" the forger chose, so its packet always
