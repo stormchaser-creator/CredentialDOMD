@@ -97,6 +97,30 @@ test("requestWords keeps a document's name and drops anything that could be a pe
   ]) assert.equal(requestWords(dropped), "", dropped);
 });
 
+test("requestWords is a closed vocabulary: a name in any case, any script or spelled out never passes, and checklist items still do", () => {
+  for (const dropped of [
+    "operative notes for mary roe", "operative notes for patient mary roe", "op notes for roe mary", "records for john q sample",
+    "discharge summary for mr sample", "operative notes for Page Case", "operative notes for patient Hope", "notes for 92 years old patient",
+    "op note for patient aged 67 years", "records for patient seen 3 months ago at mercy", "operative notes for \u041cary Roe",
+    "operative notes for \u00c9lodie \u00d8stergaard", "DEA \uff22\uff37\uff11\uff12\uff13\uff14\uff15\uff16\uff17", "notes dated \uff10\uff13/\uff10\uff12/\uff12\uff10\uff12\uff16",
+    "mrn one two three four five six", "dea qx one two three", "license mx forty eight two one three", "operative notes for case of jane doe",
+    "operative notes, Roe Mary", "operative notes - Roe, Mary", "notes for roe, mary", "BOARD CASE", "op note bed twelve room four",
+    "notes for osterly hospital neurosurgery", "records from st joseph's", "notes for 12 years ago 10 months", "patient roe 1 years",
+    "dob march fourteenth nineteen sixty one", "ssn on file please",
+  ]) assert.equal(requestWords(dropped), "", dropped);
+  for (const kept of [
+    "DEA registration", "state license", "board certificate", "BLS card", "CV", "malpractice insurance certificate", "TB test",
+    "immunization records", "photo ID", "NPDB query", "state controlled substance registration", "declarations page", "driver's license",
+    "chest x-ray", "Please send the following documents to complete your reappointment file", "case log for the past 24 months",
+  ]) assert.equal(requestWords(kept), kept, kept);
+  // A name in the lead-in drops the lead-in; a name in an item drops that item; the rest stays.
+  const t = attachmentText({ documentType: "other", extracted: {}, request_lead_in: "Please provide the operative notes for mary roe", requested_items: ["operative notes for mary roe", "DEA certificate"] });
+  assert.equal(t, "requestedItem: DEA certificate");
+  const r = rules("See attached.", [t], ["other"], "FPPE");
+  assert.deepEqual(fromFile(r), ["DEA certificate"]);
+  assert.deepEqual(verify(["operative notes for mary roe", "DEA certificate"], { words: [t], subject: "FPPE" }).asks.map((a) => a.quote), ["DEA certificate"]);
+});
+
 test("the scanner's own fields keep the identifier check, and whole lines are kept up to the cap", () => {
   const t = attachmentText({ documentType: "other", extracted: { name: "DEA Registration QX1234563", issuer: "Example Clinic NPI 1234567893", type: "License MD 48213", facility: "Example Hospital, patient Pat Sample", title: "Reappointment checklist", coveragePerClaim: "1000000" } });
   assert.equal(t, "title: Reappointment checklist\ncoveragePerClaim: 1000000");

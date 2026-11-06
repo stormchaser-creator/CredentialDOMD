@@ -173,40 +173,62 @@ export function attachmentWordsIdentify(label, words) {
 // dropped item is a missed ask, never a leak.
 
 const MAX_REQUESTED_ITEMS = 25;
-const MAX_REQUEST_WORDS = 10;
-// Capitals that name a document, not a person or a place.
-const REQUEST_ACRONYMS = new Set(["DEA", "BLS", "ACLS", "PALS", "ATLS", "NRP", "CV", "NPI", "CME", "TB", "PPD", "COI", "FPPE", "OPPE", "MD", "DO", "PA", "NP", "CPR", "ID", "MMR", "HIV", "USMLE", "COMLEX", "ECFMG", "CSR", "CDS"]);
-// Capitalised words a document's name may use. Any other capitalised word
-// may be a name, a place or a facility, and the item is dropped.
-const REQUEST_WORDS = new Set(("please current updated recent valid signed completed copy copies your the a an all any proof of documentation evidence "
-  + "board certificate certification certifications license licence licenses state medical controlled substance registration registrations "
-  + "card cards malpractice insurance professional liability coverage face sheet declaration declarations page privileges privilege "
-  + "hospital case cases log logs operative op notes note curriculum vitae peer reference references letter letters recommendation "
-  + "diploma diplomas residency fellowship training internship immunization immunizations vaccination vaccinations vaccine flu influenza "
-  + "hepatitis titer titers tuberculosis test tests screening health statement attestation attestations form forms application "
-  + "photo identification passport driver drivers life support basic advanced cardiac pediatric neonatal resuscitation trauma "
-  + "continuing education credits credit hours work history gap explanation background check release consent drug screen federal "
-  + "verification verifications list listed delineation request requested quality data procedure procedures surgical volume patient "
-  + "encounter encounters reappointment appointment credentialing file items documents document following below required fit mask "
-  + "covid booster exam examination physical boards specialty subspecialty pt results contact census population panel outcomes report reports record records rights safety summary hours mix").split(/\s+/));
+const MAX_REQUEST_WORDS = 12;
+// A CLOSED vocabulary: every word of a requested item or a lead-in, in any
+// case, must be one of these, or the entry is dropped. A name, a place or a
+// facility is then never kept, however it is written ("mary roe", "MARY
+// ROE", "Roe M"), because no name is a word here. Acronyms that name a
+// document, the words of documents' names, and the few words that join them.
+const REQUEST_ACRONYMS = new Set(["dea", "bls", "acls", "pals", "atls", "nrp", "cv", "npi", "cme", "tb", "ppd", "coi", "fppe", "oppe", "md", "do", "pa", "np",
+  "cpr", "id", "mmr", "hiv", "usmle", "comlex", "ecfmg", "csr", "cds", "npdb", "pt", "op"]);
+const REQUEST_WORDS = new Set((""
+  // documents and what they are of
+  + "board boards certificate certificates certification certifications license licence licenses licences state medical controlled substance "
+  + "registration registrations card cards malpractice insurance professional liability coverage face sheet declaration declarations "
+  + "privileges privilege hospital cases log logs operative notes note curriculum vitae peer reference references letter letters "
+  + "recommendation recommendations diploma diplomas residency fellowship training internship immunization immunizations vaccination "
+  + "vaccinations vaccine influenza flu hepatitis titer titers tuberculosis test tests testing screening health statement attestation "
+  + "attestations form forms application applications photo identification passport driver driver's drivers life support basic advanced "
+  + "cardiac pediatric neonatal resuscitation trauma continuing education credits credit hours work history gap gaps explanation "
+  + "background check release consent drug federal verification verifications list delineation quality data procedure procedures "
+  + "surgical volume patient encounter encounters reappointment appointment credentialing file items item documents document records "
+  + "record results proof documentation evidence copy copies chest x ray fit mask covid booster exam examination physical specialty "
+  + "subspecialty contact census population panel outcomes report reports rights safety summary query national practitioner databank "
+  + "malpractice claims claim loss run runs discharge summaries operative privileging request requested renewal renewed "
+  + "signed completed valid recent current updated latest "
+  // what a lead-in does
+  + "please provide send submit return complete sign upload forward need needs needed require requires required missing outstanding still "
+  + "kindly would like could you we us our me is are be this these that following below attached enclosed by in at "
+  // the joining set
+  + "for the of past last from and or with to on a an your all any each listed").split(/\s+/).filter(Boolean));
+// Words that are a document's only beside their partner: "case log", "case
+// list", "declarations page", "face sheet". Alone, they could be a name.
+const BOUND_WORDS = { case: { next: /^(?:log|logs|list|lists)$/ }, page: { prev: /^(?:declaration|declarations|face|signature)$/ } };
 
 /**
  * One requested item, or the lead-in, as the host keeps it: whitespace
  * collapsed, or "" when it could carry anything but a document's name. At
- * most ten words; no digit but a span of months or years ("for the past 24
- * months"); no address, link or "Last, First"; no capitals but a known
- * document acronym; no capitalised word that is not a document's; and
+ * most twelve words, printable ASCII only, every word (in any case) from
+ * the closed vocabulary above, no digit but a span after "past" or "last"
+ * ("for the past 24 months"), no address, link or "Last, First", and
  * nothing attachmentWordsIdentify finds.
  */
 export function requestWords(v) {
   if (typeof v !== "string") return "";
+  if (/[^\x20-\x7E\s]/.test(v)) return "";
   const s = v.replace(/\s+/g, " ").trim().replace(/[.;:]+$/, "");
   if (!s || s.split(" ").length > MAX_REQUEST_WORDS || s.length > 120) return "";
-  if (/\d/.test(s.replace(/\b\d{1,2}\s+(?:months?|years?)\b/gi, ""))) return "";
-  if (/[@<>]|https?:|www\./i.test(s) || /,\s*[A-Z]/.test(s)) return "";
-  for (const w of s.match(/[A-Za-z][A-Za-z'-]*/g) || []) {
-    if (/^[A-Z]{2,}$/.test(w.replace(/'s$/, "")) && !REQUEST_ACRONYMS.has(w.replace(/'s$/, ""))) return "";
-    if (/^[A-Z][a-z]/.test(w) && !REQUEST_WORDS.has(w.toLowerCase().replace(/'s$/, ""))) return "";
+  if (/[^A-Za-z0-9 ,.'()/&:-]/.test(s) || /,\s*[A-Za-z]+\s*$|,\s*[A-Z]/.test(s)) return "";
+  if (/\d/.test(s.replace(/\b(?:past|last)\s+\d{1,2}\s+(?:months?|years?)\b/gi, "past"))) return "";
+  const words = s.toLowerCase().replace(/\b(?:past|last)\s+\d{1,2}\s+(?:months?|years?)\b/g, "past").split(/[\s/,()&:.-]+/).map((w) => w.replace(/^'+|'+$/g, "")).filter(Boolean);
+  for (let k = 0; k < words.length; k++) {
+    const w = words[k];
+    const bound = BOUND_WORDS[w];
+    if (bound) {
+      if ((bound.next && !bound.next.test(words[k + 1] ?? "")) || (bound.prev && !bound.prev.test(words[k - 1] ?? ""))) return "";
+      continue;
+    }
+    if (!REQUEST_WORDS.has(w) && !REQUEST_ACRONYMS.has(w)) return "";
   }
   if (attachmentWordsIdentify(null, s) || identifierReason("", s)) return "";
   return s;
