@@ -14,6 +14,7 @@
  */
 
 import { timedSpan } from "./coverageBlocks.js";
+import { isArchived } from "./contractsForDate.js";
 
 /**
  * Coverage blocks for a contract, falling back to a plain start/end pair. A
@@ -60,7 +61,10 @@ export function inTerm(contract, dateStr) {
 export function checkPlacement(contracts, contract, dateStr) {
   if (!contract || !dateStr) return null;
 
-  const others = (contracts || []).filter(c => c.id !== contract.id);
+  // An archived contract claims no date: the physician put it away
+  // (ticket 8acf7241, 11-06: two Sanford contracts, one archived, and every
+  // save still asked which one).
+  const others = (contracts || []).filter(c => c.id !== contract.id && !isArchived(c));
   const elsewhere = contractsCoveringDate(others, dateStr).map(c => c.facility || "another contract");
 
   // A term-based agreement has no coverage blocks by design — it is judged
