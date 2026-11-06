@@ -305,7 +305,9 @@ export function coverageHints(context, record) {
 //                declared tests are refused; null: not checked)
 // ---------------------------------------------------------------------------
 const oneLine = (text, max) => typeof text === 'string' && text.length <= max && !/[\n\r]/.test(text);
-export function checklistErrors(result, { items, bindings = new Map(), attachments = [], ownerTicket = false, changed = null }) {
+// resolved: the items whose resolution the host recorded (validResolutions):
+// done whatever the worker says, so its state is not held to a run's proof.
+export function checklistErrors(result, { items, bindings = new Map(), attachments = [], ownerTicket = false, changed = null, resolved = new Set() }) {
   const errors = [];
   const entries = Array.isArray(result?.checklist) ? result.checklist : [];
   const ids = items.map(i => i.id);
@@ -337,6 +339,7 @@ export function checklistErrors(result, { items, bindings = new Map(), attachmen
       // ends in "?"; it may still not state a result.
       else if (question && questionReportsResult(e.remaining)) errors.push(`${where}: remaining breaks the reply rules (unverified_claim); the owner's question may not state a result (no "now", "fixed", "shows", "updated" and the like)`);
     }
+    if (resolved.has(e.ac_id)) continue;
     if (k === 'owner_decision' && e.state !== 'needs_owner') errors.push(`${where}: an owner_decision item is needs_owner; only the owner decides it`);
     if (k !== 'owner_decision' && e.state === 'needs_owner' && k !== 'data_fix') errors.push(`${where}: needs_owner is for owner_decision and data_fix items; routine work stays with the worker`);
     if ((k === 'data_fix' || k === 'device_probe') && e.state === 'done') errors.push(`${where}: a ${k} item is never done by the agent (${k === 'data_fix' ? 'the owner runs the data change' : 'only the customer can confirm it on the device'})`);
@@ -431,7 +434,7 @@ export function finalStates({ items, entries = [], claims = [], code = {}, bindi
   const byId = new Map(entries.map(e => [e.ac_id, e]));
   const seenByWorker = new Set(workerItems ?? items.map(i => i.id));
   return items.map(item => {
-    if (resolved.has(item.id) && RESOLUTION_KINDS[item.kind]) return { id: item.id, state: 'done', remaining: '', detail: 'resolved' };
+    if (resolved.has(item.id) && resolutionKind(item)) return { id: item.id, state: 'done', remaining: '', detail: 'resolved' };
     const e = byId.get(item.id);
     if (!seenByWorker.has(item.id) || !e) return { id: item.id, state: 'not_done', remaining: '', detail: 'new' };
     const out = { id: item.id, state: e.state, remaining: String(e.remaining ?? '').trim(), detail: null };
@@ -501,6 +504,14 @@ export const hostItemWork = id => [itemFollowUpWork(id), heldFollowUpWork(id), r
 // counts only when it names a customer message on the ticket.
 // ---------------------------------------------------------------------------
 export const RESOLUTION_KINDS = Object.freeze({ owner_decision: 'decision', data_fix: 'data_fix', device_probe: 'confirmed' });
+// A bug or change whose cause was the account's stored data, not the code (a
+// contract saved on the wrong timezone): no run can fix or see it. The host
+// fixes the data with a reviewed, applied data-fix file and records it as a
+// data_fix resolution naming that file (resolveItem checks it exists, has its
+// backup and was applied). Without the named file it is not a resolution.
+export const DATA_FIX_FILE = /^\d{4}-\d{2}-\d{2}-[a-z0-9][a-z0-9.-]{0,80}\.sql$/;
+export const resolutionKind = item => RESOLUTION_KINDS[item.kind] ?? (['bug', 'change'].includes(item.kind) ? 'data_fix' : undefined);
+const hasDataFixEvidence = r => Array.isArray(r.evidence) && r.evidence.length > 0 && r.evidence.every(f => typeof f === 'string' && DATA_FIX_FILE.test(f));
 // asked: the case's asked_items ({ id, at }): a confirmation counts only for
 // a message the reporter wrote after the reply that asked (review of
 // 2026-11-06, N6: the original report is no confirmation).
@@ -509,7 +520,8 @@ export function validResolutions(resolutions, { items, context = null, asked = [
   const out = new Map();
   for (const item of items) {
     const r = resolutions?.[item.id];
-    if (!r || r.kind !== RESOLUTION_KINDS[item.kind] || !Number.isFinite(Date.parse(r.at))) continue;
+    if (!r || r.kind !== resolutionKind(item) || !Number.isFinite(Date.parse(r.at))) continue;
+    if (!RESOLUTION_KINDS[item.kind] && !hasDataFixEvidence(r)) continue;
     if (r.kind === 'confirmed' && !confirmsAsk(messages.get(r.message_id), askedAt(asked, item.id), messages.has(r.message_id))) continue;
     out.set(item.id, r);
   }

@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // Trusted, read-only context collection. Ticket text is evidence, never authority.
-import { promises as fs, readFileSync, statSync, existsSync, mkdirSync, rmSync, rmdirSync, writeFileSync } from 'node:fs';
+import { promises as fs, readFileSync, statSync, lstatSync, existsSync, mkdirSync, rmSync, rmdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { checkFixedRules, customerReplyText, ReplyRuleError, ruleNames, sentences, questionReportsResult } from './ticket-fix/claims.mjs';
 import { prepareAgentReply, prepareRenderedReply, readVerificationKey, signPreparedReply, gitRunner, filesCitedIn, ensurePrivateDir, readOnly as readOnlySQL,
   MIGRATION, emailStatus, RUN_COMMITTER } from './ticket-fix/reply.mjs';
-import { checklistErrors, isSupportReply, isCustomerMessage, hostItemWork, replyHold, isCompletion, askItems, stillAsked, confirmsAsk, askedAt, readChecklist, RESOLUTION_KINDS, AGENT_REPLY_MAX, REMAINING_MAX, OBSERVED_MAX, MAX_ITEMS } from './ticket-fix/checklist.mjs';
+import { checklistErrors, isSupportReply, isCustomerMessage, hostItemWork, replyHold, isCompletion, askItems, stillAsked, confirmsAsk, askedAt, readChecklist, RESOLUTION_KINDS, resolutionKind, DATA_FIX_FILE, AGENT_REPLY_MAX, REMAINING_MAX, OBSERVED_MAX, MAX_ITEMS } from './ticket-fix/checklist.mjs';
 import { isMain } from './ticket-fix/is-main.mjs';
 
 export const APPROVED = '(public.is_admin(t.user_id) OR t.agent_approved_at IS NOT NULL)';
@@ -394,7 +394,8 @@ export function validateAssessment(result, context, { isolated = false, codeOutc
     // host; each piece of it the model wrote passes the fixed rules here.
     if (!stage3?.checklist?.items?.length) throw Error('A structured result needs the frozen checklist (stage 3); nothing was recorded');
     const problems = checklistErrors(result, { items: stage3.worker_items ?? stage3.checklist.items, bindings: bindingMap(stage3.bindings),
-      attachments: stage3.attachments ?? [], ownerTicket: context.approval?.from_admin === true, changed: typeof stage3.changed === 'boolean' ? stage3.changed : null });
+      attachments: stage3.attachments ?? [], ownerTicket: context.approval?.from_admin === true, changed: typeof stage3.changed === 'boolean' ? stage3.changed : null,
+      resolved: new Set(Array.isArray(stage3.resolved) ? stage3.resolved : []) });
     review.questions.forEach((q, i) => {
       const value = q.question.trim();
       if (!value.endsWith('?') || sentences(value).length !== 1 || value.length > 300) problems.push(`assessment.questions[${i}]: one question of at most 300 characters, ending with "?"`);
@@ -653,6 +654,31 @@ export async function releaseAttempt(directory, ticketId, runId) {
 // recorded again only while its case is not queued, so a wrong record can be
 // corrected but never stacks wake-ups.
 export const AGENT_LOCK = '/tmp/credentialdomd-ticket-agent.lock';
+// Where the host keeps reviewed production data fixes and the helper's log of
+// what it applied (apply-migration.sh): a data_fix resolution of a bug or
+// change item names files from here.
+const SUPPORT_DIR = path.join(process.env.HOME ?? '', 'Library/Application Support/CredentialDOMD');
+export const DATA_FIX_DIR = path.join(SUPPORT_DIR, 'data-fixes');
+export const DEPLOY_LOG = path.join(SUPPORT_DIR, 'deploy/deploy.log');
+// Each named file is a regular file the host owns in the data-fix folder, has
+// its .before.json backup beside it, and was applied (an APPLIED line in the
+// deploy log). Returns the names; throws on the first that is not.
+export function checkDataFixes(names, { dir = DATA_FIX_DIR, log = DEPLOY_LOG } = {}) {
+  const list = [...new Set((Array.isArray(names) ? names : []).map(n => String(n).trim()).filter(Boolean))];
+  if (!list.length || list.length > 10) throw Error('A data fix of a bug or change item names the applied data-fix file(s): TICKET_DATA_FIXES');
+  let applied = '';
+  try { applied = readFileSync(log, 'utf8'); } catch { /* checked per file below */ }
+  for (const name of list) {
+    if (!DATA_FIX_FILE.test(name)) throw Error(`${name.slice(0, 60)} is not a data-fix file name`);
+    for (const file of [name, name.replace(/\.sql$/, '.before.json')]) {
+      let stat;
+      try { stat = lstatSync(path.join(dir, file)); } catch { throw Error(`${file} is not in the data-fix folder`); }
+      if (!stat.isFile() || stat.uid !== process.getuid()) throw Error(`${file} must be a regular file the host owns`);
+    }
+    if (!applied.split('\n').some(line => new RegExp(`^\\S+ APPLIED ${name.replace(/[.]/g, '\\.')} http 20[01]$`).test(line))) throw Error(`${name} was not applied (no APPLIED line in the deploy log)`);
+  }
+  return list;
+}
 // Holds the ticket agent's lock (its owner-file format) around fn. The lock
 // goes on every exit: a return, a thrown error, or SIGTERM / SIGINT (second
 // review: a signal left it held, and every hourly run then skipped).
@@ -694,18 +720,20 @@ function wake(record, now) {
   delete record.continuation.reservation;
   delete record.owner_noted;
 }
-export async function resolveItem(directory, ticketId, acId, kind, { note = '', messageId = null, now = Date.now(), query = null, lock = null } = {}) {
+export async function resolveItem(directory, ticketId, acId, kind, { note = '', messageId = null, dataFixes = null, dataFixDir = undefined, deployLog = undefined, now = Date.now(), query = null, lock = null } = {}) {
   await ensureState(directory);
   const text = oneLineNote(note);
   // Everything that reads the database happens before the lock is taken.
   const check = record => {
     const item = readChecklist(directory, ticketId)?.items.find(i => i.id === acId);
     if (!item) throw Error(`${String(acId).slice(0, 12)} is not a frozen item of this ticket`);
-    if (RESOLUTION_KINDS[item.kind] !== kind) throw Error(`${acId} is a ${item.kind} item; it is resolved by ${RESOLUTION_KINDS[item.kind] ?? 'a run, never by hand'}`);
+    if (resolutionKind(item) !== kind) throw Error(`${acId} is a ${item.kind} item; it is resolved by ${resolutionKind(item) ?? 'a run, never by hand'}`);
     if (record.resolutions?.[acId] && record.continuation?.state === 'pending') throw Error(`${acId} is already resolved and its case is queued; nothing changed`);
   };
   const before = await readCase(directory, id(ticketId));
   check(before);
+  const frozen = readChecklist(directory, ticketId)?.items.find(i => i.id === acId);
+  const evidence = RESOLUTION_KINDS[frozen.kind] ? null : checkDataFixes(dataFixes, { dir: dataFixDir, log: deployLog });
   if (kind === 'confirmed') {
     if (!UUID.test(messageId || '')) throw Error('A confirmation names the reporter\'s message id');
     if (!query) throw Error('A confirmation is checked against the thread: TICKET_DATABASE_TOKEN is required');
@@ -721,7 +749,7 @@ export async function resolveItem(directory, ticketId, acId, kind, { note = '', 
     // A run asked again meanwhile (a newer released change): the checked
     // message answers the earlier ask, not this one.
     if (kind === 'confirmed' && askedAt(record.asked_items, acId) !== askedAt(before.asked_items, acId)) throw Error(`${acId} was asked again meanwhile; check the newer answer`);
-    record.resolutions = { ...(record.resolutions ?? {}), [acId]: { kind, at: new Date(now).toISOString(), note: text, ...(kind === 'confirmed' ? { message_id: messageId } : {}) } };
+    record.resolutions = { ...(record.resolutions ?? {}), [acId]: { kind, at: new Date(now).toISOString(), note: text, ...(kind === 'confirmed' ? { message_id: messageId } : {}), ...(evidence ? { evidence } : {}) } };
     wake(record, now);
     await writePrivate(path.join(directory, `${id(ticketId)}.json`), JSON.stringify(record, null, 2));
     return record;
@@ -1238,9 +1266,11 @@ async function main(args) {
   if (mode === '--resolve-item' && args.length === 5) {
     // --resolve-item TICKET AC-n decision|data_fix|confirmed PRIVATE_STATE;
     // the note (and a confirmation's message id) from TICKET_RESOLUTION_NOTE
-    // and TICKET_RESOLUTION_MESSAGE.
+    // and TICKET_RESOLUTION_MESSAGE; a bug or change item's data fix names its
+    // applied data-fix files, comma separated, in TICKET_DATA_FIXES.
     const [, target, item, kind, directory] = args;
     const record = await resolveItem(directory, id(target), item, kind, { note: process.env.TICKET_RESOLUTION_NOTE ?? '', messageId: process.env.TICKET_RESOLUTION_MESSAGE ?? null,
+      dataFixes: (process.env.TICKET_DATA_FIXES ?? '').split(','),
       query: process.env.TICKET_DATABASE_TOKEN ? databaseQuery : null, lock: process.env.TICKET_AGENT_LOCK || AGENT_LOCK });
     console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} RESOLVED — ${target.slice(0, 8)} ${item} (${kind}); case ${record.continuation.state}`);
     return;

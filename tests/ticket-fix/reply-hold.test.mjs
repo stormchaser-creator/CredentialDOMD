@@ -7,13 +7,14 @@
 // Synthetic records only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync, writeFileSync } from 'node:fs';
+import { readFileSync, writeFileSync, mkdirSync, symlinkSync } from 'node:fs';
 import path from 'node:path';
-import { finishRun, collectQueue, loadQueuedContext, queueSQL, heldLine, saveReview, resolveItem, noteOwner, closeFollowUp, withAgentLock, writeAttention, targetSQL, HELD_REPLY_WORK } from '../../scripts/ticket-agent-context.mjs';
+import { checkDataFixes, finishRun, collectQueue, loadQueuedContext, queueSQL, heldLine, saveReview, resolveItem, noteOwner, closeFollowUp, withAgentLock, writeAttention, targetSQL, HELD_REPLY_WORK } from '../../scripts/ticket-agent-context.mjs';
 import { spawn } from 'node:child_process';
 import { prepareRenderedReply } from '../../scripts/ticket-fix/reply.mjs';
-import { replyHold, itemsDigest, itemFollowUpWork, resolveFollowUpWork, finalStates, validResolutions, writeChecklist, renderAgentReply, stillAsked } from '../../scripts/ticket-fix/checklist.mjs';
+import { DATA_FIX_FILE, replyHold, itemsDigest, itemFollowUpWork, resolveFollowUpWork, finalStates, validResolutions, writeChecklist, renderAgentReply, stillAsked } from '../../scripts/ticket-fix/checklist.mjs';
 import { hostFollowUps } from '../../scripts/ticket-fix/stage3.mjs';
+import { sessionEvidence } from '../../scripts/ticket-fix/session-context.mjs';
 import { uuid, privateDir } from './helpers.mjs';
 
 const T = uuid(7001), OWNER = uuid(9701), M1 = uuid(7101), M2 = uuid(7102);
@@ -295,6 +296,87 @@ test('defect 1: an owner decision, a data change and a device check are done onl
   const follow = hostFollowUps({ finals: finalStates({ items: KINDS3, entries }), items: KINDS3, asked: ['AC-3'] });
   assert.deepEqual(follow.map(f => [f.work, f.owner]), [[resolveFollowUpWork('AC-1'), 'support_owner'], [resolveFollowUpWork('AC-2'), 'support_owner'], [resolveFollowUpWork('AC-3'), 'support_owner']]);
 });
+// A bug whose cause was the account's stored data (owner, 2026-11-06, a
+// contract saved on the wrong timezone): the host fixes the data with a
+// reviewed, applied data-fix file and records it; no run can see or fix it.
+const fixFolder = dir => {
+  const fixes = path.join(dir, 'data-fixes'); mkdirSync(fixes, { mode: 0o700 });
+  const log = path.join(dir, 'deploy.log');
+  const add = (name, applied = true) => {
+    writeFileSync(path.join(fixes, name), '-- synthetic\n'); writeFileSync(path.join(fixes, name.replace(/\.sql$/, '.before.json')), '[]');
+    if (applied) writeFileSync(log, `${(() => { try { return readFileSync(log, 'utf8'); } catch { return ''; } })()}2026-11-06T16:28:14Z APPLIED ${name} http 201\n`);
+  };
+  return { fixes, log, add };
+};
+test('a bug item fixed in the data is resolved only with an applied, backed-up data-fix file', () => {
+  const state = privateDir('ticket-data-fix-files-');
+  try {
+    const { fixes, log, add } = fixFolder(state.dir);
+    add('2026-11-06-synthetic-applied.sql');
+    add('2026-11-06-synthetic-unapplied.sql', false);
+    writeFileSync(path.join(fixes, '2026-11-06-synthetic-nobackup.sql'), '-- synthetic\n');
+    writeFileSync(log, `${readFileSync(log, 'utf8')}2026-11-06T16:29:00Z APPLIED 2026-11-06-synthetic-nobackup.sql http 201\n2026-11-06T16:30:00Z FAILED 2026-11-06-synthetic-failed.sql http 400\n`);
+    add('2026-11-06-synthetic-failed.sql', false);
+    symlinkSync(path.join(fixes, '2026-11-06-synthetic-applied.sql'), path.join(fixes, '2026-11-06-synthetic-link.sql'));
+    writeFileSync(path.join(fixes, '2026-11-06-synthetic-link.before.json'), '[]');
+    writeFileSync(log, `${readFileSync(log, 'utf8')}2026-11-06T16:31:00Z APPLIED 2026-11-06-synthetic-link.sql http 201\n`);
+    const opts = { dir: fixes, log };
+    assert.deepEqual(checkDataFixes(['2026-11-06-synthetic-applied.sql', ' 2026-11-06-synthetic-applied.sql'], opts), ['2026-11-06-synthetic-applied.sql']);
+    assert.throws(() => checkDataFixes([], opts), /names the applied data-fix file/);
+    assert.throws(() => checkDataFixes([''], opts), /names the applied data-fix file/);
+    assert.throws(() => checkDataFixes(['2026-11-06-synthetic-unapplied.sql'], opts), /was not applied/);
+    assert.throws(() => checkDataFixes(['2026-11-06-synthetic-failed.sql'], opts), /was not applied/);
+    assert.throws(() => checkDataFixes(['2026-11-06-synthetic-nobackup.sql'], opts), /before\.json is not in the data-fix folder/);
+    assert.throws(() => checkDataFixes(['2026-11-06-synthetic-link.sql'], opts), /regular file/);
+    assert.throws(() => checkDataFixes(['../deploy.log'], opts), /not a data-fix file name/);
+    assert.throws(() => checkDataFixes(['2026-11-06-x.sql/../../y.sql'], opts), /not a data-fix file name/);
+    // A name that only shares a prefix with an applied one is not applied.
+    add('2026-11-06-synthetic-applied.sql.sql', false);
+    assert.throws(() => checkDataFixes(['2026-11-06-synthetic-applied.sql.sql'], opts), /was not applied/);
+    assert.equal(DATA_FIX_FILE.test('2026-11-06-owner-sanford-contracts.sql'), true);
+  } finally { state.cleanup(); }
+});
+test('a bug item\'s data_fix resolution counts only with its files, and the next run sends the completion reply without asking again', async () => {
+  const at = '2026-11-06T10:00:00Z';
+  const items = [ITEMS[0]];
+  assert.equal(validResolutions({ 'AC-1': { kind: 'data_fix', at, note: 'Synthetic.' } }, { items }).size, 0, 'no files named: nothing resolved');
+  assert.equal(validResolutions({ 'AC-1': { kind: 'data_fix', at, note: 'Synthetic.', evidence: ['../x'] } }, { items }).size, 0);
+  assert.equal(validResolutions({ 'AC-1': { kind: 'decision', at, note: 'Synthetic.', evidence: ['2026-11-06-a.sql'] } }, { items }).size, 0, 'a bug item is never an owner decision');
+  assert.equal(validResolutions({ 'AC-2': { kind: 'data_fix', at, note: 'Synthetic.', evidence: ['2026-11-06-a.sql'] } }, { items: [ITEMS[1]] }).size, 0, 'a question is never a data fix');
+  const resolved = validResolutions({ 'AC-1': { kind: 'data_fix', at, note: 'Synthetic.', evidence: ['2026-11-06-a.sql'] } }, { items });
+  assert.deepEqual(finalStates({ items, entries: [{ ac_id: 'AC-1', state: 'not_done', remaining: 'ask for the times' }], resolved }).map(f => [f.state, f.detail]), [['done', 'resolved']]);
+
+  const state = privateDir('ticket-data-fix-bug-');
+  const db = database();
+  try {
+    const { fixes, log, add } = fixFolder(state.dir);
+    add('2026-11-06-synthetic-entry.sql');
+    await writeChecklist(state.dir, { version: 1, ticket_id: T, owner_ticket: false, items, non_asks: [], seen: [T, M1] });
+    const context = await loadQueuedContext(db.query, { id: T, mode: 'reply' }, state.dir);
+    const notDone = [{ id: 'AC-1', state: 'not_done', remaining: 'ask for the times', detail: null }];
+    const open = stage3(notDone, { items }); open.final.claims = []; open.final.follow_up = hostFollowUp(notDone);
+    const waiting = { ...result(), checklist: [{ ac_id: 'AC-1', state: 'not_done', remaining: 'ask for the times', tests: [] }] };
+    waiting.reply = { ...waiting.reply, claims: [] };
+    const held = await finishRun(db.query, state.dir, context, waiting, { stage3: open, codeOutcome: 'none', requireStructured: true });
+    assert.equal(held.kind, 'reply_held');
+    const lock = path.join(state.dir, 'agent.lock');
+    const opts = { lock, dataFixDir: fixes, deployLog: log };
+    await assert.rejects(resolveItem(state.dir, T, 'AC-1', 'data_fix', { note: 'Synthetic.', ...opts, dataFixes: ['2026-11-06-synthetic-missing.sql'] }), /not in the data-fix folder/);
+    const woken = await resolveItem(state.dir, T, 'AC-1', 'data_fix', { note: 'Synthetic: the stored row was corrected.', ...opts, dataFixes: ['2026-11-06-synthetic-entry.sql'] });
+    assert.deepEqual(woken.resolutions['AC-1'].evidence, ['2026-11-06-synthetic-entry.sql']);
+    assert.equal(woken.continuation.state, 'pending');
+    // The worker sees what the host did, so it does not ask about it again.
+    const next = await loadQueuedContext(db.query, { id: T, mode: 'continuation' }, state.dir, { now: Date.now() + 1000 });
+    const view = sessionEvidence(next).view;
+    assert.deepEqual(view.saved_review.resolved_by_host, [{ id: 'AC-1', kind: 'data_fix', note: 'Synthetic: the stored row was corrected.' }]);
+    const finals = finalStates({ items, entries: [{ ac_id: 'AC-1', state: 'done', remaining: '' }], resolved: validResolutions(record(state.dir).resolutions, { items, context: next }) });
+    const done = stage3(finals, { items }); done.final.claims = []; done.resolved = ['AC-1'];
+    const finished = { ...result({ done: true }), checklist: [{ ac_id: 'AC-1', state: 'done', remaining: '', tests: [] }] };
+    finished.reply = { ...finished.reply, claims: [] };
+    const sent = await finishRun(db.query, state.dir, next, finished, { stage3: done, codeOutcome: 'none', requireStructured: true });
+    assert.deepEqual([sent.kind, sent.completion, sent.continuation_state], ['reply_stored', true, 'complete']);
+  } finally { state.cleanup(); }
+});
 test('defect 1: --resolve-item records once, wakes the case without fresh attempts, and the next run sends the completion reply', async () => {
   const state = privateDir('ticket-reply-resolve-');
   const db = database();
@@ -312,7 +394,8 @@ test('defect 1: --resolve-item records once, wakes the case without fresh attemp
     const held = await finishRun(db.query, state.dir, context, waiting, { stage3: open, codeOutcome: 'none', requireStructured: true });
     assert.deepEqual([held.kind, held.continuation_state], ['reply_held', 'waiting_owner']);
     const lock = path.join(state.dir, 'agent.lock');
-    await assert.rejects(resolveItem(state.dir, T, 'AC-1', 'decision', { note: 'Synthetic.', lock }), /bug item; it is resolved by a run/);
+    await assert.rejects(resolveItem(state.dir, T, 'AC-1', 'decision', { note: 'Synthetic.', lock }), /bug item; it is resolved by data_fix/);
+    await assert.rejects(resolveItem(state.dir, T, 'AC-1', 'data_fix', { note: 'Synthetic.', lock, dataFixDir: path.join(state.dir, 'none'), deployLog: path.join(state.dir, 'none.log') }), /names the applied data-fix file/);
     await assert.rejects(resolveItem(state.dir, T, 'AC-2', 'decision', { note: 'Synthetic.', lock }), /resolved by data_fix/);
     const woken = await resolveItem(state.dir, T, 'AC-2', 'data_fix', { note: 'Synthetic title corrected and checked.', lock });
     assert.deepEqual([woken.continuation.state, woken.continuation.attempts], ['pending', 0]);

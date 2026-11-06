@@ -109,6 +109,12 @@ function savedReviewView(record, share) {
     continuation: record.continuation ? { state: record.continuation.state ?? null, attempts: record.continuation.attempts ?? null } : null,
     summary: clip(record.summary, 1200),
     checklist_states: (record.checklist_states ?? []).map(s => ({ id: s.id, state: s.state })),
+    // What the host finished itself (an owner decision, a data change it made,
+    // the reporter's confirmation, a follow-up it closed): done, never asked
+    // about or worked again.
+    resolved_by_host: Object.entries(record.resolutions && typeof record.resolutions === 'object' ? record.resolutions : {}).slice(0, 30)
+      .map(([id, r]) => ({ id, kind: r?.kind ?? null, note: clip(r?.note, 300) })),
+    closed_by_host: (Array.isArray(record.closed_follow_ups) ? record.closed_follow_ups : []).slice(-10).map(f => ({ work: clip(f?.work, 200), note: clip(f?.note, 300) })),
     ...(record.unreleased_claims ? { unreleased_code_outcome: record.unreleased_claims.code_outcome ?? null } : {}) };
   // The pending work keeps its exact text: completed_follow_up must repeat it.
   const pending = (record.pending_follow_up ?? []).map(f => ({ work: f.work, owner: f.owner, next_action: clip(f.next_action, 300) }));

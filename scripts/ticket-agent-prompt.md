@@ -135,6 +135,10 @@ Evidence IDs are validated mechanically and a bad one discards the whole run, re
 - When the target ticket has no messages, its request lives in the ticket `body`; cite the target ticket's own `id`.
 - A fix that exists only as a commit has no ticket or message of its own. Cite the target ticket's `id` (the request it answers), name the revision in the `summary` text, and put it in `verification.release`.
 - `completed_follow_up` may only name work listed in this target's saved `pending_follow_up` from a prior review (`saved_review.pending_follow_up`), with its exact text. On the first review of a ticket there is none, so leave `completed_follow_up` empty and report work you did this run under `prior_fixes` (state `claimed`) and `verification`.
+`saved_review.resolved_by_host` lists items the host finished itself (an owner decision, a
+change it made to this account's data, the reporter's confirmation), and `closed_by_host`
+the follow-ups it closed, each with what it did. Those items are done: mark them `done`,
+never ask the customer about them, never redo them, and do not list their work again.
 Use `customer_confirmed` only for an actual customer confirmation, not an agent's own
 “fixed” reply. Saved reviews are fallible working notes: prefer newer source messages
 and preserve unresolved follow-through rather than repeating an outdated summary.
