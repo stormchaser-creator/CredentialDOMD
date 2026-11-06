@@ -48,7 +48,7 @@ const zoneName = (zone) => {
   return named ? `${ZONE_NAMES[named]} time` : zone;
 };
 const zoneMismatch = (where, zone) => `This facility (${where.state}) is on ${zoneName(where.zone)}, but the times are set to ${zoneName(zone)}.`;
-const zoneGuess = (where) => `Most of ${where.state} is on ${zoneName(where.zone)}, and the Location does not say which part this facility is in: check it.`;
+const zoneGuess = (where) => `Most of ${where.state} is on ${zoneName(where.zone)}, but part of it keeps another time: check the zone for this facility.`;
 // What the form says about the zone: off (a known facility zone keeps another
 // clock), guess (the zone most of a split state keeps), or set from the
 // facility. A zone that only differs in name (America/Boise) is not off.

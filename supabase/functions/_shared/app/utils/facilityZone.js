@@ -47,8 +47,8 @@ const SPLIT = Object.freeze({
     [CT]: ["wichita", "topeka", "kansas city", "overland park", "olathe", "lawrence", "manhattan", "salina", "hutchinson", "hays", "dodge city", "garden city", "liberal", "emporia", "pittsburg", "great bend", "colby"],
     [MT]: ["goodland", "tribune", "syracuse", "sharon springs"] } },
   TX: { most: CT, cities: {
-    [CT]: ["houston", "dallas", "san antonio", "austin", "fort worth", "lubbock", "amarillo", "midland", "odessa", "corpus christi", "waco", "tyler", "abilene", "laredo", "mcallen", "brownsville", "beaumont", "temple", "killeen", "san angelo", "wichita falls", "longview", "plano", "harlingen", "edinburg", "bryan", "college station", "victoria", "big spring", "alpine", "fort stockton", "pecos"],
-    [MT]: ["el paso", "van horn", "dell city", "sierra blanca", "fabens", "horizon city", "socorro", "canutillo", "anthony"] } },
+    [CT]: ["van horn", "houston", "dallas", "san antonio", "austin", "fort worth", "lubbock", "amarillo", "midland", "odessa", "corpus christi", "waco", "tyler", "abilene", "laredo", "mcallen", "brownsville", "beaumont", "temple", "killeen", "san angelo", "wichita falls", "longview", "plano", "harlingen", "edinburg", "bryan", "college station", "victoria", "big spring", "alpine", "fort stockton", "pecos"],
+    [MT]: ["el paso", "dell city", "sierra blanca", "fabens", "horizon city", "socorro", "canutillo", "anthony"] } },
   FL: { most: ET, cities: {
     [ET]: ["miami", "orlando", "tampa", "jacksonville", "tallahassee", "gainesville", "fort lauderdale", "west palm beach", "st petersburg", "sarasota", "fort myers", "naples", "ocala", "daytona beach", "lakeland", "melbourne", "port st lucie"],
     [CT]: ["pensacola", "panama city", "panama city beach", "santa rosa beach", "gulf breeze", "navarre", "fort walton beach", "destin", "crestview", "niceville", "marianna", "milton", "defuniak springs", "chipley"] } },
@@ -75,10 +75,10 @@ const SPLIT = Object.freeze({
     [MT]: ["west wendover", "jackpot"] } },
   // The Navajo Nation keeps Mountain daylight time; the rest of Arizona, the
   // Hopi towns included, keeps Arizona time all year.
-  AZ: { most: AZ, cities: {
+  AZ: { most: AZ, mostSure: true, cities: {
     [AZ]: ["phoenix", "tucson", "mesa", "scottsdale", "tempe", "chandler", "gilbert", "glendale", "flagstaff", "yuma", "prescott", "sierra vista", "lake havasu city", "kingman", "bullhead city", "show low", "payson", "casa grande", "nogales", "page", "winslow", "holbrook", "keams canyon", "polacca", "safford", "douglas", "cottonwood", "sedona", "peoria", "surprise", "goodyear"],
     [MT]: ["chinle", "tuba city", "fort defiance", "window rock", "kayenta", "ganado", "many farms", "shonto", "kaibeto", "dilkon"] } },
-  AK: { most: AKT, cities: {
+  AK: { most: AKT, mostSure: true, cities: {
     [AKT]: ["anchorage", "fairbanks", "juneau", "sitka", "ketchikan", "bethel", "kodiak", "nome", "soldotna", "wasilla", "palmer", "kenai", "homer", "barrow", "utqiagvik"] } },
 });
 
@@ -101,9 +101,10 @@ function clean(location) {
 // -> { city, state, marked }. The state is the last comma part that names one
 // (whole, or its last word or two: "Fargo ND 58122"), the city text is
 // everything before it. Otherwise a last word or two that is a state code
-// written in capitals ("ND") or a full name counts, but `marked` is false: a
-// bare "Washington" is as often the DC or Pennsylvania town, and "Main OR"
-// an operating room.
+// written in capitals ("Fargo ND") or a full name counts. Only a code in
+// capitals after a place marks it: "Mary Washington" is a Virginia hospital,
+// and a bare "Washington" is as often the DC or Pennsylvania town. ("Main OR"
+// reads as Oregon, a split state, so it is still a guess without a town.)
 function parseLocation(location) {
   const text = clean(location);
   if (!text) return { city: "", state: null, marked: false };
@@ -115,12 +116,13 @@ function parseLocation(location) {
   const words = parts.join(" ").split(" ").filter(Boolean);
   for (const n of [2, 1]) {
     if (words.length < n) continue;
-    const tail = words.slice(-n).join(" ");
+    const tail = words.slice(-n).join(" ").replace(/\./g, "");
     // A two letter word counts only as written in capitals ("ND", not "or").
-    if (n === 1 && !/^[A-Z]{2}$/.test(tail) && !/^[A-Za-z]{3,}$/.test(tail)) continue;
     if (n === 1 && /^[a-z]{2}$/i.test(tail) && tail !== tail.toUpperCase()) continue;
     const state = canonicalState(tail);
-    if (state) return { city: fold(words.slice(0, -n).join(" ")), state, marked: false };
+    // After a place ("Fargo ND", "Washington DC"), a code in capitals or a
+    // full state name marks the state; on its own ("Washington") it does not.
+    if (state) return { city: fold(words.slice(0, -n).join(" ")), state, marked: words.length > n && /^[A-Z]{2}$/.test(tail) };
   }
   return { city: "", state: null, marked: false };
 }
@@ -152,10 +154,13 @@ export function facilityZone({ workState, location } = {}) {
   if (ONE_ZONE[state]) return { zone: ONE_ZONE[state], state, sure };
   const split = SPLIT[state];
   if (!split) return { zone: "", state, sure: false };
-  // A city from the Location counts only when it is in the Work state.
-  const zone = parsed.state === state ? cityZone(split, parsed.city) : "";
-  if (zone) return { zone, state, sure };
-  return { zone: split.most, state, sure: false };
+  // A city from the Location counts only in the Work state; a Location that
+  // names no state ("El Paso" with Work state TX) is all city.
+  const city = parsed.state === state ? parsed.city : parsed.state ? "" : fold(clean(location));
+  const zone = cityZone(split, city);
+  if (zone) return { zone, state, sure: Boolean(chosen) || parsed.marked || !parsed.state };
+  // Arizona and Alaska: the rest of the state keeps one clock, so it is no guess.
+  return { zone: split.most, state, sure: Boolean(split.mostSure) && sure };
 }
 
 // Two zones keep the same clock when their offsets agree in winter and in

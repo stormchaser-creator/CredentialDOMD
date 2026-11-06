@@ -26,7 +26,7 @@ test('the facility zone comes from the state, and from the city in a state split
   assert.deepEqual(z({ location: 'Coeur d’Alene, ID' }), ['America/Los_Angeles', true]);
   assert.deepEqual(z({ workState: 'CA' }), ['America/Los_Angeles', true]);
   assert.deepEqual(z({ location: 'Loveland, CO' }), ['America/Denver', true]);
-  assert.deepEqual(z({ workState: 'AZ' }), ['America/Phoenix', false], 'Arizona with no city: the Navajo Nation keeps Mountain time');
+  assert.deepEqual(z({ workState: 'AZ' }), ['America/Phoenix', true], 'Arizona keeps Arizona time outside the Navajo Nation');
   // A city counts only in the Work state.
   assert.deepEqual(z({ workState: 'TX', location: 'El Paso, NM' }), ['America/Chicago', false]);
   assert.deepEqual(z({ location: 'Somewhere' }), ['', false]);
@@ -44,12 +44,20 @@ test('the facility zone comes from the state, and from the city in a state split
   // The Navajo Nation keeps Mountain daylight time; the rest of Arizona does not.
   assert.deepEqual(z({ location: 'Chinle, AZ' }), ['America/Denver', true]);
   assert.deepEqual(z({ location: 'Flagstaff, AZ' }), ['America/Phoenix', true]);
-  assert.deepEqual(z({ location: 'Somewhere, AZ' }), ['America/Phoenix', false]);
+  assert.deepEqual(z({ location: 'Somewhere, AZ' }), ['America/Phoenix', true]);
   // Loose words are never sure: an operating room, a hospital named for a state, a bare state name.
   assert.deepEqual(z({ location: 'Synthetic Clinic, Main OR' }).at(1), false);
   assert.deepEqual(z({ location: 'Mary Washington' }).at(1), false);
   assert.deepEqual(z({ location: 'Washington' }).at(1), false);
-  assert.deepEqual(z({ location: 'Fargo ND' }), ['America/Chicago', false]);
+  // A code in capitals or a state name after a place marks the state.
+  assert.deepEqual(z({ location: 'Fargo ND' }), ['America/Chicago', true]);
+  assert.deepEqual(z({ location: 'Washington D.C.' }), ['America/New_York', true]);
+  assert.deepEqual(z({ location: 'Sanford Medical Center, Fargo ND 58122' }), ['America/Chicago', true]);
+  // A Location that is only a city, with the Work state.
+  assert.deepEqual(z({ workState: 'TX', location: 'El Paso' }), ['America/Denver', true]);
+  assert.deepEqual(z({ workState: 'ND', location: 'CHI St Alexius Dickinson' }), ['America/Denver', true]);
+  // Van Horn (Culberson County) keeps Central time.
+  assert.deepEqual(z({ location: 'Van Horn, TX' }), ['America/Chicago', true]);
   assert.deepEqual(z({ location: 'San Juan, PR' }), ['America/Puerto_Rico', true]);
   // Zones that keep the same clock under another name.
   assert.equal(sameClock('America/Boise', 'America/Denver'), true);
@@ -131,7 +139,7 @@ test('a state split between zones with no known city is named, never confirmed o
   input(m, 'Block 1 start time (optional)').props.onChange({ target: { value: '06:00' } });
   input(m, 'Block 1 end date').props.onChange({ target: { value: '2026-11-12' } });
   input(m, 'Block 1 end time (optional)').props.onChange({ target: { value: '06:00' } });
-  const guess = /Most of ND is on Central time, and the Location does not say which part this facility is in: check it\./;
+  const guess = /Most of ND is on Central time, but part of it keeps another time: check the zone for this facility\./;
   assert.match(textOf(zoneCheck(m.render())), guess);
   // Nobody picked the guess: asked once before it is saved.
   answer = false;
