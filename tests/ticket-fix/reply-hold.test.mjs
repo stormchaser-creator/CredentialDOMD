@@ -602,3 +602,28 @@ test('N7 and noted: attention.json says when the reporter wrote since; a case no
     assert.deepEqual((await collectQueue(db.query, state.dir, { now: Date.now() + HOUR })).waiting_owner, [T], 'the case changed: back on the list');
   } finally { state.cleanup(); }
 });
+test('the host\'s own follow-up for an open item cannot be closed by hand, and a closed copy never hides it while the item is open', async () => {
+  const state = privateDir('ticket-reply-host-work-');
+  const db = database({ awaiting: false });
+  const items = [ITEMS[0], { ...ITEMS[1], kind: 'data_fix' }];
+  try {
+    await writeChecklist(state.dir, { version: 1, ticket_id: T, owner_ticket: false, items, non_asks: [], seen: [T, M1] });
+    const context = await loadQueuedContext(db.query, { id: T, mode: 'reply' }, state.dir);
+    const open = stage3([DONE[0], { id: 'AC-2', state: 'needs_owner', remaining: 'correct the stored title', detail: null }], { items });
+    open.final.claims = open.final.claims.slice(0, 1);
+    open.final.follow_up = hostFollowUps({ finals: open.final.items, items, waiting: true });
+    const waiting = { ...result(), needs_owner_review: true, reply: { ...result().reply, claims: result().reply.claims.slice(0, 1) },
+      checklist: [{ ac_id: 'AC-1', state: 'done', remaining: '', tests: [TEST] }, { ac_id: 'AC-2', state: 'needs_owner', remaining: 'correct the stored title', tests: [] }],
+      assessment: { ...result().assessment, follow_up: [{ work: 'Owner corrects the stored title', owner: 'support_owner', next_action: 'Synthetic.' }] } };
+    await saveReview(state.dir, context, waiting, null, { stage3: open });
+    const host = resolveFollowUpWork('AC-2');
+    const lock = path.join(state.dir, 'agent.lock');
+    await assert.rejects(closeFollowUp(state.dir, T, host, { note: 'Synthetic.', lock }), /host's own work for AC-2, which is not done; record its resolution/);
+    // A closing already on record (from before this guard) does not hide it.
+    const saved = record(state.dir);
+    writeFileSync(path.join(state.dir, `${T}.json`), JSON.stringify({ ...saved, closed_follow_ups: [{ work: host, at: saved.recorded_at, note: 'Synthetic.' }] }), { mode: 0o600 });
+    await saveReview(state.dir, context, waiting, null, { stage3: open });
+    assert.ok(record(state.dir).pending_follow_up.some(f => f.work === host), 'still open while AC-2 is open');
+    assert.equal(record(state.dir).continuation.state, 'waiting_owner');
+  } finally { state.cleanup(); }
+});

@@ -747,6 +747,12 @@ export async function closeFollowUp(directory, ticketId, key, { note = '', now =
     const entry = pending[index];
     if (!entry) throw Error('No open follow-up with that index or work text');
     if (entry.owner !== 'support_owner') throw Error('Only an owner follow-up is closed by hand; a run closes the worker\'s');
+    // The host's own work for an item ("Record how AC-n was resolved") closes
+    // only when the host decides the item done: record the resolution with
+    // --resolve-item instead (review: closing it hid an open data_fix).
+    const states = Array.isArray(record.checklist_states) ? record.checklist_states : [];
+    const item = [...entry.work.matchAll(/\bAC-\d{1,3}\b/g)].map(m => m[0]).find(ac => hostItemWork(ac).some(w => questionKey(w) === questionKey(entry.work)));
+    if (item && states.find(f => f.id === item)?.state !== 'done') throw Error(`That is the host's own work for ${item}, which is not done; record its resolution with --resolve-item`);
     record.pending_follow_up = pending.filter((_, i) => i !== index);
     record.closed_follow_ups = [...(record.closed_follow_ups ?? []), { work: entry.work, at: new Date(now).toISOString(), note: text }];
     wake(record, now);
@@ -801,9 +807,12 @@ function outstandingWork(previous, result, stage3) {
   for (const done of result.assessment.completed_follow_up) outstanding.delete(questionKey(done.work));
   for (const f of Array.isArray(stage3?.final?.items) ? stage3.final.items : []) if (f.state === 'done') for (const work of hostItemWork(f.id)) outstanding.delete(questionKey(work));
   // An owner follow-up closed by hand (closeFollowUp) stays closed when a
-  // run lists the same work again.
+  // run lists the same work again, except the host's own work for an item
+  // this run left open: that one is the item's only way to the owner.
+  const openItems = (Array.isArray(stage3?.final?.items) ? stage3.final.items : []).filter(f => f.state !== 'done');
   for (const closed of Array.isArray(previous?.closed_follow_ups) ? previous.closed_follow_ups : []) {
     const open = outstanding.get(questionKey(closed.work));
+    if (openItems.some(f => hostItemWork(f.id).some(w => questionKey(w) === questionKey(closed.work)))) continue;
     if (open?.owner === 'support_owner') outstanding.delete(questionKey(closed.work));
   }
   return outstanding;

@@ -135,7 +135,8 @@ what happened.
      a check you made) is closed once, with what you did in one line:
      `TICKET_RESOLUTION_NOTE='<one line>' node scripts/ticket-agent-context.mjs --close-follow-up <ticket id> <index in pending_follow_up or its exact work text> "$HOME/Library/Application Support/CredentialDOMD/ticket-context"`
      (same lock; never while the case is queued; a worker follow-up is the
-     run's, never closed by hand). With every item done and nothing else
+     run's, never closed by hand, and "Record how AC-n was resolved" closes
+     only through `--resolve-item`). With every item done and nothing else
      open, the next run sends the one completion reply. Otherwise note it under `## For the
      owner` (the ticket's first 8 characters and what is needed, one line)
      and mark it noted once, so it stops appearing until the case changes:
