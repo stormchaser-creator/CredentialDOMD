@@ -78,7 +78,7 @@
 import { KINDS, parseAsks, asksSomething, hasAskForm, asksInSubject, isListItem, classifyAsk } from "./requestPacket.ts";
 import { classifyIntent, currentMessage } from "./intakeIntent.mjs";
 import { decodeEntities, normalizeForQuote, quoteKey, quoteOccurs } from "./quoteText.mjs";
-import { RECORDS_SCHEMA, RECORDS_PROMPT, verifyRecords, attachmentText, rulesRecords, attachmentWordsIdentify } from "./intakeFacts.mjs";
+import { RECORDS_SCHEMA, RECORDS_PROMPT, verifyRecords, attachmentText, rulesRecords, attachmentWordsIdentify, requestedInWords } from "./intakeFacts.mjs";
 
 // The model Vera runs on (src/utils/assistant.js anthropicTurn), and the one
 // ai-proxy's allowlist and the price table already carry.
@@ -157,7 +157,7 @@ Decide the intent:
 - informational: the sender explains, confirms or announces something and asks the physician for nothing. Attachments may ride along: a letter that states facts about the physician's coverage, privileges, licences or CME and attaches a document for reference is informational, not a delivery.
 - mixed: a delivery and a request in one email.
 
-An ask is something the sender asks the PHYSICIAN to do or send. For each ask, quote the words of the sender's message (or of the subject) that make it: copy them exactly, as one unbroken span, with no paraphrase, no ellipsis, no corrected spelling and nothing added. The physician's own note is not the sender's, and the quoted history counts only when the sender's message points to it ("following up on the below"). When the sender's request is written inside an attachment (a letter, memo, checklist or form asking the physician for documents, often under a message such as "See attached"), quote the ask from that attachment's words as listed under <attachments>, copied exactly the same way. A requirement put on the physician's own file, application or start date is an ask of the physician, however it is worded ("your file is incomplete until we receive your BLS card", "a current TB test is required before your start date", "the committee requires an updated CV"). Do not list as an ask:
+An ask is something the sender asks the PHYSICIAN to do or send. For each ask, quote the words of the sender's message (or of the subject) that make it: copy them exactly, as one unbroken span, with no paraphrase, no ellipsis, no corrected spelling and nothing added. The physician's own note is not the sender's, and the quoted history counts only when the sender's message points to it ("following up on the below"). When the sender's request is written inside an attachment (a letter, memo, checklist or form asking the physician for documents, often under a message such as "See attached"), quote the ask from what that attachment is listed as asking for under <attachments> (its requestedItem and requestLeadIn lines), copied exactly the same way. A requirement put on the physician's own file, application or start date is an ask of the physician, however it is worded ("your file is incomplete until we receive your BLS card", "a current TB test is required before your start date", "the committee requires an updated CV"). Do not list as an ask:
 - a statement, explanation or policy that applies to everyone ("Proof of coverage is required for every provider", "The policy covers emergency care"), even when it names a document;
 - an offer of help ("let us know if you have questions");
 - something the sender or someone else will do;
@@ -498,22 +498,26 @@ function unitsHolding(q, idx) {
   return idx.spans.filter((s) => s.start < at + q.length && s.end > at);
 }
 
-// A scanner field's key at the head of a line of attachmentText ("notes: ",
-// "issuer: ", or "notes:" alone over the scan's own lines): one word in
-// lower camel case, as the scanner names its fields. A line of the letter's
-// own, "Please provide the following:", is never one.
-const FIELD_LABEL_RE = /^[a-z][A-Za-z0-9]{0,30}:(?:\s+|$)/;
-
-/** An attachment's words (intakeFacts.mjs attachmentText) with each line's field label taken off, so the units are the letter's own. */
-const attachmentWords = (text) => String(text ?? "").split("\n").map((l) => l.replace(FIELD_LABEL_RE, "")).join("\n");
-
-// The sender's message points at what is attached AS what it asks: "see
-// attached", "per the attached", "please complete the attached", "the
-// attached letter (checklist, form, list, memo)". The bare word "attached"
-// does not: "Attached is my new hospital ID badge" delivers a badge.
-const POINTS_ATTACHED_RE = /\bsee (?:the )?(?:attached|enclosed|attachments?)\b|\bper the (?:attached|enclosed)\b|\b(?:complete|review|fill out|fill in|sign|return|read)(?: and (?:sign|return|send back))? the (?:attached|enclosed)\b|\b(?:attached|enclosed) (?:letter|request|checklist|form|forms|list|memo|questionnaire|application|packet)\b|\bchecklist\b/i;
+// The sender's message mentions what is attached ("Attached are the items
+// we need", "Please find attached our request"): on the model path, with a
+// reading that called the email a request, that is enough to read a listed
+// item of the attachment as asked.
+const POINTS_ATTACHED_RE = /\b(?:attached|enclosed|attachment|attachments|checklist)\b/i;
+// The message points at what is attached AS what it asks: "see attached",
+// "per the attached", "please complete the attached", "the attached letter
+// (checklist, form, list, memo)". Only this turns a delivery the rules read
+// into a request: "Attached is my new hospital ID badge" delivers a badge.
+const POINTS_AS_REQUEST_RE = /\bsee (?:the )?(?:attached|enclosed|attachments?)\b|\bper the (?:attached|enclosed)\b|\b(?:complete|review|fill out|fill in|sign|return|read)(?: and (?:sign|return|send back))? the (?:attached|enclosed)\b|\b(?:attached|enclosed) (?:letter|request|checklist|form|forms|list|memo|questionnaire|application|packet)\b|\bchecklist\b/i;
 // The roles in which an attachment is itself the list of what is asked.
 const ASKING_ROLES = new Set(["request_checklist", "form_to_complete"]);
+// The roles in which an attachment is the physician's own, to keep: its
+// words are never the sender's asks.
+const KEEPING_ROLES = new Set(["credential_for_physician", "agreement_or_contract"]);
+// A list's lead-in read as an ask of its own ("the following", "these
+// items"): it names nothing.
+const LEAD_IN_RE = /^(?:(?:the|these|this|those|all)\s+)?(?:following|below|above|items?|documents?|information|materials?|attached|enclosed)(?:\s+(?:items?|documents?|information|materials?|list))*$/i;
+/** Does a lead-in ask for something it names itself ("the operative notes for the following cases"), not only for a list? */
+const leadInNames = (s) => hasAskForm(s) && parseAsks(s, "").some((a) => !LEAD_IN_RE.test(quoteKey(a)));
 
 /**
  * Does `text` hold `q` with a few characters' difference: at most one edit
@@ -579,17 +583,18 @@ const RANK = { high: 3, medium: 2, low: 1 };
  * coverage is required for every provider on our panel", is dropped. On
  * 2026-09-28 that statement was the whole of the "request".
  *
- * An ask may also be quoted from an attachment's words (facts.attachments,
- * one string per attachment in the order they were listed, intakeFacts.mjs
- * attachmentText), only on a reading that calls the email a request (or
- * mixed): kept with from "attachment" when its sentence asks, or, for an
- * item listed without asking words, when it sits in a list under a line of
- * that attachment that asks, or the reading gave that attachment the role
- * request_checklist or form_to_complete and the message points to what is
- * attached. Anything else found only in an attachment is not the email's
- * own words; an ask that carries an identifying number is dropped. Such a
- * reading is at most medium confidence, so it is never acknowledged on its
- * own and never one tap.
+ * An ask may also be quoted from what an attachment requests
+ * (facts.attachments, one string per attachment in the order they were
+ * listed: intakeFacts.mjs attachmentText's requestedItem and requestLeadIn
+ * lines, the kind of each document asked for, never the letter's free
+ * words), only on a reading that calls the email a request (or mixed) and
+ * never from a file it took for the physician's own: a requested item when
+ * the lead-in asks, the reading took the file for a checklist or a form, or
+ * the message mentions what is attached; the lead-in when it names what it
+ * asks for. Anything else found only in an attachment is not the email's
+ * own words; an ask that carries an identifier is dropped. Such a reading is
+ * at most medium confidence, so it is never acknowledged on its own and
+ * never one tap.
  *
  * Returns { method: "model", intent, modelIntent, asks: [{ quote, kind,
  * from }], dropped: [{ quote, why }], attachments: [{ index, role, filing }]
@@ -624,7 +629,10 @@ export function verifyUnderstanding(value, { subject = "", parts = null, emailTe
   // checklist is still the sender's ask (2026-11-05: a forward that said
   // "See attached." over a hospital's request letter was read as asking
   // nothing).
-  const attached = (Array.isArray(facts?.attachments) ? facts.attachments : []).map((t) => indexUnits(attachmentWords(t)));
+  // What each attachment asks for, as the host kept it from the scanner
+  // (intakeFacts.mjs attachmentText: the generic kind of each document
+  // requested and the asking sentence, never the letter's own free words).
+  const attached = (Array.isArray(facts?.attachments) ? facts.attachments : []).map((t) => requestedInWords(t));
   const pointsAttached = POINTS_ATTACHED_RE.test(String(p.message ?? "")) || POINTS_ATTACHED_RE.test(String(subject ?? ""));
 
   const byIndex = new Map();
@@ -635,29 +643,27 @@ export function verifyUnderstanding(value, { subject = "", parts = null, emailTe
   }
   const attachments = [...byIndex.values()].sort((x, y) => x.index - y.index);
   const keepsFiles = attachments.some((a) => a.role === "credential_for_physician" || a.role === "agreement_or_contract");
-  // An ask read in an attachment counts when its sentence asks; an item
-  // listed without asking words ("Current BLS card") counts when it sits in
-  // a list under a line of that attachment that asks, or when the reading
-  // took that attachment for the list of what is asked AND the message
-  // points to what is attached. Anything else in an attachment is not the
-  // sender's asking words, and is dropped as such (so a reading that rested
-  // on it goes to the rules).
   // An ask read in an attachment counts only on a reading that calls the
   // email a request: an informational letter or a delivery whose attached
   // certificate says "please provide a copy of this certificate to ..." asks
-  // the physician for nothing, and is entered, not answered.
+  // the physician for nothing, and is entered, not answered. And never from
+  // a file the reading took for the physician's own credential or
+  // agreement. A requested item counts when the attachment's lead-in asks,
+  // the reading took the file for the list of what is asked, or the message
+  // mentions what is attached; the lead-in counts when it names what it
+  // asks for. Anything else is not the sender's asking words, and is dropped
+  // as such (so a reading that rested on it goes to the rules).
   const modelIntent = INTENTS.includes(value?.intent) ? value.intent : null;
   const attachmentAsksCount = modelIntent === "request" || modelIntent === "mixed";
-  const attachedAsked = attached.map((idx) => idx.spans.some((u) => !u.item && hasAskForm(u.text) && !OFFER_RE.test(u.text)));
-  const askingInAttachment = (units, i) => {
-    if (units.some((u) => OFFER_RE.test(u.text))) return false;
-    if (units.some((u) => !u.item && hasAskForm(u.text))) return true;
-    // Items of a list under a line of the same attachment that asks.
-    if (units.every((u) => u.item) && attachedAsked[i]) return true;
-    // The reading took the file for the list of what is asked, and the
-    // message points to it.
-    return ASKING_ROLES.has(byIndex.get(i)?.role) && pointsAttached;
-  };
+  const askedIn = (q) => attached.map((r, i) => {
+    const role = byIndex.get(i)?.role;
+    if (KEEPING_ROLES.has(role)) return null;
+    const item = r.items.some((it) => normalizeForQuote(it).includes(q));
+    const lead = !!r.leadIn && normalizeForQuote(r.leadIn).includes(q);
+    if (!item && !lead) return null;
+    const ok = (item && (hasAskForm(r.leadIn) || ASKING_ROLES.has(role) || pointsAttached)) || (lead && leadInNames(r.leadIn));
+    return { i, ok };
+  }).filter(Boolean);
 
   const asks = [];
   const dropped = [];
@@ -679,10 +685,10 @@ export function verifyUnderstanding(value, { subject = "", parts = null, emailTe
     else if (inSubject || inMessage) { drop(DROP.notAsking); continue; }
     else if (inHistory) { drop(pointsBelow ? DROP.notAsking : DROP.history); continue; }
     else {
-      const inAttachment = attached.map((idx, i) => ({ i, units: unitsHolding(q, idx) })).filter((h) => h.units && h.units.length);
+      const inAttachment = askedIn(q);
       const close = inAttachment.length ? null : message.spans.find((s) => nearlyContains(s.norm, q));
       if (inAttachment.length) {
-        if (!attachmentAsksCount || !inAttachment.some((h) => askingInAttachment(h.units, h.i))) { drop(DROP.notOwnWords); continue; }
+        if (!attachmentAsksCount || !inAttachment.some((h) => h.ok)) { drop(DROP.notOwnWords); continue; }
         // The quote is stored in the request and shown to the physician.
         if (attachmentWordsIdentify(null, quote)) { drop(DROP.identifier); continue; }
         from = "attachment";
@@ -798,33 +804,6 @@ export function asksToSign(asks) {
 
 // ─── The fallback ────────────────────────────────────────────────────────────
 
-const loose = (s) => normalizeForQuote(s).replace(/[^a-z0-9]+/g, " ").trim();
-
-/**
- * An attachment's words as the rules read them for asks: only the scan's
- * notes and an "other" document's facts, never the scanner's own fields
- * ("name: Hospital ID Badge", "issuer: ..."), which say what the file is and
- * ask nothing; and the lines under a lead-in that asks ("Please provide the
- * following documents:") read as that list's items, bullet or not.
- */
-function checklistLines(text) {
-  const out = [];
-  let under = false;
-  for (const line of String(text ?? "").split("\n")) {
-    const key = line.match(FIELD_LABEL_RE);
-    if (key && !/^notes:/.test(line)) { under = false; continue; }
-    const l = line.replace(FIELD_LABEL_RE, "").trim();
-    if (!l) { out.push(""); under = false; continue; }
-    if (/:$/.test(l) && hasAskForm(l)) { out.push(l); under = true; continue; }
-    out.push(under && !isListItem(l) ? `- ${l}` : l);
-  }
-  return out.join("\n");
-}
-
-// A list's lead-in read as an ask of its own ("the following", "these
-// items"): it names nothing.
-const LEAD_IN_RE = /^(?:(?:the|these|this|those|all)\s+)?(?:following|below|above|items?|documents?|information|materials?|attached|enclosed)(?:\s+(?:items?|documents?|information|materials?|list))*$/i;
-
 // The scanner's types for a document that is not a credential, a receipt or
 // an agreement: where a letter or a checklist that asks is read. The rules
 // read asks only there, so a certificate's own boilerplate ("Please provide
@@ -833,39 +812,27 @@ export const LETTER_SCAN_TYPES = Object.freeze(["other", "unknown"]);
 
 /**
  * The asks the rules read in the attachments' words (intakeFacts.mjs
- * attachmentText, one string per attachment), each kept only when the
- * sentence it sits in asks, or when it is an item of a list under a line of
- * the same attachment that asks ("Please provide the following:"). A letter
- * that only states things ("Your DEA registration was verified") gives none,
- * and neither does a list's lead-in or an ask that carries an identifying
- * number (its words are stored with the request).
+ * attachmentText, one string per attachment): each requested item the host
+ * kept from the scanner (the generic kind of a document, "Current DEA
+ * certificate"), and the lead-in when it names what it asks for itself
+ * ("Please provide the operative notes for the following cases") and no
+ * item was kept. Never a list's lead-in alone, and never an ask that
+ * carries an identifier (its words are stored with the request).
  */
 export function attachmentAsks(words) {
   const out = [];
   const seen = new Set();
+  const add = (a) => {
+    const key = quoteKey(a);
+    if (!key || seen.has(key) || LEAD_IN_RE.test(key) || attachmentWordsIdentify(null, a)) return;
+    seen.add(key);
+    out.push(a);
+  };
   for (const raw of Array.isArray(words) ? words : []) {
-    const text = checklistLines(raw);
-    if (!text.trim()) continue;
-    const idx = indexUnits(text);
-    const listAsked = idx.spans.some((u) => !u.item && hasAskForm(u.text) && !OFFER_RE.test(u.text));
-    // parseAsks reads a list's items and nothing else when the text has a
-    // list, so each asking sentence outside the list is read on its own too
-    // (a lead-in that ends in a colon is the list's, not an ask).
-    const sentences = idx.spans.filter((u) => !u.item && hasAskForm(u.text) && !/:\s*$/.test(u.text)).flatMap((u) => parseAsks(u.text, ""));
-    for (const a of [...parseAsks(text, ""), ...sentences]) {
-      // parseAsks tidies what it returns ("DEA Registration: current copy"
-      // comes back without its colon), so its units are found by words.
-      const held = unitsHolding(normalizeForQuote(a), idx) || idx.spans.filter((u) => ` ${loose(u.text)} `.includes(` ${loose(a)} `));
-      if (!held || !held.length || held.some((u) => OFFER_RE.test(u.text))) continue;
-      const asking = held.some((u) => !u.item && hasAskForm(u.text)) || (held.every((u) => u.item) && listAsked);
-      const key = quoteKey(a);
-      // A rules ask from an attachment names a document: a badge's "Please
-      // present this badge at the security desk" asks the physician for none.
-      if (!asking || seen.has(key) || LEAD_IN_RE.test(key) || attachmentWordsIdentify(null, a) || classifyAsk(a).kind === "unknown") continue;
-      seen.add(key);
-      out.push(a);
-      if (out.length >= MAX_ASKS) return out;
-    }
+    const { leadIn, items } = requestedInWords(raw);
+    for (const it of items) add(it);
+    if (!items.length && leadIn && leadInNames(leadIn)) for (const a of parseAsks(leadIn, "")) add(a);
+    if (out.length >= MAX_ASKS) return out.slice(0, MAX_ASKS);
   }
   return out;
 }
@@ -893,7 +860,8 @@ const cleanSubjectLine = (s) => String(s ?? "").replace(/^\s*(?:(?:re|fwd?|fw|tr
  * "attachment" and never on their own warrant an acknowledgement
  * (ackWarranted); an ask of the email's own that only points to the
  * attachment ("See attached") gives way to them. A delivery stays a delivery
- * unless the message points to what is attached.
+ * unless the message points to the attachment as what it asks
+ * (POINTS_AS_REQUEST_RE: "see attached", not "Attached is my badge").
  */
 export function rulesUnderstanding({ subject = "", body = "", attachmentNames = [], attachmentCount, forwarded = false, why = "", attachmentWords = [], attachmentTypes = [] } = {}) {
   const rules = classifyIntent({ subject, body, attachmentNames, attachmentCount, forwarded });
@@ -905,7 +873,7 @@ export function rulesUnderstanding({ subject = "", body = "", attachmentNames = 
   const message = currentMessage(body);
   // A delivery stays a delivery unless the message points to the attachment
   // as what it asks; then, and on any other reading, the attachment's asks count.
-  const delivery = rules.intent === "delivery" && !(read.length && POINTS_ATTACHED_RE.test(message));
+  const delivery = rules.intent === "delivery" && !(read.length && POINTS_AS_REQUEST_RE.test(message));
   const fromFiles = delivery ? [] : read;
   const asks = fromFiles.length ? parsed.filter((a) => !(POINTS_ATTACHED_RE.test(a) && classifyAsk(a).kind === "unknown")) : parsed;
   const asking = asks.length > 0 || fromFiles.length > 0 || asksSomething(body, subject);

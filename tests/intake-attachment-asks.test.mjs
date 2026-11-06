@@ -4,47 +4,48 @@
 // pointer to its PDF: the PDF was a hospital's letter asking for documents.
 // Nothing in it was read. Three defects stacked:
 //   - the scanner's prompt knows credentials and receipts, so the letter
-//     came back nearly empty, and attachmentText read only the flat
-//     extracted fields (never the scan's notes or an "other" document's
-//     facts), so the letter's words reached neither the model nor the host;
+//     came back nearly empty, and the reading was shown nothing it asked;
 //   - verifyUnderstanding checked an ask's quote against the subject, the
-//     note, the message and the history, never the attachments' words, so an
-//     ask quoted from the letter was dropped and the rules read the email;
+//     note, the message and the history, never the attachments, so an ask
+//     taken from the letter was dropped and the rules read the email;
 //   - the rules never read the attachments at all.
 // And the model call itself had failed with a 400 whose reason was thrown
 // away (intakeModelCall.ts kept only the status).
+//
+// Passing the scanner's free notes on (the first attempt) leaked whatever a
+// letter said: a case list names patients with dates, and four rounds of
+// review kept finding a name shape the guesses missed. So the scanner is now
+// asked for the KIND of each document requested and for the asking sentence
+// with its details left out (requested_items, request_lead_in), and the host
+// keeps an entry only when it is plainly a document's name (intakeFacts.mjs
+// requestWords). The scanner's free notes and facts are not passed on, as
+// before the incident.
 //
 // Every email, name and address here is synthetic.
 // Run: node --test tests/intake-attachment-asks.test.mjs
 import { test, before, beforeEach } from "node:test";
 import assert from "node:assert/strict";
 import * as understanding from "../supabase/functions/_shared/intakeUnderstanding.mjs";
-import { attachmentText, corpusIndex } from "../supabase/functions/_shared/intakeFacts.mjs";
+import * as intakeFacts from "../supabase/functions/_shared/intakeFacts.mjs";
 import { loadFunction, resetWorld, deliver, harness } from "../scripts/email-inbound-harness.mjs";
 import { composeForward } from "../scripts/intake-eval.mjs";
 
-// A namespace import, so each test (not the whole file) shows what the code
+// Namespace imports, so each test (not the whole file) shows what the code
 // before the fix lacked.
-const { verifyUnderstanding, rulesUnderstanding, ackWarranted, attachmentAsks, DROP } = understanding;
+const { verifyUnderstanding, rulesUnderstanding, ackWarranted, attachmentAsks, buildUnderstandingRequest, DROP } = understanding;
+const { attachmentText, corpusIndex, requestWords } = intakeFacts;
 
-const DEA_ASK = "Please send an updated copy of your current DEA registration by 12/15/2026 to complete the reappointment file.";
-
-// What the scanner returns for a request letter once it is asked to copy the
-// letter's asking words into notes (email-inbound SCAN_REQUEST_WORDS).
+// What the scanner returns for the 11-05 kind of letter, asked for what it
+// requests (email-inbound SCAN_REQUEST_WORDS).
 const LETTER_SCAN = {
   documentType: "other",
   confidence: "medium",
-  extracted: {
-    name: "Reappointment request letter",
-    issuer: "Osterly Example Health",
-    facts: [
-      { label: "Letter date", value: "October 30, 2026" },
-      { label: "Policy Number", value: "PL-4471902" },
-    ],
-    suggestedCategory: { name: "Letters" },
-  },
-  notes: `${DEA_ASK}\nThe following items are still outstanding:\n- Current CPR/BLS certification card\n- Copy of your state controlled-substance registration`,
+  extracted: { name: "Reappointment request letter", issuer: "Osterly Example Health", facts: [{ label: "Policy Number", value: "PL-4471902" }], suggestedCategory: { name: "Letters" } },
+  notes: "Dear Dr. Testa, the file for Pat Sample (DOB 03/14/1961) is incomplete.",
+  request_lead_in: "Please send the following documents to complete your reappointment file",
+  requested_items: ["Current DEA certificate", "Current BLS card"],
 };
+const LETTER = (over = {}) => ({ ...LETTER_SCAN, ...over });
 
 const factsFor = (parts, subject, words) => ({
   corpus: corpusIndex([subject, parts.note, parts.message, parts.history, ...words]),
@@ -62,288 +63,149 @@ const reading = (asks, role = "request_checklist", confidence = "high") => ({
   confidence,
   records: [],
 });
+const verify = (asks, { message = "See attached.", words = [attachmentText(LETTER_SCAN)], role = "request_checklist", intent = "request", subject = "Reappointment file" } = {}) => {
+  const parts = { note: "", message, history: "" };
+  return verifyUnderstanding({ ...reading(asks, role), intent }, { subject, parts, attachmentCount: words.length, facts: factsFor(parts, subject, words) });
+};
+const rules = (body, words, types = words.map(() => "other"), subject = "Reappointment file") =>
+  rulesUnderstanding({ subject, body, attachmentNames: words.map((_, i) => `file${i}.pdf`), attachmentCount: words.length, forwarded: true, attachmentWords: words, attachmentTypes: types });
+const fromFile = (r) => r.asks.filter((a) => a.from === "attachment").map((a) => a.quote);
 
-// ── attachmentText ───────────────────────────────────────────────────────────
+// ── What the host keeps of an attachment ─────────────────────────────────────
 
-test("attachmentText: a scan's notes (line by line) and an other document's facts are read, identifying labels and numbers still left out", () => {
+test("attachmentText passes on what a letter requests, as document kinds, and never the scan's free notes or facts", () => {
   const t = attachmentText(LETTER_SCAN);
-  assert.ok(t.includes(DEA_ASK), "the letter's asking sentence, from the scan's notes");
-  assert.ok(t.split("\n").includes("- Current CPR/BLS certification card"), "a listed item keeps its own line");
-  assert.ok(t.includes("Letter date: October 30, 2026"), "a fact as label: value");
-  assert.ok(!t.includes("PL-4471902") && !/Policy Number/.test(t), "a fact with a number-like label is still left out");
-
-  // One line of the notes that names a date of birth goes; the rest stays.
-  const mixed = attachmentText({ documentType: "unknown", extracted: {}, notes: "Please send your current DEA registration.\nDOB 03/14/1961" });
-  assert.equal(mixed, "notes: Please send your current DEA registration.");
-  // The extracted notes and the scan's notes saying the same thing are shown once.
-  assert.equal(attachmentText({ documentType: "insurance", extracted: { notes: "Claims made." }, notes: "Claims made." }), "notes: Claims made.");
+  assert.equal(t, "requestLeadIn: Please send the following documents to complete your reappointment file\nrequestedItem: Current DEA certificate\nrequestedItem: Current BLS card\nname: Reappointment request letter\nissuer: Osterly Example Health");
+  assert.ok(!/Sample|03\/14|PL-4471902/.test(t), "the notes and facts stay behind, as before the incident");
+  assert.equal(attachmentText({ patientRecord: true, requested_items: ["Current BLS card"] }), "");
 });
 
-// ── verifyUnderstanding ──────────────────────────────────────────────────────
+test("requestWords keeps a document's name and drops anything that could be a person, a place, a date or a number", () => {
+  for (const kept of [
+    "Current DEA certificate", "Current BLS card", "operative notes for the listed cases", "case log for the past 24 months",
+    "DEA Registration", "State License", "Board Certificate", "CV", "Patient Logs for the past 24 months", "Patient Case List",
+    "Patient Volume Attestation", "Patient Encounter Log", "Pt Log for reappointment", "Patient Contact Hours form",
+    "Malpractice face sheet", "TB test results", "Please provide the operative notes for the listed cases",
+  ]) assert.equal(requestWords(kept), kept, kept);
+  for (const dropped of [
+    // The fourth review's leaks, and every earlier round's.
+    "1. Roe, Mary - craniotomy - 03/02/2026", "Mary Roe craniotomy on 03/02/2026", "Roe M 03/02/2026", "MARY ROE 03/02/2026", "Op note: Mary Board 03/02/2026",
+    "Case 1: Roe, Lee - craniotomy", "Discharge summary for Staff, Pat", "Records for Jane Day", "Mary Roe", "Roe M", "MARY ROE",
+    "Operative note for patient Pat Sample", "Patient Name - Pat Sample", "born March 14, 1961", "DEA registration QX1234563",
+    "NPI 1234567893", "License MD 48213", "copy to casey.example@osterly-health.example", "records from Osterly Hospital",
+    "Doctor of Medicine, Example State University", "a very long description of the requested document that goes on past ten words",
+  ]) assert.equal(requestWords(dropped), "", dropped);
+});
 
-test("an ask quoted from the attachment's words is kept, marked as the attachment's, at medium confidence at most, and never acknowledged", () => {
-  const words = [attachmentText(LETTER_SCAN)];
-  const parts = { note: "", message: "See attached.", history: "" };
-  const v = verifyUnderstanding(reading([DEA_ASK]), { subject: "Reappointment file", parts, attachmentCount: 1, facts: factsFor(parts, "Reappointment file", words) });
-  assert.equal(v.asks.length, 1, "the ask in the letter survives");
-  assert.equal(v.asks[0].from, "attachment");
+test("the scanner's own fields keep the identifier check, and whole lines are kept up to the cap", () => {
+  const t = attachmentText({ documentType: "other", extracted: { name: "DEA Registration QX1234563", issuer: "Example Clinic NPI 1234567893", type: "License MD 48213", facility: "Example Hospital, patient Pat Sample", title: "Reappointment checklist", coveragePerClaim: "1000000" } });
+  assert.equal(t, "title: Reappointment checklist\ncoveragePerClaim: 1000000");
+  const many = attachmentText({ documentType: "other", extracted: { description: "x ".repeat(340).trim() }, requested_items: Array.from({ length: 25 }, () => "Current BLS card"), request_lead_in: "Please send the following" });
+  assert.ok(many.split("\n").every((l) => /^(requestLeadIn|requestedItem|description): /.test(l)), "every line whole");
+  assert.equal(many.split("\n").filter((l) => l.startsWith("requestedItem")).length, 1, "an item once");
+});
+
+// ── The model's reading ──────────────────────────────────────────────────────
+
+test("the 11-05 case: an ask quoted from what the attachment requests is kept, from the attachment, medium at most, never acknowledged", () => {
+  const v = verify(["Current DEA certificate", "Current BLS card"]);
+  assert.deepEqual(v.asks.map((a) => [a.quote, a.from]), [["Current DEA certificate", "attachment"], ["Current BLS card", "attachment"]]);
   assert.equal(v.dropped.length, 0);
   assert.equal(v.unclear, false);
-  assert.equal(v.needsRules, false, "the model's reading stands; the rules are not called in");
-  assert.equal(v.confidence, "medium", "capped: the words rest on the scanner's reading of the file");
-  assert.equal(ackWarranted(v).ok, false, "the sender is not told they asked on the attachment's words alone");
-
-  // Words found in no attachment are still not the email's own words.
-  const invented = verifyUnderstanding(reading(["Please send your passport photo page."]), { subject: "Reappointment file", parts, attachmentCount: 1, facts: factsFor(parts, "Reappointment file", words) });
-  assert.equal(invented.asks.length, 0);
+  assert.equal(v.needsRules, false);
+  assert.equal(v.confidence, "medium");
+  assert.equal(ackWarranted(v).ok, false);
+  // Words in no attachment are still not the email's own.
+  const invented = verify(["Please send your passport photo page."]);
   assert.deepEqual(invented.dropped.map((d) => d.why), [DROP.notOwnWords]);
   assert.equal(invented.needsRules, true);
 });
 
-test("a listed item with no asking words counts only under an asking line of its attachment, or as a checklist the message points to", () => {
-  const words = [attachmentText(LETTER_SCAN)];
-  const item = "Current CPR/BLS certification card";
-  const subject = "Reappointment file";
-  // The message's own ask and the item named only in the attached checklist.
-  const pointing = { note: "", message: "Please send the items listed in the attached checklist for my reappointment file.", history: "" };
-  const v = verifyUnderstanding(reading(["Please send the items listed in the attached checklist for my reappointment file.", item]), { subject, parts: pointing, attachmentCount: 1, facts: factsFor(pointing, subject, words) });
-  assert.equal(v.asks.length, 2);
-  assert.deepEqual(v.asks.map((a) => a.from), ["message", "attachment"]);
-
-  // A bare list (no line of the file asks): only as a checklist the message points to.
-  const bare = [attachmentText({ documentType: "other", extracted: {}, notes: "Reappointment items\n- Current CPR/BLS certification card\n- Updated CV" })];
-  const silent = { note: "", message: "Thank you for your time this week.", history: "" };
-  const see = { note: "", message: "See attached.", history: "" };
-  const at = (parts, role) => verifyUnderstanding(reading([item], role), { subject, parts, attachmentCount: 1, facts: factsFor(parts, subject, bare) });
-  assert.deepEqual(at(see, "request_checklist").asks.map((a) => a.quote), [item], "a checklist the message points to");
-  for (const [parts, role, why] of [[silent, "request_checklist", "a checklist the message never mentions"], [see, "informational", "a file the reading took for something to read"], [see, "credential_for_physician", "a credential"]]) {
-    const r = at(parts, role);
-    assert.equal(r.asks.length, 0, why);
-    assert.deepEqual(r.dropped, [{ quote: item, why: DROP.notOwnWords }], `${why}: not the email's own asking words, so the rules read it`);
-    assert.equal(r.needsRules, true, why);
+test("a requested item counts under an asking lead-in, as a checklist, or when the message mentions what is attached", () => {
+  const bare = [attachmentText(LETTER({ request_lead_in: undefined }))];
+  for (const message of ["Attached are the items we need from you.", "Please find attached the items needed for reappointment.", "Attached please find our request.", "We need the attached items by Friday.", "Please see attached."]) {
+    const v = verify(["Current DEA certificate", "Current BLS card"], { message, words: bare, role: "informational" });
+    assert.equal(v.asks.length, 2, message);
   }
+  assert.equal(verify(["Current BLS card"], { message: "Thank you for your time this week.", words: bare, role: "request_checklist" }).asks.length, 1, "a checklist");
+  const neither = verify(["Current BLS card"], { message: "Thank you for your time this week.", words: bare, role: "informational" });
+  assert.deepEqual(neither.dropped, [{ quote: "Current BLS card", why: DROP.notOwnWords }]);
+  assert.equal(neither.needsRules, true);
+  // The lead-in counts when it names what it asks for; a lead-in to a list does not.
+  const fppe = [attachmentText(LETTER({ request_lead_in: "Please provide the operative notes for the listed cases", requested_items: [] }))];
+  assert.equal(verify(["Please provide the operative notes for the listed cases"], { words: fppe }).asks.length, 1);
+  assert.equal(verify(["Please send the following documents to complete your reappointment file"], { words: [attachmentText(LETTER({ request_lead_in: "Please send the following documents" }))] }).asks.length, 0);
 });
 
 test("a delivered card and an informational certificate stay what they were: nothing in an attachment makes them a request", () => {
-  // The reviewers' regression against the commit before: a renewed BLS card
-  // forwarded for the file, read (wrongly) as a request quoting the issuer.
-  const card = [attachmentText({ documentType: "license", extracted: { issuer: "Example Heart Association", name: "BLS Provider" } })];
-  const delivered = { note: "", message: "Attached is your renewed BLS card for your records.", history: "" };
-  const v = verifyUnderstanding({ ...reading(["Example Heart Association"], "credential_for_physician"), asks: [{ quote: "Example Heart Association", kind: "bls", who: "physician" }] },
-    { subject: "BLS card", parts: delivered, attachmentCount: 1, facts: factsFor(delivered, "BLS card", card) });
+  const card = [attachmentText({ documentType: "license", extracted: { issuer: "Example Heart Association", name: "BLS Provider" }, requested_items: ["Current BLS card"] })];
+  const v = verify(["Current BLS card"], { message: "Attached is your renewed BLS card for your records.", words: card, role: "credential_for_physician", subject: "BLS card" });
   assert.equal(v.asks.length, 0);
-  assert.equal(v.needsRules, true, "the rules read it, as before");
-  const rules = rulesUnderstanding({ subject: "BLS card", body: delivered.message, attachmentNames: ["BLS card.pdf"], attachmentCount: 1, forwarded: true, attachmentWords: card, attachmentTypes: ["license"] });
-  assert.equal(rules.intent, "delivery");
-
-  // A certificate of insurance whose own small print asks for a copy, under
-  // a reading that calls the email informational: entered, not answered.
-  const coi = [attachmentText({ documentType: "insurance", extracted: { provider: "Example Mutual" }, notes: "Please provide a copy of this certificate to the credentialing office." })];
-  const info = { note: "", message: "Here is my updated COI for my file.", history: "" };
-  const quote = "Please provide a copy of this certificate to the credentialing office";
-  const r = verifyUnderstanding({ ...reading([quote], "credential_for_physician"), intent: "informational" }, { subject: "COI", parts: info, attachmentCount: 1, facts: factsFor(info, "COI", coi) });
-  assert.equal(r.intent, "informational");
-  assert.equal(r.asks.length, 0);
-  assert.equal(r.unclear, false);
-
-  // The same certificate when the model call fails: the rules keep it a delivery.
-  const email = { subject: "COI", body: "For my file.", attachmentNames: ["coi.pdf"], attachmentCount: 1 };
-  const fallback = rulesUnderstanding({ ...email, attachmentWords: coi, attachmentTypes: ["insurance"] });
-  assert.equal(fallback.rulesIntent, "delivery");
-  assert.equal(fallback.intent, "delivery");
-  // Only a letter's or a checklist's words are read for asks, and a
-  // delivery turns mixed only when the message points to what is attached.
-  const words = ["notes: Please send your current DEA registration."];
-  assert.equal(rulesUnderstanding({ ...email, attachmentWords: words, attachmentTypes: ["license"] }).intent, "delivery");
-  assert.equal(rulesUnderstanding({ ...email, attachmentWords: words, attachmentTypes: ["other"] }).intent, "delivery", "a message that does not point to the file");
-  const pointed = { ...email, body: "Please see the attached letter regarding your reappointment.", attachmentNames: ["Reappointment letter.pdf"] };
-  assert.equal(rulesUnderstanding(pointed).intent, "delivery");
-  assert.equal(rulesUnderstanding({ ...pointed, attachmentWords: words, attachmentTypes: ["other"] }).intent, "mixed");
-  assert.equal(fallback.asks.filter((a) => a.from === "attachment").length, 0);
+  assert.equal(v.needsRules, true);
+  assert.equal(rules("Attached is your renewed BLS card for your records.", card, ["license"], "BLS card").intent, rulesUnderstanding({ subject: "BLS card", body: "Attached is your renewed BLS card for your records.", attachmentNames: ["file0.pdf"], attachmentCount: 1, forwarded: true }).intent);
+  const coi = [attachmentText({ documentType: "insurance", extracted: { provider: "Example Mutual" }, requested_items: ["certificate of insurance copy"] })];
+  const info = verify(["certificate of insurance copy"], { message: "Here is my updated COI for my file.", words: coi, role: "informational", intent: "informational", subject: "COI" });
+  assert.equal(info.intent, "informational");
+  assert.equal(info.asks.length, 0);
 });
 
-test("identifying numbers, names and addresses in a scan's notes and facts never reach the model or a stored ask", () => {
-  const t = attachmentText({
-    documentType: "other",
-    extracted: { facts: [{ label: "Registration", value: "QX1234563" }, { label: "License", value: "MD 12345" }, { label: "Requested by", value: "Medical Staff Office" }] },
-    notes: [
-      "Please send your DEA registration QX1234563.",
-      "NPI 1234567893",
-      "Patient: Pat Q Sample",
-      "Date of Birth: March 14, 1961",
-      "Contact: casey.example@osterly-health.example",
-      "Please send a copy of your current BLS card.",
-    ].join("\n"),
-  });
-  assert.equal(t, "notes: Please send a copy of your current BLS card.\nRequested by: Medical Staff Office");
-
-  // An ask quoted with a number in it is dropped, by the model's check and the rules'.
-  const words = ["notes:\nPlease send your DEA registration QX1234563 (exp 2027-03-31).\nPlease send a copy of your current BLS card."];
-  const parts = { note: "", message: "See attached.", history: "" };
-  const v = verifyUnderstanding(reading(["Please send your DEA registration QX1234563 (exp 2027-03-31).", "Please send a copy of your current BLS card."]), { subject: "Reappointment file", parts, attachmentCount: 1, facts: factsFor(parts, "Reappointment file", words) });
-  assert.deepEqual(v.asks.map((a) => a.quote), ["Please send a copy of your current BLS card."]);
+test("an ask whose quote carries an identifier is dropped, even from words that did not come through attachmentText", () => {
+  const v = verify(["DEA registration QX1234563", "Current BLS card"], { words: ["requestLeadIn: Please send the following\nrequestedItem: DEA registration QX1234563\nrequestedItem: Current BLS card"] });
+  assert.deepEqual(v.asks.map((a) => a.quote), ["Current BLS card"]);
   assert.deepEqual(v.dropped.map((d) => d.why), [DROP.identifier]);
-  const fromFile = attachmentAsks(words);
-  assert.ok(fromFile.length >= 1 && fromFile.every((a) => !/QX1234563/.test(a)), JSON.stringify(fromFile));
+  assert.deepEqual(attachmentAsks(["requestedItem: DEA registration QX1234563\nrequestedItem: Current BLS card"]), ["Current BLS card"]);
 });
 
-test("attachmentText checks whole lines before it cuts: a cut never leaves part of a number behind", () => {
-  const pad = `${"x ".repeat(993)}`.trim();
-  const t = attachmentText({ documentType: "other", extracted: {}, notes: `${pad}\nSSN 123-45-6789\nPlease send a copy of your current BLS card.` });
-  assert.ok(!/123-45/.test(t), "no part of the SSN");
-  const long = attachmentText({ documentType: "other", extracted: {}, notes: `${"y ".repeat(999).trim()}\nSSN 123-45-6789` });
-  assert.ok(!/\b123\b/.test(long));
-  // A line that does not fit is left out whole, never cut.
-  const many = attachmentText({ documentType: "other", extracted: {}, notes: Array.from({ length: 80 }, (_, i) => `Please send item number ${"z".repeat(30)} ${i}.`).join("\n") });
-  assert.ok(many.split("\n").every((l) => l === "notes:" || /^Please send item number z+ \d+\.$/.test(l)), "every kept line whole");
-});
-
-test("the model is told an ask written in an attachment may be quoted from its words", () => {
-  const r = understanding.buildUnderstandingRequest({ message: "See attached." });
-  assert.match(r.system[0].text, /written inside an attachment/);
-  assert.match(r.system[0].text, /quote the ask from that attachment's words/);
+test("the model is told an ask written in an attachment may be quoted from what it requests", () => {
+  const text = buildUnderstandingRequest({ message: "See attached." }).system[0].text;
+  assert.match(text, /written inside an attachment/);
+  assert.match(text, /requestedItem and requestLeadIn/);
 });
 
 // ── The rules ────────────────────────────────────────────────────────────────
 
-test("the rules read the attachments' words apart: an asking sentence or a listed item under an asking line counts, a statement does not", () => {
-  const r = rulesUnderstanding({ subject: "Reappointment file", body: "See attached.", attachmentNames: ["letter.pdf"], attachmentCount: 1, forwarded: true, attachmentWords: ["notes: Please send your current DEA registration."] });
-  const fromFile = r.asks.filter((a) => a.from === "attachment");
-  assert.equal(fromFile.length, 1);
-  assert.match(fromFile[0].quote, /DEA registration/);
+test("the rules read what a letter requests: the 11-05 asks, and the bare pointer gives way to them", () => {
+  const r = rules("See attached.", [attachmentText(LETTER_SCAN)]);
+  assert.deepEqual(fromFile(r), ["Current DEA certificate", "Current BLS card"]);
+  assert.ok(!r.asks.some((a) => /^see attached$/i.test(a.quote)));
   assert.equal(r.unclear, false);
-
-  const stated = rulesUnderstanding({ subject: "Reappointment file", body: "See attached.", attachmentNames: ["letter.pdf"], attachmentCount: 1, forwarded: true, attachmentWords: ["notes: Your DEA registration was verified on 10/01/2026."] });
-  assert.equal(stated.asks.filter((a) => a.from === "attachment").length, 0, "a statement in the letter is no ask");
-
-  const listed = attachmentAsks(["notes:\nPlease provide the following:\n- Current BLS card\n- Updated CV"]);
-  assert.ok(listed.some((a) => /BLS card/.test(a)) && listed.some((a) => /CV/.test(a)), `listed: ${JSON.stringify(listed)}`);
-  // A lead-in is not an ask of its own, and the email's bare pointer gives way to the letter's asks.
-  const lines = rulesUnderstanding({ subject: "Fwd: request", body: "See attached.", attachmentNames: ["letter.pdf"], attachmentCount: 1, attachmentWords: ["notes:\nPlease provide the following:\nCurrent DEA certificate\nCurrent BLS card"] });
-  assert.deepEqual(lines.asks.map((a) => [a.quote, a.from]), [["DEA certificate", "attachment"], ["BLS card", "attachment"]]);
-  assert.deepEqual(attachmentAsks(["notes:\n- Current BLS card\n- Updated CV"]), [], "a bare list under nothing that asks");
+  assert.equal(ackWarranted(r).ok, false, "never acknowledged on the attachment's asks alone");
+  // A credential's file is not read for asks.
+  assert.deepEqual(fromFile(rules("See attached.", [attachmentText(LETTER_SCAN)], ["license"])), []);
 });
 
-test("the rules never acknowledge on the attachment's asks alone, and a delivery with an ask in its attachment is mixed", () => {
-  const r = rulesUnderstanding({ subject: "Reappointment", body: "Please see the attached letter regarding your reappointment.", attachmentNames: ["Reappointment letter.pdf"], attachmentCount: 1, forwarded: true, attachmentWords: ["notes: Please send your current DEA registration."], attachmentTypes: ["other"] });
-  assert.equal(r.intent, "mixed", "the rules took it for a delivery; the message points to the letter, and the letter asks");
-  assert.deepEqual(r.asks.filter((a) => a.from === "attachment").map((a) => a.quote), ["DEA registration"]);
-  // The email's own ask names no document; the attachment's does, and does not count.
-  const own = { method: "rules", askForm: true, asks: [{ quote: "See attached", kind: null }, { quote: "DEA registration", kind: null, from: "attachment" }] };
-  assert.equal(ackWarranted(own).why, "no ask names a document", "only the email's own asks name a document for the acknowledgement");
-  assert.equal(ackWarranted({ ...own, asks: [{ quote: "DEA registration", kind: null }] }).ok, true, "the same ask in the email itself does");
-  assert.equal(ackWarranted({ method: "rules", asks: [{ quote: "your current DEA registration", from: "attachment" }], askForm: true }).why, "the asks were read only in an attachment");
+test("the FPPE case list gives the generic ask with no names, on both paths", () => {
+  // The scanner's reading of a case list, as it is asked to give it, and a
+  // scanner that copied the cases anyway: the host keeps only the kind.
+  const scan = LETTER({
+    notes: "Please provide the operative notes for the following cases:\nCase 1: Roe, Lee - craniotomy 03/02/2026\nCase 2: Pat Sample, lumbar fusion, 04/11/2026",
+    request_lead_in: "Please provide the operative notes for the listed cases",
+    requested_items: ["operative notes for the listed cases", "Roe, Lee - craniotomy - 03/02/2026", "Pat Sample lumbar fusion"],
+  });
+  const words = [attachmentText(scan)];
+  assert.ok(!/Roe|Sample|\d{2}\/\d{2}/.test(words[0]), words[0]);
+  assert.deepEqual(fromFile(rules("See attached.", words, ["other"], "FPPE")), ["operative notes for the listed cases"]);
+  const v = verify(["operative notes for the listed cases", "Roe, Lee - craniotomy - 03/02/2026"], { words, subject: "FPPE" });
+  assert.deepEqual(v.asks.map((a) => a.quote), ["operative notes for the listed cases"]);
+  // With only the lead-in, the rules still read the kind of document asked.
+  const lead = [attachmentText(LETTER({ request_lead_in: "Please provide the operative notes for the listed cases", requested_items: [] }))];
+  assert.equal(fromFile(rules("See attached.", lead, ["other"], "FPPE")).length, 1);
 });
 
-// ── The second review ────────────────────────────────────────────────────────
-
-test("a patient named, or a birth date in words, never reaches the model or a stored ask", () => {
-  for (const line of [
-    "Operative note for patient Pat Sample",
-    "Patient Name - Pat Sample",
-    "Discharge summary for Lee Roe, born March 14, 1961",
-    "Born March 14, 1961",
-    "Case: Sample, Pat 03/14/1961",
-    "Name: Pat Q Sample",
-  ]) {
-    const t = attachmentText({ documentType: "other", extracted: {}, notes: `Please provide the following:\n${line}` });
-    assert.ok(!t.includes(line.slice(-10)), `${line}: ${JSON.stringify(t)}`);
-  }
-  assert.equal(attachmentText({ documentType: "other", extracted: { facts: [{ label: "Name", value: "Pat Sample" }] } }), "");
-  // The committee and an ordinary due date are not people or birth dates.
-  const kept = attachmentText({ documentType: "other", extracted: {}, notes: "Please send the Patient Safety Committee attestation.\nPlease return it by December 1, 2026." });
-  assert.equal(kept, "notes:\nPlease send the Patient Safety Committee attestation.\nPlease return it by December 1, 2026.");
-
-  // A quote naming a patient is dropped by the model's check and the rules'.
-  const words = ["notes:\nPlease provide the following:\nOperative note for patient Pat Sample\nCurrent BLS card"];
-  const parts = { note: "", message: "See attached.", history: "" };
-  const v = verifyUnderstanding(reading(["Operative note for patient Pat Sample"]), { subject: "FPPE", parts, attachmentCount: 1, facts: factsFor(parts, "FPPE", words) });
-  assert.deepEqual(v.asks, []);
-  assert.deepEqual(v.dropped.map((d) => d.why), [DROP.identifier]);
-  assert.ok(!attachmentAsks(words).some((a) => /Sample/.test(a)));
-});
-
-test("a hospital ID badge delivered for the file stays a delivery when the rules read it", () => {
-  const badge = (notes) => [attachmentText({ documentType: "other", extracted: { name: "Hospital ID Badge", issuer: "Osterly Example Health" }, notes })];
-  for (const notes of ["Please present this badge at the security desk upon arrival.", "Please return this badge when your assignment ends.", "Please notify us of any change of address."]) {
-    for (const body of ["For my file.", "Attached is my new hospital ID badge."]) {
-      const r = rulesUnderstanding({ subject: "badge", body, attachmentNames: ["badge.pdf"], attachmentCount: 1, attachmentWords: badge(notes), attachmentTypes: ["other"] });
-      assert.equal(r.intent, rulesUnderstanding({ subject: "badge", body, attachmentNames: ["badge.pdf"], attachmentCount: 1 }).intent, `${notes} / ${body}`);
-      assert.equal(r.asks.filter((a) => a.from === "attachment").length, 0, `${notes} / ${body}`);
+test("a delivery whose message only says what is attached stays a delivery, with no asks", () => {
+  // A scanner that wrongly listed a badge's boilerplate as requested items.
+  const badge = (type) => [attachmentText({ documentType: type, extracted: { name: "Hospital ID Badge", issuer: "Osterly Example Health" }, request_lead_in: "Please present a photo ID to obtain a replacement", requested_items: ["photo ID", "Current BLS card"] })];
+  for (const type of ["other", "unknown"]) {
+    for (const body of ["For my file.", "Attached is my new hospital ID badge.", "Attached is my updated vendor registration for my records."]) {
+      const r = rules(body, badge(type), [type], "badge");
+      const plain = rulesUnderstanding({ subject: "badge", body, attachmentNames: ["file0.pdf"], attachmentCount: 1, forwarded: true });
+      if (plain.intent !== "delivery") continue;
+      assert.equal(r.intent, "delivery", `${type} / ${body}`);
+      assert.deepEqual(fromFile(r), [], `${type} / ${body}`);
     }
   }
-  // The scanner's own fields are never read for asks.
-  assert.deepEqual(attachmentAsks(["name: Hospital ID Badge\nissuer: Osterly Example Health"]), []);
-});
-
-test("a checklist's own items and a coverage letter's limits are kept: a label alone drops nothing", () => {
-  const notes = "Please provide the following documents:\nDEA Registration: current copy\nState License: current copy\nBoard Certificate: current copy\nBLS Card: current copy\nCV: updated";
-  const w = attachmentText({ documentType: "other", extracted: {}, notes });
-  assert.equal(w, `notes:\n${notes}`);
-  const r = rulesUnderstanding({ subject: "Fwd: reappointment", body: "See attached.", attachmentNames: ["letter.pdf"], attachmentCount: 1, attachmentWords: [w], attachmentTypes: ["other"] });
-  const fromFile = r.asks.filter((a) => a.from === "attachment").map((a) => a.quote);
-  for (const k of [/DEA Registration/, /State License/, /Board Certificate/, /BLS Card/, /CV/]) assert.ok(fromFile.some((q) => k.test(q)), `${k}: ${JSON.stringify(fromFile)}`);
-
-  const facts = attachmentText({ documentType: "other", extracted: { facts: [{ label: "DEA Registration", value: "Copy required" }, { label: "Medical License", value: "Copy required" }, { label: "Professional Liability Policy Limits", value: "$1,000,000 / $3,000,000" }, { label: "Policy Number", value: "PL-4471902" }, { label: "Email", value: "office at example" }] } });
-  assert.equal(facts, "DEA Registration: Copy required\nMedical License: Copy required\nProfessional Liability Policy Limits: $1,000,000 / $3,000,000");
-  const limits = attachmentText({ documentType: "other", extracted: {}, notes: "Policy limits: $1,000,000 per claim / $3,000,000 aggregate" });
-  assert.equal(limits, "notes: Policy limits: $1,000,000 per claim / $3,000,000 aggregate");
-});
-
-test("long notes keep what fits: an oversize paragraph is read by sentence, and nothing after it is lost", () => {
-  const filler = "The committee reviews every file before the reappointment meeting and needs complete records. ".repeat(25);
-  const one = attachmentText({ documentType: "other", extracted: {}, notes: `Please send your current DEA certificate and BLS card by December 1. ${filler}` });
-  assert.ok(one.includes("Please send your current DEA certificate and BLS card by December 1."), one.slice(0, 120));
-  const after = attachmentText({ documentType: "other", extracted: {}, notes: `Please send your current BLS card.\n${"y ".repeat(1100)}\nPlease send your current DEA certificate.` });
-  assert.ok(after.includes("Please send your current DEA certificate."), after.slice(0, 200));
-});
-
-test("the scanner's own fields are held to the same identifier check as the notes", () => {
-  const t = attachmentText({ documentType: "other", extracted: { name: "DEA Registration QX1234563", issuer: "Example Clinic NPI 1234567893", description: "Please send DEA QX1234563", type: "License MD 48213", facility: "Example Hospital, patient Pat Sample", title: "Reappointment checklist", coveragePerClaim: "1000000" } });
-  assert.equal(t, "title: Reappointment checklist\ncoveragePerClaim: 1000000");
-});
-
-// ── The third review ─────────────────────────────────────────────────────────
-
-test("a case list names patients without the word: a case line, or a person's name straight before a date, is dropped; an institution's is kept", () => {
-  const notes = "Please provide the operative notes for the following cases:\nCase 1: Roe, Lee - craniotomy 03/02/2026\nCase 2: Pat Sample, lumbar fusion, 04/11/2026\nSample, Pat 04/11/2026\nPat Sample (04/11/2026)";
-  const t = attachmentText({ documentType: "other", extracted: { facts: [{ label: "Case", value: "Roe, Lee" }, { label: "Case 3", value: "laminectomy" }] }, notes });
-  assert.ok(!/Roe|Sample|Case/.test(t), JSON.stringify(t));
-  const v = verifyUnderstanding(reading(["Sample, Pat 04/11/2026"]), { subject: "FPPE", parts: { note: "", message: "See attached.", history: "" }, attachmentCount: 1,
-    facts: factsFor({ note: "", message: "See attached.", history: "" }, "FPPE", ["notes:\nPlease provide the following:\nSample, Pat 04/11/2026"]) });
-  assert.deepEqual(v.dropped.map((d) => d.why), [DROP.identifier]);
-  for (const line of [
-    "Doctor of Medicine, Example State University, May 20, 2005",
-    "Board Certification: Example Board of Neurological Surgery 06/15/2009",
-    "Appointed to the Medical Staff of Osterly Hospital 01/05/2010",
-    "Effective Date 2026-01-01",
-  ]) {
-    assert.equal(attachmentText({ documentType: "other", extracted: {}, notes: line }), `notes: ${line}`, line);
-  }
-});
-
-test("a delivery whose message only says what is attached stays a delivery, with no asks, and is filed", async () => {
-  for (const notes of ["Badge must be worn at all times. Please present a photo ID to obtain a replacement.", "To renew, please upload your current BLS card and TB test results to the vendor portal.", "Please keep your DEA registration current with this office."]) {
-    for (const type of ["other", "unknown"]) {
-      for (const body of ["For my file.", "Attached is my new hospital ID badge.", "Attached is my updated vendor registration for my records."]) {
-        const words = [attachmentText({ documentType: type, extracted: { name: "Hospital ID Badge", issuer: "Osterly Example Health" }, notes })];
-        const r = rulesUnderstanding({ subject: "badge", body, attachmentNames: ["badge.pdf"], attachmentCount: 1, attachmentWords: words, attachmentTypes: [type] });
-        assert.equal(r.intent, "delivery", `${type} / ${notes} / ${body}`);
-        assert.equal(r.asks.filter((a) => a.from === "attachment").length, 0, `${type} / ${notes} / ${body}`);
-      }
-    }
-  }
-  // A message that points to the attachment as what it asks still counts.
-  const asked = rulesUnderstanding({ subject: "Reappointment", body: "Please see the attached letter regarding your reappointment.", attachmentNames: ["Reappointment letter.pdf"], attachmentCount: 1, attachmentWords: ["notes: Please send your current DEA registration."], attachmentTypes: ["other"] });
-  assert.equal(asked.intent, "mixed");
-});
-
-test("ordinary reappointment asks that start with Patient are kept", () => {
-  for (const item of ["Patient Logs for the past 24 months", "Patient Case List (last 2 years)", "Patient Volume Attestation", "Patient Encounter Log", "Pt Log for reappointment", "Patient Contact Hours form", "Patient Safety Attestation"]) {
-    assert.ok(attachmentText({ documentType: "other", extracted: {}, notes: `Please provide the following:\n${item}` }).includes(item), item);
-  }
-  // A patient's name after the word still goes.
-  assert.equal(attachmentText({ documentType: "other", extracted: {}, notes: "Operative note for patient Pat Sample" }), "");
+  const pointed = rulesUnderstanding({ subject: "Reappointment", body: "Please see the attached letter regarding your reappointment.", attachmentNames: ["Reappointment letter.pdf"], attachmentCount: 1, attachmentWords: [attachmentText(LETTER_SCAN)], attachmentTypes: ["other"] });
+  assert.equal(pointed.intent, "mixed", "a message that points to the letter as what it asks");
 });
 
 // ── End to end ───────────────────────────────────────────────────────────────
@@ -364,19 +226,21 @@ function seed() {
 }
 
 let n = 0;
-const send = () => {
-  harness.geminiReply = () => LETTER_SCAN;
+const send = (scan = LETTER_SCAN, c = CASE, filename = "Reappointment_Request.pdf") => {
+  harness.geminiReply = () => scan;
   return deliver({
-    id: `att${++n}`, from: `Rowan Testa <${ME}>`, to: "docs@credentialdomd.com", subject: `Fwd: ${CASE.subject}`, text: composeForward(CASE),
-    attachments: [{ filename: "Reappointment_Request.pdf", contentType: "application/pdf", bytes: new TextEncoder().encode("%PDF-1.4 letter") }],
+    id: `att${++n}`, from: `Rowan Testa <${ME}>`, to: "docs@credentialdomd.com", subject: `Fwd: ${c.subject}`, text: composeForward(c),
+    attachments: [{ filename, contentType: "application/pdf", bytes: new TextEncoder().encode(`%PDF-1.4 ${n}`) }],
   });
 };
+const toHospital = () => harness.sent.filter((m) => m.to?.[0] !== ME);
+const FAIL = () => ({ status: 400, body: { type: "error", error: { type: "invalid_request_error", message: "Synthetic   failure:\n the request was refused." } } });
 
 before(async () => { await loadFunction(); });
 beforeEach(() => { resetWorld(); harness.rawAuth = "mx.resend.com; dmarc=pass header.from=clinic.example"; seed(); });
 
-test("end to end: the scanner is asked for a request letter's words, and the model's ask quoted from them is kept, not one tap, no acknowledgement", async () => {
-  harness.anthropicReply = () => reading([DEA_ASK]);
+test("end to end: the scanner is asked for document kinds only, the model's ask is kept, not one tap, no acknowledgement, and no letter text reaches the model", async () => {
+  harness.anthropicReply = () => reading(["Current DEA certificate", "Current BLS card"]);
   const r = await send();
   assert.equal(r.status, 200);
   assert.equal(r.body.read, "model");
@@ -384,17 +248,21 @@ test("end to end: the scanner is asked for a request letter's words, and the mod
   assert.equal(r.body.one_tap, false);
   assert.match(r.body.ack, /^ack skipped: the asks were read only in an attachment/);
   const instruction = harness.gemini[0].body.contents[0].parts.at(-1).text;
-  assert.match(instruction, /letter, memo, checklist or form that asks the physician for documents/);
-  assert.match(instruction, /word for word/);
-  assert.ok(harness.anthropic[0].body.messages[0].content.includes(DEA_ASK), "the letter's words reach the model");
+  assert.match(instruction, /requested_items/);
+  assert.match(instruction, /generic kind of document only/);
+  assert.match(instruction, /never a patient, a case, a person's name/);
+  assert.doesNotMatch(instruction, /word for word/);
+  const prompt = harness.anthropic[0].body.messages[0].content;
+  assert.ok(prompt.includes("requestedItem: Current DEA certificate"));
+  assert.ok(!/Pat Sample|03\/14\/1961|PL-4471902/.test(prompt), "nothing from the letter's own notes or facts");
   const [req] = rows("document_requests");
-  assert.ok(req.proposal.items.some((i) => /DEA registration/.test(i.ask)), "the ask is in the packet proposal");
-  assert.equal(harness.sent.filter((m) => m.to?.[0] !== ME).length, 0, "nothing goes to the hospital");
+  assert.ok(req.proposal.items.some((i) => /DEA certificate/.test(i.ask)));
+  assert.equal(toHospital().length, 0);
   assert.match(rows("inbound_emails")[0].detail, /read by model \(medium\)/);
 });
 
-test("end to end: a 400 from the AI service says why in the ledger, and nothing is sent to the requester", async () => {
-  harness.anthropicReply = () => ({ status: 400, body: { type: "error", error: { type: "invalid_request_error", message: "Synthetic   failure:\n the request was refused." } } });
+test("end to end: a 400 says why in the ledger, and the rules put the letter's asks in the request, read by keywords", async () => {
+  harness.anthropicReply = FAIL;
   const r = await send();
   assert.equal(r.status, 200);
   assert.equal(r.body.read, "rules");
@@ -402,30 +270,34 @@ test("end to end: a 400 from the AI service says why in the ledger, and nothing 
   assert.match(row.detail, /read by rules \(the AI service answered 400 \(invalid_request_error: Synthetic failure: the request was refused\.\)\)/);
   assert.ok(!row.detail.includes("sk-ant-test"), "never the key");
   assert.ok(!/ack sent/i.test(row.detail));
-  assert.equal(harness.sent.filter((m) => m.to?.[0] !== ME).length, 0, "nothing goes to the hospital");
-  // The letter's asks, read by the rules, are what the request holds.
+  assert.equal(toHospital().length, 0);
   const [req] = rows("document_requests");
   const asks = req.proposal.items.map((i) => i.ask);
-  assert.ok(asks.some((a) => /DEA registration/.test(a)), JSON.stringify(asks));
-  assert.ok(asks.some((a) => /BLS certification card/.test(a)), JSON.stringify(asks));
-  assert.ok(!asks.some((a) => /^see attached$/i.test(a)), "the bare pointer is not an ask");
-  assert.equal(req.proposal.source, "rules", "still read by keywords");
+  assert.ok(asks.some((a) => /DEA certificate/.test(a)), JSON.stringify(asks));
+  assert.ok(asks.some((a) => /BLS card/.test(a)), JSON.stringify(asks));
+  assert.ok(!asks.some((a) => /^see attached$/i.test(a)));
+  assert.equal(req.proposal.source, "rules");
   assert.equal(r.body.one_tap, false);
 });
 
+test("end to end: an FPPE case list stores the generic ask and no patient, on the rules path", async () => {
+  harness.anthropicReply = FAIL;
+  await send(LETTER({ request_lead_in: "Please provide the operative notes for the listed cases", requested_items: ["operative notes for the listed cases", "Roe, Lee - craniotomy - 03/02/2026"], notes: "Case 1: Roe, Lee - craniotomy 03/02/2026" }), { ...CASE, subject: "FPPE" }, "FPPE.pdf");
+  const [req] = rows("document_requests");
+  const stored = JSON.stringify(req.proposal);
+  assert.ok(/operative notes for the listed cases/.test(stored), stored);
+  assert.ok(!/Roe|03\/02\/2026/.test(stored), stored);
+});
+
 test("end to end: a hospital ID badge forwarded as \"Attached is my new hospital ID badge.\" is delivered and filed, not made a request, when the rules read it", async () => {
-  harness.anthropicReply = () => ({ status: 400, body: { type: "error", error: { type: "invalid_request_error", message: "synthetic" } } });
-  harness.geminiReply = () => ({ documentType: "other", confidence: "high", extracted: { name: "Hospital ID Badge", issuer: "Osterly Example Health", facts: [{ label: "Valid through", value: "2027-06-30" }], suggestedCategory: { name: "Hospital ID Badges" } }, notes: "Badge must be worn at all times. Please present a photo ID to obtain a replacement." });
-  const r = await deliver({
-    id: `badge${++n}`, from: `Rowan Testa <${ME}>`, to: "docs@credentialdomd.com", subject: "Fwd: badge",
-    text: composeForward({ subject: "badge", from: { name: "Casey Example", address: "casey.example@osterly-health.example" }, body: "Attached is my new hospital ID badge." }),
-    attachments: [{ filename: "badge.pdf", contentType: "application/pdf", bytes: new TextEncoder().encode("%PDF-1.4 badge") }],
-  });
+  harness.anthropicReply = FAIL;
+  const r = await send({ documentType: "other", confidence: "high", extracted: { name: "Hospital ID Badge", issuer: "Osterly Example Health", facts: [{ label: "Valid through", value: "2027-06-30" }], suggestedCategory: { name: "Hospital ID Badges" } }, request_lead_in: "Please present a photo ID to obtain a replacement", requested_items: ["photo ID"] },
+    { subject: "badge", from: CASE.from, body: "Attached is my new hospital ID badge." }, "badge.pdf");
   assert.equal(r.status, 200);
   assert.equal(r.body.read, "rules");
   assert.equal(r.body.intent, "delivery");
   assert.equal(rows("document_requests").length, 0, "no request row");
   assert.equal(rows("documents").length, 1);
   assert.notEqual(rows("documents")[0].type, "request-attachment-inbox", "not held with a request");
-  assert.equal(harness.sent.filter((m) => m.to?.[0] !== ME).length, 0);
+  assert.equal(toHospital().length, 0);
 });

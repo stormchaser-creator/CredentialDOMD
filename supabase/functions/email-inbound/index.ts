@@ -1293,10 +1293,11 @@ type Scan = any;
 // (scannerCore.js, the app's scanner too) knows credentials and receipts, so
 // on 2026-11-05 a hospital's request letter attached to a forward came back
 // with almost nothing in it, and the request inside the PDF was never read.
-// Its asking words go in notes, word for word, where attachmentText
-// (intakeFacts.mjs) hands them to the reading and to the host's check of
-// every quote.
-const SCAN_REQUEST_WORDS = "If the document is a letter, memo, checklist or form that asks the physician for documents or information, put in \"notes\" each sentence that asks and each item it lists, word for word as printed, one per line.";
+// The scanner is asked for what such a letter asks, as the KIND of each
+// document only and never its details: a letter's own words can name
+// patients, and the host passes on only what attachmentText
+// (intakeFacts.mjs requestWords) can tell is a document's name.
+const SCAN_REQUEST_WORDS = "If the document is a letter, memo, checklist or form that asks the physician for documents, also return at the top level of the JSON \"requested_items\": an array with one entry per document it asks the physician for, each written as the generic kind of document only, in a few lower-case words (for example \"operative notes\", \"DEA certificate\", \"BLS card\", \"case log for the past 24 months\"), never a patient, a case, a person's name, a facility, a date, a number, an address or any other detail; and \"request_lead_in\": its asking sentence with every such detail left out (for example \"Please provide the operative notes for the listed cases\"). Leave both out for any other document.";
 
 /**
  * Read one attachment with the app's scanner prompt and validator, on the

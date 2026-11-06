@@ -132,143 +132,116 @@ Never give a policy, licence, certificate, DEA or NPI number, or any other ident
 // Keys of a scanner result that hold an identifying number or a personal
 // detail. They are never shown to the model and never checked against.
 const SCAN_SECRET = /number|npi|dea|ssn|dob|birth|account|member|patient|mrn|billto|email|phone|address|signature/i;
-// A label in a scan's notes or facts that names a contact detail of a
-// person. Any other label is judged by its value: "DEA Registration: current
-// copy" is a checklist's item, "DEA Registration: QX1234563" an identifier.
-const CONTACT_LABEL_RE = /^(?:(?:home|mailing|street|residential|work)\s+)?address$|^(?:phone|telephone|fax|cell|mobile|e-?mail|signature)(?:\s+(?:number|no\.?|#))?$/i;
-// A label that names a person, over a value that reads as one ("Name: Pat Q Sample").
-const PERSON_LABEL_RE = /^(?:(?:full|legal|patient|member)\s+)?name$/i;
-const PERSON_VALUE_RE = /^[A-Z][a-z'-]+(?:\s+[A-Z]\.?)*\s+[A-Z][a-z'-]+/;
 
 // The most of one attachment's words that are shown and checked against.
-export const MAX_ATTACHMENT_WORDS = 4000;
-const MAX_SCAN_NOTES = 2000;
-const MAX_NOTE_LINE = 700;
-const MAX_FACTS = 60;
-// An address or a link in an attachment's line: never shown, never quoted.
+export const MAX_ATTACHMENT_WORDS = 1500;
+// An address or a link: never shown, never quoted.
 const CONTACT_RE = /[A-Za-z0-9._%+'-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|\bhttps?:\/\/|\bwww\./i;
-// "Label: value" or "Label - value" at the head of a line of the scan's
-// notes, the label a few words ("Case 1: ...").
-const NOTE_LABEL_RE = /^([A-Za-z][A-Za-z0-9 .'/&()#]{0,40}?)(?::|\s+-)\s+(\S.*)$/;
-// A case of the physician's, by number or not: whoever it names is a patient.
-const CASE_LABEL_RE = /^case\b/i;
 // Words that follow "patient" without naming anyone ("Patient Logs",
-// "Patient Safety Committee", "Patient Volume Attestation"): identifierGate.js
-// keeps these, and so does this.
+// "Patient Safety Committee"): identifierGate.js keeps these, and so does this.
 const NOT_PATIENT_NAME = "Logs?|Cases?|Volumes?|Encounters?|Lists?|Census|Contacts?|Hours|Population|Panels?|Outcomes?|Data|Reports?|Records?|Safety|Care|Experience|Satisfaction|Portal|Relations|Advocate|Access|Services|Rights|Quality|Flow|Centered|Centred|Education|Engagement|Mix|Load|Numbers|Counts?|Totals?|Summary|Attestation|Forms?";
 // A patient named: "patient" (or "pt") and a capitalised word after it that is a name.
 const PATIENT_NAMED_RE = new RegExp(`\\b(?:[Pp]atient|PATIENT|[Pp]t)\\b\\.?(?:'s)?(?:\\s+[Nn]ame)?\\s*[:,-]?\\s*(?!(?:${NOT_PATIENT_NAME})\\b)[A-Z][a-z]`);
-// Words that end in a person's shaped name, "Last, First" or "First [M.] Last",
-// straight before a date ("Sample, Pat 03/14/1961", "Pat Sample (04/11/2026)").
-const NAME_BEFORE_RE = /\b([A-Z][a-z'-]+)(?:,\s*|\s+)(?:([A-Z])\.?\s+)?([A-Z][a-z'-]+)[\s,(-]*$/;
-// Words that make such a pair a place, a body or a heading, not a person:
-// "Johns Hopkins University, May 20, 2005", "Neurological Surgery 06/15/2009",
-// "Mercy Hospital 01/05/2010", "Effective Date 2026-01-01".
-const INSTITUTION_RE = /^(?:University|Universit\w*|Hospitals?|Board|Surgery|Medicine|Medical|College|Centers?|Centres?|Clinics?|School|Staff|Society|Association|Institute|Health|Healthcare|Department|Foundation|Academy|Council|Committee|System|Group|Partners|Services|Program|Residency|Fellowship|Date|Dated|Day|Effective|Expiration|Expires|Expired|Issued|Through|Until|Since|Due|Renewal|Renewed|Certification|Certificate|Registration|License|Licence|Policy|Coverage|Appointment|Approved|Granted|Signed|Received|Updated|Completed|Valid|Begins|Ends|Start|End)$/;
-
-/**
- * Does `v` put a person next to a date: "born" and a date, or a name
- * shaped like a person's straight before any date ("Sample, Pat
- * 03/14/1961")? A pair with a word of a place or a body in it is not one.
- */
-function personDateIn(v) {
-  return datesIn(v).some((d) => {
-    const before = v.slice(0, d.index);
-    if (/\bborn\b|\bb\.\s*$/i.test(before.slice(-30))) return true;
-    const m = before.match(NAME_BEFORE_RE);
-    return !!m && ![m[1], m[3]].some((w) => INSTITUTION_RE.test(w));
-  });
-}
 
 /**
  * Do these words of an attachment carry an identifier: anything
  * identifierReason names (SSN, date of birth, a patient identifier, an
  * account, licence or passport number), a number ID_VALUE_RE or longNumber
  * reads as one (a DEA number, an NPI, "licence MD-48213"), a patient named
- * ("operative note for patient Pat Sample"), a person next to a date ("born
- * March 14, 1961", "Sample, Pat 03/14/1961"), or an address or a link?
- * `label` is the field or fact label the words sit under, when any. The
- * records path holds a quote to the same number check (carriesIdentifier).
- * An amount ("$1,000,000") and a date are not identifiers.
+ * ("operative note for patient Pat Sample"), "born" and a date, or an
+ * address or a link? `label` is the field the words sit under, when any.
+ * The records path holds a quote to the same number check (carriesIdentifier).
  */
 export function attachmentWordsIdentify(label, words) {
   const v = String(words ?? "");
-  if (CONTACT_RE.test(v) || PATIENT_NAMED_RE.test(v) || personDateIn(v) || carriesIdentifier(null, v)) return true;
+  if (CONTACT_RE.test(v) || PATIENT_NAMED_RE.test(v) || /\bborn\b/i.test(v) || carriesIdentifier(null, v)) return true;
   return !!label && !!identifierReason(label, v);
 }
 
-/** A label and its value that name something no attachment's words may carry: a contact detail, a person's name, a case (its patient), an identifier. */
-function labelledIdentifies(label, value) {
-  if (CONTACT_LABEL_RE.test(label) || CASE_LABEL_RE.test(label)) return true;
-  if (PERSON_LABEL_RE.test(label) && PERSON_VALUE_RE.test(value)) return true;
-  return attachmentWordsIdentify(label, value);
-}
+// ─── What a request letter asks for ──────────────────────────────────────────
+//
+// On 2026-11-05 a forward said "See attached." over a hospital's letter that
+// asked for documents, and nothing was read: the scanner's prompt knows
+// credentials, and the letter's words never reached the reading. Passing the
+// scanner's free notes on instead leaked whatever the letter said (a case
+// list names patients, with dates), and no guess at what a name looks like
+// held. So the intake asks the scanner (email-inbound SCAN_REQUEST_WORDS)
+// for two things only: requested_items, the generic KIND of each document
+// asked for ("DEA certificate", "operative notes for the listed cases"), and
+// request_lead_in, the asking sentence with every detail left out; and the
+// host keeps each only when it is short and plainly a document's name. A
+// dropped item is a missed ask, never a leak.
 
-/** A line of the scan's notes that carries an identifier, under its own label when it has one ("Date of Birth: March 14, 1961", "Patient Name - Pat Sample"). */
-function noteLineIdentifies(line) {
-  if (attachmentWordsIdentify("notes", line)) return true;
-  const m = line.match(NOTE_LABEL_RE);
-  return !!m && labelledIdentifies(m[1].trim(), m[2]);
-}
+const MAX_REQUESTED_ITEMS = 25;
+const MAX_REQUEST_WORDS = 10;
+// Capitals that name a document, not a person or a place.
+const REQUEST_ACRONYMS = new Set(["DEA", "BLS", "ACLS", "PALS", "ATLS", "NRP", "CV", "NPI", "CME", "TB", "PPD", "COI", "FPPE", "OPPE", "MD", "DO", "PA", "NP", "CPR", "ID", "MMR", "HIV", "USMLE", "COMLEX", "ECFMG", "CSR", "CDS"]);
+// Capitalised words a document's name may use. Any other capitalised word
+// may be a name, a place or a facility, and the item is dropped.
+const REQUEST_WORDS = new Set(("please current updated recent valid signed completed copy copies your the a an all any proof of documentation evidence "
+  + "board certificate certification certifications license licence licenses state medical controlled substance registration registrations "
+  + "card cards malpractice insurance professional liability coverage face sheet declaration declarations page privileges privilege "
+  + "hospital case cases log logs operative op notes note curriculum vitae peer reference references letter letters recommendation "
+  + "diploma diplomas residency fellowship training internship immunization immunizations vaccination vaccinations vaccine flu influenza "
+  + "hepatitis titer titers tuberculosis test tests screening health statement attestation attestations form forms application "
+  + "photo identification passport driver drivers life support basic advanced cardiac pediatric neonatal resuscitation trauma "
+  + "continuing education credits credit hours work history gap explanation background check release consent drug screen federal "
+  + "verification verifications list listed delineation request requested quality data procedure procedures surgical volume patient "
+  + "encounter encounters reappointment appointment credentialing file items documents document following below required fit mask "
+  + "covid booster exam examination physical boards specialty subspecialty pt results contact census population panel outcomes report reports record records rights safety summary hours mix").split(/\s+/));
 
-/** A line of the notes as the pieces that may be kept: itself, or its sentences when it is too long to keep whole. */
-const notePieces = (line) => (line.length <= MAX_NOTE_LINE ? [line]
-  : line.split(/(?<=[.!?;])\s+/).map((x) => x.trim()).filter((x) => x && x.length <= MAX_NOTE_LINE));
+/**
+ * One requested item, or the lead-in, as the host keeps it: whitespace
+ * collapsed, or "" when it could carry anything but a document's name. At
+ * most ten words; no digit but a span of months or years ("for the past 24
+ * months"); no address, link or "Last, First"; no capitals but a known
+ * document acronym; no capitalised word that is not a document's; and
+ * nothing attachmentWordsIdentify finds.
+ */
+export function requestWords(v) {
+  if (typeof v !== "string") return "";
+  const s = v.replace(/\s+/g, " ").trim().replace(/[.;:]+$/, "");
+  if (!s || s.split(" ").length > MAX_REQUEST_WORDS || s.length > 120) return "";
+  if (/\d/.test(s.replace(/\b\d{1,2}\s+(?:months?|years?)\b/gi, ""))) return "";
+  if (/[@<>]|https?:|www\./i.test(s) || /,\s*[A-Z]/.test(s)) return "";
+  for (const w of s.match(/[A-Za-z][A-Za-z'-]*/g) || []) {
+    if (/^[A-Z]{2,}$/.test(w.replace(/'s$/, "")) && !REQUEST_ACRONYMS.has(w.replace(/'s$/, ""))) return "";
+    if (/^[A-Z][a-z]/.test(w) && !REQUEST_WORDS.has(w.toLowerCase().replace(/'s$/, ""))) return "";
+  }
+  if (attachmentWordsIdentify(null, s) || identifierReason("", s)) return "";
+  return s;
+}
 
 /**
  * An attachment's words as the scanner read them, numbers that identify
- * anything left out: the flat extracted fields, then the scan's own notes
- * line by line (where email-inbound asks the scanner to copy a request
- * letter's asking sentences and listed items, SCAN_REQUEST_WORDS), then an
- * "other" document's facts as label: value. Until 2026-11-05 only the flat
- * fields were read, so a request letter whose words the scanner put in notes
- * or facts reached neither the reading nor the host's check of its quotes.
- * A flat field's key passes SCAN_SECRET; every value, and every line of the
- * notes on its own, is held to attachmentWordsIdentify (under its label, when
- * it has one), so one line that names a number does not take the rest with
- * it. A label alone drops nothing but a contact detail or a person's name:
- * "DEA Registration: current copy" is a checklist's item. Whole lines (or,
- * for one too long, its sentences) are checked before anything is cut, and
- * what does not fit is left out rather than cut, so no cut can leave part of
- * a number behind.
+ * anything left out: what a request letter asks for, when the scanner says
+ * (requested_items and request_lead_in, each through requestWords), as
+ * "requestLeadIn: ..." and "requestedItem: ..." lines, then the scanner's
+ * own flat fields. The scanner's free notes and an "other" document's facts
+ * are not passed on: they are the letter's words, and a letter can name
+ * anyone.
  */
 export function attachmentText(scan) {
   if (!scan || typeof scan !== "object" || scan.patientRecord) return "";
   const ex = scan.extracted && typeof scan.extracted === "object" ? scan.extracted : {};
-  const flat = (v) => String(v).replace(/\s+/g, " ").trim();
-  const clip = (v, n) => (v.length > n ? v.slice(0, n) : v);
   const out = [];
+  const lead = requestWords(scan.request_lead_in);
+  if (lead) out.push(`requestLeadIn: ${lead}`);
+  const seen = new Set();
+  for (const item of (Array.isArray(scan.requested_items) ? scan.requested_items : []).slice(0, MAX_REQUESTED_ITEMS)) {
+    const s = requestWords(item);
+    if (s && !seen.has(s.toLowerCase())) { seen.add(s.toLowerCase()); out.push(`requestedItem: ${s}`); }
+  }
   for (const [k, v] of Object.entries(ex)) {
-    if (SCAN_SECRET.test(k) || v === null || v === undefined || v === "" || typeof v === "object") continue;
-    const s = flat(v);
+    if (SCAN_SECRET.test(k) || /^request(?:LeadIn|edItem)$/.test(k) || v === null || v === undefined || v === "" || typeof v === "object") continue;
+    const s = String(v).replace(/\s+/g, " ").trim();
     if (!s || identifierReason(k, s)) continue;
     // Words are held to the whole check; a value that is only a number (an
     // amount per claim, an hourly rate) is digits by design.
     if (/[A-Za-z]/.test(s) ? attachmentWordsIdentify(k, s) : ID_VALUE_RE.test(s)) continue;
-    out.push(`${k}: ${clip(s, 700)}`);
+    out.push(`${k}: ${s.slice(0, 700)}`);
   }
-  // The notes keep their lines: a listed item stays an item of its own.
-  const lines = [];
-  if (typeof scan.notes === "string" && flat(scan.notes) !== flat(ex.notes ?? "")) {
-    let size = 0;
-    for (const l of scan.notes.split(/\r?\n/).map(flat)) {
-      for (const piece of l ? notePieces(l) : []) {
-        if (noteLineIdentifies(piece) || size + piece.length + 1 > MAX_SCAN_NOTES) continue;
-        lines.push(piece);
-        size += piece.length + 1;
-      }
-    }
-  }
-  if (lines.length === 1) out.push(`notes: ${lines[0]}`);
-  else if (lines.length) out.push("notes:", ...lines);
-  for (const f of (Array.isArray(ex.facts) ? ex.facts : []).slice(0, MAX_FACTS)) {
-    if (!f || typeof f !== "object") continue;
-    const label = flat(f.label ?? "").slice(0, 80);
-    const value = f.value === null || f.value === undefined || typeof f.value === "object" ? "" : flat(f.value);
-    if (!label || !value || labelledIdentifies(label, value)) continue;
-    out.push(`${label}: ${clip(value, 300)}`);
-  }
-  // Whole lines up to the cap.
+  // Whole lines up to the cap: a cut never leaves part of a number behind.
   const kept = [];
   let size = 0;
   for (const l of out) {
@@ -278,6 +251,18 @@ export function attachmentText(scan) {
     size += add;
   }
   return kept.join("\n");
+}
+
+/** What attachmentText says a request letter asks for: { leadIn, items }. */
+export function requestedInWords(text) {
+  const out = { leadIn: "", items: [] };
+  for (const line of String(text ?? "").split("\n")) {
+    const m = line.match(/^(requestLeadIn|requestedItem): (.+)$/);
+    if (!m) continue;
+    if (m[1] === "requestLeadIn") out.leadIn = m[2];
+    else out.items.push(m[2]);
+  }
+  return out;
 }
 
 const briefly = (row, section) => {

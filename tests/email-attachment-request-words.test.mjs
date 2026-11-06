@@ -16,8 +16,10 @@
 //
 // The attachment's words are built the way email-inbound builds them, from
 // the scanner's result (intakeFacts.mjs attachmentText), not written by hand:
-// until 2026-11-05 attachmentText never read a scan's notes, so a fixture that
-// assumed a "notes:" line was testing words the host never had.
+// what the host passes on is the scanner's requested_items and
+// request_lead_in (the kind of each document asked for), never the letter's
+// free notes, so a fixture that assumed a "notes:" line was testing words the
+// host never has.
 //
 // Run: node --test tests/email-attachment-request-words.test.mjs
 import { test } from "node:test";
@@ -34,13 +36,13 @@ const factsFor = (parts, subject, attachmentWords) => ({
 });
 
 test("a documentation request whose words are only in the attachment's scanned text is still picked up as an ask", () => {
-  const attachmentWords = attachmentText({ documentType: "other", extracted: {}, notes: "Please send an updated copy of your current DEA registration by 12/15/2026 to complete the reappointment file." });
+  const attachmentWords = attachmentText({ documentType: "other", extracted: {}, request_lead_in: "Please send an updated copy of your current DEA registration", requested_items: ["Current DEA registration"] });
   const parts = { note: "", message: "See attached.", history: "" };
   const facts = factsFor(parts, "Reappointment file", [attachmentWords]);
 
   const v = verifyUnderstanding({
     intent: "request",
-    asks: [{ quote: "Please send an updated copy of your current DEA registration by 12/15/2026 to complete the reappointment file.", kind: "dea", who: "physician" }],
+    asks: [{ quote: "Please send an updated copy of your current DEA registration", kind: "dea", who: "physician" }],
     attachments: [{ index: 1, role: "request_checklist", filing: "Keep with the request" }],
     summary: "a request for your DEA registration",
     confidence: "high",
@@ -55,7 +57,7 @@ test("a documentation request whose words are only in the attachment's scanned t
 });
 
 test("the email's own message is read together with its attachment, not instead of it", () => {
-  const attachmentWords = attachmentText({ documentType: "other", extracted: {}, notes: "Current CPR/BLS certification card and a copy of your state controlled-substance registration are both still outstanding." });
+  const attachmentWords = attachmentText({ documentType: "other", extracted: {}, requested_items: ["Current BLS certification card", "state controlled substance registration"] });
   const parts = { note: "", message: "Please send the items listed in the attached checklist for my reappointment file.", history: "" };
   const facts = factsFor(parts, "Reappointment file", [attachmentWords]);
 
@@ -63,7 +65,7 @@ test("the email's own message is read together with its attachment, not instead 
     intent: "request",
     asks: [
       { quote: "Please send the items listed in the attached checklist for my reappointment file.", kind: "unknown", who: "physician" },
-      { quote: "Current CPR/BLS certification card", kind: "bls", who: "physician" },
+      { quote: "Current BLS certification card", kind: "bls", who: "physician" },
     ],
     attachments: [{ index: 1, role: "request_checklist", filing: "Keep with the request" }],
     summary: "a request for the items in the attached checklist",
@@ -75,5 +77,5 @@ test("the email's own message is read together with its attachment, not instead 
   // today; the point of this test is the second ask, named only in the
   // attachment the same email carried.
   assert.equal(v.asks.length, 2, "both the message's own ask and the attachment's own ask should be kept");
-  assert.ok(v.asks.some((a) => a.quote === "Current CPR/BLS certification card"), "the item named only in the attachment should be among the kept asks");
+  assert.ok(v.asks.some((a) => a.quote === "Current BLS certification card"), "the item named only in the attachment should be among the kept asks");
 });
