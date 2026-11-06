@@ -23,7 +23,7 @@ import { promises as fs, readFileSync, readdirSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { gitRunner, readLiveBuild, fetchLiveBuild } from './reply.mjs';
 import { verifyClaim, parseClaimEvidence, namesDevice, testCannotConfirm } from './claims.mjs';
-import { itemFollowUpWork, heldFollowUpWork } from './checklist.mjs';
+import { itemFollowUpWork, heldFollowUpWork, resolveFollowUpWork } from './checklist.mjs';
 import { gateWorktree } from './worktree.mjs';
 import { runTestFile, greenVerdict, TEST_FILE } from './gates/tests.mjs';
 import { RUN_NAME } from './merge.mjs';
@@ -147,9 +147,16 @@ export function disputedItems(observations = [], verdicts = {}) {
 //                (the case is waiting_customer or waiting_owner, never
 //                complete), not on another model run
 //   items        the checklist: a device probe waits on the customer's check
-export function hostFollowUps({ attachments = [], finals = [], waiting = false, items = [] }) {
+//   asked        device probes a stored reply already asked about: the
+//                reporter's answer waits on a recorded resolution
+// An owner_decision or data_fix item, and a device probe already asked, can
+// only be finished by a recorded resolution (checklist.mjs RESOLUTION_KINDS):
+// that is the owner's work, never another worker run (review of 2026-11-06:
+// they looped through every attempt and revival).
+export function hostFollowUps({ attachments = [], finals = [], waiting = false, items = [], asked = [] }) {
   const out = [];
   const probe = new Set(items.filter(i => i.kind === 'device_probe').map(i => i.id));
+  const resolve = new Set(items.filter(i => i.kind === 'owner_decision' || i.kind === 'data_fix' || (i.kind === 'device_probe' && asked.includes(i.id))).map(i => i.id));
   for (const a of attachments.filter(x => x.target && x.access === 'unavailable')) {
     out.push({ work: `Retrieve and review attachment ${a.attachment} (${a.storage_path})`, owner: 'support_worker', next_action: `The host could not deliver it (${String(a.reason ?? 'unknown').slice(0, 120)}); the next run downloads it again` });
   }
@@ -157,7 +164,9 @@ export function hostFollowUps({ attachments = [], finals = [], waiting = false, 
     out.push({ work: `Open attachment ${a.attachment} (${a.storage_path}) yourself`, owner: 'support_owner', next_action: 'The runner opens images and PDFs only, so no session has seen this file; read it and add what matters to the ticket' });
   }
   for (const f of finals) {
-    if (f.state === 'in_progress') out.push({ work: heldFollowUpWork(f.id), owner: 'support_worker', next_action: `After the owner merges the held run, cite ${f.id}'s test on the live build` });
+    if (f.state !== 'done' && resolve.has(f.id)) out.push({ work: resolveFollowUpWork(f.id), owner: 'support_owner', next_action: probe.has(f.id)
+      ? `Read the reporter's answer about ${f.id}; record their confirming message, or ask again on the thread` : `Decide or make the change for ${f.id}, then record it` });
+    else if (f.state === 'in_progress') out.push({ work: heldFollowUpWork(f.id), owner: 'support_worker', next_action: `After the owner merges the held run, cite ${f.id}'s test on the live build` });
     else if (f.detail === 'new') out.push({ work: `Work on ${f.id}, added to the checklist after this run's worker`, owner: 'support_worker', next_action: `The next run takes ${f.id} up` });
     else if (['not_done', 'partial'].includes(f.state) && !waiting && !probe.has(f.id)) out.push({ work: itemFollowUpWork(f.id), owner: 'support_worker', next_action: `The next run works on ${f.id} until the host can decide it done` });
   }

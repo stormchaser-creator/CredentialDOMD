@@ -35,7 +35,7 @@ test('publication SQL on PostgreSQL: verified replies, refused operator inserts,
   assert.equal(result.status, 0, result.stderr || result.stdout);
   assert.match(result.stdout, /\d+ synthetic PostgreSQL checks passed/);
   assert.match(result.stdout, /ok an operator insert without a verification is refused by the database/);
-  for (const name of ['a held reply with no message since leaves the new-message queue', 'a message the run saw keeps it out, to the microsecond; a status note is not input',
+  for (const name of ['a held reply with no message since leaves the new-message queue', 'a message the run saw keeps it out, to the microsecond; a status note is not input, nor the watermark',
     'a message newer than the watermark lets it back in']) assert.ok(result.stdout.includes(`ok ${name}`), name);
 });
 

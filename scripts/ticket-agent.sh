@@ -122,7 +122,8 @@ RUN_COMMITTER="ticket-agent+$RUN_ID@credentialdomd.invalid"
 # Queue eligibility is enforced in the trusted shared collector. A physician's
 # ticket still needs the owner's approval; admin-filed tickets retain their gate.
 # Due internal follow-ups use the same target/owner/original approval, never a new
-# recipient. Their action-only runs do not send another reply without new input.
+# recipient. Their action-only runs send no reply without new input, except one
+# completion reply once every item is done (ticket-agent-context.mjs finishRun).
 TOKEN=$(security find-generic-password -l "Supabase CLI" -w 2>/dev/null) || { echo "$(date '+%F %T') ERROR — no Supabase token in keychain" >> "$LOG"; exit 1; }
 # Stored replies that no checked writer recorded, and replies the database
 # handed to send-ticket-reply that are still not emailed an hour later

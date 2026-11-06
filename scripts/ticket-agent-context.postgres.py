@@ -88,7 +88,7 @@ with tempfile.TemporaryDirectory(prefix='ticket-context-pg-') as tmp:
         check('a held reply with no message since leaves the new-message queue',all(x['id']!=T for x in held(None)) and any(x['id']==T for x in rows(js('queueSQL()'))))
         sql(f"insert into support_messages values('30000000-0000-4000-8000-000000000009','{T}','{A}','Synthetic input',false,'2026-09-20 08:00:00.123456+00',null,null),('30000000-0000-4000-8000-00000000000a','{T}','{A}','Status set to open',false,'2026-09-21',null,null)")
         seen=rows(js(f"targetSQL('{T}')"))[0]['last_message_at']
-        check('a message the run saw keeps it out, to the microsecond; a status note is not input',all(x['id']!=T for x in held('2026-09-20T08:00:00.123456+00:00')) and seen.startswith('2026-09-21'))
+        check('a message the run saw keeps it out, to the microsecond; a status note is not input, nor the watermark',all(x['id']!=T for x in held('2026-09-20T08:00:00.123456+00:00')) and seen=='2026-09-20T08:00:00.123456+00:00')
         check('a message newer than the watermark lets it back in',any(x['id']==T for x in held('2026-09-20T08:00:00.123455+00:00')) and any(x['id']==T for x in held(None)))
         sql(f"delete from support_messages where ticket_id='{T}';update support_tickets set updated_at='{VERSION}' where id='{T}'")
         # A refund ticket the refund ledger opened (20260930071000) on an

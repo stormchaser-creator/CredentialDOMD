@@ -7,7 +7,7 @@ import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { checkFixedRules, customerReplyText, ReplyRuleError, ruleNames, sentences, questionReportsResult } from './ticket-fix/claims.mjs';
 import { prepareAgentReply, prepareRenderedReply, readVerificationKey, signPreparedReply, gitRunner, filesCitedIn, ensurePrivateDir, readOnly as readOnlySQL,
   MIGRATION, emailStatus, RUN_COMMITTER } from './ticket-fix/reply.mjs';
-import { checklistErrors, isSupportReply, hostItemWork, replyHold, isCompletion, AGENT_REPLY_MAX, REMAINING_MAX, OBSERVED_MAX, MAX_ITEMS } from './ticket-fix/checklist.mjs';
+import { checklistErrors, isSupportReply, hostItemWork, replyHold, isCompletion, askItems, readChecklist, RESOLUTION_KINDS, AGENT_REPLY_MAX, REMAINING_MAX, OBSERVED_MAX, MAX_ITEMS } from './ticket-fix/checklist.mjs';
 import { isMain } from './ticket-fix/is-main.mjs';
 
 export const APPROVED = '(public.is_admin(t.user_id) OR t.agent_approved_at IS NOT NULL)';
@@ -130,8 +130,10 @@ export function approvalSQL(approval) {
   if (typeof approval.approved_at !== 'string' || !Number.isFinite(Date.parse(approval.approved_at))) throw Error('Original approval timestamp is required');
   return `t.agent_approved_at=${literal(approval.approved_at)}::timestamptz`;
 }
-// The target's newest message when it was read (a held reply's watermark).
-const LAST_MESSAGE = '(SELECT max(m.created_at) FROM support_messages m WHERE m.ticket_id=t.id) AS last_message_at';
+// The target's newest input when it was read (a held reply's watermark):
+// the same messages the queue counts as new input, so an admin's "Status set
+// to" note neither lets a held ticket back in nor resets its attempts.
+const LAST_MESSAGE = `(SELECT max(m.created_at) FROM support_messages m WHERE m.ticket_id=t.id AND ${NEW_INPUT}) AS last_message_at`;
 export function continuationSQL(record) {
   const approval = approvalSQL(record.approval);
   return readOnly(`SELECT ${FIELDS},${LAST_MESSAGE},(${AWAITING}) AS awaiting_reply FROM support_tickets t WHERE t.id='${id(record.target_id)}'::uuid
@@ -403,7 +405,9 @@ export function validateAssessment(result, context, { isolated = false, codeOutc
       if (COMPLETION_CLAIM.test(value) || questionReportsResult(value)) problems.push(`assessment.questions[${i}]: unverified_claim: a question may not report a result (no "now", "fixed", "shows", "saved", "updated" and the like); ask about what the customer sees`);
     });
     // A decision waiting on CredentialDOMD reaches the owner as durable work.
-    if (context.approval?.from_admin !== true && result.checklist.some(e => e.state === 'needs_owner') && !review.follow_up.some(f => f.owner === 'support_owner')) {
+    // An item whose resolution is recorded no longer waits on anyone.
+    const resolved = new Set(Array.isArray(stage3.resolved) ? stage3.resolved : []);
+    if (context.approval?.from_admin !== true && result.checklist.some(e => e.state === 'needs_owner' && !resolved.has(e.ac_id)) && !review.follow_up.some(f => f.owner === 'support_owner')) {
       problems.push('checklist: an item waiting on a decision needs a support_owner follow-up saying what the owner must decide');
     }
     if (problems.length) throw new ResultRefused(problems);
@@ -506,8 +510,10 @@ export async function collectQueue(query, directory, { includeArchived = false, 
   const records = [];
   for (const name of names) records.push(await readCase(directory, name.slice(0, -5)));
   // A held reply (finishRun) leaves the new-message queue until a newer
-  // message arrives: its work goes on as a bounded continuation below.
-  const held = records.filter(r => r.continuation?.held).map(r => ({ id: r.target_id, after: r.continuation.held.input_at ?? null }));
+  // message arrives: its work goes on as a bounded continuation below. Only
+  // while that work is live: a suppressed or closed case must not keep a
+  // reopened ticket out of the queue for good, nor count toward the bound.
+  const held = records.filter(r => r.continuation?.held && HELD_LIVE.includes(r.continuation.state)).map(r => ({ id: r.target_id, after: r.continuation.held.input_at ?? null }));
   if (held.length > 500) throw Error('Held reply queue exceeds bound; operator review required');
   const incoming = await query(queueSQL(includeArchived, parked, failing, held));
   if (incoming.length > 2 || incoming.some(t => !UUID.test(t.id || '') || typeof t.from_admin !== 'boolean')) throw Error('Malformed approved queue');
@@ -528,8 +534,9 @@ export async function collectQueue(query, directory, { includeArchived = false, 
       due.push(record);
       continue;
     }
-    // A held reply waiting on the owner's decision: named on every queue run.
-    if (queue.held && queue.state === 'waiting_owner') owner.push(record.target_id);
+    // Work waiting on the owner (a decision, a data change, a reporter's
+    // answer to record): named on every queue run, and in attention.json.
+    if (queue.state === 'waiting_owner') owner.push(record.target_id);
     if (queue.state !== 'pending') continue; // Owner/customer waits never invoke the worker.
     if (!Number.isInteger(queue.attempts) || queue.attempts < 0 || !Number.isFinite(Date.parse(queue.due_at))) throw Error('Malformed continuation state');
     if (Date.parse(queue.due_at) <= now) due.push(record);
@@ -549,6 +556,7 @@ export async function collectQueue(query, directory, { includeArchived = false, 
     if (!rows.length) {
       record.continuation.state = 'suppressed';
       record.continuation.reason = 'Original approval, owner or open-ticket eligibility changed';
+      delete record.continuation.held;
       await writePrivate(path.join(directory, `${record.target_id}.json`), JSON.stringify(record, null, 2));
       continue;
     }
@@ -631,6 +639,36 @@ export async function releaseAttempt(directory, ticketId, runId) {
   await writePrivate(path.join(directory, `${id(ticketId)}.json`), JSON.stringify(record, null, 2));
   return true;
 }
+// Records how an item no run can finish was resolved (review of 2026-11-06,
+// defect 1): the owner's decision for an owner_decision, the data change made
+// and checked for a data_fix, or the reporter's confirming message for a
+// device_probe (a customer message on the ticket; the host checks it again
+// when it decides, checklist.mjs validResolutions). Run by the owner or the
+// ops supervisor. Each item is resolved once and never re-resolved, and the
+// case is put back in the queue without fresh attempts (at most one left
+// when it had used them): a resolution can wake a case at most once per
+// item, so no reset loops.
+export async function resolveItem(directory, ticketId, acId, kind, { note = '', messageId = null, now = Date.now() } = {}) {
+  await ensureState(directory);
+  const record = await readCase(directory, id(ticketId));
+  const checklist = readChecklist(directory, ticketId);
+  const item = checklist?.items.find(i => i.id === acId);
+  if (!item) throw Error(`${String(acId).slice(0, 12)} is not a frozen item of this ticket`);
+  if (RESOLUTION_KINDS[item.kind] !== kind) throw Error(`${acId} is a ${item.kind} item; it is resolved by ${RESOLUTION_KINDS[item.kind] ?? 'a run, never by hand'}`);
+  if (kind === 'confirmed' && !UUID.test(messageId || '')) throw Error('A confirmation names the reporter\'s message id');
+  if (typeof note !== 'string' || !note.trim() || note.length > 300 || /[\n\r\0]/.test(note)) throw Error('Say in one line (at most 300 characters) what was decided, changed or confirmed');
+  if (record.resolutions?.[acId]) throw Error(`${acId} is already resolved; nothing changed`);
+  record.resolutions = { ...(record.resolutions ?? {}), [acId]: { kind, at: new Date(now).toISOString(), note: note.trim(), ...(kind === 'confirmed' ? { message_id: messageId } : {}) } };
+  const queue = record.continuation ?? {};
+  if (queue.state !== 'suppressed') {
+    const attempts = Number.isInteger(queue.attempts) ? Math.min(queue.attempts, MAX_CONTINUATIONS - 1) : 0;
+    record.continuation = { ...queue, state: 'pending', attempts, due_at: new Date(now).toISOString() };
+    delete record.continuation.reason;
+    delete record.continuation.reservation;
+  }
+  await writePrivate(path.join(directory, `${id(ticketId)}.json`), JSON.stringify(record, null, 2));
+  return record;
+}
 export function assertReplyMode(context) {
   if (context.run_mode !== 'reply') throw Error('Action-only continuation cannot publish a customer reply');
 }
@@ -640,21 +678,37 @@ export function assertReplyMode(context) {
 // ticket out of the new-message queue until a newer one arrives). A retry of
 // the same held reply keeps its attempts, so MAX_CONTINUATIONS and the
 // revival limits bound it like any continuation; new input starts afresh.
+// The continuation states in which a held reply's work is still live.
+const HELD_LIVE = Object.freeze(['pending', 'stalled', 'waiting_owner']);
 export const HELD_REPLY_WORK = 'Finish the request: its reply is held until every item is done or the reporter must be asked';
 // completed: this run's reply reported every item done and was stored
 // (finishRun): the case closes, and the completion is remembered per
 // checklist so a later run that finds everything still done sends nothing.
-export async function saveReview(directory, context, given, sourceRevision, { now = Date.now(), codeOutcome = undefined, release = null, stage3 = null, held = null, completed = null } = {}) {
-  validateAssessment(given, context, { codeOutcome, release, stage3 });
-  let result = demoteUnreleased(given, codeOutcome);
-  // Work the host itself knows is left (stage 3): an attachment it could not
-  // download, an item whose change waits for release. Never dropped by a
-  // summary that omits it.
+// Work the host itself knows is left (stage 3): an attachment it could not
+// download, an item whose change waits for release, a resolution only the
+// owner can record. Never dropped by a summary that omits it.
+function withHostFollowUps(result, stage3) {
   const hostFollowUp = Array.isArray(stage3?.final?.follow_up) ? stage3.final.follow_up : [];
-  if (hostFollowUp.length) {
-    const own = result.assessment.follow_up;
-    result = { ...result, assessment: { ...result.assessment, follow_up: [...own, ...hostFollowUp.filter(h => !own.some(f => questionKey(f.work) === questionKey(h.work)))] } };
-  }
+  if (!hostFollowUp.length) return result;
+  const own = result.assessment.follow_up;
+  return { ...result, assessment: { ...result.assessment, follow_up: [...own, ...hostFollowUp.filter(h => !own.some(f => questionKey(f.work) === questionKey(h.work)))] } };
+}
+// The follow-ups still open once this result is saved (keyed by work):
+// the earlier ones and this run's, less what it completed and the host's
+// own per-item work for items the host decided done.
+function outstandingWork(previous, result, stage3) {
+  const outstanding = new Map([...(previous?.pending_follow_up || []), ...result.assessment.follow_up].map(f => [questionKey(f.work), f]));
+  for (const done of result.assessment.completed_follow_up) outstanding.delete(questionKey(done.work));
+  for (const f of Array.isArray(stage3?.final?.items) ? stage3.final.items : []) if (f.state === 'done') for (const work of hostItemWork(f.id)) outstanding.delete(questionKey(work));
+  return outstanding;
+}
+// completionPending: a completion reply is about to be stored with this
+// verification id (finishRun): if the run dies after the database stored it,
+// the next run finds the row and records it instead of sending it again.
+export async function saveReview(directory, context, given, sourceRevision, { now = Date.now(), codeOutcome = undefined, release = null, stage3 = null, held = null, completed = null,
+  completionPending = null } = {}) {
+  validateAssessment(given, context, { codeOutcome, release, stage3 });
+  const result = withHostFollowUps(demoteUnreleased(given, codeOutcome), stage3);
   await ensureState(directory);
   const filename = path.join(directory, `${id(context.target_id)}.json`);
   let previous;
@@ -668,17 +722,12 @@ export async function saveReview(directory, context, given, sourceRevision, { no
   // A remembered follow-up is historical, not proof it is still pending or done.
   const answers = new Map([...(previous?.remembered_answers || []), ...result.assessment.answered_questions].map(q => [questionKey(q.question), q]));
   const followUps = new Map([...(previous?.follow_up_history || []), ...result.assessment.follow_up].map(f => [questionKey(f.work), f]));
-  const outstanding = new Map([...(previous?.pending_follow_up || []), ...result.assessment.follow_up].map(f => [questionKey(f.work), f]));
-  for (const done of result.assessment.completed_follow_up) outstanding.delete(questionKey(done.work));
-  // The host closes its own per-item follow-up once it decides the item done.
-  for (const f of Array.isArray(stage3?.final?.items) ? stage3.final.items : []) if (f.state === 'done') for (const work of hostItemWork(f.id)) outstanding.delete(questionKey(work));
+  const outstanding = outstandingWork(previous, result, stage3);
   // A held reply always leaves work for a run (or the owner), never "complete".
   if (held && ![...outstanding.values()].some(f => ['support_worker', 'support_owner'].includes(f.owner))) {
     outstanding.set(questionKey(HELD_REPLY_WORK), { work: HELD_REPLY_WORK, owner: 'support_worker', next_action: 'The next run carries on with the items that are not done' });
   }
   if (!held) outstanding.delete(questionKey(HELD_REPLY_WORK));
-  // A completion reply closes the case: nothing is left for a run to do.
-  if (completed) outstanding.clear();
   const pendingWork = [...outstanding.values()];
   const workerPending = pendingWork.some(f => f.owner === 'support_worker');
   const ownerPending = pendingWork.some(f => f.owner === 'support_owner');
@@ -699,6 +748,10 @@ export async function saveReview(directory, context, given, sourceRevision, { no
       ...(held ? { held: { at: new Date(now).toISOString(), input_at: inputAt, reasons: held.reasons } } : {}) },
     ...(completed ? { completion: { at: new Date(now).toISOString(), checklist_sha256: stage3?.checklist?.items_sha256 ?? null, verification_id: completed.verification_id } }
       : previous?.completion ? { completion: previous.completion } : {}),
+    ...(completionPending && !completed ? { completion_pending: { at: new Date(now).toISOString(), checklist_sha256: stage3?.checklist?.items_sha256 ?? null, verification_id: completionPending.verification_id } } : {}),
+    // Recorded by --resolve-item and by a stored reply (finishRun): kept.
+    ...(previous?.resolutions ? { resolutions: previous.resolutions } : {}),
+    ...(previous?.asked_items ? { asked_items: previous.asked_items } : {}),
     history_complete: context.history_complete, limitations: context.limitations,
     // A saved draft is evidence of follow-through, never proof of delivery or deployment.
     publication: 'not_confirmed', remembered_answers: [...answers.values()], follow_up_history: [...followUps.values()], ...result,
@@ -745,56 +798,95 @@ export async function prepareResult(context, result, { repo = REPO, preHead = nu
 async function storeReply(query, directory, context, prepared, { includeArchived, structured, continuation = false, beforeStore = null }) {
   const secret = await readVerificationKey(query);
   const verification = signPreparedReply(prepared, { ticketId: context.target_id, secret });
-  if (beforeStore) await beforeStore();
+  if (beforeStore) await beforeStore(verification);
   const { replySQL } = await import('./ticket-agent-isolated.mjs');
   const rows = await query(replySQL({ id: context.target_id, owner_id: context.owner_id, updated_at: context.target_version, approval: context.approval }, prepared.text,
     { includeArchived, verification, continuation, ...(structured ? { max: AGENT_REPLY_MAX } : {}) }));
   if (rows.length !== 1) return null;
-  const ledger = path.join(directory, 'replies', context.target_id);
-  await ensurePrivateDir(ledger);
-  await writePrivate(path.join(ledger, `${verification.id}.json`), JSON.stringify({ kind: 'reply_stored', path: 'agent', ticket_id: context.target_id,
-    message_id: rows[0].id, verification_id: verification.id, body_sha256: verification.body_sha256, run_id: prepared.report.run_id,
-    recorded_at: new Date().toISOString() }, null, 2));
+  await writeLedger(directory, context.target_id, { message_id: rows[0].id, verification_id: verification.id, body_sha256: verification.body_sha256, run_id: prepared.report.run_id });
   return verification;
 }
+async function writeLedger(directory, ticketId, entry) {
+  const ledger = path.join(directory, 'replies', ticketId);
+  await ensurePrivateDir(ledger);
+  await writePrivate(path.join(ledger, `${entry.verification_id}.json`), JSON.stringify({ kind: 'reply_stored', path: 'agent', ticket_id: ticketId, ...entry,
+    recorded_at: new Date().toISOString() }, null, 2));
+}
+// The reply a verification was used by, if the database stored one.
+export const storedReplySQL = verificationId => readOnly(`SELECT m.id FROM support_messages m WHERE m.verification_id='${id(verificationId)}'::uuid`);
 async function previousCase(directory, ticketId) {
   try { return await readCase(directory, ticketId); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
 }
+// A stored reply that asked the reporter about these items: the case
+// remembers them, so they are not asked again (checklist.mjs askItems).
+async function markAsked(directory, ticketId, ids) {
+  if (!ids.length) return;
+  const record = await readCase(directory, ticketId);
+  record.asked_items = [...new Set([...(record.asked_items ?? []), ...ids])];
+  await writePrivate(path.join(directory, `${id(ticketId)}.json`), JSON.stringify(record, null, 2));
+}
 export async function finishRun(query, directory, context, result, { sourceRevision = null, includeArchived = false, repo = REPO, preHead = null, runStarted = null, runCommitter = null, runId = null, release = null, fetchBuild, codeOutcome = undefined,
-  stage3 = null, requireStructured = false } = {}) {
+  stage3: given = null, requireStructured = false } = {}) {
+  const previous = await previousCase(directory, context.target_id);
+  // Items a stored reply already asked about, from the case (never re-asked).
+  const stage3 = given ? { ...given, asked: previous?.asked_items ?? given.asked ?? [] } : null;
   const prepared = await prepareResult(context, result, { repo, preHead, runStarted, runCommitter, runId, release, fetchBuild, codeOutcome, stage3, requireStructured });
   const structured = isStructured(result);
   const outcome = codeOutcome ?? stage3?.final?.code_outcome ?? null;
+  const ownerTicket = context.approval?.from_admin === true;
   // Every item the host decided done, this run's change (if any) released,
-  // nothing asked: the reply reports finished work and closes the case.
-  const completion = structured && Boolean(stage3?.final) && isCompletion({ finals: stage3.final.items, codeOutcome: outcome }) && !result.assessment.questions.length;
+  // nothing asked and no follow-up left open, the host's or the worker's
+  // (review of 2026-11-06: an unread attachment or an owner item must not be
+  // erased by "every part is done"): the reply reports finished work and the
+  // case closes.
+  const pending = structured && stage3?.final
+    ? [...outstandingWork(previous, withHostFollowUps(demoteUnreleased(result, codeOutcome), stage3), stage3).values()].filter(f => f.work !== HELD_REPLY_WORK) : [];
+  const completion = structured && Boolean(stage3?.final) && isCompletion({ finals: stage3.final.items, codeOutcome: outcome, pending }) && !result.assessment.questions.length;
   const options = { codeOutcome, release, stage3 };
-  // A completion reply is recorded as such only once it is stored: a
-  // withheld one leaves the work pending for the next run.
+  const sameChecklist = marker => Boolean(marker) && marker.checklist_sha256 === (stage3?.checklist?.items_sha256 ?? null);
+  // A completion reply is recorded as such only once it is stored. A
+  // withheld one keeps the case open as a held reply, so a later run tries
+  // again (review of 2026-11-06: it closed the case with nothing sent).
   const complete = async (verification, mode) => {
     if (!verification) {
-      await saveReview(directory, context, result, sourceRevision, options);
+      await saveReview(directory, context, result, sourceRevision, { ...options, held: { reasons: ['completion withheld'] } });
       return { kind: 'reply_withheld', verification_id: null };
     }
     const record = await saveReview(directory, context, result, sourceRevision, { ...options, completed: { verification_id: verification.id } });
     return { kind: 'reply_stored', completion: true, run_mode: mode, verification_id: verification.id, continuation_state: record.continuation.state, emailed: false, email: emailStatus(context.approval.from_admin) };
+  };
+  // A completion this checklist already had: sent (completion), or begun by
+  // a run that died before it was recorded (completion_pending). The
+  // database says whether that one was stored; it is never sent twice.
+  const alreadySent = async () => {
+    if (sameChecklist(previous?.completion)) return true;
+    const begun = previous?.completion_pending;
+    if (!sameChecklist(begun) || !UUID.test(begun.verification_id || '')) return false;
+    const rows = await query(storedReplySQL(begun.verification_id));
+    if (rows.length !== 1 || !UUID.test(rows[0].id || '')) return false;
+    await writeLedger(directory, context.target_id, { message_id: rows[0].id, verification_id: begun.verification_id, body_sha256: null, run_id: null, recovered: true });
+    await saveReview(directory, context, result, sourceRevision, { ...options, completed: { verification_id: begun.verification_id } });
+    return true;
+  };
+  const sendCompletion = async (reply, mode) => {
+    const verification = await storeReply(query, directory, context, reply, { includeArchived, structured, continuation: mode === 'continuation',
+      // Until it is recorded the case stays open (held), so a run that died
+      // before the database stored it sends it on the next run.
+      beforeStore: v => saveReview(directory, context, result, sourceRevision, { ...options, held: { reasons: ['completion being stored'] }, completionPending: { verification_id: v.id } }) });
+    return complete(verification, mode);
   };
   if (context.run_mode === 'continuation') {
     const rows = await query(continuationSQL(context));
     if (rows.length !== 1 || rows[0].id !== context.target_id || rows[0].user_id !== context.owner_id || rows[0].updated_at !== context.target_version) throw Error('Continuation changed or approval withdrawn; no result applied');
     // An action-only run never sends a status. Once it finishes the work it
     // sends ONE completion reply (owner, 2026-11-06: "complete the task"),
-    // through the same checks, claims and verification as any reply. A
-    // completion already sent for this checklist is never sent again.
-    const previous = completion ? await previousCase(directory, context.target_id) : null;
-    const sent = previous?.completion?.checklist_sha256 === stage3?.checklist?.items_sha256;
-    if (!completion || sent) {
+    // through the same checks, claims and verification as any reply.
+    if (!completion || await alreadySent()) {
       const record = await saveReview(directory, context, result, sourceRevision, options);
       return { kind: 'continuation_saved', continuation_state: record.continuation.state };
     }
     if (stage3.ticket_id !== context.target_id) throw Error('The host decision is for another ticket');
-    const reply = prepareRenderedReply({ result, ticketId: context.target_id, ownerTicket: context.approval?.from_admin === true, stage3, runId, preHead, runStarted });
-    return complete(await storeReply(query, directory, context, reply, { includeArchived, structured, continuation: true }), 'continuation');
+    return sendCompletion(prepareRenderedReply({ result, ticketId: context.target_id, ownerTicket, stage3, runId, preHead, runStarted }), 'continuation');
   }
   if (!prepared) throw Error('Nothing to publish: the host has not decided the checklist');
   assertReplyMode(context);
@@ -802,16 +894,18 @@ export async function finishRun(query, directory, context, result, { sourceRevis
   // released) or the reply asks the reporter something, nothing is stored or
   // emailed: the case keeps its follow-up and a later run finishes the work.
   // agent_last_reply_at stays unset, so the ticket still shows unanswered.
-  const hold = structured ? replyHold({ items: stage3.checklist.items, finals: stage3.final.items, questions: result.assessment.questions,
-    ownerTicket: context.approval?.from_admin === true, codeOutcome: outcome }) : null;
+  const asked = stage3?.asked ?? [];
+  const hold = structured ? replyHold({ items: stage3.checklist.items, finals: stage3.final.items, questions: result.assessment.questions, ownerTicket, codeOutcome: outcome, asked })
+    : null;
   if (hold) {
     const record = await saveReview(directory, context, result, sourceRevision, { ...options, held: hold });
     return { kind: 'reply_held', reasons: hold.reasons, continuation_state: record.continuation.state, attempts: record.continuation.attempts };
   }
-  if (completion) return complete(await storeReply(query, directory, context, prepared, { includeArchived, structured }), 'reply');
+  if (completion) return sendCompletion(prepared, 'reply');
   const verification = await storeReply(query, directory, context, prepared, { includeArchived, structured,
     beforeStore: () => saveReview(directory, context, result, sourceRevision, options) });
   if (!verification) return { kind: 'reply_withheld', verification_id: null };
+  if (structured) await markAsked(directory, context.target_id, askItems(stage3.checklist.items, stage3.final.items, { ownerTicket, asked, codeOutcome: outcome }));
   return { kind: 'reply_stored', verification_id: verification.id, emailed: false, email: emailStatus(context.approval.from_admin) };
 }
 // Set by ticket-agent.sh for this run: HEAD before the model ran, the start
@@ -997,6 +1091,15 @@ async function main(args) {
     console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} ${released ? `RELEASED — the continuation attempt this run reserved for ${ticketId} is given back` : `no continuation attempt of this run to give back for ${ticketId}`}`);
     return;
   }
+  if (mode === '--resolve-item' && args.length === 5) {
+    // --resolve-item TICKET AC-n decision|data_fix|confirmed PRIVATE_STATE;
+    // the note (and a confirmation's message id) from TICKET_RESOLUTION_NOTE
+    // and TICKET_RESOLUTION_MESSAGE.
+    const [, target, item, kind, directory] = args;
+    const record = await resolveItem(directory, id(target), item, kind, { note: process.env.TICKET_RESOLUTION_NOTE ?? '', messageId: process.env.TICKET_RESOLUTION_MESSAGE ?? null });
+    console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} RESOLVED — ${target.slice(0, 8)} ${item} (${kind}); case ${record.continuation.state}`);
+    return;
+  }
   if (mode === '--validate' && args.length === 3) {
     // Exit 2 = the model's result broke a rule it can repair; the reason goes
     // to stdout for the runner's repair prompt. Any other failure is exit 1.
@@ -1034,6 +1137,6 @@ async function main(args) {
     if (status.completion) console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} COMPLETION REPLY — ${context.target_id.slice(0, 8)}: every item done; stored from a ${status.run_mode} run, case closed`);
     console.log(JSON.stringify(status)); return;
   }
-  throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --release-attempt TICKET_ID PRIVATE_STATE | --validate CONTEXT MODEL_OUTPUT | --session MODEL_OUTPUT | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');
+  throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --release-attempt TICKET_ID PRIVATE_STATE | --resolve-item TICKET_ID AC-n decision|data_fix|confirmed PRIVATE_STATE | --validate CONTEXT MODEL_OUTPUT | --session MODEL_OUTPUT | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');
 }
 if (isMain(import.meta.url)) main(process.argv.slice(2)).catch(error => { console.error(`ERROR: ${logSafe(error)}`); process.exitCode = 1; });

@@ -191,6 +191,23 @@ ticket is unanswered), so once the host decides every item done the reply goes o
 reports what was done. New input from the reporter starts afresh. A change the gates
 or the review refused still counts toward the breaker.
 
+A continuation sends no status either, but once the host decides every item done, no
+change of the run waits unreleased and no follow-up (the host's or the worker's) is
+left open, it sends one completion reply on the same verified path; the reply stamps
+`agent_last_reply_at`, the case closes, and the completion is remembered per checklist
+digest. A `completion_pending` marker (with the verification id) is written before the
+reply is stored, so a run that dies after the database stored it records it on the next
+run instead of sending it twice. A completion the database withholds keeps the case open.
+
+Items no run can finish (`owner_decision`, `data_fix`, and a `device_probe` the reporter
+was already asked about) wait on the owner (`waiting_owner`, listed in `attention.json`)
+until a resolution is recorded with `--resolve-item TICKET AC-n
+decision|data_fix|confirmed PRIVATE_STATE` (note in `TICKET_RESOLUTION_NOTE`; a
+confirmation names the reporter's message in `TICKET_RESOLUTION_MESSAGE`, which the host
+checks is a customer message on the ticket). Each item is resolved once; the resolution
+puts the case back in the queue without fresh attempts, and the host then decides the
+item done. A device check is asked once, and never while the run's change is not live.
+
 ## Acceptance and validation
 
 Run without production access or provider calls:

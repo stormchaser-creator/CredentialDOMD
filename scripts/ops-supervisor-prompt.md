@@ -107,18 +107,23 @@ what happened.
      run then finds it live and replies. If the worker could have fixed it
      and only made a mistake, leave it to the next run.
    - **Tickets waiting on the owner's decision** (HEALTH names "open tickets
-     waiting on the owner's decision"). The ticket run held the reply (no
-     status replies, owner 2026-11-06) because an item needs a decision; no
-     run works it until one is made. Read its case file
-     (`ticket-context/<id>.json`: `checklist_states` with `needs_owner`, and
-     the `support_owner` entries in `pending_follow_up`). If the decision is
-     routine and your rules here let you make it (a code or copy change you
-     may make under step 4, never a price or money constant, legal copy or
-     clinical coding), make it, commit it, and set the case file's
-     `continuation.state` to `pending`, `attempts` to 0 and `due_at` to now,
-     so the next run verifies it done and sends the completion reply. Write
-     the commit in the journal. Otherwise note it under `## For the owner`:
-     the ticket's first 8 characters and the decision, one line.
+     waiting on the owner's decision"). An item no run can finish waits on a
+     recorded resolution: an `owner_decision`, a `data_fix` the owner runs,
+     or a `device_probe` the reporter answered. Read the case file
+     (`ticket-context/<id>.json`: `checklist_states`, and the `support_owner`
+     entries in `pending_follow_up`) and the thread. If your rules here let
+     you settle it (a routine decision, never a price or money constant,
+     legal copy or clinical coding; a reporter's message that plainly
+     confirms the device check), make any code change under step 4, then
+     record it, once per item:
+     `TICKET_RESOLUTION_NOTE='<one line>' node scripts/ticket-agent-context.mjs --resolve-item <ticket id> AC-n decision|data_fix|confirmed "$HOME/Library/Application Support/CredentialDOMD/ticket-context"`
+     (a confirmation also sets `TICKET_RESOLUTION_MESSAGE=<message id>`). That
+     puts the case back in the queue; its next run decides the item done and,
+     with everything done, sends the completion reply. A data change is the
+     owner's: record `data_fix` only after he made it and you checked it.
+     Never edit the case file's `continuation` for these, and never resolve
+     an item twice. Otherwise note it under `## For the owner`: the ticket's
+     first 8 characters and what is needed, one line.
    - **Member tickets and replies.** The ticket agent answers these itself
      (pg_cron releases them to it). Check that a new one is queued and that
      a reply is being worked; fix the pipeline if it is stuck. Never write

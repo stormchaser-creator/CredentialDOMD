@@ -320,7 +320,8 @@ export function prepareRenderedReply({ result, ticketId, ownerTicket = false, st
   // something (checklist.mjs replyHold), so "we will post when the rest is
   // done" is never sent: it is a plan, not a result (owner, 2026-11-06).
   const closing = result.reply.closing === 'follow_up' ? 'reply_here' : result.reply.closing;
-  const text = renderAgentReply({ opening: result.reply.opening, confirmed, questions, items: stage3.checklist.items, finals: stage3.final.items, closing, ownerTicket });
+  const text = renderAgentReply({ opening: result.reply.opening, confirmed, questions, items: stage3.checklist.items, finals: stage3.final.items, closing, ownerTicket,
+    asked: Array.isArray(stage3.asked) ? stage3.asked : [], codeOutcome: stage3.final.code_outcome ?? null });
   const violations = checkFixedRules(text, { max: AGENT_REPLY_MAX });
   if (violations.length) throw new ReplyRuleError(violations);
   const body = agentReplyBody(text);

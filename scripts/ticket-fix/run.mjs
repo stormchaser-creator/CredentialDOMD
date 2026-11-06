@@ -104,7 +104,7 @@ import { prepareResult, refusalHead, RESULT_SCHEMA } from '../ticket-agent-conte
 import { readManifest, reviewedIds, modelView, selectAttachments } from './attachments.mjs';
 import { createAttachmentRoot } from './attachment-temp.mjs';
 import { readChecklist, emptyChecklist, newSources, extractionFacts, checkExtraction, confirmPrompt, extendChecklist, writeChecklist, applyAskVerdicts,
-  coverageHints, finalStates, unseenItems, untrustedItems, UNTRUSTED_HEADING, CHECKLIST_SCHEMA } from './checklist.mjs';
+  coverageHints, finalStates, unseenItems, untrustedItems, readCaseFacts, validResolutions, UNTRUSTED_HEADING, CHECKLIST_SCHEMA } from './checklist.mjs';
 import { runBindings, hostBindings, priorBindings, mergeBindings, verifyAgentClaims, baseTestRunner, disputedItems, hostFollowUps, writeStage3 } from './stage3.mjs';
 import { createWorktree, removeWorktree, changedPaths, classifyChanges, commitWork, scratchPaths, addGatesTrailer, git, sanitizeSubject, gateWorktree, hooksDigest,
   checkWorktreeLink, remoteMain, agentCommitsOnMain, GitStateChanged } from './worktree.mjs';
@@ -660,7 +660,14 @@ async function workTicket(o, atEnd) {
     await saveOutput();
     // What the host knows before it decides: the checklist the worker saw,
     // the tests bound to its items, the attachments and whether each was read.
-    const stage3Pre = () => { const changed = workerChanged(); return { ticket_id: ticket, checklist, worker_items: workerItems, bindings: provisional(output, changed), attachments: attachments(), changed }; };
+    // The case's recorded resolutions (owner decisions, data changes, the
+    // reporter's confirmations) and the items a stored reply already asked.
+    const caseFacts = () => {
+      const facts = readCaseFacts(state, ticket);
+      return { resolved: validResolutions(facts.resolutions, { items: checklist.items, context }), asked: facts.asked };
+    };
+    const stage3Pre = () => { const changed = workerChanged(); return { ticket_id: ticket, checklist, worker_items: workerItems, bindings: provisional(output, changed), attachments: attachments(), changed,
+      resolved: [...caseFacts().resolved.keys()] }; };
     // Returns true when the host's reply checks accept the current output.
     // The code outcome is not known yet: nothing this run did is released, so
     // a "verified_change" is refused here (finding 5).
@@ -746,13 +753,15 @@ async function workTicket(o, atEnd) {
       const disputed = disputedItems(observations, edges?.observation_verdicts ?? {});
       const code = { outcome, gates_pass: Boolean(gates?.pass), review_pass: Boolean(review?.pass), review_items: review?.item_verdicts ?? {}, green: headTests ?? green, release_verified: released };
       const asMap = value => new Map(Object.entries(value).map(([k, v]) => [k, new Set(v)]));
+      const { resolved, asked } = caseFacts();
       const finals = finalStates({ items: checklist.items, entries: output.structured_output?.checklist ?? [], claims, code, bindings: asMap(trusted), prior: asMap(prior),
-        disputed, unseen: unseenItems(checklist.items, attachments()), workerItems: itemIds });
+        disputed, unseen: unseenItems(checklist.items, attachments()), workerItems: itemIds, resolved });
       // The worker's open items wait on the customer's answer or the owner's
       // decision when it asked one or recorded work for him.
       const waiting = (output.structured_output?.assessment?.questions ?? []).length > 0 || (output.structured_output?.assessment?.follow_up ?? []).some(f => f.owner === 'support_owner');
       const record = { version: 1, ticket_id: ticket, run: name, checklist, worker_items: workerItems, bindings, changed, trusted_bindings: trusted, prior_bindings: prior, attachments: attachments(), observations,
-        observation_verdicts: edges?.observation_verdicts ?? {}, final: { items: finals, claims, follow_up: hostFollowUps({ attachments: attachments(), finals, waiting, items: checklist.items }), code_outcome: outcome } };
+        observation_verdicts: edges?.observation_verdicts ?? {}, resolved: [...resolved.keys()], asked,
+        final: { items: finals, claims, follow_up: hostFollowUps({ attachments: attachments(), finals, waiting, items: checklist.items, asked }), code_outcome: outcome } };
       facts.stage3_file = await writeStage3(path.join(runDir, `${ticket}-stage3.json`), record);
       // A released run's bindings are what a later run may cite (items met):
       // only tests the host trusts, never a declaration alone.

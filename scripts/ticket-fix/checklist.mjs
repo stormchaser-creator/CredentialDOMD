@@ -424,10 +424,14 @@ export function checklistErrors(result, { items, bindings = new Map(), attachmen
 // test for the item green at a released, verified head, or held after every
 // gate and the review); otherwise it is "not done yet" with its next step.
 // ---------------------------------------------------------------------------
-export function finalStates({ items, entries = [], claims = [], code = {}, bindings = new Map(), prior = new Map(), disputed = new Set(), unseen = new Set(), workerItems = null }) {
+// resolved: Map(ac id -> resolution) of items no run can finish (an owner
+// decision, a data change, a reporter's device check), as validResolutions
+// accepted them: such an item is done once it is resolved, never before.
+export function finalStates({ items, entries = [], claims = [], code = {}, bindings = new Map(), prior = new Map(), disputed = new Set(), unseen = new Set(), workerItems = null, resolved = new Map() }) {
   const byId = new Map(entries.map(e => [e.ac_id, e]));
   const seenByWorker = new Set(workerItems ?? items.map(i => i.id));
   return items.map(item => {
+    if (resolved.has(item.id) && RESOLUTION_KINDS[item.kind]) return { id: item.id, state: 'done', remaining: '', detail: 'resolved' };
     const e = byId.get(item.id);
     if (!seenByWorker.has(item.id) || !e) return { id: item.id, state: 'not_done', remaining: '', detail: 'new' };
     const out = { id: item.id, state: e.state, remaining: String(e.remaining ?? '').trim(), detail: null };
@@ -485,7 +489,41 @@ export function unseenItems(items, attachments = []) {
 export const itemFollowUpWork = id => `Finish ${id}: the host has not confirmed it done`;
 export const heldFollowUpWork = id => `Confirm ${id} once its held change is released`;
 // The host's own follow-ups for an item, closed when the host decides it done.
-export const hostItemWork = id => [itemFollowUpWork(id), heldFollowUpWork(id)];
+export const resolveFollowUpWork = id => `Record how ${id} was resolved (ticket-agent-context.mjs --resolve-item)`;
+export const hostItemWork = id => [itemFollowUpWork(id), heldFollowUpWork(id), resolveFollowUpWork(id)];
+
+// ---------------------------------------------------------------------------
+// Items no run can finish by itself (review of 2026-11-06, defect 1): an
+// owner_decision, a data_fix the owner runs, a device_probe only the reporter
+// can check. Each is done once its resolution is recorded in the case
+// (ticket-agent-context.mjs --resolve-item): the decision, the data change
+// made and checked, or the reporter's message confirming it. A confirmation
+// counts only when it names a customer message on the ticket.
+// ---------------------------------------------------------------------------
+export const RESOLUTION_KINDS = Object.freeze({ owner_decision: 'decision', data_fix: 'data_fix', device_probe: 'confirmed' });
+export function validResolutions(resolutions, { items, context = null }) {
+  const messages = new Set(context ? askSources(context).filter(s => s.kind === 'message').map(s => s.id) : []);
+  const out = new Map();
+  for (const item of items) {
+    const r = resolutions?.[item.id];
+    if (!r || r.kind !== RESOLUTION_KINDS[item.kind] || !Number.isFinite(Date.parse(r.at))) continue;
+    if (r.kind === 'confirmed' && !messages.has(r.message_id)) continue;
+    out.set(item.id, r);
+  }
+  return out;
+}
+// The resolutions in the case record (<state>/<ticket>.json, owner-only), and
+// the ask items a stored reply already put to the reporter.
+export function readCaseFacts(state, ticket) {
+  if (!state || !UUID.test(ticket || '')) return { resolutions: {}, asked: [] };
+  const file = path.join(state, `${ticket}.json`);
+  if (!existsSync(file)) return { resolutions: {}, asked: [] };
+  const stat = lstatSync(file);
+  if (!stat.isFile() || stat.isSymbolicLink() || stat.uid !== process.getuid() || (stat.mode & 0o077) || stat.size > 100000) throw Error('The case record must be an owner-only file');
+  const record = JSON.parse(readFileSync(file, 'utf8'));
+  if (record?.target_id !== ticket) throw Error('Case target mismatch');
+  return { resolutions: record.resolutions && typeof record.resolutions === 'object' ? record.resolutions : {}, asked: Array.isArray(record.asked_items) ? record.asked_items : [] };
+}
 
 // ---------------------------------------------------------------------------
 // When a reply goes out at all (owner, 2026-11-06, ticket b3ea3291: "complete
@@ -501,24 +539,31 @@ export const hostItemWork = id => [itemFollowUpWork(id), heldFollowUpWork(id)];
 // follow-up and the next run carries on (ticket-agent-context.mjs finishRun).
 // ---------------------------------------------------------------------------
 const UNRELEASED = Object.freeze(['held', 'refused', 'merged', 'release_failed']);
-// The items whose footer line asks the reporter something.
-export function askItems(items, finals, { ownerTicket }) {
+// The items whose footer line asks the reporter something. asked: items a
+// stored reply already asked (the case record): never asked again, their
+// answer waits on a recorded resolution. A device check is never asked while
+// this run's change is not live: the reporter would check the old build.
+export function askItems(items, finals, { ownerTicket, asked = [], codeOutcome = null }) {
   const byId = new Map(finals.map(f => [f.id, f]));
   return items.filter(item => {
     const f = byId.get(item.id);
-    if (!f || f.state === 'done') return false;
-    return (ownerTicket && f.state === 'needs_owner' && Boolean(trimEnd(f.remaining ?? ''))) || (item.kind === 'device_probe' && f.state === 'partial');
+    if (!f || f.state === 'done' || asked.includes(item.id)) return false;
+    return (ownerTicket && f.state === 'needs_owner' && Boolean(trimEnd(f.remaining ?? ''))) ||
+      (item.kind === 'device_probe' && f.state === 'partial' && !UNRELEASED.includes(codeOutcome));
   }).map(item => item.id);
 }
-// Every item done and no change of this run waiting unreleased: a reply then
-// reports finished work (and a continuation may send it: finishRun).
-export function isCompletion({ finals, codeOutcome = null }) {
-  return finals.length > 0 && finals.every(f => f.state === 'done') && !UNRELEASED.includes(codeOutcome);
+// Every item done, no change of this run waiting unreleased and no work left
+// in the case (pending: the follow-ups that would stay open, the host's and
+// the worker's): a reply then reports finished work and closes the case (a
+// continuation may send it: finishRun).
+export function isCompletion({ finals, codeOutcome = null, pending = [] }) {
+  return finals.length > 0 && finals.every(f => f.state === 'done') && !UNRELEASED.includes(codeOutcome) && !pending.length;
 }
 // null: the reply may go out. Otherwise { reasons }: ids, states and the code
-// outcome only (they go to the log).
-export function replyHold({ items, finals, questions = [], ownerTicket = false, codeOutcome = null }) {
-  const asks = questions.length > 0 || askItems(items, finals, { ownerTicket }).length > 0;
+// outcome only (they go to the log). While this run's change is not live only
+// a question in assessment.questions goes out.
+export function replyHold({ items, finals, questions = [], ownerTicket = false, codeOutcome = null, asked = [] }) {
+  const asks = questions.length > 0 || askItems(items, finals, { ownerTicket, asked, codeOutcome }).length > 0;
   const open = finals.filter(f => f.state !== 'done');
   const unreleased = UNRELEASED.includes(codeOutcome);
   if (asks || (!open.length && !unreleased)) return null;
@@ -535,7 +580,9 @@ export function footerLine(n, item, final, { ownerTicket }) {
   const rest = trimEnd(final.remaining ?? '');
   let line;
   if (final.state === 'done') line = `${n}. ${req}: done`;
-  else if (item.kind === 'device_probe' && final.state === 'partial') line = `${n}. ${req}: please check this on your device and tell us what you see${rest ? `: ${rest}` : ''}`;
+  // The worker's "remaining" is not shown here: it could carry a status ("still
+  // to do: deploy next week") that no rule refuses (review of 2026-11-06).
+  else if (item.kind === 'device_probe' && final.state === 'partial') line = `${n}. ${req}: please check this on your device and tell us what you see`;
   else if (final.state === 'in_progress') line = `${n}. ${req}: in progress, a change is ready and waiting to be released`;
   else if (final.state === 'needs_owner') line = ownerTicket ? `${n}. ${req}: needs your decision: ${rest ? `${rest.replace(/\?*$/, '')}?` : 'please decide how it should work'}` : `${n}. ${req}: waiting on a decision from CredentialDOMD`;
   else if (final.state === 'partial') line = final.detail === 'not_confirmed' || !rest ? `${n}. ${req}: partly done, not confirmed yet` : `${n}. ${req}: partly done, still to do: ${rest}`;
@@ -551,11 +598,11 @@ export function renderFooter(items, finals, { ownerTicket }) {
 // The customer's footer lists only what is done and what asks the reporter
 // something (replyHold): never "not done yet", "partly done" or a next step
 // (owner, 2026-11-06).
-export function renderAgentReply({ opening, confirmed = [], questions = [], items, finals, closing, ownerTicket }) {
+export function renderAgentReply({ opening, confirmed = [], questions = [], items, finals, closing, ownerTicket, asked = [], codeOutcome = null }) {
   const parts = [OPENINGS[opening]];
   if (confirmed.length) parts.push([CONFIRMED_HEADING, ...confirmed.map(t => `- ${t}`)].join('\n'));
   if (questions.length) parts.push([QUESTIONS_HEADING, ...questions.map(q => `- ${q}`)].join('\n'));
-  const asks = new Set(askItems(items, finals, { ownerTicket }));
+  const asks = new Set(askItems(items, finals, { ownerTicket, asked, codeOutcome }));
   const shown = items.filter(item => asks.has(item.id) || finals.find(f => f.id === item.id)?.state === 'done');
   if (shown.length) parts.push(renderFooter(shown, finals, { ownerTicket }));
   if (CLOSINGS[closing]) parts.push(CLOSINGS[closing]);
