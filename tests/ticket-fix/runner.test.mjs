@@ -267,7 +267,9 @@ test('the runner shell: lock owner, park alert, status on every exit; the model 
   }
   // One 3-hour budget for the whole run; each target's alarm is what is left.
   assert.match(sh, /RUN_DEADLINE=\$\(\( \$\(date \+%s\) \+ 10800 \)\)/);
-  assert.match(sh, /if \[ "\$LEFT" -lt 1800 \]; then\n[^\n]*DEFERRED[^\n]*\n\s+break/);
+  assert.match(sh, /if \[ "\$LEFT" -lt 3600 \]; then\n[^\n]*DEFERRED[^\n]*\n\s+break/);
+  // Another reporter's attachments are gone before the next target runs.
+  assert.match(sh, /for TARGET in \$\{\(f\)TARGETS\}; do\n\s+\[ -n "\$TARGET" \] \|\| continue\n(?:\s*#[^\n]*\n)+\s+\[ -n "\$\{ATTACHMENTS:-\}" \] && \/bin\/rm -rf "\$ATTACHMENTS"/);
   assert.match(sh, /\/usr\/bin\/perl -e 'alarm shift; exec @ARGV' -- "\$LEFT" node "\$HOST\/ticket-fix\/run.mjs" work --ticket "\$TICKET_ID" --context "\$CONTEXT" --output "\$OUTPUT" --run-file "\$RUN_FILE"/);
   assert.match(sh, /--claude "\$CLAUDE" --committer "\$RUN_COMMITTER" --notify "\$NOTIFY" --worker-seconds "\$WORKER_SECONDS"/);
   assert.match(sh, /--work "\$WORK_STATE" --state "\$CASE_STATE" --fix-state "\$FIX_STATE"/);
@@ -294,7 +296,7 @@ test('the runner shell: lock owner, park alert, status on every exit; the model 
   assert.match(sh, /3\) reject "model run failed or timed out"; RC=1; continue ;;/);
   assert.match(sh, /5\) reject "changed files outside its scope"; RC=1; continue ;;/);
   assert.match(sh, /\*\) reject "host step failed \(exit \$WORK_RC\)"; RC=1; continue ;;/);
-  assert.match(sh, /142\) reject "ran out of time \(the 3-hour limit\)"; RC=1; continue ;;/);
+  assert.match(sh, /142\) if \[ "\$LEFT" -ge 10740 \]; then reject "ran out of time \(the 3-hour limit\)"; RC=1; continue; fi/);
   // A device-only bug parks once (review of 2026-10-30); SIGTERM from outside counts nothing.
   assert.match(sh, /9\) echo 3 > "\$FAIL_COUNT"[\s\S]*?park --state "\$CASE_STATE" --ticket "\$TICKET_ID" --count 3 --why device/);
   assert.match(sh, /143\) echo "[^\n]*terminated from outside \(SIGTERM\); nothing counted"/);
@@ -677,10 +679,10 @@ test('the runner shell: exit 143 counts nothing and gives back the attempt; exit
   assert.ok(start > 0 && block.includes('143)'), 'the case block was found');
   const state = privateDir('ticket-exit-');
   try {
-    const runCase = (rc, mode = 'reply') => {
+    const runCase = (rc, mode = 'reply', left = 10800) => {
       const log = path.join(state.dir, `log-${rc}-${mode}`);
       const script = `LOG=${JSON.stringify(log)}\nFAIL_COUNT=${JSON.stringify(path.join(state.dir, `count-${rc}-${mode}`))}\nTICKET_ID=${T}\nRUN_MODE=${mode}\nRUN_ID=0123456789abcdef\n` +
-        `ATTACHMENTS=${JSON.stringify(path.join(state.dir, 'attachments'))}\nFAIL_DIR=${JSON.stringify(state.dir)}\nCASE_STATE=${JSON.stringify(state.dir)}\nHOST=/synthetic\nALERT=/synthetic/alert.mjs\nNOTIFY=/synthetic/notify\nRC=0\nFAILS=0\n` +
+        `LEFT=${left}\nATTACHMENTS=${JSON.stringify(path.join(state.dir, 'attachments'))}\nFAIL_DIR=${JSON.stringify(state.dir)}\nCASE_STATE=${JSON.stringify(state.dir)}\nHOST=/synthetic\nALERT=/synthetic/alert.mjs\nNOTIFY=/synthetic/notify\nRC=0\nFAILS=0\n` +
         `node() { print -r -- "node $*" >> "$LOG"; }\nreject() { print -r -- "REJECT $1" >> "$LOG"; }\nrun_field() { :; }\n` +
         `for i in 1 2; do\nprint -r -- "TARGET $i" >> "$LOG"\n[ "$i" = 2 ] && break\nWORK_RC=${rc}\n${block}\nprint -r -- "AFTER" >> "$LOG"\ndone\nprint -r -- "RC=$RC" >> "$LOG"\n`;
       const r = spawnSync('/bin/zsh', ['-f', '-c', script], { encoding: 'utf8' });
@@ -710,5 +712,12 @@ test('the runner shell: exit 143 counts nothing and gives back the attempt; exit
     assert.match(runCase(3).log, /REJECT model run failed or timed out[\s\S]*TARGET 2/);
     assert.match(runCase(77).log, /REJECT host step failed \(exit 77\)[\s\S]*TARGET 2/);
     assert.doesNotMatch(killed.log, /TARGET 2/, 'a run stopped from outside runs nothing more');
+    // The alarm with less than the full 3 hours: an earlier target used the
+    // time. Nothing counted, the attempt given back, the run over.
+    const late = runCase(142, 'continuation', 2400);
+    assert.doesNotMatch(late.log, /REJECT/);
+    assert.match(late.log, /DEFERRED — .* stopped when this run's 3 hours ran out; nothing counted/);
+    assert.match(late.log, /--release-attempt/);
+    assert.doesNotMatch(late.log, /TARGET 2/);
   } finally { state.cleanup(); }
 });

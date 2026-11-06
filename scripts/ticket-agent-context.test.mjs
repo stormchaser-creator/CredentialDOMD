@@ -394,7 +394,9 @@ test('stalled work comes back by itself a day later, at most twice, and the coun
       }
       throw Error('never stalled');
     };
-    assert.deepEqual((await stall(START)).attention, [targetId]);
+    const first = await stall(START);
+    assert.deepEqual(first.attention, [targetId]);
+    assert.equal(first.stuck, undefined, 'it will come back by itself: not the supervisor\'s yet');
     // The last attempt was at START + 3 h: a day from then, not from the review.
     assert.deepEqual((await collectQueue(makeQuery(), directory, { now: START + 26 * HOUR })).attention, [targetId], 'not before a day after the last attempt');
     let at = START + 27 * HOUR;
@@ -416,7 +418,8 @@ test('stalled work comes back by itself a day later, at most twice, and the coun
     }
     const done = await collectQueue(makeQuery(), directory, { now: at + 48 * HOUR });
     assert.deepEqual(done.items, [], 'no third revival');
-    assert.deepEqual(done.attention, [targetId], 'left for the supervisor');
+    assert.deepEqual(done.attention, [targetId]);
+    assert.deepEqual(done.stuck, [targetId], 'left for the supervisor');
   });
 });
 test('a parked ticket comes back a day after its last failure, twice at most; a device park never does', async () => {
@@ -467,8 +470,8 @@ test('the attention file names stalled work and only the parked tickets still op
     for (const n of [2, 3]) await writeFile(path.join(directory, 'failed', `${uuid(n)}.revived`), `${REVIVE_MAX}\n`, { mode: 0o600 });
     await writeFile(path.join(directory, 'failed', `${uuid(6)}.device`), '', { mode: 0o600 });
     const query = async sql => { seen.push(sql); assert.match(sql, /^begin read only;/); return [{ id: uuid(2) }, { id: uuid(5) }]; };
-    const record = await writeAttention(query, directory, { attention: [uuid(5), uuid(7)], parked: [uuid(2), uuid(3), uuid(4), uuid(6)] }, { now: START });
-    assert.deepEqual(record, { at: new Date(START).toISOString(), stalled: [uuid(5)], parked_open: [uuid(2)] }, 'closed (7, 3), revivable (4) and device (6) tickets are left out');
+    const record = await writeAttention(query, directory, { attention: [uuid(5), uuid(7), uuid(8)], stuck: [uuid(5), uuid(7)], parked: [uuid(2), uuid(3), uuid(4), uuid(6)] }, { now: START });
+    assert.deepEqual(record, { at: new Date(START).toISOString(), stalled: [uuid(5)], parked_open: [uuid(2)] }, 'closed (7, 3), revivable (4, 8) and device (6) tickets are left out');
     assert.doesNotMatch(seen[0], new RegExp(uuid(4)));
     assert.deepEqual(JSON.parse(await readFile(path.join(directory, 'attention.json'), 'utf8')), record);
     assert.equal(((await stat(path.join(directory, 'attention.json'))).mode & 0o777), 0o600);

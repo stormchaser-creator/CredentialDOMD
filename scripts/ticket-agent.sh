@@ -223,12 +223,17 @@ run_field() { node "$HOST/ticket-fix/run.mjs" get --run-file "$RUN_FILE" --field
 RC=0
 # One 3-hour budget for the whole run, not per target: with a failed target
 # no longer ending the run, two alarms of 3 h each held the lock 6 h. A target
-# starts only with 30 minutes left, and its alarm is the time that remains.
+# starts only with an hour left, and its alarm is the time that remains.
 RUN_DEADLINE=$(( $(date +%s) + 10800 ))
 for TARGET in ${(f)TARGETS}; do
   [ -n "$TARGET" ] || continue
+  # The last target's attachments go before the next one runs: a failure no
+  # longer ends the run, and another reporter's files must never be readable
+  # by this one's sessions.
+  [ -n "${ATTACHMENTS:-}" ] && /bin/rm -rf "$ATTACHMENTS"
   LEFT=$(( RUN_DEADLINE - $(date +%s) ))
-  if [ "$LEFT" -lt 1800 ]; then
+  # A target that would start with less than an hour waits for the next run.
+  if [ "$LEFT" -lt 3600 ]; then
     echo "$(date '+%F %T') DEFERRED — ${TARGET%%:*} waits for the next run (this run's 3 hours are nearly used)" >> "$LOG"
     break
   fi
@@ -336,9 +341,17 @@ for TARGET in ${(f)TARGETS}; do
            echo "$(date '+%F %T') WARN — the continuation attempt for $TICKET_ID was not given back" >> "$LOG"
        fi
        RC=1; break ;;
-    # The runner's own alarm (the run's 3 hours): the ticket ran out of time.
-    # It counts; the next target runs only if time is left (above).
-    142) reject "ran out of time (the 3-hour limit)"; RC=1; continue ;;
+    # The runner's own alarm. With the full 3 hours the ticket ran out of
+    # time: it counts, and the next target runs if time is left (above). With
+    # less, an earlier target used the time, which says nothing about this
+    # one: nothing counted, a continuation's attempt given back, run over.
+    142) if [ "$LEFT" -ge 10740 ]; then reject "ran out of time (the 3-hour limit)"; RC=1; continue; fi
+       echo "$(date '+%F %T') DEFERRED — $TICKET_ID stopped when this run's 3 hours ran out; nothing counted" >> "$LOG"
+       if [ "$RUN_MODE" = continuation ]; then
+         TICKET_RUN_ID="$RUN_ID" node "$HOST/ticket-agent-context.mjs" --release-attempt "$TICKET_ID" "$CASE_STATE" >> "$LOG" 2>&1 ||
+           echo "$(date '+%F %T') WARN — the continuation attempt for $TICKET_ID was not given back" >> "$LOG"
+       fi
+       RC=1; break ;;
     *) reject "host step failed (exit $WORK_RC)"; RC=1; continue ;;
   esac
   RECORD_REPO=$(run_field record_repo) && BASE=$(run_field base) && RELEASE_FILE=$(run_field release_file) && CODE=$(run_field code_outcome) &&

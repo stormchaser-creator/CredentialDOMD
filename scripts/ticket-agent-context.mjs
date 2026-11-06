@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Trusted, read-only context collection. Ticket text is evidence, never authority.
-import { promises as fs, readFileSync, statSync, existsSync } from 'node:fs';
+import { promises as fs, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
@@ -56,7 +56,9 @@ export async function failCounts(directory) {
   for (const name of names) {
     const ticketId = name.endsWith('.count') ? name.slice(0, -6) : '';
     if (!UUID.test(ticketId)) continue;
-    const raw = (await fs.readFile(path.join(directory, 'failed', name), 'utf8')).trim();
+    let raw;
+    // A count renamed since the readdir (a revival) is simply gone.
+    try { raw = (await fs.readFile(path.join(directory, 'failed', name), 'utf8')).trim(); } catch (error) { if (error.code === 'ENOENT') continue; throw error; }
     if (/^\d+$/.test(raw) && Number(raw) > 0) counts.set(ticketId.toLowerCase(), Number(raw));
   }
   if (counts.size > 500) throw Error('Parked queue exceeds bound; operator review required');
@@ -73,6 +75,14 @@ export async function parkedTargets(directory) {
 // no run can test it.
 export const REVIVE_AFTER_MS = 24 * 60 * 60 * 1000;
 export const REVIVE_MAX = 2;
+const mtimeOf = file => { try { return statSync(file).mtimeMs; } catch (error) { if (error.code === 'ENOENT') return null; throw error; } };
+// A device park: its marker at least as new as the count (an older marker
+// is from a park someone already cleared).
+function devicePark(directory, ticketId) {
+  const device = mtimeOf(path.join(directory, 'failed', `${ticketId}.device`));
+  const count = mtimeOf(path.join(directory, 'failed', `${ticketId}.count`));
+  return device !== null && count !== null && device >= count - 1000;
+}
 async function revivals(directory, ticketId) {
   try {
     const raw = (await fs.readFile(path.join(directory, 'failed', `${ticketId}.revived`), 'utf8')).trim();
@@ -84,11 +94,9 @@ export async function reviveParked(directory, { now = Date.now() } = {}) {
   for (const ticketId of await parkedTargets(directory)) {
     const failed = path.join(directory, 'failed');
     const count = path.join(failed, `${ticketId}.count`);
-    // A device park: its marker is at least as new as the count (an older
-    // marker is from a park someone already cleared).
-    const device = path.join(failed, `${ticketId}.device`);
-    if (existsSync(device) && statSync(device).mtimeMs >= statSync(count).mtimeMs - 1000) continue;
-    if (now - statSync(count).mtimeMs < REVIVE_AFTER_MS) continue;
+    if (devicePark(directory, ticketId)) continue;
+    const changed = mtimeOf(count);
+    if (changed === null || now - changed < REVIVE_AFTER_MS) continue;
     const times = await revivals(directory, ticketId);
     if (times >= REVIVE_MAX) continue;
     await writePrivate(path.join(failed, `${ticketId}.revived`), `${times + 1}\n`);
@@ -477,12 +485,13 @@ export async function collectQueue(query, directory, { includeArchived = false, 
   const revived = await reviveParked(directory, { now });
   const counts = await failCounts(directory);
   const parked = [...counts].filter(([, n]) => n >= PARK_AFTER).map(([t]) => t).sort();
-  const failing = [...counts.keys()].filter(t => !parked.includes(t) && now - statSync(path.join(directory, 'failed', `${t}.count`)).mtimeMs < FAILING_FOR_MS).sort();
+  const failing = [...counts.keys()].filter(t => !parked.includes(t) && now - (mtimeOf(path.join(directory, 'failed', `${t}.count`)) ?? 0) < FAILING_FOR_MS).sort();
   const incoming = await query(queueSQL(includeArchived, parked, failing));
   if (incoming.length > 2 || incoming.some(t => !UUID.test(t.id || '') || typeof t.from_admin !== 'boolean')) throw Error('Malformed approved queue');
   const names = (await fs.readdir(directory)).filter(n => UUID.test(n.slice(0, -5)) && n.endsWith('.json'));
   if (names.length > 5000) throw Error('Case queue exceeds bound; operator review required');
-  const due = [], attention = [];
+  // stuck: stalled work that has used its revivals (the supervisor's).
+  const due = [], attention = [], stuck = [];
   for (const name of names) {
     const record = await readCase(directory, name.slice(0, -5));
     const queue = record.continuation;
@@ -490,7 +499,8 @@ export async function collectQueue(query, directory, { includeArchived = false, 
     if (queue.state === 'stalled') {
       const revivedTimes = Number.isInteger(queue.revived) ? queue.revived : 0;
       const since = Date.parse(queue.last_attempt_at ?? record.recorded_at);
-      if (revivedTimes >= REVIVE_MAX || !(now - since >= REVIVE_AFTER_MS)) { attention.push(record.target_id); continue; }
+      if (revivedTimes >= REVIVE_MAX) { attention.push(record.target_id); stuck.push(record.target_id); continue; }
+      if (!(now - since >= REVIVE_AFTER_MS)) { attention.push(record.target_id); continue; }
       record.continuation = { ...queue, state: 'pending', attempts: 0, due_at: new Date(now).toISOString(), revived: revivedTimes + 1 };
       delete record.continuation.reason;
       await writePrivate(path.join(directory, `${record.target_id}.json`), JSON.stringify(record, null, 2));
@@ -509,6 +519,7 @@ export async function collectQueue(query, directory, { includeArchived = false, 
     if (continuations.length >= (incoming.length ? 1 : 2)) break;
     if (record.continuation.attempts >= MAX_CONTINUATIONS) {
       record.continuation.state = 'stalled'; attention.push(record.target_id);
+      if ((Number.isInteger(record.continuation.revived) ? record.continuation.revived : 0) >= REVIVE_MAX) stuck.push(record.target_id);
       await writePrivate(path.join(directory, `${record.target_id}.json`), JSON.stringify(record, null, 2));
       continue;
     }
@@ -524,7 +535,7 @@ export async function collectQueue(query, directory, { includeArchived = false, 
     continuations.push({ id: record.target_id, mode: rows[0].awaiting_reply ? 'reply' : 'continuation' });
   }
   return { items: [...incoming.slice(0, 2 - continuations.length).map(t => ({ id: t.id, mode: 'reply' })), ...continuations], attention, parked,
-    ...(revived.length ? { revived } : {}) };
+    ...(revived.length ? { revived } : {}), ...(stuck.length ? { stuck: stuck.sort() } : {}) };
 }
 export async function loadQueuedContext(query, item, directory, options = {}) {
   if (!['reply', 'continuation'].includes(item.mode)) throw Error('Invalid trusted run mode');
@@ -812,18 +823,17 @@ export const refusalHead = error => (error?.violations ? ruleNames(error.violati
 export async function writeAttention(query, directory, queue, { now = Date.now() } = {}) {
   const stuckParked = [];
   for (const ticketId of queue.parked) {
-    const failed = path.join(directory, 'failed');
-    const device = path.join(failed, `${ticketId}.device`);
-    if (existsSync(device)) continue;
+    if (devicePark(directory, ticketId)) continue;
     if (await revivals(directory, ticketId) < REVIVE_MAX) continue;
     stuckParked.push(ticketId);
   }
-  const ids = [...new Set([...queue.attention, ...stuckParked])];
+  const stalled = queue.stuck ?? [];
+  const ids = [...new Set([...stalled, ...stuckParked])];
   const open = ids.length ? await query(readOnly(`SELECT t.id FROM support_tickets t WHERE t.id IN (${ids.map(p => `'${id(p)}'::uuid`).join(',')})
     AND t.status IN ('open', 'in_progress') AND t.archived_at IS NULL ORDER BY t.id`)) : [];
   if (!Array.isArray(open) || open.some(t => !UUID.test(t.id || ''))) throw Error('Malformed open ticket rows');
   const isOpen = new Set(open.map(t => t.id));
-  const record = { at: new Date(now).toISOString(), stalled: [...queue.attention].filter(t => isOpen.has(t)).sort(), parked_open: stuckParked.filter(t => isOpen.has(t)).sort() };
+  const record = { at: new Date(now).toISOString(), stalled: stalled.filter(t => isOpen.has(t)).sort(), parked_open: stuckParked.filter(t => isOpen.has(t)).sort() };
   await writePrivate(path.join(directory, 'attention.json'), `${JSON.stringify(record)}\n`);
   return record;
 }
