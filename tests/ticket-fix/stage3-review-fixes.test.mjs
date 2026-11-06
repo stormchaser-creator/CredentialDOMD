@@ -452,7 +452,8 @@ test('a verified claim about an item the host left partly done is not shown as c
     stage3: stage3Of({ items: [{ id: 'AC-1', state, remaining: '', detail: state === 'done' ? null : 'not_confirmed' }], claims: [{ index: 0, ac_id: 'AC-1', verified: true, kind: 'file' }], follow_up: [], code_outcome: 'none' }) });
   const partly = render('partial');
   assert.doesNotMatch(partly.text, /What we confirmed/);
-  assert.match(partly.text, /1\. Separate the summary lines with line breaks: partly done, not confirmed yet/);
+  // Owner, 2026-11-06: an item not done is never listed with a status.
+  assert.doesNotMatch(partly.text, /partly done|Where each part stands/);
   assert.match(render('done').text, /What we confirmed:\n- The upload button reads "Attach file"/);
 });
 

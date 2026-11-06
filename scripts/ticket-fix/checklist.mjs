@@ -488,6 +488,39 @@ export const heldFollowUpWork = id => `Confirm ${id} once its held change is rel
 export const hostItemWork = id => [itemFollowUpWork(id), heldFollowUpWork(id)];
 
 // ---------------------------------------------------------------------------
+// When a reply goes out at all (owner, 2026-11-06, ticket b3ea3291: "complete
+// the task that's requested instead of filling me in about what you plan on
+// doing"). A reply reports finished work or asks what only the reporter can
+// answer, never a status:
+//   every item the host decided done, and no change of this run waiting
+//     unreleased (refused, held, merged, release check failed), or
+//   a question for the reporter: assessment.questions, the owner's own
+//     needs_owner question on his ticket, or a device check only the
+//     customer can make (a device_probe item).
+// Anything else is held: nothing reaches the customer, the case keeps its
+// follow-up and the next run carries on (ticket-agent-context.mjs finishRun).
+// ---------------------------------------------------------------------------
+const UNRELEASED = Object.freeze(['held', 'refused', 'merged', 'release_failed']);
+// The items whose footer line asks the reporter something.
+export function askItems(items, finals, { ownerTicket }) {
+  const byId = new Map(finals.map(f => [f.id, f]));
+  return items.filter(item => {
+    const f = byId.get(item.id);
+    if (!f || f.state === 'done') return false;
+    return (ownerTicket && f.state === 'needs_owner' && Boolean(trimEnd(f.remaining ?? ''))) || (item.kind === 'device_probe' && f.state === 'partial');
+  }).map(item => item.id);
+}
+// null: the reply may go out. Otherwise { reasons }: ids, states and the code
+// outcome only (they go to the log).
+export function replyHold({ items, finals, questions = [], ownerTicket = false, codeOutcome = null }) {
+  const asks = questions.length > 0 || askItems(items, finals, { ownerTicket }).length > 0;
+  const open = finals.filter(f => f.state !== 'done');
+  const unreleased = UNRELEASED.includes(codeOutcome);
+  if (asks || (!open.length && !unreleased)) return null;
+  return { reasons: [...open.map(f => `${f.id} ${f.state}`), ...(unreleased ? [`change ${codeOutcome}`] : [])] };
+}
+
+// ---------------------------------------------------------------------------
 // The customer's reply, rendered by the host: a fixed opening, the claims the
 // host verified, the questions, the footer, a fixed closing. No other prose.
 // ---------------------------------------------------------------------------
@@ -497,6 +530,7 @@ export function footerLine(n, item, final, { ownerTicket }) {
   const rest = trimEnd(final.remaining ?? '');
   let line;
   if (final.state === 'done') line = `${n}. ${req}: done`;
+  else if (item.kind === 'device_probe' && final.state === 'partial') line = `${n}. ${req}: please check this on your device and tell us what you see${rest ? `: ${rest}` : ''}`;
   else if (final.state === 'in_progress') line = `${n}. ${req}: in progress, a change is ready and waiting to be released`;
   else if (final.state === 'needs_owner') line = ownerTicket ? `${n}. ${req}: needs your decision: ${rest ? `${rest.replace(/\?*$/, '')}?` : 'please decide how it should work'}` : `${n}. ${req}: waiting on a decision from CredentialDOMD`;
   else if (final.state === 'partial') line = final.detail === 'not_confirmed' || !rest ? `${n}. ${req}: partly done, not confirmed yet` : `${n}. ${req}: partly done, still to do: ${rest}`;
@@ -509,11 +543,16 @@ export function renderFooter(items, finals, { ownerTicket }) {
   const byId = new Map(finals.map(f => [f.id, f]));
   return [FOOTER_HEADING, ...items.map((item, i) => footerLine(i + 1, item, byId.get(item.id) ?? { state: 'not_done', remaining: '' }, { ownerTicket }))].join('\n');
 }
+// The customer's footer lists only what is done and what asks the reporter
+// something (replyHold): never "not done yet", "partly done" or a next step
+// (owner, 2026-11-06).
 export function renderAgentReply({ opening, confirmed = [], questions = [], items, finals, closing, ownerTicket }) {
   const parts = [OPENINGS[opening]];
   if (confirmed.length) parts.push([CONFIRMED_HEADING, ...confirmed.map(t => `- ${t}`)].join('\n'));
   if (questions.length) parts.push([QUESTIONS_HEADING, ...questions.map(q => `- ${q}`)].join('\n'));
-  if (items.length) parts.push(renderFooter(items, finals, { ownerTicket }));
+  const asks = new Set(askItems(items, finals, { ownerTicket }));
+  const shown = items.filter(item => asks.has(item.id) || finals.find(f => f.id === item.id)?.state === 'done');
+  if (shown.length) parts.push(renderFooter(shown, finals, { ownerTicket }));
   if (CLOSINGS[closing]) parts.push(CLOSINGS[closing]);
   return parts.join('\n\n');
 }

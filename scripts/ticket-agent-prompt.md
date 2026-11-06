@@ -244,9 +244,18 @@ host renders the reply from these parts only:
    and the like): ask about what the customer sees ("On which screen is the total
    wrong?").
 4. "Where each part stands:", one line per checklist item, written by the host from its own
-   decision (below).
-5. A fixed closing, chosen by `reply.closing`: `reply_here`, `follow_up` (only when
-   something is left) or `none`.
+   decision (below), for the items that are done or ask the customer something (the
+   owner's question on his own ticket, a device check). Items not done are left out.
+5. A fixed closing, chosen by `reply.closing`: `reply_here` or `none` (`follow_up` is sent
+   as `reply_here`).
+
+**No status replies (owner, 2026-11-06).** The customer gets a reply only when every
+checklist item is done (and any change of this run is released), or when it asks the
+customer a question only they can answer (`assessment.questions`, the owner's
+`needs_owner` question on his ticket, a device check). Otherwise the host stores and
+emails nothing: the case stays pending and the next run carries on from your follow-ups.
+So finish the work. Do not ask a question to get a reply out; ask only what you cannot
+find out yourself.
 
 **Claims.** Each claim is `{ac_id, text, evidence}`: one line of at most 160 characters about
 one checklist item, and exactly one kind of evidence:
@@ -282,17 +291,15 @@ ids and no hex strings; the host refuses them.
   `remaining` what the customer can check on their device.
 
 **The host decides the state the customer sees**, from its own artifacts and never from
-your text: an item you mark `done` shows as done only when the host verified its claim and,
-for a bug or change, its test passed where the live build contains it. When your change
-passed every gate and the review and is held for the owner, the host shows "in progress, a
-change is ready and waiting to be released"; a change that was refused shows "not done
-yet"; anything else it cannot prove shows "partly done, not confirmed yet". Your `partial`
-shows as partly done only when the host verified that progress (this run's test for the
-item passed in a released change); otherwise it shows "not done yet" with your
-`remaining` as the next step. An item whose message came with an attachment no session
-could read is never shown as done. So mark an item `done` when your change fixes it (with
-its test and a claim), or when a test a released run bound to it shows it is already live,
-and let the host decide the rest.
+your text: an item you mark `done` is done only when the host verified its claim and, for a
+bug or change, its test passed where the live build contains it. A change held for the
+owner is in progress, a refused change is not done, and anything else it cannot prove is
+not confirmed; none of these is sent to the customer (above), so the case stays open and
+the next run continues. Your `partial` counts as progress only when the host verified it
+(this run's test for the item passed in a released change). An item whose message came
+with an attachment no session could read is never done. So mark an item `done` when your
+change fixes it (with its test and a claim), or when a test a released run bound to it
+shows it is already live, and let the host decide the rest.
 
 **Follow-through.** Any item not done needs a durable `follow_up` or a question. Use
 `support_owner` only for an explicit decision or permission requiring a human; set

@@ -357,11 +357,13 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', suffix='0', dir='/p
         check('the stored result says it was not emailed', '"emailed":false' in log(run))
         check('the stored result says the email is attempted, not confirmed', '"email":"attempted, not confirmed: notify_ticket_reply' in log(run) and 'Only support_messages.emailed_at shows it was sent' in log(run))
         check('the verification records the run and that its claims are bound', sql(f"select (report->>'claims') || '|' || length(report->>'run_id') from support_reply_verifications where ticket_id='{T}'") == 'bound|16')
-        # Stage 3: the reply is the host's: a fixed opening, the footer with one
-        # line per frozen checklist item in the host's state, a fixed closing.
+        # Stage 3: the reply is the host's: a fixed opening, the question, a
+        # fixed closing. Owner, 2026-11-06: an item not done is never listed
+        # with a status, and nothing promises a later post.
         body = sql(f"select body from support_messages where ticket_id='{T}' and is_admin_reply")
-        check('the stored reply is rendered by the host with one footer line per checklist item', body.startswith('CredentialDOMD Support · Automated\n\nHere is where your request stands.') and
-              'Where each part stands:\n1. Review the existing answer: not done yet, next: look into the synthetic report\n' in body and body.endswith('We will post on this thread when the remaining work is done.'), body)
+        check('the stored reply is rendered by the host: the question, no status line for the item not done', body.startswith('CredentialDOMD Support · Automated\n\nHere is where your request stands.') and
+              'Questions for you:\n- Which screen were you using when this happened?\n' in body and 'Where each part stands' not in body and 'not done yet' not in body and
+              body.endswith('If anything still looks wrong, reply on this thread and we will pick it up here.'), body)
         check('the frozen checklist is private host state', (state / 'checklists' / f'{T}.json').stat().st_mode & 0o777 == 0o600 and json.loads((state / 'checklists' / f'{T}.json').read_text())['items'][0]['id'] == 'AC-1')
         check('the case record keeps the host decision per item', json.loads((state / f'{T}.json').read_text())['checklist_states'] == [{'id': 'AC-1', 'state': 'not_done', 'remaining': 'look into the synthetic report', 'detail': None}])
         # Stage 2: every session is contained and runs in a worktree; the
@@ -395,7 +397,7 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', suffix='0', dir='/p
         inputs = invocations(run)
         check('one resume carried only the host reason', len(inputs) == 2 and inputs[1].get('resumed') and 'commit_or_build_id' in inputs[1]['repair_prompt'] and 'device_not_tested' in inputs[1]['repair_prompt'])
         check('the repair is logged and nothing counts as rejected', 'REPAIR' in log(run) and 'REJECTED' not in log(run) and not (state / 'failed' / f'{T}.count').exists())
-        check('the repaired reply is the one stored', sql(f"select body from support_messages where ticket_id='{T}' and is_admin_reply").endswith('We will post on this thread when the remaining work is done.') and
+        check('the repaired reply is the one stored', sql(f"select body from support_messages where ticket_id='{T}' and is_admin_reply").endswith('If anything still looks wrong, reply on this thread and we will pick it up here.') and
               'c237149' not in sql(f"select body from support_messages where ticket_id='{T}' and is_admin_reply"))
         check('the log names the broken rules, never the refused reply text', 'REPAIR — ' + T + ' attempt 1: reply.claims[0] commit_or_build_id, device_not_tested\n' in log(run) and 'c237149' not in log(run) and 'iPhone' not in log(run), log(run))
 
@@ -480,11 +482,37 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', suffix='0', dir='/p
         run, state, script, repo = scenario('code_refused')
         origin_head = git_out(run / 'origin.git', 'rev-parse', 'main')
         result = execute(script)
-        check('a change with no reproduction is refused by the gates, but the reply is still recorded', result.returncode == 0 and count() == 1 and 'CODE REFUSED — ' + T in log(run), log(run)[-2500:])
+        # Owner, 2026-11-06: nothing is done and nothing is asked, so no reply.
+        check('a change with no reproduction is refused by the gates, and its reply is held', result.returncode == 0 and count() == 0 and 'CODE REFUSED — ' + T in log(run) and
+              f'REPLY HELD — {T[:8]}: not complete (AC-1 not_done, change refused); continuing' in log(run), log(run)[-2500:])
         check('the refused change counts toward the breaker and alerts the owner', (state / 'failed' / f'{T}.count').read_text().strip() == '1' and any('was not merged' in m for m in notified(run)), notified(run))
         check('the gate failure went back to the worker once, as rule names', [v.get('resumed') for v in invocations(run)] == [None, True] and 'reproduction_recorded' in invocations(run)[1]['repair_prompt'])
         check('nothing reached origin main; the branch is kept for inspection', git_out(run / 'origin.git', 'rev-parse', 'main') == origin_head and git_out(repo, 'branch', '--list', 'agent/*') != '')
-        check('a refused change leaves no worktree once the reply is recorded', not any((run / 'work' / 'worktrees').iterdir()))
+        check('a refused change leaves no worktree once the reply is held', not any((run / 'work' / 'worktrees').iterdir()))
+
+        # Owner, 2026-11-06 (ticket b3ea3291): no status replies. A run that
+        # finishes nothing and asks nothing stores and emails nothing; the
+        # ticket stays unanswered and its work goes on as a bounded
+        # continuation, never as a fresh reply every hour.
+        run, state, script, repo = scenario('not_done')
+        result = execute(script)
+        record = json.loads((state / f'{T}.json').read_text())
+        check_parts('not_done: the reply is held, nothing reaches the customer', run, [
+            ('runner exit 0', result.returncode == 0, result.returncode),
+            ('no stored reply', count() == 0, count()),
+            ('no verification row', sql(f"select count(*) from support_reply_verifications where ticket_id='{T}'") == '0', None),
+            ('agent_last_reply_at unset', sql(f"select agent_last_reply_at is null from support_tickets where id='{T}'") == 't', None),
+            ('log line', f'REPLY HELD — {T[:8]}: not complete (AC-1 not_done); continuing' in log(run), None),
+            ('case pending and held', record['continuation']['state'] == 'pending' and record['continuation']['held']['input_at'] is None and record['continuation']['attempts'] == 0, record['continuation']),
+            ('nothing counted', not (state / 'failed' / f'{T}.count').exists(), None)], result)
+        check('not_done: the next run within the hour does not rerun it as a fresh reply', execute(script).returncode == 0 and len(invocations(run)) == 1 and 'idle' in log(run).splitlines()[-1], log(run)[-1500:])
+        due(state)
+        check_parts('not_done: once due it runs as a continuation that may still reply, and spends an attempt', run, [
+            ('runner exit 0', execute(script).returncode == 0, None),
+            ('a second worker run', len(invocations(run)) == 2, len(invocations(run))),
+            ('in reply mode', invocations(run)[-1]['run_mode'] == 'reply', invocations(run)[-1].get('run_mode')),
+            ('attempt spent', json.loads((state / f'{T}.json').read_text())['continuation']['attempts'] == 1, json.loads((state / f'{T}.json').read_text())['continuation']),
+            ('held again, no reply', count() == 0 and log(run).count('REPLY HELD — ' + T[:8]) == 2, count())])
 
         run, state, script, repo = scenario('forged')
         sql(f"""

@@ -187,6 +187,12 @@ const result = {
   },
   ...(scenario === 'code_refused' ? { change: { subject: 'Synthetic change', tests: [] } } : {}),
 };
+// Owner, 2026-11-06: a reply goes out only when the work is done or it asks
+// the reporter something. The worker here finishes nothing, so in reply mode
+// it asks; not_done and code_refused ask nothing and their reply is held.
+if (context.run_mode === 'reply' && !['not_done', 'code_refused'].includes(scenario)) {
+  result.assessment.questions = [{ question: 'Which screen were you using when this happened?', why_needed: 'Synthetic fixture question', required_attachment_paths: [], evidence_ids: [target] }];
+}
 if (scenario === 'bad_assessment') result.assessment.prior_fixes = [{ summary: 'Synthetic', state: 'claimed', evidence_ids: ['unavailable-evidence'] }];
 if (scenario === 'answered_question') {
   result.assessment.answered_questions = [{ question: 'Does the Add button work?', answer: 'Yes, already answered', evidence_ids: [target] }];

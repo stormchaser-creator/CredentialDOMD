@@ -61,7 +61,7 @@ test('the worker schema is structured; the staged isolated runner keeps its free
   assert.throws(() => validateAssessment(result(), context()), /needs the frozen checklist/);
 });
 
-test('the reply is the host\'s: opening, verified claims only, questions, the footer in the host\'s states, closing; no id, no em dash', async () => {
+test('the reply is the host\'s: opening, verified claims only, questions, the done items, closing; no status line, no id, no em dash', async () => {
   const ctx = applyAttachmentAccess(context(), stage3());
   assert.equal(ctx.attachments[0].access, 'reviewed', 'the question about the screenshot may be asked: the host proved it was read');
   const prepared = await prepareResult(ctx, result(), { stage3: stage3(), requireStructured: true, runId: '0123456789abcdef' });
@@ -69,8 +69,11 @@ test('the reply is the host\'s: opening, verified claims only, questions, the fo
     'Here is where your request stands.',
     'What we confirmed:\n- The title reads "Synthetic summary line"',
     'Questions for you:\n- Which invoice should the weekend rule apply to first?',
-    'Where each part stands:\n1. Separate the summary lines with line breaks: in progress, a change is ready and waiting to be released\n2. Answer where the title comes from: done\n3. Decide whether weekend days bill at the holiday rate: waiting on a decision from CredentialDOMD',
-    'We will post on this thread when the remaining work is done.'].join('\n\n'));
+    // Owner, 2026-11-06: only what is done (or asks the reporter) is listed,
+    // and no "we will post when the rest is done".
+    'Where each part stands:\n1. Answer where the title comes from: done',
+    'If anything still looks wrong, reply on this thread and we will pick it up here.'].join('\n\n'));
+  assert.doesNotMatch(prepared.text, /in progress|waiting on a decision|not done yet|partly done|next:/);
   assert.equal(prepared.body, `CredentialDOMD Support · Automated\n\n${prepared.text}`);
   assert.ok(!prepared.text.includes('—'));
   assert.deepEqual(checkFixedRules(prepared.text, { max: AGENT_REPLY_MAX }), []);

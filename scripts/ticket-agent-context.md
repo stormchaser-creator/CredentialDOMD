@@ -169,6 +169,28 @@ new customer input can still enter the normal approved queue. The saved next act
 and attempt count remain visible for operator recovery. The scan caps at 5,000 case
 files and probes at most 20 due candidates per run; bounds fail or defer explicitly.
 
+## Held replies (owner, 2026-11-06)
+
+The hourly runner sends no status replies. A structured reply is stored and emailed
+only when every checklist item is done (and no change of the run waits unreleased), or
+when it asks the reporter something only they can answer: `assessment.questions`, the
+owner's own `needs_owner` question on his ticket, or a device check. The footer then
+lists only the done items and those asks, never "not done yet", "partly done" or a next
+step, and the `follow_up` closing is sent as `reply_here`.
+
+Any other reply is held (`--record-and-reply` prints `REPLY HELD` with item ids and
+states). Nothing is stored or emailed and `agent_last_reply_at` stays unset, so the
+ticket still shows as unanswered. The case record keeps its follow-up pending (a host
+follow-up is added if none is left) and `continuation.held` records the newest message
+the run had seen. Because the ticket is still awaiting a reply, the new-message queue
+would otherwise rerun it as a fresh reply every hour; instead the queue leaves a held
+ticket out until a newer message arrives, and its work runs as a continuation: one
+attempt reserved per run, a one-hour cooldown, `stalled` after three, revived by itself
+after a day at most twice, then operational review. The run loads in reply mode (the
+ticket is unanswered), so once the host decides every item done the reply goes out and
+reports what was done. New input from the reporter starts afresh. A change the gates
+or the review refused still counts toward the breaker.
+
 ## Acceptance and validation
 
 Run without production access or provider calls:

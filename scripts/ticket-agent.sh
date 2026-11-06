@@ -360,13 +360,19 @@ for TARGET in ${(f)TARGETS}; do
   # transaction. No model-selected target/recipient/SQL is accepted. The code
   # outcome binds the record: an unreleased change completes no follow-up.
   # The stage 3 record is the host's decision per checklist item and claim;
-  # the reply is rendered from it.
+  # the reply is rendered from it. A reply is stored and emailed only when
+  # every item is done (and released) or it asks the reporter something
+  # (owner, 2026-11-06: no status replies). Otherwise it is held: nothing
+  # reaches the customer, the log says REPLY HELD, the ticket stays
+  # unanswered and its case stays pending, so a later run carries on as a
+  # continuation with bounded attempts (ticket-agent-context.mjs finishRun).
   if TICKET_RUN_KEY="$RUN_KEY" TICKET_REPO="$RECORD_REPO" TICKET_PRE_HEAD="$BASE" TICKET_RUN_STARTED="$RUN_STARTED" TICKET_RUN_COMMITTER="$RUN_COMMITTER" \
     TICKET_RUN_ID="$RUN_ID" TICKET_RELEASE_FILE="$RELEASE_FILE" TICKET_CODE_OUTCOME="$CODE" TICKET_STAGE3_FILE="$STAGE3" TICKET_DATABASE_TOKEN="$TOKEN" node "$HOST/ticket-agent-context.mjs" \
     --record-and-reply "$CONTEXT" "$OUTPUT" "$CASE_STATE" >> "$LOG" 2>&1; then
     if [ "$CODE" = refused ]; then
-      # The reply is recorded (it claims nothing), but a change the gates or
-      # the review refused counts toward the breaker.
+      # The reply step held the reply (or, when it asks the reporter
+      # something, recorded it), but a change the gates or the review refused
+      # counts toward the breaker either way.
       echo $((FAILS + 1)) > "$FAIL_COUNT"
       echo "$(date '+%F %T') CODE REFUSED — $TICKET_ID change not merged ($((FAILS + 1)) in a row)" >> "$LOG"
       [ $((FAILS + 1)) -eq 3 ] && node "$ALERT" park --state "$CASE_STATE" --ticket "$TICKET_ID" --count 3 --notify "$NOTIFY" >> "$LOG" 2>&1

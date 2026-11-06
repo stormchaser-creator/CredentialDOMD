@@ -298,11 +298,15 @@ export async function prepareAgentReply({ reply, ticketId = null, git = null, pr
 // The hourly agent's reply (stage 3, A3 and G1): rendered by the host from
 // the structured result and the host's own decision (stage3.final, written by
 // ticket-fix/run.mjs): a fixed opening, only the claims the host verified,
-// the questions, "Where each part stands:" with one line per frozen checklist
-// item in the state the host decided, and a fixed closing. No sentence of
+// the questions, "Where each part stands:" with a line per frozen checklist
+// item the host decided done or that asks the reporter something, and a
+// fixed closing. No sentence of
 // the model's reaches the customer except a verified claim, a checked
 // question, a requirement the host quoted-checked at extraction and the
-// "remaining" text of an item that is not done (which may report no result).
+// "remaining" text of an item that asks the reporter something (the owner's
+// question on his ticket, a device check). Items not done are left out of
+// the footer; a reply with nothing done and nothing to ask is never rendered
+// for sending (ticket-agent-context.mjs finishRun holds it).
 export function prepareRenderedReply({ result, ticketId, ownerTicket = false, stage3, runId = null, preHead = null, runStarted = null }) {
   if (!UUID.test(ticketId || '') || stage3?.ticket_id !== ticketId) throw Error('The host decision is for another ticket');
   const verdicts = new Map((stage3.final.claims ?? []).map(c => [c.index, c]));
@@ -312,9 +316,10 @@ export function prepareRenderedReply({ result, ticketId, ownerTicket = false, st
   const doneItems = new Set(stage3.final.items.filter(f => f.state === 'done').map(f => f.id));
   const confirmed = result.reply.claims.filter((c, i) => verdicts.get(i)?.verified === true && doneItems.has(c.ac_id)).map(c => c.text.trim());
   const questions = result.assessment.questions.map(q => q.question.trim());
-  const pending = stage3.final.items.some(f => f.state !== 'done');
-  // "We will post when the rest is done" only when something is left.
-  const closing = result.reply.closing === 'follow_up' && !pending ? 'reply_here' : result.reply.closing;
+  // A reply goes out only when the work is done or it asks the reporter
+  // something (checklist.mjs replyHold), so "we will post when the rest is
+  // done" is never sent: it is a plan, not a result (owner, 2026-11-06).
+  const closing = result.reply.closing === 'follow_up' ? 'reply_here' : result.reply.closing;
   const text = renderAgentReply({ opening: result.reply.opening, confirmed, questions, items: stage3.checklist.items, finals: stage3.final.items, closing, ownerTicket });
   const violations = checkFixedRules(text, { max: AGENT_REPLY_MAX });
   if (violations.length) throw new ReplyRuleError(violations);
