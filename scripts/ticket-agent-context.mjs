@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // Trusted, read-only context collection. Ticket text is evidence, never authority.
-import { promises as fs, readFileSync, statSync } from 'node:fs';
+import { promises as fs, readFileSync, statSync, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
@@ -34,27 +34,68 @@ const FIELDS = `t.id,t.user_id,t.subject,left(t.body,24000) AS body,
 // Parked targets are left out of the query itself, so a parked ticket can
 // never hold one of the two slots (09-25 to 09-28: 126 runs logged PARKED for
 // two tickets while fe321c16 waited behind them).
-export function queueSQL(includeArchived = false, parked = []) {
+// Tickets with failed runs (failing) go after the rest: 11-05, a new ticket
+// waited all day behind one whose runs kept failing.
+export function queueSQL(includeArchived = false, parked = [], failing = []) {
   const skip = parked.length ? ` AND t.id NOT IN (${parked.map(p => `'${id(p)}'::uuid`).join(',')})` : '';
+  const later = failing.length ? `CASE WHEN t.id IN (${failing.map(p => `'${id(p)}'::uuid`).join(',')}) THEN 1 ELSE 0 END,` : '';
   return readOnly(`SELECT t.id,t.updated_at,public.is_admin(t.user_id) AS from_admin FROM support_tickets t
     WHERE ${APPROVED} AND ${AWAITING} AND ${REFUND_HELD}${includeArchived ? '' : ' AND t.archived_at IS NULL'}${skip}
-    ORDER BY t.created_at,t.id LIMIT 2`);
+    ORDER BY ${later}t.created_at,t.id LIMIT 2`);
 }
 export const PARK_AFTER = 3;
 // The shell's circuit breaker writes <state>/failed/<ticket>.count; a count of
-// PARK_AFTER or more parks the ticket until a human removes the file.
-export async function parkedTargets(directory) {
+// PARK_AFTER or more parks the ticket (reviveParked brings it back).
+// A count file left from an old failure no longer sends its ticket to the
+// back of the queue (FAILING_FOR_MS; collectQueue).
+export const FAILING_FOR_MS = 7 * 24 * 60 * 60 * 1000;
+export async function failCounts(directory) {
   let names;
-  try { names = await fs.readdir(path.join(directory, 'failed')); } catch (error) { if (error.code === 'ENOENT') return []; throw error; }
-  const parked = [];
+  try { names = await fs.readdir(path.join(directory, 'failed')); } catch (error) { if (error.code === 'ENOENT') return new Map(); throw error; }
+  const counts = new Map();
   for (const name of names) {
     const ticketId = name.endsWith('.count') ? name.slice(0, -6) : '';
     if (!UUID.test(ticketId)) continue;
     const raw = (await fs.readFile(path.join(directory, 'failed', name), 'utf8')).trim();
-    if (/^\d+$/.test(raw) && Number(raw) >= PARK_AFTER) parked.push(ticketId.toLowerCase());
+    if (/^\d+$/.test(raw) && Number(raw) > 0) counts.set(ticketId.toLowerCase(), Number(raw));
   }
-  if (parked.length > 500) throw Error('Parked queue exceeds bound; operator review required');
-  return parked.sort();
+  if (counts.size > 500) throw Error('Parked queue exceeds bound; operator review required');
+  return counts;
+}
+export async function parkedTargets(directory) {
+  return [...(await failCounts(directory))].filter(([, n]) => n >= PARK_AFTER).map(([t]) => t).sort();
+}
+// Parked and stalled work used to wait for a person forever (11-02 to 11-05:
+// seven open tickets, every run "idle"). Each comes back by itself once a
+// day has passed, at most REVIVE_MAX times per ticket: the code it failed on
+// has usually moved by then, and a bounded retry costs less than a ticket
+// nobody works. A device park (<ticket>.device) never comes back by itself:
+// no run can test it.
+export const REVIVE_AFTER_MS = 24 * 60 * 60 * 1000;
+export const REVIVE_MAX = 2;
+async function revivals(directory, ticketId) {
+  try {
+    const raw = (await fs.readFile(path.join(directory, 'failed', `${ticketId}.revived`), 'utf8')).trim();
+    return /^\d+$/.test(raw) ? Number(raw) : REVIVE_MAX;
+  } catch (error) { if (error.code === 'ENOENT') return 0; throw error; }
+}
+export async function reviveParked(directory, { now = Date.now() } = {}) {
+  const revived = [];
+  for (const ticketId of await parkedTargets(directory)) {
+    const failed = path.join(directory, 'failed');
+    const count = path.join(failed, `${ticketId}.count`);
+    // A device park: its marker is at least as new as the count (an older
+    // marker is from a park someone already cleared).
+    const device = path.join(failed, `${ticketId}.device`);
+    if (existsSync(device) && statSync(device).mtimeMs >= statSync(count).mtimeMs - 1000) continue;
+    if (now - statSync(count).mtimeMs < REVIVE_AFTER_MS) continue;
+    const times = await revivals(directory, ticketId);
+    if (times >= REVIVE_MAX) continue;
+    await writePrivate(path.join(failed, `${ticketId}.revived`), `${times + 1}\n`);
+    await fs.rename(count, `${count}.revived-${times + 1}`);
+    revived.push(ticketId);
+  }
+  return revived;
 }
 // Replies are stored only with a verification row (20260928150000); without
 // the table and key the runner would reach the model and then fail to store.
@@ -433,8 +474,11 @@ async function readCase(directory, ticketId) {
 }
 export async function collectQueue(query, directory, { includeArchived = false, now = Date.now() } = {}) {
   await ensureState(directory);
-  const parked = await parkedTargets(directory);
-  const incoming = await query(queueSQL(includeArchived, parked));
+  const revived = await reviveParked(directory, { now });
+  const counts = await failCounts(directory);
+  const parked = [...counts].filter(([, n]) => n >= PARK_AFTER).map(([t]) => t).sort();
+  const failing = [...counts.keys()].filter(t => !parked.includes(t) && now - statSync(path.join(directory, 'failed', `${t}.count`)).mtimeMs < FAILING_FOR_MS).sort();
+  const incoming = await query(queueSQL(includeArchived, parked, failing));
   if (incoming.length > 2 || incoming.some(t => !UUID.test(t.id || '') || typeof t.from_admin !== 'boolean')) throw Error('Malformed approved queue');
   const names = (await fs.readdir(directory)).filter(n => UUID.test(n.slice(0, -5)) && n.endsWith('.json'));
   if (names.length > 5000) throw Error('Case queue exceeds bound; operator review required');
@@ -443,7 +487,17 @@ export async function collectQueue(query, directory, { includeArchived = false, 
     const record = await readCase(directory, name.slice(0, -5));
     const queue = record.continuation;
     if (!queue || incoming.some(t => t.id === record.target_id) || parked.includes(record.target_id)) continue;
-    if (queue.state === 'stalled') { attention.push(record.target_id); continue; }
+    if (queue.state === 'stalled') {
+      const revivedTimes = Number.isInteger(queue.revived) ? queue.revived : 0;
+      const since = Date.parse(queue.last_attempt_at ?? record.recorded_at);
+      if (revivedTimes >= REVIVE_MAX || !(now - since >= REVIVE_AFTER_MS)) { attention.push(record.target_id); continue; }
+      record.continuation = { ...queue, state: 'pending', attempts: 0, due_at: new Date(now).toISOString(), revived: revivedTimes + 1 };
+      delete record.continuation.reason;
+      await writePrivate(path.join(directory, `${record.target_id}.json`), JSON.stringify(record, null, 2));
+      revived.push(record.target_id);
+      due.push(record);
+      continue;
+    }
     if (queue.state !== 'pending') continue; // Owner/customer waits never invoke the worker.
     if (!Number.isInteger(queue.attempts) || queue.attempts < 0 || !Number.isFinite(Date.parse(queue.due_at))) throw Error('Malformed continuation state');
     if (Date.parse(queue.due_at) <= now) due.push(record);
@@ -469,7 +523,8 @@ export async function collectQueue(query, directory, { includeArchived = false, 
     // This target may have fresh input beyond the first two new-message rows.
     continuations.push({ id: record.target_id, mode: rows[0].awaiting_reply ? 'reply' : 'continuation' });
   }
-  return { items: [...incoming.slice(0, 2 - continuations.length).map(t => ({ id: t.id, mode: 'reply' })), ...continuations], attention, parked };
+  return { items: [...incoming.slice(0, 2 - continuations.length).map(t => ({ id: t.id, mode: 'reply' })), ...continuations], attention, parked,
+    ...(revived.length ? { revived } : {}) };
 }
 export async function loadQueuedContext(query, item, directory, options = {}) {
   if (!['reply', 'continuation'].includes(item.mode)) throw Error('Invalid trusted run mode');
@@ -580,7 +635,10 @@ export async function saveReview(directory, context, given, sourceRevision, { no
     target_version: context.target_version, recorded_at: new Date(now).toISOString(), source_revision: sourceRevision,
     approval: context.approval, pending_follow_up: pendingWork,
     continuation: { state, attempts, due_at: new Date(now + COOLDOWN_MS).toISOString(),
-      ...(state === 'stalled' ? { reason: 'Three continuation attempts need operational review; no further automatic calls' } : {}) },
+      // How often collectQueue has revived it (REVIVE_MAX bounds it): kept
+      // across runs, or a ticket that stalls again would be revived forever.
+      ...(Number.isInteger(previous?.continuation?.revived) ? { revived: previous.continuation.revived } : {}),
+      ...(state === 'stalled' ? { reason: 'Three continuation attempts; revived by itself after a day, at most twice, then operational review' } : {}) },
     history_complete: context.history_complete, limitations: context.limitations,
     // A saved draft is evidence of follow-through, never proof of delivery or deployment.
     publication: 'not_confirmed', remembered_answers: [...answers.values()], follow_up_history: [...followUps.values()], ...result,
@@ -746,6 +804,29 @@ const problemHead = problem => {
 export const refusalHead = error => (error?.violations ? ruleNames(error.violations)
   : Array.isArray(error?.problems) ? [...new Set(error.problems.map(problemHead))].join('; ').slice(0, 400)
     : String(error?.message ?? error).split(':')[0].slice(0, 160));
+// What the ops supervisor reads (scripts/ops-supervisor.sh): the open
+// tickets no run will work by itself, stalled past their revivals or parked.
+// A log line alone reached nobody (11-02 to 11-05).
+// Parked tickets reviveParked will bring back, and device parks (the owner
+// was told), are left out: only what needs the supervisor.
+export async function writeAttention(query, directory, queue, { now = Date.now() } = {}) {
+  const stuckParked = [];
+  for (const ticketId of queue.parked) {
+    const failed = path.join(directory, 'failed');
+    const device = path.join(failed, `${ticketId}.device`);
+    if (existsSync(device)) continue;
+    if (await revivals(directory, ticketId) < REVIVE_MAX) continue;
+    stuckParked.push(ticketId);
+  }
+  const ids = [...new Set([...queue.attention, ...stuckParked])];
+  const open = ids.length ? await query(readOnly(`SELECT t.id FROM support_tickets t WHERE t.id IN (${ids.map(p => `'${id(p)}'::uuid`).join(',')})
+    AND t.status IN ('open', 'in_progress') AND t.archived_at IS NULL ORDER BY t.id`)) : [];
+  if (!Array.isArray(open) || open.some(t => !UUID.test(t.id || ''))) throw Error('Malformed open ticket rows');
+  const isOpen = new Set(open.map(t => t.id));
+  const record = { at: new Date(now).toISOString(), stalled: [...queue.attention].filter(t => isOpen.has(t)).sort(), parked_open: stuckParked.filter(t => isOpen.has(t)).sort() };
+  await writePrivate(path.join(directory, 'attention.json'), `${JSON.stringify(record)}\n`);
+  return record;
+}
 export async function databaseQuery(query) {
   const token = process.env.TICKET_DATABASE_TOKEN;
   if (!token) throw Error('Existing runner database credential is required');
@@ -767,7 +848,9 @@ async function main(args) {
     await assertReplyVerificationInstalled(databaseQuery);
     const queue = await collectQueue(databaseQuery, filename, { includeArchived: true });
     await writePrivate(ticketId, JSON.stringify(queue));
+    if (queue.revived?.length) console.error(`REVIVED: parked or stalled work back in the queue: ${queue.revived.join(', ')}`);
     if (queue.attention.length) console.error(`ATTENTION: stalled internal work requires operational review: ${queue.attention.join(', ')}`);
+    await writeAttention(databaseQuery, filename, queue).catch(error => console.error(`WARN: attention.json not written (${String(error.message).slice(0, 160)})`));
     return;
   }
   if (mode === '--load' && args.length === 5) {

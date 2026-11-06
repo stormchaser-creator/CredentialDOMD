@@ -33,7 +33,8 @@ what happened.
   `~/Projects/CredentialDOMD`, branch `main`. Never edit it in place; work in
   a fresh worktree: `git worktree add --detach <dir> origin/main`, then
   `git switch -c <branch> --no-track`.
-- Ticket agent: launchd `com.credentialdomd.ticket-agent`, hourly at :17,
+- Ticket agent: launchd `com.credentialdomd.ticket-agent` at :17, and a
+  crontab kickstart at :47,
   script `scripts/ticket-agent.sh`, log
   `~/Library/Logs/credentialdomd-ticket-agent.log`, runs in
   `~/Library/Application Support/CredentialDOMD/ticket-work/runs/`, held runs
@@ -77,6 +78,24 @@ what happened.
      `HOLD-host-code-changed` in the ticket-context folder means a run
      changed the agent's own code: read what changed (the agent log says),
      revert it if it was not a reviewed merge, then remove the file.
+   - **Stuck tickets** (HEALTH names "open tickets no ticket run will work
+     by itself"). These are real people's requests, and "known" or
+     "unchanged" is never an outcome. Per ticket id, read its case file
+     (`ticket-context/<id>.json`), its `failed/` files and its last runs in
+     the agent log, and find why each run failed. Then do one of:
+     - the runner was wrong: fix the runner (with a test) and record it for
+       the owner, since you may not merge the automation's own files;
+     - the bug is real and the agent cannot fix it: fix it yourself (step 4)
+       and then revive the ticket so its run replies and closes it;
+     - the fix is already live: revive it so its run verifies and replies.
+     The runner already revives each ticket by itself twice, a day apart;
+     these have used both. Revive one only after you have committed a fix for
+     the cause (or found the fix already live), once per fix, and write the
+     commit in the journal. To revive: rename `failed/<id>.count` to
+     `failed/<id>.count.ops-<commit>` (parked), or set its case file's
+     `continuation.state` to `pending`, `attempts` to 0 and `due_at` to now
+     (stalled). Never delete either file. Tickets parked for a device
+     (`failed/<id>.device`) are not listed: the owner was told.
    - **Member tickets and replies.** The ticket agent answers these itself
      (pg_cron releases them to it). Check that a new one is queued and that
      a reply is being worked; fix the pipeline if it is stuck. Never write
@@ -102,9 +121,10 @@ what happened.
    - the ticket agent ran in the last 3 hours and its last runs ended;
    - the latest CI run on `main` passed;
    - https://credentialdomd.com/ and https://credentialdomd.com/app/ answer 200;
-   - open owner tickets from app errors older than a day
-     (`support_tickets` with `context_payload->>'source' = 'client_error'`
-     and status open): make sure they are being worked, or work them;
+   - every open ticket older than a day (`support_tickets` with status
+     open or in_progress and no archived_at), app errors and people's
+     requests alike: make sure each is being worked (a run in the last day,
+     or a reply waiting on the person), or work it as a stuck ticket;
    - disk space on `/` (df) above 15%.
 6. Never end a run waiting. Anything still pending (a CI run, a merge to
    retry, a check to repeat) becomes a follow-up note for your next run:

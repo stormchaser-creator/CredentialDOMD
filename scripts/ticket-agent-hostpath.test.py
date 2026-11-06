@@ -445,14 +445,15 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', suffix='0', dir='/p
         # is told once (review of the pause: it was silent and looked clean).
         run, state, script, repo = scenario('usage_limit', two_owners=True, parked=2)
         check('a usage limit pauses the run (exit 8) and counts nothing: no rejection, no park, no alert yet', execute(script).returncode == 8 and count() == 0 and count(X) == 0 and
-              (state / 'failed' / f'{T}.count').read_text().strip() == '2' and 'PAUSED — ' + T + ' usage limit reached' in log(run) and 'REJECTED' not in log(run) and notified(run) == [], log(run)[-2500:])
-        check('the pause ends the run: the other ticket starts no session', [v['role'] for v in sessions(run)] == ['extract'] and not (state / 'failed' / f'{X}.count').exists(), sessions(run))
+              (state / 'failed' / f'{T}.count').read_text().strip() == '2' and 'PAUSED — ' + X + ' usage limit reached' in log(run) and 'REJECTED' not in log(run) and notified(run) == [], log(run)[-2500:])
+        # The fresh ticket (X) runs first; the one with two failed runs (T) waits.
+        check('the pause ends the run: the other ticket starts no session', [v['role'] for v in sessions(run)] == ['extract'] and not (state / 'failed' / f'{X}.count').exists() and (state / 'failed' / f'{T}.count').read_text().strip() == '2', sessions(run))
         check('a paused run leaves no worktree and no branch', not any((run / 'work' / 'worktrees').iterdir()) and git_out(repo, 'branch', '--list', 'agent/*') == '')
         again = execute(script)
-        check('another limited run still counts nothing', again.returncode == 8 and (state / 'failed' / f'{T}.count').read_text().strip() == '2' and log(run).count('PAUSED — ' + T + ' usage limit reached') == 2 and notified(run) == [],
+        check('another limited run still counts nothing', again.returncode == 8 and (state / 'failed' / f'{T}.count').read_text().strip() == '2' and log(run).count('PAUSED — ' + X + ' usage limit reached') == 2 and notified(run) == [],
               (again.returncode, (state / 'failed' / f'{T}.count').read_text(), notified(run), log(run)[-2500:]))
         paused = status(state)
-        check('the status file shows the pause and its limit sentence, not a clean run', paused['last_run']['rc'] == 8 and paused['usage_limit']['runs'] == 2 and paused['usage_limit']['ticket'] == T[:8] and
+        check('the status file shows the pause and its limit sentence, not a clean run', paused['last_run']['rc'] == 8 and paused['usage_limit']['runs'] == 2 and paused['usage_limit']['ticket'] == X[:8] and
               paused['usage_limit']['notice'] == "You've hit your session limit · resets 2pm (America/Los_Angeles)" and paused['usage_limit']['alerted_at'] is None, paused)
         pause_file = state / 'usage-limit.json'
         record = json.loads(pause_file.read_text())
@@ -460,7 +461,7 @@ with tempfile.TemporaryDirectory(prefix='support-hostpath-', suffix='0', dir='/p
         write(pause_file, json.dumps(record))
         check('a pause that has lasted 6 h alerts the owner once, with the limit sentence and ids only', execute(script).returncode == 8 and len(notified(run)) == 1 and
               "has stopped at the subscription's usage limit, so no ticket is being worked" in notified(run)[0] and notified(run)[0].endswith("The CLI said: You've hit your session limit · resets 2pm (America/Los_Angeles)") and
-              T not in notified(run)[0] and 'Synthetic' not in notified(run)[0] and 'usage_limit_paused' in (state / 'alerts.log').read_text(), (notified(run), log(run)[-2500:]))
+              T not in notified(run)[0] and X not in notified(run)[0] and 'Synthetic' not in notified(run)[0] and 'usage_limit_paused' in (state / 'alerts.log').read_text(), (notified(run), log(run)[-2500:]))
         check('the same pause alerts only once', execute(script).returncode == 8 and len(notified(run)) == 1 and status(state)['usage_limit']['runs'] == 4, notified(run))
         # A pause no run ended (the ticket answered by hand, then idle hours:
         # nothing reached run.mjs, so nothing called resumed) is over once no

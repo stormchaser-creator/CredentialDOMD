@@ -186,6 +186,11 @@ A prior completion claim or a resolved related ticket is not itself task verific
    byte in a source file. A file git ignores (for example under a `logs/` directory) is never
    committed, and the gates, which run in a fresh checkout of the commit, fail on it. Your
    session and the gates run in a sandbox with no access to credentials or other projects.
+   Some `src/` modules have a copy under `supabase/functions/_shared/app/` (see
+   `scripts/sync-shared-app-modules.mjs`, ROOTS and their imports), which you cannot write:
+   a change to one fails `scripts/shared-app-modules.test.mjs` in every round. Fix the ticket
+   without changing those modules when you can; when you cannot, change nothing there and
+   record the change as `support_worker` follow-up naming the module, for the operator.
 3. A reproduction may already exist: the host facts above list tests a separate session wrote
    BEFORE you and the host recorded FAILING on this base. Those files are frozen (you cannot
    edit them). Your fix is done when they pass. A product change with no reproduction recorded

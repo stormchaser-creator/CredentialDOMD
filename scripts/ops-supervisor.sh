@@ -96,11 +96,24 @@ launchctl list com.credentialdomd.ticket-agent >/dev/null 2>&1 || health+=("the 
   health+=("the signup notifier wrote to its error file in the last hour")
 if [[ -d $AGENT_LOCK ]]; then
   held=$(( EPOCHSECONDS - $(zstat +mtime "$AGENT_LOCK") ))
-  (( held > 3 * 3600 )) && health+=("the ticket agent lock has been held $(( held / 3600 )) hours")
+  # No hour count: a new number each hour was a new finding, so a new session.
+  (( held > 3 * 3600 )) && health+=("the ticket agent lock has been held over 3 hours")
 fi
 [[ -f $notify_log ]] || health+=("the signup notifier has no log")
 [[ -e "$HOME/Library/Application Support/CredentialDOMD/ticket-context/HOLD-host-code-changed" ]] &&
   health+=("the ticket agent is held: HOLD-host-code-changed exists (its own code changed during a run)")
+# Open tickets no ticket run will work by itself: stalled past their
+# revivals, or parked (ticket-agent-context.mjs writeAttention, each queue
+# build). 11-02 to 11-05 seven sat this way while every check passed.
+attention="$HOME/Library/Application Support/CredentialDOMD/ticket-context/attention.json"
+if [[ -f $attention ]]; then
+  stuck=$(python3 -c '
+import json, sys
+d = json.load(open(sys.argv[1]))
+print(" ".join(sorted({str(t)[:8] for t in d.get("stalled", []) + d.get("parked_open", [])})))' "$attention" 2>/dev/null) ||
+    stuck="(unreadable attention.json)"
+  [[ -n $stuck ]] && health+=("open tickets no ticket run will work by itself (stalled or parked): $stuck")
+fi
 
 sweep=queue
 today=$(strftime '%F' $EPOCHSECONDS)

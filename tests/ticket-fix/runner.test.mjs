@@ -265,7 +265,10 @@ test('the runner shell: lock owner, park alert, status on every exit; the model 
   for (const file of ['scripts/ticket-agent.sh', 'scripts/ticket-fix/run.mjs', 'scripts/ticket-fix/worker.mjs', 'scripts/ticket-fix/review.mjs', 'scripts/ticket-fix/merge.mjs']) {
     assert.doesNotMatch(read(file), /dangerously-skip-permissions|bypassPermissions"?\s*[,)]/, file);
   }
-  assert.match(sh, /\/usr\/bin\/perl -e 'alarm 10800; exec @ARGV' -- node "\$HOST\/ticket-fix\/run.mjs" work --ticket "\$TICKET_ID" --context "\$CONTEXT" --output "\$OUTPUT" --run-file "\$RUN_FILE"/);
+  // One 3-hour budget for the whole run; each target's alarm is what is left.
+  assert.match(sh, /RUN_DEADLINE=\$\(\( \$\(date \+%s\) \+ 10800 \)\)/);
+  assert.match(sh, /if \[ "\$LEFT" -lt 1800 \]; then\n[^\n]*DEFERRED[^\n]*\n\s+break/);
+  assert.match(sh, /\/usr\/bin\/perl -e 'alarm shift; exec @ARGV' -- "\$LEFT" node "\$HOST\/ticket-fix\/run.mjs" work --ticket "\$TICKET_ID" --context "\$CONTEXT" --output "\$OUTPUT" --run-file "\$RUN_FILE"/);
   assert.match(sh, /--claude "\$CLAUDE" --committer "\$RUN_COMMITTER" --notify "\$NOTIFY" --worker-seconds "\$WORKER_SECONDS"/);
   assert.match(sh, /--work "\$WORK_STATE" --state "\$CASE_STATE" --fix-state "\$FIX_STATE"/);
   assert.match(sh, /WORK_STATE="\$HOME\/Library\/Application Support\/CredentialDOMD\/ticket-work"/);
@@ -287,10 +290,11 @@ test('the runner shell: lock owner, park alert, status on every exit; the model 
   // The record step knows the code outcome (finding 5) and finish the repository (finding 2).
   assert.match(sh, /TICKET_CODE_OUTCOME="\$CODE"[^\n]*node "\$HOST\/ticket-agent-context.mjs" \\\n\s+--record-and-reply/);
   assert.match(sh, /run.mjs" finish --run-file "\$RUN_FILE" --work "\$WORK_STATE" --repo "\$REPO"/);
-  assert.match(sh, /2\) reject "review not recorded"; RC=1; break ;;/);
-  assert.match(sh, /3\) reject "model run failed or timed out"; RC=1; break ;;/);
-  assert.match(sh, /5\) reject "changed files outside its scope"; RC=1; break ;;/);
-  assert.match(sh, /\*\) reject "host step failed \(exit \$WORK_RC\)"; RC=1; break ;;/);
+  assert.match(sh, /2\) reject "review not recorded"; RC=1; continue ;;/);
+  assert.match(sh, /3\) reject "model run failed or timed out"; RC=1; continue ;;/);
+  assert.match(sh, /5\) reject "changed files outside its scope"; RC=1; continue ;;/);
+  assert.match(sh, /\*\) reject "host step failed \(exit \$WORK_RC\)"; RC=1; continue ;;/);
+  assert.match(sh, /142\) reject "ran out of time \(the 3-hour limit\)"; RC=1; continue ;;/);
   // A device-only bug parks once (review of 2026-10-30); SIGTERM from outside counts nothing.
   assert.match(sh, /9\) echo 3 > "\$FAIL_COUNT"[\s\S]*?park --state "\$CASE_STATE" --ticket "\$TICKET_ID" --count 3 --why device/);
   assert.match(sh, /143\) echo "[^\n]*terminated from outside \(SIGTERM\); nothing counted"/);
@@ -666,7 +670,7 @@ test('CI runs the whole suite on every push and pull request and deploys nothing
 // The shell's exit handling, run for real (review of 2026-10-30): a run
 // killed from outside (SIGTERM, 143) is not a rejection, and a device-only
 // bug parks the ticket once instead of being worked every hour.
-test('the runner shell: exit 143 counts nothing and gives back the attempt; exit 9 parks once with one alert; others still reject', { skip: existsSync('/bin/zsh') ? false : 'needs zsh' }, () => {
+test('the runner shell: exit 143 counts nothing and gives back the attempt; exit 9 parks once with one alert; others reject and the next target runs', { skip: existsSync('/bin/zsh') ? false : 'needs zsh' }, () => {
   const sh = read('scripts/ticket-agent.sh');
   const start = sh.indexOf('  case "$WORK_RC" in');
   const block = sh.slice(start, sh.indexOf('\n  esac\n', start) + '\n  esac\n'.length);
@@ -676,9 +680,9 @@ test('the runner shell: exit 143 counts nothing and gives back the attempt; exit
     const runCase = (rc, mode = 'reply') => {
       const log = path.join(state.dir, `log-${rc}-${mode}`);
       const script = `LOG=${JSON.stringify(log)}\nFAIL_COUNT=${JSON.stringify(path.join(state.dir, `count-${rc}-${mode}`))}\nTICKET_ID=${T}\nRUN_MODE=${mode}\nRUN_ID=0123456789abcdef\n` +
-        `ATTACHMENTS=${JSON.stringify(path.join(state.dir, 'attachments'))}\nCASE_STATE=${JSON.stringify(state.dir)}\nHOST=/synthetic\nALERT=/synthetic/alert.mjs\nNOTIFY=/synthetic/notify\nRC=0\nFAILS=0\n` +
+        `ATTACHMENTS=${JSON.stringify(path.join(state.dir, 'attachments'))}\nFAIL_DIR=${JSON.stringify(state.dir)}\nCASE_STATE=${JSON.stringify(state.dir)}\nHOST=/synthetic\nALERT=/synthetic/alert.mjs\nNOTIFY=/synthetic/notify\nRC=0\nFAILS=0\n` +
         `node() { print -r -- "node $*" >> "$LOG"; }\nreject() { print -r -- "REJECT $1" >> "$LOG"; }\nrun_field() { :; }\n` +
-        `WORK_RC=${rc}\nfor _ in 1; do\n${block}\nprint -r -- "AFTER" >> "$LOG"\ndone\nprint -r -- "RC=$RC" >> "$LOG"\n`;
+        `for i in 1 2; do\nprint -r -- "TARGET $i" >> "$LOG"\n[ "$i" = 2 ] && break\nWORK_RC=${rc}\n${block}\nprint -r -- "AFTER" >> "$LOG"\ndone\nprint -r -- "RC=$RC" >> "$LOG"\n`;
       const r = spawnSync('/bin/zsh', ['-f', '-c', script], { encoding: 'utf8' });
       assert.equal(r.status, 0, r.stderr);
       return { log: readFileSync(log, 'utf8'), count: existsSync(path.join(state.dir, `count-${rc}-${mode}`)) ? readFileSync(path.join(state.dir, `count-${rc}-${mode}`), 'utf8').trim() : null };
@@ -697,8 +701,14 @@ test('the runner shell: exit 143 counts nothing and gives back the attempt; exit
     assert.match(device.log, /--why device/);
     assert.match(device.log, /DEVICE — .* needs a device reproduction/);
     assert.match(device.log, /RC=0/);
-    // The alarm (SIGALRM, 142) and any other host failure still reject.
-    assert.match(runCase(142).log, /REJECT host step failed \(exit 142\)/);
-    assert.match(runCase(3).log, /REJECT model run failed or timed out/);
+    assert.ok(existsSync(path.join(state.dir, `${T}.device`)), 'a device park is marked so it never comes back by itself');
+    // The alarm (SIGALRM, 142) and any other host failure still reject, and
+    // the next target still runs (11-05: one failing ticket starved a new one).
+    const timedOut = runCase(142);
+    assert.match(timedOut.log, /REJECT ran out of time \(the 3-hour limit\)/);
+    assert.match(timedOut.log, /TARGET 2/);
+    assert.match(runCase(3).log, /REJECT model run failed or timed out[\s\S]*TARGET 2/);
+    assert.match(runCase(77).log, /REJECT host step failed \(exit 77\)[\s\S]*TARGET 2/);
+    assert.doesNotMatch(killed.log, /TARGET 2/, 'a run stopped from outside runs nothing more');
   } finally { state.cleanup(); }
 });

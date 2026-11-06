@@ -180,7 +180,8 @@ cd "$REPO" || exit 1
 # Every failed run counts toward the circuit breaker, whatever failed: a
 # result the host refused, a model session that failed or timed out, a run
 # that changed the host's code or files outside its scope. Three in a row
-# park the ticket and alert the owner. Without this, one unrecordable ticket
+# park the ticket and alert the owner. A parked ticket comes back by itself
+# a day later, at most twice (ticket-agent-context.mjs reviveParked). Without this, one unrecordable ticket
 # burned 71 consecutive model runs (2026-09-20/21) with no alert, and a
 # ticket that always timed out would never have parked. The one exception is
 # the subscription's session or usage limit (run.mjs exit 8): it says nothing
@@ -220,8 +221,17 @@ run_field() { node "$HOST/ticket-fix/run.mjs" get --run-file "$RUN_FILE" --field
 
 # Separate model sessions keep each reporter's context bound to one target.
 RC=0
+# One 3-hour budget for the whole run, not per target: with a failed target
+# no longer ending the run, two alarms of 3 h each held the lock 6 h. A target
+# starts only with 30 minutes left, and its alarm is the time that remains.
+RUN_DEADLINE=$(( $(date +%s) + 10800 ))
 for TARGET in ${(f)TARGETS}; do
   [ -n "$TARGET" ] || continue
+  LEFT=$(( RUN_DEADLINE - $(date +%s) ))
+  if [ "$LEFT" -lt 1800 ]; then
+    echo "$(date '+%F %T') DEFERRED — ${TARGET%%:*} waits for the next run (this run's 3 hours are nearly used)" >> "$LOG"
+    break
+  fi
   TICKET_ID="${TARGET%%:*}"
   RUN_MODE="${TARGET#*:}"
   CONTEXT="$RUN_DIR/$TICKET_ID-context.json"
@@ -271,7 +281,7 @@ for TARGET in ${(f)TARGETS}; do
   # The 3-hour alarm is a backstop; every session and gate has its own limit
   # and run.mjs kills whole process groups when it is signalled.
   RUN_STARTED=$(date -u '+%Y-%m-%dT%H:%M:%SZ')
-  /usr/bin/perl -e 'alarm 10800; exec @ARGV' -- node "$HOST/ticket-fix/run.mjs" work --ticket "$TICKET_ID" --context "$CONTEXT" --output "$OUTPUT" --run-file "$RUN_FILE" \
+  /usr/bin/perl -e 'alarm shift; exec @ARGV' -- "$LEFT" node "$HOST/ticket-fix/run.mjs" work --ticket "$TICKET_ID" --context "$CONTEXT" --output "$OUTPUT" --run-file "$RUN_FILE" \
     --run-id "$RUN_ID" --run-dir "$RUN_DIR" --repo "$REPO" --work "$WORK_STATE" --state "$CASE_STATE" --fix-state "$FIX_STATE" \
     --claude "$CLAUDE" --committer "$RUN_COMMITTER" --notify "$NOTIFY" --worker-seconds "$WORKER_SECONDS" --run-started "$RUN_STARTED" \
     --attachments-dir "$ATTACHMENTS" --attachments-manifest "$MANIFEST" --auto-merge "$AUTO_MERGE" >> "$LOG" 2>&1
@@ -284,13 +294,16 @@ for TARGET in ${(f)TARGETS}; do
   if [ "$WORK_RC" -eq 6 ]; then hold_run host_state; RC=1; break; fi
   case "$WORK_RC" in
     0) ;;
-    2) reject "review not recorded"; RC=1; break ;;
-    3) reject "model run failed or timed out"; RC=1; break ;;
-    5) reject "changed files outside its scope"; RC=1; break ;;
+    # A failure belongs to its ticket: it is counted, and the next target
+    # still gets its turn (11-05: one ticket's failures kept a new one waiting
+    # all day).
+    2) reject "review not recorded"; RC=1; continue ;;
+    3) reject "model run failed or timed out"; RC=1; continue ;;
+    5) reject "changed files outside its scope"; RC=1; continue ;;
     7) echo 3 > "$FAIL_COUNT"
        echo "$(date '+%F %T') REJECTED — $TICKET_ID checklist not extracted; parked" >> "$LOG"
        node "$ALERT" park --state "$CASE_STATE" --ticket "$TICKET_ID" --count 3 --why checklist --notify "$NOTIFY" >> "$LOG" 2>&1
-       RC=1; break ;;
+       RC=1; continue ;;
     # The limit, not the ticket: no reject, the fail count untouched, a
     # continuation's reserved attempt given back, and no later target this
     # run (its sessions would hit the same limit). The pause is recorded, the
@@ -307,8 +320,9 @@ for TARGET in ${(f)TARGETS}; do
     # A bug only a device or browser shows (the reproduction found no code
     # test for it): no run could pass the gates, so working it hourly only
     # burns sessions. Parked at once, the owner told once (alert.mjs park
-    # --why device); it is skipped until he removes the count file.
-    9) echo 3 > "$FAIL_COUNT"
+    # --why device). The .device marker keeps it parked: it never comes back
+    # by itself (ticket-agent-context.mjs reviveParked).
+    9) echo 3 > "$FAIL_COUNT"; : > "$FAIL_DIR/$TICKET_ID.device"
        echo "$(date '+%F %T') DEVICE — $TICKET_ID needs a device reproduction; parked, nothing else counted" >> "$LOG"
        node "$ALERT" park --state "$CASE_STATE" --ticket "$TICKET_ID" --count 3 --why device --notify "$NOTIFY" >> "$LOG" 2>&1
        /bin/rm -rf "$ATTACHMENTS"
@@ -322,7 +336,10 @@ for TARGET in ${(f)TARGETS}; do
            echo "$(date '+%F %T') WARN — the continuation attempt for $TICKET_ID was not given back" >> "$LOG"
        fi
        RC=1; break ;;
-    *) reject "host step failed (exit $WORK_RC)"; RC=1; break ;;
+    # The runner's own alarm (the run's 3 hours): the ticket ran out of time.
+    # It counts; the next target runs only if time is left (above).
+    142) reject "ran out of time (the 3-hour limit)"; RC=1; continue ;;
+    *) reject "host step failed (exit $WORK_RC)"; RC=1; continue ;;
   esac
   RECORD_REPO=$(run_field record_repo) && BASE=$(run_field base) && RELEASE_FILE=$(run_field release_file) && CODE=$(run_field code_outcome) &&
     STAGE3=$(run_field stage3_file) || { reject "unreadable run record"; RC=1; break; }
@@ -341,7 +358,7 @@ for TARGET in ${(f)TARGETS}; do
       echo "$(date '+%F %T') CODE REFUSED — $TICKET_ID change not merged ($((FAILS + 1)) in a row)" >> "$LOG"
       [ $((FAILS + 1)) -eq 3 ] && node "$ALERT" park --state "$CASE_STATE" --ticket "$TICKET_ID" --count 3 --notify "$NOTIFY" >> "$LOG" 2>&1
     else
-      /bin/rm -f "$FAIL_COUNT"
+      /bin/rm -f "$FAIL_COUNT" "$FAIL_DIR/$TICKET_ID.device"
     fi
   else
     # The rejected review is kept privately so the rejection can be diagnosed;

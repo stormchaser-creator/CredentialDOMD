@@ -284,3 +284,26 @@ test('ops supervisor: a daily sweep that fails is not retried every hour', { ski
     assert.equal(l.calls().length, 1);
   } finally { l.cleanup(); }
 });
+
+// 11-02 to 11-05: seven open tickets sat stalled or parked while every
+// check passed. The ticket run's attention file makes them work.
+test('ops supervisor: open tickets no ticket run will work start a session, named by id', { skip }, () => {
+  const l = lab();
+  try {
+    const ctx = path.join(l.home, 'Library', 'Application Support', 'CredentialDOMD', 'ticket-context');
+    fs.mkdirSync(ctx, { recursive: true, mode: 0o700 });
+    const file = path.join(ctx, 'attention.json');
+    fs.writeFileSync(file, JSON.stringify({ at: '2026-11-05T00:00:00Z', stalled: [], parked_open: [] }) + '\n');
+    assert.equal(l.run('03').status, 0);
+    assert.equal(l.calls().length, 0, 'nothing stuck: no session');
+    fs.writeFileSync(file, JSON.stringify({ at: '2026-11-05T00:00:00Z', stalled: ['292fcbce-73c0-4e81-98cf-b0d196d39eb3'], parked_open: ['23920b06-0000-4000-8000-000000000000'] }) + '\n');
+    assert.equal(l.run('04').status, 0);
+    assert.equal(l.calls().length, 1);
+    assert.match(l.calls()[0].args[1], /HEALTH: open tickets no ticket run will work by itself \(stalled or parked\): 23920b06 292fcbce\n/);
+    assert.equal(l.run('05').status, 0);
+    assert.equal(l.calls().length, 1, 'unchanged: once a day');
+    fs.writeFileSync(file, '{not json');
+    assert.equal(l.run('06').status, 0);
+    assert.match(l.calls()[1].args[1], /\(unreadable attention.json\)/);
+  } finally { l.cleanup(); }
+});

@@ -69,7 +69,7 @@ test('owned attachment cleanup removes a dead owner in this scope and preserves 
 
 test('the shell: a checklist that cannot be extracted parks the ticket at once and alerts; the record step gets the stage 3 record', () => {
   assert.equal(EXIT.checklist, 7);
-  assert.match(sh, /7\) echo 3 > "\$FAIL_COUNT"\n[^\n]*REJECTED — \$TICKET_ID checklist not extracted; parked[^\n]*\n\s+node "\$ALERT" park --state "\$CASE_STATE" --ticket "\$TICKET_ID" --count 3 --why checklist --notify "\$NOTIFY"[^\n]*\n\s+RC=1; break ;;/);
+  assert.match(sh, /7\) echo 3 > "\$FAIL_COUNT"\n[^\n]*REJECTED — \$TICKET_ID checklist not extracted; parked[^\n]*\n\s+node "\$ALERT" park --state "\$CASE_STATE" --ticket "\$TICKET_ID" --count 3 --why checklist --notify "\$NOTIFY"[^\n]*\n\s+RC=1; continue ;;/);
   assert.match(sh, /STAGE3=\$\(run_field stage3_file\) \|\| \{ reject "unreadable run record"; RC=1; break; \}/);
   assert.match(sh, /TICKET_CODE_OUTCOME="\$CODE" TICKET_STAGE3_FILE="\$STAGE3" TICKET_DATABASE_TOKEN="\$TOKEN" node "\$HOST\/ticket-agent-context.mjs" \\\n\s+--record-and-reply/);
   const dir = mkdtempSync(path.join(os.tmpdir(), 'ticket-field-'));

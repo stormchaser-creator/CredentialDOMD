@@ -256,7 +256,8 @@ ok("no longer skips permissions: dontAsk with explicit allow and deny rules (sta
 ok("still single-instance via the lock directory", agentRaw.includes('mkdir "$LOCK"'));
 // PR11 shortened the cap when it split the run into one session per ticket.
 // The number is the runner owner's to choose; that a cap exists is the property.
-ok("still capped by a perl alarm", /perl -e 'alarm \d+; exec @ARGV'/.test(agentRaw));
+// 11-05: one budget for the whole run, each target's alarm the time left.
+ok("still capped by a perl alarm", /perl -e 'alarm shift; exec @ARGV' -- "\$LEFT"/.test(agentRaw) && /RUN_DEADLINE=\$\(\( \$\(date \+%s\) \+ \d+ \)\)/.test(agentRaw));
 ok("no credential is echoed", !/echo[^\n]*\$TOKEN|echo[^\n]*ANTHROPIC_API_KEY/.test(agentRaw));
 
 console.log("\n── Both migrations are additive ──");

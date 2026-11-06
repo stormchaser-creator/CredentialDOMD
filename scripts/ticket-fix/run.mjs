@@ -132,6 +132,7 @@ const sha256 = text => createHash('sha256').update(text).digest('hex');
 // review after the last revision is final: what it still finds refuses the
 // change.
 export const REVIEW_REVISIONS = 2;
+export const ROUND_BUDGET_MS = 75 * 60 * 1000;
 // device (9): the reproduction found no code test for a bug only a device
 // or browser shows (needs_device); the ticket waits for a device
 // reproduction (ticket-agent.sh parks it once and tells the owner).
@@ -785,6 +786,15 @@ async function workTicket(o, atEnd) {
     const reviewLaunch = reviewDir => async (input, { index, attempt }) => session({ role: 'review', cwd: reviewDir, input, schema: REVIEW_SCHEMA,
       settings: reviewSettings({ worktree: reviewDir, home, work, state: denyState, runDir, tmp, attachments: readDir }), sessionDir: path.join(sessions, `review-${Date.now()}-${index}-${attempt}`), timeoutMs: reviewSeconds * 1000, baseEnv: env });
     let gates, gatesText, owner, blast, review = null, round = 0, gateRepairs = 0, revisions = 0;
+    // No new worker round once ROUND_BUDGET_MS of the run has gone: a round
+    // (worker, gates, two reviews) takes 20 to 75 minutes, and the shell's
+    // 3-hour alarm killed 8acf7241 twice on 11-05 in its third round. The
+    // run ends refused with its branch kept instead, and the next target runs.
+    const outOfTime = () => {
+      const over = Date.now() - Date.parse(runStarted) > ROUND_BUDGET_MS;
+      if (over) log(`BUDGET — ${id8}: ${Math.round(ROUND_BUDGET_MS / 60000)} minutes used; no further worker round this run`);
+      return over;
+    };
     for (;;) {
       round++;
       const baseline = await baselineFor({ repo, work, base: wt.base, env: gEnv, commands, binary, sandbox: box, modules: wt.modules_source });
@@ -800,7 +810,7 @@ async function workTicket(o, atEnd) {
       blast = blastRadius({ dir: wt.dir, base: wt.base, head: step.head, files: gates.diff.files, binary });
       await writeRunFile(work, name, 'owner-rules.json', { protected: owner, blast });
       if (!gates.pass) {
-        if (gateRepairs >= 1 || !sessionId) break;
+        if (gateRepairs >= 1 || !sessionId || outOfTime()) break;
         gateRepairs++;
         const next = await workerCall(`The host ran the gates on your change and it did not pass, so nothing was merged:\n${gateFailures(gates).map(l => `- ${l}`).join('\n')}\nFix the change (not the reproduction files), then return the structured result again for the same target_id.`, sessionId, reviseSeconds);
         if (!next.ok) { log(`GATES — ${id8}: repair session ${next.reason}`); break; }
@@ -811,7 +821,7 @@ async function workTicket(o, atEnd) {
         continue;
       }
       const head = step.head;
-      const final = revisions >= REVIEW_REVISIONS || !sessionId;
+      const final = revisions >= REVIEW_REVISIONS || !sessionId || outOfTime();
       review = await reviewIn(head, reviewDir => reviewDiff({ dir: reviewDir, base: wt.base, head, context, gates, protectedReport: owner, blast, launch: reviewLaunch(reviewDir),
         prompt: readFileSync(REVIEW_PROMPT_FILE, 'utf8'), binary, stage3: stage3Review(step.declared), final }));
       await writeRunFile(work, name, `review-${round}.json`, review);
