@@ -206,9 +206,13 @@ decision|data_fix|confirmed PRIVATE_STATE` (note in `TICKET_RESOLUTION_NOTE`; a
 confirmation names the reporter's message in `TICKET_RESOLUTION_MESSAGE`, which the host
 checks is a customer message on the ticket). Each item is resolved once; the resolution
 puts the case back in the queue without fresh attempts, and the host then decides the
-item done. A device check is asked once per answer: again after the reporter writes or a
-newer change is released, never while the run's change is not live; a confirmation must be
-newer than the reply that asked. `--resolve-item` takes the ticket agent's lock (it fails
+item done. A device check (or the owner's question on his ticket) is asked once, and again
+only when a newer change is released, never while the run's change is not live; the
+reporter's answer is what is recorded, and a confirmation must be newer than the reply that
+asked. An owner follow-up that was dealt with by hand (an attachment the runner cannot open)
+is closed with `--close-follow-up TICKET INDEX|WORK PRIVATE_STATE` (same lock and note);
+it stays closed when a run lists the same work again, and the case wakes without fresh
+attempts. `--resolve-item` takes the ticket agent's lock (it fails
 while a run holds it), checks a confirmation against the thread (`TICKET_DATABASE_TOKEN`),
 and may correct a record while the case is not queued. A waiting case with nothing to
 resolve is noted once with `--note-owner TICKET PRIVATE_STATE` and leaves the waiting list

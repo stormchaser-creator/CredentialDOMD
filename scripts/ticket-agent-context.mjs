@@ -653,6 +653,9 @@ export async function releaseAttempt(directory, ticketId, runId) {
 // recorded again only while its case is not queued, so a wrong record can be
 // corrected but never stacks wake-ups.
 export const AGENT_LOCK = '/tmp/credentialdomd-ticket-agent.lock';
+// Holds the ticket agent's lock (its owner-file format) around fn. The lock
+// goes on every exit: a return, a thrown error, or SIGTERM / SIGINT (second
+// review: a signal left it held, and every hourly run then skipped).
 export async function withAgentLock(lock, fn) {
   // Named by the caller every time (the CLI names AGENT_LOCK): a test never
   // takes the real one by default.
@@ -661,10 +664,16 @@ export async function withAgentLock(lock, fn) {
     if (error.code === 'EEXIST') throw Error('The ticket agent is running (its lock is held); try again once it has finished');
     throw error;
   }
+  const release = () => { rmSync(path.join(lock, 'owner'), { force: true }); try { rmdirSync(lock); } catch { /* already gone */ } };
+  const onSignal = signal => { release(); process.exit(signal === 'SIGINT' ? 130 : 143); };
+  process.once('SIGTERM', onSignal); process.once('SIGINT', onSignal);
   try {
     writeFileSync(path.join(lock, 'owner'), `pid=${process.pid}\nstarted=${Math.floor(Date.now() / 1000)}\n`, { mode: 0o600 });
     return await fn();
-  } finally { rmSync(path.join(lock, 'owner'), { force: true }); rmdirSync(lock); }
+  } finally {
+    process.removeListener('SIGTERM', onSignal); process.removeListener('SIGINT', onSignal);
+    release();
+  }
 }
 // A message the reporter wrote on this ticket, as the database has it.
 export const reporterMessageSQL = (ticketId, messageId) => readOnly(`SELECT m.id,m.ticket_id,m.author_id,left(m.body,200) AS body,m.is_admin_reply,m.created_at,
@@ -674,34 +683,73 @@ const oneLineNote = note => {
   if (typeof note !== 'string' || !note.trim() || note.length > 300 || /[\n\r\0]/.test(note)) throw Error('Say in one line (at most 300 characters) what was decided, changed or confirmed');
   return note.trim();
 };
+// Puts a case back in the queue without fresh attempts (at most one left
+// when it had used them).
+function wake(record, now) {
+  const queue = record.continuation ?? {};
+  if (queue.state === 'suppressed') return;
+  const attempts = Number.isInteger(queue.attempts) ? Math.min(queue.attempts, MAX_CONTINUATIONS - 1) : 0;
+  record.continuation = { ...queue, state: 'pending', attempts, due_at: new Date(now).toISOString() };
+  delete record.continuation.reason;
+  delete record.continuation.reservation;
+  delete record.owner_noted;
+}
 export async function resolveItem(directory, ticketId, acId, kind, { note = '', messageId = null, now = Date.now(), query = null, lock = null } = {}) {
+  await ensureState(directory);
+  const text = oneLineNote(note);
+  // Everything that reads the database happens before the lock is taken.
+  const check = record => {
+    const item = readChecklist(directory, ticketId)?.items.find(i => i.id === acId);
+    if (!item) throw Error(`${String(acId).slice(0, 12)} is not a frozen item of this ticket`);
+    if (RESOLUTION_KINDS[item.kind] !== kind) throw Error(`${acId} is a ${item.kind} item; it is resolved by ${RESOLUTION_KINDS[item.kind] ?? 'a run, never by hand'}`);
+    if (record.resolutions?.[acId] && record.continuation?.state === 'pending') throw Error(`${acId} is already resolved and its case is queued; nothing changed`);
+  };
+  const before = await readCase(directory, id(ticketId));
+  check(before);
+  if (kind === 'confirmed') {
+    if (!UUID.test(messageId || '')) throw Error('A confirmation names the reporter\'s message id');
+    if (!query) throw Error('A confirmation is checked against the thread: TICKET_DATABASE_TOKEN is required');
+    const rows = await query(reporterMessageSQL(ticketId, messageId));
+    const m = rows[0];
+    const reporter = rows.length === 1 && m.owner_id === before.owner_id && isCustomerMessage(m, { owner_id: m.owner_id, approval: { from_admin: m.from_admin === true } });
+    if (!reporter) throw Error('That message is not one the reporter wrote on this ticket');
+    if (!confirmsAsk(m.created_at, askedAt(before.asked_items, acId))) throw Error(`That message is not newer than the reply that asked about ${acId}`);
+  }
+  return withAgentLock(lock, async () => {
+    const record = await readCase(directory, id(ticketId));
+    check(record);
+    // A run asked again meanwhile (a newer released change): the checked
+    // message answers the earlier ask, not this one.
+    if (kind === 'confirmed' && askedAt(record.asked_items, acId) !== askedAt(before.asked_items, acId)) throw Error(`${acId} was asked again meanwhile; check the newer answer`);
+    record.resolutions = { ...(record.resolutions ?? {}), [acId]: { kind, at: new Date(now).toISOString(), note: text, ...(kind === 'confirmed' ? { message_id: messageId } : {}) } };
+    wake(record, now);
+    await writePrivate(path.join(directory, `${id(ticketId)}.json`), JSON.stringify(record, null, 2));
+    return record;
+  });
+}
+// Closes an open owner follow-up the owner (or the supervisor) has dealt
+// with: an attachment the runner cannot open, read and acted on; a check
+// made by hand. Nothing else could close one, so a case with every item done
+// and one such follow-up was held for good (second review). key: the
+// follow-up's index in pending_follow_up or its exact work text. Same lock
+// and rules as --resolve-item: one line saying what was done, never while
+// the case is queued; the closing is remembered (closed_follow_ups), so a
+// run that lists the same work again does not reopen it, and the case wakes
+// without fresh attempts.
+export async function closeFollowUp(directory, ticketId, key, { note = '', now = Date.now(), lock = null } = {}) {
   await ensureState(directory);
   const text = oneLineNote(note);
   return withAgentLock(lock, async () => {
     const record = await readCase(directory, id(ticketId));
-    const checklist = readChecklist(directory, ticketId);
-    const item = checklist?.items.find(i => i.id === acId);
-    if (!item) throw Error(`${String(acId).slice(0, 12)} is not a frozen item of this ticket`);
-    if (RESOLUTION_KINDS[item.kind] !== kind) throw Error(`${acId} is a ${item.kind} item; it is resolved by ${RESOLUTION_KINDS[item.kind] ?? 'a run, never by hand'}`);
-    if (record.resolutions?.[acId] && record.continuation?.state === 'pending') throw Error(`${acId} is already resolved and its case is queued; nothing changed`);
-    if (kind === 'confirmed') {
-      if (!UUID.test(messageId || '')) throw Error('A confirmation names the reporter\'s message id');
-      if (!query) throw Error('A confirmation is checked against the thread: TICKET_DATABASE_TOKEN is required');
-      const rows = await query(reporterMessageSQL(ticketId, messageId));
-      const m = rows[0];
-      const reporter = rows.length === 1 && m.owner_id === record.owner_id && isCustomerMessage(m, { owner_id: m.owner_id, approval: { from_admin: m.from_admin === true } });
-      if (!reporter) throw Error('That message is not one the reporter wrote on this ticket');
-      if (!confirmsAsk(m.created_at, askedAt(record.asked_items, acId))) throw Error(`That message is not newer than the reply that asked about ${acId}`);
-    }
-    record.resolutions = { ...(record.resolutions ?? {}), [acId]: { kind, at: new Date(now).toISOString(), note: text, ...(kind === 'confirmed' ? { message_id: messageId } : {}) } };
-    const queue = record.continuation ?? {};
-    if (queue.state !== 'suppressed') {
-      const attempts = Number.isInteger(queue.attempts) ? Math.min(queue.attempts, MAX_CONTINUATIONS - 1) : 0;
-      record.continuation = { ...queue, state: 'pending', attempts, due_at: new Date(now).toISOString() };
-      delete record.continuation.reason;
-      delete record.continuation.reservation;
-    }
-    delete record.owner_noted;
+    if (record.continuation?.state === 'pending') throw Error('The case is queued; nothing changed');
+    const pending = Array.isArray(record.pending_follow_up) ? record.pending_follow_up : [];
+    const index = /^\d{1,3}$/.test(String(key)) ? Number(key) : pending.findIndex(f => f.work === key);
+    const entry = pending[index];
+    if (!entry) throw Error('No open follow-up with that index or work text');
+    if (entry.owner !== 'support_owner') throw Error('Only an owner follow-up is closed by hand; a run closes the worker\'s');
+    record.pending_follow_up = pending.filter((_, i) => i !== index);
+    record.closed_follow_ups = [...(record.closed_follow_ups ?? []), { work: entry.work, at: new Date(now).toISOString(), note: text }];
+    wake(record, now);
     await writePrivate(path.join(directory, `${id(ticketId)}.json`), JSON.stringify(record, null, 2));
     return record;
   });
@@ -752,6 +800,12 @@ function outstandingWork(previous, result, stage3) {
   const outstanding = new Map([...(previous?.pending_follow_up || []), ...result.assessment.follow_up].map(f => [questionKey(f.work), f]));
   for (const done of result.assessment.completed_follow_up) outstanding.delete(questionKey(done.work));
   for (const f of Array.isArray(stage3?.final?.items) ? stage3.final.items : []) if (f.state === 'done') for (const work of hostItemWork(f.id)) outstanding.delete(questionKey(work));
+  // An owner follow-up closed by hand (closeFollowUp) stays closed when a
+  // run lists the same work again.
+  for (const closed of Array.isArray(previous?.closed_follow_ups) ? previous.closed_follow_ups : []) {
+    const open = outstanding.get(questionKey(closed.work));
+    if (open?.owner === 'support_owner') outstanding.delete(questionKey(closed.work));
+  }
   return outstanding;
 }
 // completionPending: a completion reply is about to be stored with this
@@ -809,6 +863,7 @@ export async function saveReview(directory, context, given, sourceRevision, { no
     // Recorded by --resolve-item and by a stored reply (finishRun): kept.
     ...(previous?.resolutions ? { resolutions: previous.resolutions } : {}),
     ...(previous?.asked_items ? { asked_items: previous.asked_items } : {}),
+    ...(previous?.closed_follow_ups ? { closed_follow_ups: previous.closed_follow_ups } : {}),
     history_complete: context.history_complete, limitations: context.limitations,
     // A saved draft is evidence of follow-through, never proof of delivery or deployment.
     publication: 'not_confirmed', remembered_answers: [...answers.values()], follow_up_history: [...followUps.values()], ...result,
@@ -879,7 +934,7 @@ async function previousCase(directory, ticketId) {
 }
 // A stored reply that asked the reporter about these items, and when: the
 // case remembers them, so they are not asked again until the reporter
-// writes or a newer change is released (checklist.mjs stillAsked), and a
+// receives a newer released change (checklist.mjs stillAsked), and a
 // confirmation must be newer than the ask (validResolutions).
 async function markAsked(directory, ticketId, ids, at = new Date().toISOString()) {
   if (!ids.length) return;
@@ -892,7 +947,7 @@ export async function finishRun(query, directory, context, result, { sourceRevis
   const previous = await previousCase(directory, context.target_id);
   const outcome = codeOutcome ?? given?.final?.code_outcome ?? null;
   // Items a stored reply asked about that still wait on that answer (the case).
-  const stage3 = given ? { ...given, asked: stillAsked(previous?.asked_items ?? [], { context, codeOutcome: outcome }) } : null;
+  const stage3 = given ? { ...given, asked: stillAsked(previous?.asked_items ?? [], { codeOutcome: outcome }) } : null;
   const prepared = await prepareResult(context, result, { repo, preHead, runStarted, runCommitter, runId, release, fetchBuild, codeOutcome, stage3, requireStructured });
   const structured = isStructured(result);
   const ownerTicket = context.approval?.from_admin === true;
@@ -1175,6 +1230,13 @@ async function main(args) {
     console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} RESOLVED — ${target.slice(0, 8)} ${item} (${kind}); case ${record.continuation.state}`);
     return;
   }
+  if (mode === '--close-follow-up' && args.length === 4) {
+    // --close-follow-up TICKET INDEX|WORK PRIVATE_STATE; the note from TICKET_RESOLUTION_NOTE.
+    const [, target, key, directory] = args;
+    const record = await closeFollowUp(directory, id(target), key, { note: process.env.TICKET_RESOLUTION_NOTE ?? '', lock: process.env.TICKET_AGENT_LOCK || AGENT_LOCK });
+    console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} CLOSED — ${target.slice(0, 8)} owner follow-up; case ${record.continuation.state}`);
+    return;
+  }
   if (mode === '--note-owner' && args.length === 3) {
     await noteOwner(filename, id(ticketId), { note: process.env.TICKET_RESOLUTION_NOTE ?? '', lock: process.env.TICKET_AGENT_LOCK || AGENT_LOCK });
     console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} NOTED — ${ticketId.slice(0, 8)} for the owner; off the waiting list until the case changes`);
@@ -1217,6 +1279,6 @@ async function main(args) {
     if (status.completion) console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} COMPLETION REPLY — ${context.target_id.slice(0, 8)}: every item done; stored from a ${status.run_mode} run, case closed`);
     console.log(JSON.stringify(status)); return;
   }
-  throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --release-attempt TICKET_ID PRIVATE_STATE | --resolve-item TICKET_ID AC-n decision|data_fix|confirmed PRIVATE_STATE | --note-owner TICKET_ID PRIVATE_STATE | --validate CONTEXT MODEL_OUTPUT | --session MODEL_OUTPUT | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');
+  throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --release-attempt TICKET_ID PRIVATE_STATE | --resolve-item TICKET_ID AC-n decision|data_fix|confirmed PRIVATE_STATE | --note-owner TICKET_ID PRIVATE_STATE | --close-follow-up TICKET_ID INDEX|WORK PRIVATE_STATE | --validate CONTEXT MODEL_OUTPUT | --session MODEL_OUTPUT | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');
 }
 if (isMain(import.meta.url)) main(process.argv.slice(2)).catch(error => { console.error(`ERROR: ${logSafe(error)}`); process.exitCode = 1; });

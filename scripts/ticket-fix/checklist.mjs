@@ -519,15 +519,15 @@ export const askedAt = (asked, id) => (Array.isArray(asked) ? asked : []).filter
 export function confirmsAsk(createdAt, at, known = true) {
   return known && at !== null && Number.isFinite(Date.parse(createdAt)) && Date.parse(createdAt) > Date.parse(at);
 }
-// The items a stored reply asked about that still wait on that answer: not
-// once the reporter has written since (their answer may say it still fails)
-// nor once this run released a change (the check is worth asking again on
-// the new build). Review of 2026-11-06, N2: asked once, a failed check left
-// the ticket silent for good.
-export function stillAsked(asked, { context = null, codeOutcome = null } = {}) {
+// The items a stored reply asked about: never asked again until this run
+// released a change (the check is worth asking again on the new build).
+// The reporter's answer is not a reason to ask again: it is what the
+// supervisor records (--resolve-item confirmed), newer than this ask (second
+// review of 2026-11-06: re-asking on any message made every answer older than
+// the newest ask, so no confirmation could ever be recorded).
+export function stillAsked(asked, { codeOutcome = null } = {}) {
   if (codeOutcome === 'released') return [];
-  const inputs = context ? askSources(context).filter(s => s.kind === 'message').map(s => Date.parse(s.created_at)).filter(Number.isFinite) : [];
-  return [...new Set((Array.isArray(asked) ? asked : []).filter(a => typeof a?.id === 'string' && Number.isFinite(Date.parse(a.at)) && !inputs.some(t => t > Date.parse(a.at))).map(a => a.id))];
+  return [...new Set((Array.isArray(asked) ? asked : []).filter(a => typeof a?.id === 'string' && Number.isFinite(Date.parse(a.at))).map(a => a.id))];
 }
 // The resolutions in the case record (<state>/<ticket>.json, owner-only), and
 // the ask items a stored reply already put to the reporter.
@@ -559,7 +559,7 @@ export function readCaseFacts(state, ticket) {
 const UNRELEASED = Object.freeze(['held', 'refused', 'merged', 'release_failed']);
 // The items whose footer line asks the reporter something. asked: ids a
 // stored reply already asked that still wait on that answer (stillAsked):
-// not asked again until the reporter writes or a newer change is released. A device check is never asked while
+// not asked again until a newer change is released. A device check is never asked while
 // this run's change is not live: the reporter would check the old build.
 export function askItems(items, finals, { ownerTicket, asked = [], codeOutcome = null }) {
   const byId = new Map(finals.map(f => [f.id, f]));

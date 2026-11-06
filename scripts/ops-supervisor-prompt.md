@@ -127,7 +127,16 @@ what happened.
      you checked it. Never edit the case file's `continuation` for these. A
      wrong record can be corrected the same way while the case is not
      queued. HEALTH "of those, the reporter has written since" means an
-     answer arrived: read it first. Otherwise note it under `## For the
+     answer arrived: read it first. A device check is not asked again after
+     the reporter answers; their answer is what you record (`confirmed`,
+     with that message's id), or, if it says the check still fails, leave it
+     for the worker and note it. An open owner follow-up you have dealt
+     with (an attachment the runner cannot open that you read and acted on,
+     a check you made) is closed once, with what you did in one line:
+     `TICKET_RESOLUTION_NOTE='<one line>' node scripts/ticket-agent-context.mjs --close-follow-up <ticket id> <index in pending_follow_up or its exact work text> "$HOME/Library/Application Support/CredentialDOMD/ticket-context"`
+     (same lock; never while the case is queued; a worker follow-up is the
+     run's, never closed by hand). With every item done and nothing else
+     open, the next run sends the one completion reply. Otherwise note it under `## For the
      owner` (the ticket's first 8 characters and what is needed, one line)
      and mark it noted once, so it stops appearing until the case changes:
      `TICKET_RESOLUTION_NOTE='<one line>' node scripts/ticket-agent-context.mjs --note-owner <ticket id> "$HOME/Library/Application Support/CredentialDOMD/ticket-context"`.
