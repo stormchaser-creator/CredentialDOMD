@@ -151,12 +151,14 @@ test("a delivered card and an informational certificate stay what they were: not
   const fallback = rulesUnderstanding({ ...email, attachmentWords: coi, attachmentTypes: ["insurance"] });
   assert.equal(fallback.rulesIntent, "delivery");
   assert.equal(fallback.intent, "delivery");
-  // Only a letter's or a checklist's words are read for asks: the same
-  // asking sentence on a credential leaves the delivery alone, on a letter
-  // under a message that asks nothing itself it makes the email mixed.
+  // Only a letter's or a checklist's words are read for asks, and a
+  // delivery turns mixed only when the message points to what is attached.
   const words = ["notes: Please send your current DEA registration."];
   assert.equal(rulesUnderstanding({ ...email, attachmentWords: words, attachmentTypes: ["license"] }).intent, "delivery");
-  assert.equal(rulesUnderstanding({ ...email, attachmentWords: words, attachmentTypes: ["other"] }).intent, "mixed");
+  assert.equal(rulesUnderstanding({ ...email, attachmentWords: words, attachmentTypes: ["other"] }).intent, "delivery", "a message that does not point to the file");
+  const pointed = { ...email, body: "Please see the attached letter regarding your reappointment.", attachmentNames: ["Reappointment letter.pdf"] };
+  assert.equal(rulesUnderstanding(pointed).intent, "delivery");
+  assert.equal(rulesUnderstanding({ ...pointed, attachmentWords: words, attachmentTypes: ["other"] }).intent, "mixed");
   assert.equal(fallback.asks.filter((a) => a.from === "attachment").length, 0);
 });
 
@@ -231,6 +233,74 @@ test("the rules never acknowledge on the attachment's asks alone, and a delivery
   assert.equal(ackWarranted(own).why, "no ask names a document", "only the email's own asks name a document for the acknowledgement");
   assert.equal(ackWarranted({ ...own, asks: [{ quote: "DEA registration", kind: null }] }).ok, true, "the same ask in the email itself does");
   assert.equal(ackWarranted({ method: "rules", asks: [{ quote: "your current DEA registration", from: "attachment" }], askForm: true }).why, "the asks were read only in an attachment");
+});
+
+// ── The second review ────────────────────────────────────────────────────────
+
+test("a patient named, or a birth date in words, never reaches the model or a stored ask", () => {
+  for (const line of [
+    "Operative note for patient Pat Sample",
+    "Patient Name - Pat Sample",
+    "Discharge summary for Lee Roe, born March 14, 1961",
+    "Born March 14, 1961",
+    "Case: Sample, Pat 03/14/1961",
+    "Name: Pat Q Sample",
+  ]) {
+    const t = attachmentText({ documentType: "other", extracted: {}, notes: `Please provide the following:\n${line}` });
+    assert.ok(!t.includes(line.slice(-10)), `${line}: ${JSON.stringify(t)}`);
+  }
+  assert.equal(attachmentText({ documentType: "other", extracted: { facts: [{ label: "Name", value: "Pat Sample" }] } }), "");
+  // The committee and an ordinary due date are not people or birth dates.
+  const kept = attachmentText({ documentType: "other", extracted: {}, notes: "Please send the Patient Safety Committee attestation.\nPlease return it by December 1, 2026." });
+  assert.equal(kept, "notes:\nPlease send the Patient Safety Committee attestation.\nPlease return it by December 1, 2026.");
+
+  // A quote naming a patient is dropped by the model's check and the rules'.
+  const words = ["notes:\nPlease provide the following:\nOperative note for patient Pat Sample\nCurrent BLS card"];
+  const parts = { note: "", message: "See attached.", history: "" };
+  const v = verifyUnderstanding(reading(["Operative note for patient Pat Sample"]), { subject: "FPPE", parts, attachmentCount: 1, facts: factsFor(parts, "FPPE", words) });
+  assert.deepEqual(v.asks, []);
+  assert.deepEqual(v.dropped.map((d) => d.why), [DROP.identifier]);
+  assert.ok(!attachmentAsks(words).some((a) => /Sample/.test(a)));
+});
+
+test("a hospital ID badge delivered for the file stays a delivery when the rules read it", () => {
+  const badge = (notes) => [attachmentText({ documentType: "other", extracted: { name: "Hospital ID Badge", issuer: "Osterly Example Health" }, notes })];
+  for (const notes of ["Please present this badge at the security desk upon arrival.", "Please return this badge when your assignment ends.", "Please notify us of any change of address."]) {
+    for (const body of ["For my file.", "Attached is my new hospital ID badge."]) {
+      const r = rulesUnderstanding({ subject: "badge", body, attachmentNames: ["badge.pdf"], attachmentCount: 1, attachmentWords: badge(notes), attachmentTypes: ["other"] });
+      assert.equal(r.intent, rulesUnderstanding({ subject: "badge", body, attachmentNames: ["badge.pdf"], attachmentCount: 1 }).intent, `${notes} / ${body}`);
+      assert.equal(r.asks.filter((a) => a.from === "attachment").length, 0, `${notes} / ${body}`);
+    }
+  }
+  // The scanner's own fields are never read for asks.
+  assert.deepEqual(attachmentAsks(["name: Hospital ID Badge\nissuer: Osterly Example Health"]), []);
+});
+
+test("a checklist's own items and a coverage letter's limits are kept: a label alone drops nothing", () => {
+  const notes = "Please provide the following documents:\nDEA Registration: current copy\nState License: current copy\nBoard Certificate: current copy\nBLS Card: current copy\nCV: updated";
+  const w = attachmentText({ documentType: "other", extracted: {}, notes });
+  assert.equal(w, `notes:\n${notes}`);
+  const r = rulesUnderstanding({ subject: "Fwd: reappointment", body: "See attached.", attachmentNames: ["letter.pdf"], attachmentCount: 1, attachmentWords: [w], attachmentTypes: ["other"] });
+  const fromFile = r.asks.filter((a) => a.from === "attachment").map((a) => a.quote);
+  for (const k of [/DEA Registration/, /State License/, /Board Certificate/, /BLS Card/, /CV/]) assert.ok(fromFile.some((q) => k.test(q)), `${k}: ${JSON.stringify(fromFile)}`);
+
+  const facts = attachmentText({ documentType: "other", extracted: { facts: [{ label: "DEA Registration", value: "Copy required" }, { label: "Medical License", value: "Copy required" }, { label: "Professional Liability Policy Limits", value: "$1,000,000 / $3,000,000" }, { label: "Policy Number", value: "PL-4471902" }, { label: "Email", value: "office at example" }] } });
+  assert.equal(facts, "DEA Registration: Copy required\nMedical License: Copy required\nProfessional Liability Policy Limits: $1,000,000 / $3,000,000");
+  const limits = attachmentText({ documentType: "other", extracted: {}, notes: "Policy limits: $1,000,000 per claim / $3,000,000 aggregate" });
+  assert.equal(limits, "notes: Policy limits: $1,000,000 per claim / $3,000,000 aggregate");
+});
+
+test("long notes keep what fits: an oversize paragraph is read by sentence, and nothing after it is lost", () => {
+  const filler = "The committee reviews every file before the reappointment meeting and needs complete records. ".repeat(25);
+  const one = attachmentText({ documentType: "other", extracted: {}, notes: `Please send your current DEA certificate and BLS card by December 1. ${filler}` });
+  assert.ok(one.includes("Please send your current DEA certificate and BLS card by December 1."), one.slice(0, 120));
+  const after = attachmentText({ documentType: "other", extracted: {}, notes: `Please send your current BLS card.\n${"y ".repeat(1100)}\nPlease send your current DEA certificate.` });
+  assert.ok(after.includes("Please send your current DEA certificate."), after.slice(0, 200));
+});
+
+test("the scanner's own fields are held to the same identifier check as the notes", () => {
+  const t = attachmentText({ documentType: "other", extracted: { name: "DEA Registration QX1234563", issuer: "Example Clinic NPI 1234567893", description: "Please send DEA QX1234563", type: "License MD 48213", facility: "Example Hospital, patient Pat Sample", title: "Reappointment checklist", coveragePerClaim: "1000000" } });
+  assert.equal(t, "title: Reappointment checklist\ncoveragePerClaim: 1000000");
 });
 
 // ── End to end ───────────────────────────────────────────────────────────────

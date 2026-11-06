@@ -795,6 +795,29 @@ export function asksToSign(asks) {
 
 // ─── The fallback ────────────────────────────────────────────────────────────
 
+const loose = (s) => normalizeForQuote(s).replace(/[^a-z0-9]+/g, " ").trim();
+
+/**
+ * An attachment's words as the rules read them for asks: only the scan's
+ * notes and an "other" document's facts, never the scanner's own fields
+ * ("name: Hospital ID Badge", "issuer: ..."), which say what the file is and
+ * ask nothing; and the lines under a lead-in that asks ("Please provide the
+ * following documents:") read as that list's items, bullet or not.
+ */
+function checklistLines(text) {
+  const out = [];
+  let under = false;
+  for (const line of String(text ?? "").split("\n")) {
+    const key = line.match(FIELD_LABEL_RE);
+    if (key && !/^notes:/.test(line)) { under = false; continue; }
+    const l = line.replace(FIELD_LABEL_RE, "").trim();
+    if (!l) { out.push(""); under = false; continue; }
+    if (/:$/.test(l) && hasAskForm(l)) { out.push(l); under = true; continue; }
+    out.push(under && !isListItem(l) ? `- ${l}` : l);
+  }
+  return out.join("\n");
+}
+
 // A list's lead-in read as an ask of its own ("the following", "these
 // items"): it names nothing.
 const LEAD_IN_RE = /^(?:(?:the|these|this|those|all)\s+)?(?:following|below|above|items?|documents?|information|materials?|attached|enclosed)(?:\s+(?:items?|documents?|information|materials?|list))*$/i;
@@ -818,7 +841,7 @@ export function attachmentAsks(words) {
   const out = [];
   const seen = new Set();
   for (const raw of Array.isArray(words) ? words : []) {
-    const text = attachmentWords(raw);
+    const text = checklistLines(raw);
     if (!text.trim()) continue;
     const idx = indexUnits(text);
     const listAsked = idx.spans.some((u) => !u.item && hasAskForm(u.text) && !OFFER_RE.test(u.text));
@@ -827,11 +850,15 @@ export function attachmentAsks(words) {
     // (a lead-in that ends in a colon is the list's, not an ask).
     const sentences = idx.spans.filter((u) => !u.item && hasAskForm(u.text) && !/:\s*$/.test(u.text)).flatMap((u) => parseAsks(u.text, ""));
     for (const a of [...parseAsks(text, ""), ...sentences]) {
-      const held = unitsHolding(normalizeForQuote(a), idx);
+      // parseAsks tidies what it returns ("DEA Registration: current copy"
+      // comes back without its colon), so its units are found by words.
+      const held = unitsHolding(normalizeForQuote(a), idx) || idx.spans.filter((u) => ` ${loose(u.text)} `.includes(` ${loose(a)} `));
       if (!held || !held.length || held.some((u) => OFFER_RE.test(u.text))) continue;
       const asking = held.some((u) => !u.item && hasAskForm(u.text)) || (held.every((u) => u.item) && listAsked);
       const key = quoteKey(a);
-      if (!asking || seen.has(key) || LEAD_IN_RE.test(key) || attachmentWordsIdentify(null, a)) continue;
+      // A rules ask from an attachment names a document: a badge's "Please
+      // present this badge at the security desk" asks the physician for none.
+      if (!asking || seen.has(key) || LEAD_IN_RE.test(key) || attachmentWordsIdentify(null, a) || classifyAsk(a).kind === "unknown") continue;
       seen.add(key);
       out.push(a);
       if (out.length >= MAX_ASKS) return out;
@@ -863,7 +890,7 @@ const cleanSubjectLine = (s) => String(s ?? "").replace(/^\s*(?:(?:re|fwd?|fw|tr
  * "attachment" and never on their own warrant an acknowledgement
  * (ackWarranted); an ask of the email's own that only points to the
  * attachment ("See attached") gives way to them. A delivery stays a delivery
- * unless the message points to what is attached or asks nothing itself.
+ * unless the message points to what is attached.
  */
 export function rulesUnderstanding({ subject = "", body = "", attachmentNames = [], attachmentCount, forwarded = false, why = "", attachmentWords = [], attachmentTypes = [] } = {}) {
   const rules = classifyIntent({ subject, body, attachmentNames, attachmentCount, forwarded });
@@ -878,7 +905,7 @@ export function rulesUnderstanding({ subject = "", body = "", attachmentNames = 
   const askForm = hasAskForm(cleanSubjectLine(subject)) || askUnits(message).some((u) => !u.item && hasAskForm(u.text) && !OFFER_RE.test(u.text));
   let intent;
   let unclear = false;
-  if (rules.intent === "delivery") intent = fromFiles.length && (POINTS_ATTACHED_RE.test(message) || !askForm) ? "mixed" : "delivery";
+  if (rules.intent === "delivery") intent = fromFiles.length && POINTS_ATTACHED_RE.test(message) ? "mixed" : "delivery";
   else {
     intent = rules.intent === "both" ? "mixed" : "request";
     unclear = !asking;
