@@ -366,6 +366,9 @@ for TARGET in ${(f)TARGETS}; do
   # reaches the customer, the log says REPLY HELD, the ticket stays
   # unanswered and its case stays pending, so a later run carries on as a
   # continuation with bounded attempts (ticket-agent-context.mjs finishRun).
+  # A continuation never sends a status; once it decides every item done it
+  # sends one completion reply on the same path (COMPLETION REPLY), which
+  # stamps agent_last_reply_at and closes the case.
   if TICKET_RUN_KEY="$RUN_KEY" TICKET_REPO="$RECORD_REPO" TICKET_PRE_HEAD="$BASE" TICKET_RUN_STARTED="$RUN_STARTED" TICKET_RUN_COMMITTER="$RUN_COMMITTER" \
     TICKET_RUN_ID="$RUN_ID" TICKET_RELEASE_FILE="$RELEASE_FILE" TICKET_CODE_OUTCOME="$CODE" TICKET_STAGE3_FILE="$STAGE3" TICKET_DATABASE_TOKEN="$TOKEN" node "$HOST/ticket-agent-context.mjs" \
     --record-and-reply "$CONTEXT" "$OUTPUT" "$CASE_STATE" >> "$LOG" 2>&1; then

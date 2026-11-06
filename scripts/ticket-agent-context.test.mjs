@@ -471,7 +471,7 @@ test('the attention file names stalled work and only the parked tickets still op
     await writeFile(path.join(directory, 'failed', `${uuid(6)}.device`), '', { mode: 0o600 });
     const query = async sql => { seen.push(sql); assert.match(sql, /^begin read only;/); return [{ id: uuid(2) }, { id: uuid(5) }]; };
     const record = await writeAttention(query, directory, { attention: [uuid(5), uuid(7), uuid(8)], stuck: [uuid(5), uuid(7)], parked: [uuid(2), uuid(3), uuid(4), uuid(6)] }, { now: START });
-    assert.deepEqual(record, { at: new Date(START).toISOString(), stalled: [uuid(5)], parked_open: [uuid(2)], failing: [] }, 'closed (7, 3), revivable (4, 8) and device (6) tickets are left out');
+    assert.deepEqual(record, { at: new Date(START).toISOString(), stalled: [uuid(5)], parked_open: [uuid(2)], failing: [], waiting_owner: [] }, 'closed (7, 3), revivable (4, 8) and device (6) tickets are left out');
     assert.doesNotMatch(seen[0], new RegExp(uuid(4)));
     assert.deepEqual(JSON.parse(await readFile(path.join(directory, 'attention.json'), 'utf8')), record);
     assert.equal(((await stat(path.join(directory, 'attention.json'))).mode & 0o777), 0o600);
@@ -509,5 +509,17 @@ test('the attention file names open tickets a run failed on in the last day', as
     const record = await writeAttention(query, directory, { attention: [], parked: [] }, { now: START });
     assert.deepEqual(record.failing, [uuid(1)], 'recent and open (1); not a day old (2), closed (3) or parked (4)');
     assert.match(seen[0], new RegExp(uuid(3)), 'the closed one was asked about');
+  } finally { await rm(directory, { recursive: true, force: true }); }
+});
+test('the attention file names open tickets whose reply is held for the owner\'s decision', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'support-owner-wait-test-'));
+  try {
+    const seen = [];
+    // uuid(1) is open; uuid(2) was closed since.
+    const query = async sql => { seen.push(sql); return [{ id: uuid(1) }]; };
+    const record = await writeAttention(query, directory, { attention: [], parked: [], waiting_owner: [uuid(2), uuid(1)] }, { now: START });
+    assert.deepEqual(record.waiting_owner, [uuid(1)]);
+    assert.match(seen[0], new RegExp(uuid(2)), 'the closed one was asked about');
+    assert.deepEqual(JSON.parse(await readFile(path.join(directory, 'attention.json'), 'utf8')).waiting_owner, [uuid(1)]);
   } finally { await rm(directory, { recursive: true, force: true }); }
 });

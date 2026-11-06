@@ -7,9 +7,9 @@
 // Synthetic records only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { finishRun, collectQueue, loadQueuedContext, queueSQL, heldLine, HELD_REPLY_WORK } from '../../scripts/ticket-agent-context.mjs';
+import { finishRun, collectQueue, loadQueuedContext, queueSQL, heldLine, saveReview, HELD_REPLY_WORK } from '../../scripts/ticket-agent-context.mjs';
 import { prepareRenderedReply } from '../../scripts/ticket-fix/reply.mjs';
 import { replyHold, itemsDigest, itemFollowUpWork } from '../../scripts/ticket-fix/checklist.mjs';
 import { uuid, privateDir } from './helpers.mjs';
@@ -43,8 +43,8 @@ const QUESTION = { question: 'Which invoice shows the summary you mean?', why_ne
 
 // A synthetic database: the queue honours the held-reply clause (a newer
 // message lets the ticket back in), and every write is recorded.
-function database() {
-  const db = { messages: [{ id: M1, ticket_id: T, author_id: OWNER, is_admin_reply: false, body: 'Synthetic follow-up.', created_at: W1 }], statements: [] };
+function database({ awaiting = true } = {}) {
+  const db = { awaiting, messages: [{ id: M1, ticket_id: T, author_id: OWNER, is_admin_reply: false, body: 'Synthetic follow-up.', created_at: W1 }], statements: [] };
   const row = () => ({ id: T, user_id: OWNER, subject: 'Synthetic', body: 'Synthetic body.', status: 'open', created_at: '2026-11-01T00:00:00Z', updated_at: '2026-11-06T09:00:00Z',
     archived_at: null, agent_last_reply_at: null, agent_approved_at: '2026-11-01T01:00:00Z', from_admin: false });
   db.query = async sql => {
@@ -55,11 +55,11 @@ function database() {
       const held = new RegExp(`t.id='${T}'::uuid AND NOT EXISTS \\(SELECT 1 FROM support_messages m WHERE m.ticket_id=t.id(?: AND m.created_at>convert_from\\(decode\\('([0-9a-f]+)','hex'\\),'UTF8'\\)::timestamptz)?`).exec(sql);
       const after = held?.[1] ? Buffer.from(held[1], 'hex').toString('utf8') : null;
       const newer = db.messages.some(m => after === null || Date.parse(m.created_at) > Date.parse(after) || (m.created_at > after && Date.parse(m.created_at) === Date.parse(after)));
-      return held && !newer ? [] : [{ id: T, updated_at: row().updated_at, from_admin: false }];
+      return !db.awaiting || (held && !newer) ? [] : [{ id: T, updated_at: row().updated_at, from_admin: false }];
     }
     if (sql.includes('AS context_owner_id')) return [{ context_ticket_id: T, context_owner_id: OWNER, messages: sql.includes(`WHERE t.id='${T}'`) ? db.messages : [] }];
     if (sql.includes('FROM support_tickets t WHERE t.user_id=')) return sql.includes('(t.created_at,t.id)>') ? [] : [row()];
-    if (sql.includes('FROM support_tickets t WHERE t.id=')) return [{ ...row(), last_message_at: db.messages.at(-1).created_at, awaiting_reply: true }];
+    if (sql.includes('FROM support_tickets t WHERE t.id=')) return [{ ...row(), last_message_at: db.messages.at(-1).created_at, awaiting_reply: db.awaiting }];
     throw Error(`Unexpected query: ${sql.slice(0, 80)}`);
   };
   db.writes = () => db.statements.filter(s => s.startsWith('DO $ticket_broker$') || s.includes('vault.decrypted_secrets'));
@@ -202,4 +202,65 @@ test('queueSQL: a held ticket leaves the new-message queue until a message newer
   assert.ok(sql.includes(`AND NOT (t.id='${uuid(7002)}'::uuid AND NOT EXISTS (SELECT 1 FROM support_messages m WHERE m.ticket_id=t.id AND m.body NOT ILIKE`), 'no message seen: any new message counts');
   assert.throws(() => queueSQL(false, [], [], [{ id: T, after: "'; drop table x;--" }]), /Invalid held reply watermark/);
   assert.throws(() => queueSQL(false, [], [], [{ id: 'not-a-ticket', after: null }]), /Invalid support ID/);
+});
+
+// The coordinator's follow-up to b3ea3291: a continuation (including one on a
+// ticket that already got an old status reply) sends ONE completion reply once
+// every item is done, through the same verified path, and closes the case.
+const replyBody = statement => Buffer.from(/convert_from\(decode\('([0-9a-f]+)', 'hex'\), 'UTF8'\), true, now\(\)/.exec(statement)[1], 'hex').toString('utf8');
+async function answeredTicket(fn) {
+  const state = privateDir('ticket-reply-completion-');
+  // An old-style ticket: agent_last_reply_at set (it got a status reply), no
+  // new input, its work left pending in the case record.
+  const db = database({ awaiting: false });
+  try {
+    const first = await loadQueuedContext(db.query, { id: T, mode: 'reply' }, state.dir);
+    await saveReview(state.dir, first, result(), null, { stage3: stage3(OPEN), codeOutcome: 'none', now: Date.now() - 2 * HOUR });
+    const due = async () => {
+      const queue = await collectQueue(db.query, state.dir, { now: Date.now() + HOUR });
+      assert.deepEqual(queue.items, [{ id: T, mode: 'continuation' }]);
+      const context = await loadQueuedContext(db.query, queue.items[0], state.dir, { now: Date.now() + HOUR });
+      assert.equal(context.run_mode, 'continuation');
+      return context;
+    };
+    await fn({ db, state, due });
+  } finally { state.cleanup(); }
+}
+test('a continuation that finishes every item sends one completion reply on the verified path, stamps the ticket and closes the case', async () => {
+  await answeredTicket(async ({ db, state, due }) => {
+    const sent = await finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: stage3(DONE, { code: 'released' }), codeOutcome: 'released', requireStructured: true, runId: '0123456789abcdef' });
+    assert.deepEqual([sent.kind, sent.completion, sent.run_mode, sent.continuation_state], ['reply_stored', true, 'continuation', 'complete']);
+    const writes = db.statements.filter(x => x.startsWith('DO $ticket_broker$'));
+    assert.equal(writes.length, 1);
+    assert.match(writes[0], /support_reply_verifications/, 'the verification row is written with the reply');
+    assert.match(writes[0], /agent_last_reply_at = now\(\)/);
+    assert.match(writes[0], /t\.status IN \('open','in_progress'\) AND t\.archived_at IS NULL/);
+    const body = replyBody(writes[0]);
+    assert.match(body, /^CredentialDOMD Support · Automated\n\nHere is where your request stands\.\n\nWhat we confirmed:\n- Summary lines are separated by line breaks/);
+    assert.match(body, /1\. Separate the summary lines with line breaks: done\n2\. Answer where the title comes from: done/);
+    assert.doesNotMatch(body, /not done yet|partly done|next:|We will post/);
+    const closed = record(state.dir);
+    assert.equal(closed.continuation.state, 'complete');
+    assert.deepEqual(closed.pending_follow_up, []);
+    assert.equal(closed.completion.verification_id, sent.verification_id);
+    assert.ok(readFileSync(path.join(state.dir, 'replies', T, `${sent.verification_id}.json`), 'utf8').includes('"path": "agent"'), 'the runner\'s ledger records it');
+    // A later continuation that finds everything still done sends nothing.
+    const again = JSON.parse(readFileSync(path.join(state.dir, `${T}.json`), 'utf8'));
+    again.continuation = { ...again.continuation, state: 'pending', attempts: 0, due_at: new Date(Date.now() - 1000).toISOString() };
+    writeFileSync(path.join(state.dir, `${T}.json`), JSON.stringify(again), { mode: 0o600 });
+    const second = await finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: stage3(DONE), codeOutcome: 'none', requireStructured: true });
+    assert.equal(second.kind, 'continuation_saved');
+    assert.equal(db.statements.filter(x => x.startsWith('DO $ticket_broker$')).length, 1, 'sent once');
+  });
+});
+test('a continuation with items not done, or a change not released, sends nothing', async () => {
+  await answeredTicket(async ({ db, state, due }) => {
+    const open = await finishRun(db.query, state.dir, await due(), result(), { stage3: stage3(OPEN), codeOutcome: 'none', requireStructured: true });
+    assert.equal(open.kind, 'continuation_saved');
+    assert.equal(record(state.dir).continuation.state, 'pending');
+    const unreleased = await finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: stage3(DONE, { code: 'merged' }), codeOutcome: 'merged', requireStructured: true });
+    assert.equal(unreleased.kind, 'continuation_saved');
+    assert.deepEqual(db.writes(), [], 'no reply row, no verification key read');
+    assert.equal(record(state.dir).completion, undefined);
+  });
 });

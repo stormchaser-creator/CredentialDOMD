@@ -85,7 +85,11 @@ export { customerReplyText };
 // seven resolved tickets were reopened by "confirming" replies). max: the
 // hourly runner's host-rendered reply carries one footer line per checklist
 // item (stage 3) and may be longer than a free-text reply.
-export function replySQL(ticket, reply, { includeArchived = false, verification, max = 4000 } = {}) {
+// continuation: the one completion reply of an action-only run (owner,
+// 2026-11-06). Its ticket was answered before, so it is no longer awaiting a
+// reply; it must still be open or in progress and not archived (the
+// continuation's own eligibility), at the captured version.
+export function replySQL(ticket, reply, { includeArchived = false, verification, max = 4000, continuation = false } = {}) {
   if (!Number.isInteger(max) || max < 1 || max > 12000) throw Error('Invalid reply limit');
   if (!/^[a-f0-9-]{36}$/.test(ticket.id)) throw Error('Invalid ticket id');
   if (!/^[a-f0-9-]{36}$/.test(ticket.owner_id || '')) throw Error('Invalid ticket owner');
@@ -103,7 +107,8 @@ export function replySQL(ticket, reply, { includeArchived = false, verification,
   if (!body.trim() || body.length > max) throw Error('Invalid reply');
   const labeledReply = `CredentialDOMD Support · Automated\n\n${body}`;
   checkVerification(verification, ticket.id, labeledReply);
-  const awaiting = includeArchived ? AWAITING.replace('t.archived_at IS NULL AND ', '') : AWAITING;
+  const awaiting = continuation ? "t.status IN ('open','in_progress') AND t.archived_at IS NULL"
+    : includeArchived ? AWAITING.replace('t.archived_at IS NULL AND ', '') : AWAITING;
   const messageId = randomUUID();
   return `DO $ticket_broker$
   DECLARE target record;

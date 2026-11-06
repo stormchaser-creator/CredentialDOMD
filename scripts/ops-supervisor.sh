@@ -117,6 +117,12 @@ print(" ".join(sorted({str(t)[:8] for t in d.get("stalled", []) + d.get("parked_
 import json, sys
 print(" ".join(sorted({str(t)[:8] for t in json.load(open(sys.argv[1])).get("failing", [])})))' "$attention" 2>/dev/null) || failing=""
   [[ -n $failing ]] && health+=("open tickets a ticket run failed on in the last day: $failing")
+  # A reply the ticket run held until the owner decides (owner, 2026-11-06:
+  # no status replies). No run works these until someone does.
+  deciding=$(python3 -c '
+import json, sys
+print(" ".join(sorted({str(t)[:8] for t in json.load(open(sys.argv[1])).get("waiting_owner", [])})))' "$attention" 2>/dev/null) || deciding=""
+  [[ -n $deciding ]] && health+=("open tickets waiting on the owner's decision: $deciding")
 fi
 
 sweep=queue

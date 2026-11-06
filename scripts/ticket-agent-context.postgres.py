@@ -157,6 +157,21 @@ with tempfile.TemporaryDirectory(prefix='ticket-context-pg-') as tmp:
         check('same stale envelope cannot duplicate reply',sql(reply())=='')
         check('related context never gets a new reply',sql(f"select count(*) from support_messages where ticket_id='{R}'")=='2')
         check('no other customer changed',sql(f"select count(*) from support_messages where ticket_id='{X}'")=='0')
+        # A continuation's one completion reply (owner, 2026-11-06): the ticket
+        # was answered before, so it no longer awaits a reply; it must still be
+        # open or in progress, unarchived and at the captured version.
+        now_version=sql(f"select to_json(updated_at)#>>'{{}}' from support_tickets where id='{T}'")
+        def done_reply(continuation,text='Every part of your request is done.'):
+            return js(f"replySQL({{id:'{T}',owner_id:'{A}',updated_at:'{now_version}',approval:{{from_admin:false,approved_at:'{approved_at}'}}}},'{text}',{{...{verified(T,text)},continuation:{'true' if continuation else 'false'}}})")
+        check('an answered ticket gets no ordinary reply without new input',sql(done_reply(False))=='')
+        sql(f"update support_tickets set status='resolved' where id='{T}'")
+        check('a completion reply never goes to a resolved ticket',sql(done_reply(True))=='')
+        sql(f"update support_tickets set status='open',updated_at='{now_version}' where id='{T}'")
+        completion=sql(done_reply(True))
+        check('a completion reply from a continuation is stored, verified and stamped',len(completion)==36 and
+              sql(f"select count(*) from support_reply_verifications where used_by_message_id='{completion}'")=='1' and
+              sql(f"select (agent_last_reply_at>='{now_version}'::timestamptz)::text||'|'||status from support_tickets where id='{T}'")=='true|open')
+        check('the same completion envelope cannot be stored twice',sql(done_reply(True))=='')
         unverified=run(BIN/'psql','-X','-qAt','-v','ON_ERROR_STOP=1','-h',sock,'-p','56431','-U','postgres','-d','postgres',input=f"insert into support_messages values(gen_random_uuid(),'{T}','{A}','Hand-written operator reply',true,now(),null,null)")
         check('an operator insert without a verification is refused by the database',unverified.returncode!=0 and 'need a verified reply' in unverified.stderr)
         admin_reply=js(f"replySQL({{id:'{X}',owner_id:'{B}',updated_at:'{VERSION}',approval:{{from_admin:true,approved_at:null}}}},'Synthetic admin-owned reply.',{verified(X,'Synthetic admin-owned reply.')})")

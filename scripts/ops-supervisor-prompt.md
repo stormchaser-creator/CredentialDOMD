@@ -106,6 +106,19 @@ what happened.
      edge function), and note the commit in the journal; the ticket's next
      run then finds it live and replies. If the worker could have fixed it
      and only made a mistake, leave it to the next run.
+   - **Tickets waiting on the owner's decision** (HEALTH names "open tickets
+     waiting on the owner's decision"). The ticket run held the reply (no
+     status replies, owner 2026-11-06) because an item needs a decision; no
+     run works it until one is made. Read its case file
+     (`ticket-context/<id>.json`: `checklist_states` with `needs_owner`, and
+     the `support_owner` entries in `pending_follow_up`). If the decision is
+     routine and your rules here let you make it (a code or copy change you
+     may make under step 4, never a price or money constant, legal copy or
+     clinical coding), make it, commit it, and set the case file's
+     `continuation.state` to `pending`, `attempts` to 0 and `due_at` to now,
+     so the next run verifies it done and sends the completion reply. Write
+     the commit in the journal. Otherwise note it under `## For the owner`:
+     the ticket's first 8 characters and the decision, one line.
    - **Member tickets and replies.** The ticket agent answers these itself
      (pg_cron releases them to it). Check that a new one is queued and that
      a reply is being worked; fix the pipeline if it is stuck. Never write

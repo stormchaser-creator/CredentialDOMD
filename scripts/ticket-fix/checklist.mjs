@@ -510,6 +510,11 @@ export function askItems(items, finals, { ownerTicket }) {
     return (ownerTicket && f.state === 'needs_owner' && Boolean(trimEnd(f.remaining ?? ''))) || (item.kind === 'device_probe' && f.state === 'partial');
   }).map(item => item.id);
 }
+// Every item done and no change of this run waiting unreleased: a reply then
+// reports finished work (and a continuation may send it: finishRun).
+export function isCompletion({ finals, codeOutcome = null }) {
+  return finals.length > 0 && finals.every(f => f.state === 'done') && !UNRELEASED.includes(codeOutcome);
+}
 // null: the reply may go out. Otherwise { reasons }: ids, states and the code
 // outcome only (they go to the log).
 export function replyHold({ items, finals, questions = [], ownerTicket = false, codeOutcome = null }) {
