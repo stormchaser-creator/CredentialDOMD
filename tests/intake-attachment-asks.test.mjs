@@ -1,0 +1,209 @@
+// A documentation request that lives in an attachment, not in the email.
+//
+// On 2026-11-05 a physician forwarded docs@ an email whose only words were a
+// pointer to its PDF: the PDF was a hospital's letter asking for documents.
+// Nothing in it was read. Three defects stacked:
+//   - the scanner's prompt knows credentials and receipts, so the letter
+//     came back nearly empty, and attachmentText read only the flat
+//     extracted fields (never the scan's notes or an "other" document's
+//     facts), so the letter's words reached neither the model nor the host;
+//   - verifyUnderstanding checked an ask's quote against the subject, the
+//     note, the message and the history, never the attachments' words, so an
+//     ask quoted from the letter was dropped and the rules read the email;
+//   - the rules never read the attachments at all.
+// And the model call itself had failed with a 400 whose reason was thrown
+// away (intakeModelCall.ts kept only the status).
+//
+// Every email, name and address here is synthetic.
+// Run: node --test tests/intake-attachment-asks.test.mjs
+import { test, before, beforeEach } from "node:test";
+import assert from "node:assert/strict";
+import * as understanding from "../supabase/functions/_shared/intakeUnderstanding.mjs";
+import { attachmentText, corpusIndex } from "../supabase/functions/_shared/intakeFacts.mjs";
+import { loadFunction, resetWorld, deliver, harness } from "../scripts/email-inbound-harness.mjs";
+import { composeForward } from "../scripts/intake-eval.mjs";
+
+// A namespace import, so each test (not the whole file) shows what the code
+// before the fix lacked.
+const { verifyUnderstanding, rulesUnderstanding, ackWarranted, attachmentAsks, DROP } = understanding;
+
+const DEA_ASK = "Please send an updated copy of your current DEA registration by 12/15/2026 to complete the reappointment file.";
+
+// What the scanner returns for a request letter once it is asked to copy the
+// letter's asking words into notes (email-inbound SCAN_REQUEST_WORDS).
+const LETTER_SCAN = {
+  documentType: "other",
+  confidence: "medium",
+  extracted: {
+    name: "Reappointment request letter",
+    issuer: "Osterly Example Health",
+    facts: [
+      { label: "Letter date", value: "October 30, 2026" },
+      { label: "Policy Number", value: "PL-4471902" },
+    ],
+    suggestedCategory: { name: "Letters" },
+  },
+  notes: `${DEA_ASK}\nThe following items are still outstanding:\n- Current CPR/BLS certification card\n- Copy of your state controlled-substance registration`,
+};
+
+const factsFor = (parts, subject, words) => ({
+  corpus: corpusIndex([subject, parts.note, parts.message, parts.history, ...words]),
+  email: [subject, parts.note, parts.message, parts.history].filter(Boolean).join("\n\n"),
+  attachments: words,
+  refs: new Map(),
+  physicianName: "Rowan Testa",
+});
+
+const reading = (asks, role = "request_checklist", confidence = "high") => ({
+  intent: "request",
+  asks: asks.map((quote) => ({ quote, kind: "unknown", who: "physician" })),
+  attachments: [{ index: 1, role, filing: "Keep with the request" }],
+  summary: "items for your reappointment file",
+  confidence,
+  records: [],
+});
+
+// ── attachmentText ───────────────────────────────────────────────────────────
+
+test("attachmentText: a scan's notes (line by line) and an other document's facts are read, identifying labels and numbers still left out", () => {
+  const t = attachmentText(LETTER_SCAN);
+  assert.ok(t.includes(DEA_ASK), "the letter's asking sentence, from the scan's notes");
+  assert.ok(t.split("\n").includes("- Current CPR/BLS certification card"), "a listed item keeps its own line");
+  assert.ok(t.includes("Letter date: October 30, 2026"), "a fact as label: value");
+  assert.ok(!t.includes("PL-4471902") && !/Policy Number/.test(t), "a fact with a number-like label is still left out");
+
+  // One line of the notes that names a date of birth goes; the rest stays.
+  const mixed = attachmentText({ documentType: "unknown", extracted: {}, notes: "Please send your current DEA registration.\nDOB 03/14/1961" });
+  assert.equal(mixed, "notes: Please send your current DEA registration.");
+  // The extracted notes and the scan's notes saying the same thing are shown once.
+  assert.equal(attachmentText({ documentType: "insurance", extracted: { notes: "Claims made." }, notes: "Claims made." }), "notes: Claims made.");
+});
+
+// ── verifyUnderstanding ──────────────────────────────────────────────────────
+
+test("an ask quoted from the attachment's words is kept, marked as the attachment's, at medium confidence at most, and never acknowledged", () => {
+  const words = [attachmentText(LETTER_SCAN)];
+  const parts = { note: "", message: "See attached.", history: "" };
+  const v = verifyUnderstanding(reading([DEA_ASK]), { subject: "Reappointment file", parts, attachmentCount: 1, facts: factsFor(parts, "Reappointment file", words) });
+  assert.equal(v.asks.length, 1, "the ask in the letter survives");
+  assert.equal(v.asks[0].from, "attachment");
+  assert.equal(v.dropped.length, 0);
+  assert.equal(v.unclear, false);
+  assert.equal(v.needsRules, false, "the model's reading stands; the rules are not called in");
+  assert.equal(v.confidence, "medium", "capped: the words rest on the scanner's reading of the file");
+  assert.equal(ackWarranted(v).ok, false, "the sender is not told they asked on the attachment's words alone");
+
+  // Words found in no attachment are still not the email's own words.
+  const invented = verifyUnderstanding(reading(["Please send your passport photo page."]), { subject: "Reappointment file", parts, attachmentCount: 1, facts: factsFor(parts, "Reappointment file", words) });
+  assert.equal(invented.asks.length, 0);
+  assert.deepEqual(invented.dropped.map((d) => d.why), [DROP.notOwnWords]);
+  assert.equal(invented.needsRules, true);
+});
+
+test("a listed item with no asking words counts only when the attachment is the list of what is asked, or the message points to it", () => {
+  const words = [attachmentText(LETTER_SCAN)];
+  const item = "Current CPR/BLS certification card";
+  const subject = "Reappointment file";
+  // The message's own ask and the item named only in the attached checklist.
+  const pointing = { note: "", message: "Please send the items listed in the attached checklist for my reappointment file.", history: "" };
+  const v = verifyUnderstanding(reading(["Please send the items listed in the attached checklist for my reappointment file.", item]), { subject, parts: pointing, attachmentCount: 1, facts: factsFor(pointing, subject, words) });
+  assert.equal(v.asks.length, 2);
+  assert.deepEqual(v.asks.map((a) => a.from), ["message", "attachment"]);
+
+  // The reading called the file a checklist; the message says nothing of it.
+  const silent = { note: "", message: "Thank you for your time this week.", history: "" };
+  const checklist = verifyUnderstanding(reading([item], "request_checklist"), { subject, parts: silent, attachmentCount: 1, facts: factsFor(silent, subject, words) });
+  assert.deepEqual(checklist.asks.map((a) => a.quote), [item]);
+
+  // Neither: a file read as something to read, under a message that does not point to it.
+  const neither = verifyUnderstanding(reading([item], "informational"), { subject, parts: silent, attachmentCount: 1, facts: factsFor(silent, subject, words) });
+  assert.equal(neither.asks.length, 0);
+  assert.deepEqual(neither.dropped, [{ quote: item, why: DROP.notAsking }]);
+});
+
+// ── The rules ────────────────────────────────────────────────────────────────
+
+test("the rules read the attachments' words apart: an asking sentence or a listed item under an asking line counts, a statement does not", () => {
+  const r = rulesUnderstanding({ subject: "Reappointment file", body: "See attached.", attachmentNames: ["letter.pdf"], attachmentCount: 1, forwarded: true, attachmentWords: ["notes: Please send your current DEA registration."] });
+  const fromFile = r.asks.filter((a) => a.from === "attachment");
+  assert.equal(fromFile.length, 1);
+  assert.match(fromFile[0].quote, /DEA registration/);
+  assert.equal(r.unclear, false);
+
+  const stated = rulesUnderstanding({ subject: "Reappointment file", body: "See attached.", attachmentNames: ["letter.pdf"], attachmentCount: 1, forwarded: true, attachmentWords: ["notes: Your DEA registration was verified on 10/01/2026."] });
+  assert.equal(stated.asks.filter((a) => a.from === "attachment").length, 0, "a statement in the letter is no ask");
+
+  const listed = attachmentAsks(["notes:\nPlease provide the following:\n- Current BLS card\n- Updated CV"]);
+  assert.ok(listed.some((a) => /BLS card/.test(a)) && listed.some((a) => /CV/.test(a)), `listed: ${JSON.stringify(listed)}`);
+  assert.deepEqual(attachmentAsks(["notes:\n- Current BLS card\n- Updated CV"]), [], "a bare list under nothing that asks");
+});
+
+test("the rules never acknowledge on the attachment's asks alone, and a delivery with an ask in its attachment is mixed", () => {
+  const r = rulesUnderstanding({ subject: "Reappointment", body: "Please see the attached letter regarding your reappointment.", attachmentNames: ["Reappointment letter.pdf"], attachmentCount: 1, forwarded: true, attachmentWords: ["notes: Please send your current DEA registration."] });
+  assert.equal(r.intent, "mixed", "the rules took it for a delivery; the letter asks");
+  assert.deepEqual(r.asks.filter((a) => a.from === "attachment").map((a) => a.quote), ["DEA registration"]);
+  // The email's own ask names no document; the attachment's does, and does not count.
+  const own = { method: "rules", askForm: true, asks: [{ quote: "See attached", kind: null }, { quote: "DEA registration", kind: null, from: "attachment" }] };
+  assert.equal(ackWarranted(own).why, "no ask names a document", "only the email's own asks name a document for the acknowledgement");
+  assert.equal(ackWarranted({ ...own, asks: [{ quote: "DEA registration", kind: null }] }).ok, true, "the same ask in the email itself does");
+  assert.equal(ackWarranted({ method: "rules", asks: [{ quote: "your current DEA registration", from: "attachment" }], askForm: true }).why, "the asks were read only in an attachment");
+});
+
+// ── End to end ───────────────────────────────────────────────────────────────
+
+const PROFILE = "0b7f1c2e-5a44-4d7e-9b1a-3c2d1e0f9a88";
+const ME = "rowan.testa@clinic.example";
+const rows = (t) => harness.db.rows(t);
+const CASE = {
+  subject: "Reappointment file",
+  from: { name: "Casey Example", address: "casey.example@osterly-health.example" },
+  body: "Hi Dr. Testa,\n\nSee attached.\n\nCasey Example\nMedical Staff Office",
+};
+
+function seed() {
+  rows("mailbox_claims").push({ address: ME, profile_id: PROFILE, proof: "verified", terminal_at: null });
+  rows("profiles").push({ id: PROFILE, auth_user_id: "user_synthetic01", email: ME, access_status: "active", verified_email: ME, deleted_at: null, name: "Rowan Testa", degree_type: "MD", ack_requests: true });
+  rows("app_secrets").push({ name: "gemini_shared_key", value: "AIza-test" }, { name: "anthropic_shared_key", value: "sk-ant-test" });
+}
+
+let n = 0;
+const send = () => {
+  harness.geminiReply = () => LETTER_SCAN;
+  return deliver({
+    id: `att${++n}`, from: `Rowan Testa <${ME}>`, to: "docs@credentialdomd.com", subject: `Fwd: ${CASE.subject}`, text: composeForward(CASE),
+    attachments: [{ filename: "Reappointment_Request.pdf", contentType: "application/pdf", bytes: new TextEncoder().encode("%PDF-1.4 letter") }],
+  });
+};
+
+before(async () => { await loadFunction(); });
+beforeEach(() => { resetWorld(); harness.rawAuth = "mx.resend.com; dmarc=pass header.from=clinic.example"; seed(); });
+
+test("end to end: the scanner is asked for a request letter's words, and the model's ask quoted from them is kept, not one tap, no acknowledgement", async () => {
+  harness.anthropicReply = () => reading([DEA_ASK]);
+  const r = await send();
+  assert.equal(r.status, 200);
+  assert.equal(r.body.read, "model");
+  assert.equal(r.body.intent, "request");
+  assert.equal(r.body.one_tap, false);
+  assert.match(r.body.ack, /^ack skipped: the asks were read only in an attachment/);
+  const instruction = harness.gemini[0].body.contents[0].parts.at(-1).text;
+  assert.match(instruction, /letter, memo, checklist or form that asks the physician for documents/);
+  assert.match(instruction, /word for word/);
+  assert.ok(harness.anthropic[0].body.messages[0].content.includes(DEA_ASK), "the letter's words reach the model");
+  const [req] = rows("document_requests");
+  assert.ok(req.proposal.items.some((i) => /DEA registration/.test(i.ask)), "the ask is in the packet proposal");
+  assert.equal(harness.sent.filter((m) => m.to?.[0] !== ME).length, 0, "nothing goes to the hospital");
+  assert.match(rows("inbound_emails")[0].detail, /read by model \(medium\)/);
+});
+
+test("end to end: a 400 from the AI service says why in the ledger, and nothing is sent to the requester", async () => {
+  harness.anthropicReply = () => ({ status: 400, body: { type: "error", error: { type: "invalid_request_error", message: "Synthetic   failure:\n the request was refused." } } });
+  const r = await send();
+  assert.equal(r.status, 200);
+  assert.equal(r.body.read, "rules");
+  const [row] = rows("inbound_emails");
+  assert.match(row.detail, /read by rules \(the AI service answered 400 \(invalid_request_error: Synthetic failure: the request was refused\.\)\)/);
+  assert.ok(!row.detail.includes("sk-ant-test"), "never the key");
+  assert.ok(!/ack sent/i.test(row.detail));
+  assert.equal(harness.sent.filter((m) => m.to?.[0] !== ME).length, 0, "nothing goes to the hospital");
+});

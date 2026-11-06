@@ -133,7 +133,7 @@ export function factsFor(c) {
     facts: {
       corpus: corpusIndex([input.subject, parts.note, parts.message, parts.history, ...words]),
       email: [input.subject, parts.note, parts.message, parts.history].filter(Boolean).join("\n\n"),
-      attachments: words.filter(Boolean),
+      attachments: words,
       refs: existingForModel(c.onFile || {}).refs,
       physicianName: String(c.physicianName || ""),
     },

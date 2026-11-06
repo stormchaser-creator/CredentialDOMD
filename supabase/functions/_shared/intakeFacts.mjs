@@ -133,17 +133,47 @@ Never give a policy, licence, certificate, DEA or NPI number, or any other ident
 // detail. They are never shown to the model and never checked against.
 const SCAN_SECRET = /number|npi|dea|ssn|dob|birth|account|member|patient|mrn|billto|email|phone|address|signature/i;
 
-/** An attachment's words as the scanner read them, numbers that identify anything left out. */
+// The most of one attachment's words that are shown and checked against.
+export const MAX_ATTACHMENT_WORDS = 4000;
+const MAX_SCAN_NOTES = 2000;
+const MAX_FACTS = 60;
+
+/**
+ * An attachment's words as the scanner read them, numbers that identify
+ * anything left out: the flat extracted fields, then the scan's own notes
+ * line by line (where email-inbound asks the scanner to copy a request
+ * letter's asking sentences and listed items, SCAN_REQUEST_WORDS), then an
+ * "other" document's facts as label: value. Until 2026-11-05 only the flat
+ * fields were read, so a request letter whose words the scanner put in notes
+ * or facts reached neither the reading nor the host's check of its quotes.
+ * Every label passes SCAN_SECRET and every value identifierReason, the
+ * notes one line at a time, so one line that names a number does not take
+ * the rest with it.
+ */
 export function attachmentText(scan) {
   if (!scan || typeof scan !== "object" || scan.patientRecord) return "";
   const ex = scan.extracted && typeof scan.extracted === "object" ? scan.extracted : {};
+  const flat = (v) => String(v).replace(/\s+/g, " ").trim();
   const out = [];
   for (const [k, v] of Object.entries(ex)) {
     if (SCAN_SECRET.test(k) || v === null || v === undefined || v === "" || typeof v === "object") continue;
-    const s = String(v).replace(/\s+/g, " ").trim().slice(0, 700);
+    const s = flat(v).slice(0, 700);
     if (s && !identifierReason(k, s)) out.push(`${k}: ${s}`);
   }
-  return out.join("\n").slice(0, 1500);
+  // The notes keep their lines: a listed item stays an item of its own.
+  const lines = typeof scan.notes === "string" && flat(scan.notes) !== flat(ex.notes ?? "")
+    ? scan.notes.slice(0, MAX_SCAN_NOTES).split(/\r?\n/).map(flat).filter((l) => l && !identifierReason("notes", l))
+    : [];
+  if (lines.length === 1) out.push(`notes: ${lines[0]}`);
+  else if (lines.length) out.push("notes:", ...lines);
+  for (const f of (Array.isArray(ex.facts) ? ex.facts : []).slice(0, MAX_FACTS)) {
+    if (!f || typeof f !== "object") continue;
+    const label = flat(f.label ?? "").slice(0, 80);
+    const value = f.value === null || f.value === undefined || typeof f.value === "object" ? "" : flat(f.value).slice(0, 300);
+    if (!label || !value || SCAN_SECRET.test(label) || identifierReason(label, value)) continue;
+    out.push(`${label}: ${value}`);
+  }
+  return out.join("\n").slice(0, MAX_ATTACHMENT_WORDS);
 }
 
 const briefly = (row, section) => {

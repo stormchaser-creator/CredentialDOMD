@@ -27,13 +27,15 @@
  *                               sender's own words (the subject or the
  *                               current message, word for word or within a
  *                               character or two; the quoted history only
- *                               when the message points to it; never the
- *                               physician's own note), in a sentence that
- *                               asks (requestPacket.ts hasAskForm). An ask
- *                               that fails is dropped. A reading that called
- *                               the email a request and kept no ask is
- *                               "unclear": saved for the physician to read,
- *                               never acknowledged, never one tap
+ *                               when the message points to it; an
+ *                               attachment's words, at medium confidence at
+ *                               most; never the physician's own note), in a
+ *                               sentence that asks (requestPacket.ts
+ *                               hasAskForm). An ask that fails is dropped.
+ *                               A reading that called the email a request
+ *                               and kept no ask is "unclear": saved for the
+ *                               physician to read, never acknowledged,
+ *                               never one tap
  *   ackWarranted                whether the sender may be acknowledged at
  *                               all: the acknowledgement tells them they
  *                               asked, so only a reading sure that they did
@@ -495,6 +497,20 @@ function unitsHolding(q, idx) {
   return idx.spans.filter((s) => s.start < at + q.length && s.end > at);
 }
 
+// A scanner field's key at the head of a line of attachmentText ("notes: ",
+// "issuer: ", or "notes:" alone over the scan's own lines): one word in
+// lower camel case, as the scanner names its fields. A line of the letter's
+// own, "Please provide the following:", is never one.
+const FIELD_LABEL_RE = /^[a-z][A-Za-z0-9]{0,30}:(?:\s+|$)/;
+
+/** An attachment's words (intakeFacts.mjs attachmentText) with each line's field label taken off, so the units are the letter's own. */
+const attachmentWords = (text) => String(text ?? "").split("\n").map((l) => l.replace(FIELD_LABEL_RE, "")).join("\n");
+
+// The sender's message points at what is attached to it.
+const POINTS_ATTACHED_RE = /\b(?:attached|enclosed|attachment|attachments|checklist)\b/i;
+// The roles in which an attachment is itself the list of what is asked.
+const ASKING_ROLES = new Set(["request_checklist", "form_to_complete"]);
+
 /**
  * Does `text` hold `q` with a few characters' difference: at most one edit
  * per twenty characters (two per forty), and none under twenty? A model that
@@ -559,6 +575,14 @@ const RANK = { high: 3, medium: 2, low: 1 };
  * coverage is required for every provider on our panel", is dropped. On
  * 2026-09-28 that statement was the whole of the "request".
  *
+ * An ask may also be quoted from an attachment's words (facts.attachments,
+ * one string per attachment in the order they were listed, intakeFacts.mjs
+ * attachmentText): kept with from "attachment" when its sentence asks, or,
+ * for an item listed without asking words, when the reading gave that
+ * attachment the role request_checklist or form_to_complete or the message
+ * points to what is attached. Such a reading is at most medium confidence,
+ * so it is never acknowledged on its own and never one tap.
+ *
  * Returns { method: "model", intent, modelIntent, asks: [{ quote, kind,
  * from }], dropped: [{ quote, why }], attachments: [{ index, role, filing }]
  * (index from 0), summary, confidence, unclear, settled, needsRules,
@@ -587,6 +611,28 @@ export function verifyUnderstanding(value, { subject = "", parts = null, emailTe
   const listAsked = asksInSubject(subject) || message.spans.some((s) => !s.item && hasAskForm(s.text) && !OFFER_RE.test(s.text));
   const historyAsked = history.spans.some((s) => !s.item && hasAskForm(s.text) && !OFFER_RE.test(s.text));
   const pointsBelow = POINTS_BELOW_RE.test(String(p.message ?? ""));
+  // Each attachment's words, in the order they were listed to the model, and
+  // the role it gave each one: an ask the sender put in an attached letter or
+  // checklist is still the sender's ask (2026-11-05: a forward that said
+  // "See attached." over a hospital's request letter was read as asking
+  // nothing).
+  const attached = (Array.isArray(facts?.attachments) ? facts.attachments : []).map((t) => indexUnits(attachmentWords(t)));
+  const pointsAttached = POINTS_ATTACHED_RE.test(String(p.message ?? "")) || POINTS_ATTACHED_RE.test(String(subject ?? ""));
+
+  const byIndex = new Map();
+  for (const a of value?.attachments || []) {
+    const index = Number(a?.index) - 1;
+    if (!Number.isInteger(index) || index < 0 || index >= attachmentCount || byIndex.has(index)) continue;
+    byIndex.set(index, { index, role: ROLES.includes(a.role) ? a.role : "informational", filing: plainModelText(a.filing, 120) });
+  }
+  const attachments = [...byIndex.values()].sort((x, y) => x.index - y.index);
+  const keepsFiles = attachments.some((a) => a.role === "credential_for_physician" || a.role === "agreement_or_contract");
+  // An ask read in an attachment counts when its sentence asks, or, for an
+  // item listed without asking words ("Current BLS card"), when the reading
+  // took that attachment for the list of what is asked or the message
+  // points to what is attached.
+  const askingInAttachment = (units, i) => units.some((u) => hasAskForm(u.text) && !OFFER_RE.test(u.text))
+    || (!units.some((u) => OFFER_RE.test(u.text)) && (ASKING_ROLES.has(byIndex.get(i)?.role) || pointsAttached));
 
   const asks = [];
   const dropped = [];
@@ -608,8 +654,12 @@ export function verifyUnderstanding(value, { subject = "", parts = null, emailTe
     else if (inSubject || inMessage) { drop(DROP.notAsking); continue; }
     else if (inHistory) { drop(pointsBelow ? DROP.notAsking : DROP.history); continue; }
     else {
-      const close = message.spans.find((s) => nearlyContains(s.norm, q));
-      if (close) {
+      const inAttachment = attached.map((idx, i) => ({ i, units: unitsHolding(q, idx) })).filter((h) => h.units && h.units.length);
+      const close = inAttachment.length ? null : message.spans.find((s) => nearlyContains(s.norm, q));
+      if (inAttachment.length) {
+        if (!inAttachment.some((h) => askingInAttachment(h.units, h.i))) { drop(DROP.notAsking); continue; }
+        from = "attachment";
+      } else if (close) {
         if (!askingIn([close], listAsked)) { drop(DROP.notAsking); continue; }
         from = "message";
         near = true;
@@ -624,15 +674,6 @@ export function verifyUnderstanding(value, { subject = "", parts = null, emailTe
     if (asks.length >= MAX_ASKS) break;
   }
 
-  const byIndex = new Map();
-  for (const a of value?.attachments || []) {
-    const index = Number(a?.index) - 1;
-    if (!Number.isInteger(index) || index < 0 || index >= attachmentCount || byIndex.has(index)) continue;
-    byIndex.set(index, { index, role: ROLES.includes(a.role) ? a.role : "informational", filing: plainModelText(a.filing, 120) });
-  }
-  const attachments = [...byIndex.values()].sort((x, y) => x.index - y.index);
-  const keepsFiles = attachments.some((a) => a.role === "credential_for_physician" || a.role === "agreement_or_contract");
-
   const modelIntent = INTENTS.includes(value?.intent) ? value.intent : null;
   let confidence = CONFIDENCES.includes(value?.confidence) ? value.confidence : "low";
   const cap = (c) => { if (RANK[confidence] > RANK[c]) confidence = c; };
@@ -640,6 +681,10 @@ export function verifyUnderstanding(value, { subject = "", parts = null, emailTe
   // is one whose words the host found only nearly, or only in the history.
   if (dropped.length) cap("medium");
   if (asks.some((a) => a.near || a.from === "history")) cap("medium");
+  // An ask read only in an attachment rests on the scanner's reading of the
+  // file, which can be wrong: never acknowledged on its own, never one tap
+  // (ackWarranted, requestPacket.ts oneTapReady).
+  if (asks.some((a) => a.from === "attachment")) cap("medium");
   // The model said the email asks for nothing and then listed an ask that
   // holds up: the reading contradicts itself.
   if (asks.length && (modelIntent === "informational" || modelIntent === "delivery")) cap("low");
@@ -693,18 +738,23 @@ export function verifyUnderstanding(value, { subject = "", parts = null, emailTe
  * the sender they made a request, so only a reading that is sure they did:
  * a model reading at high confidence with an ask in the sender's own asking
  * words, or a rules reading with an ask named to a document from an email
- * that has an asking sentence. Returns { ok, why }.
+ * that has an asking sentence. An ask read only in an attachment (from
+ * "attachment") never counts toward either. Returns { ok, why }.
  */
 export function ackWarranted(reading) {
   const r = reading && typeof reading === "object" ? reading : {};
   const asks = Array.isArray(r.asks) ? r.asks : [];
   if (r.unclear) return { ok: false, why: "the email may not ask for anything" };
   if (!asks.length) return { ok: false, why: "no ask was read" };
+  // An ask read only in an attachment rests on the scanner's reading of the
+  // file: the sender is not told they asked on that alone.
+  if (asks.every((a) => a?.from === "attachment")) return { ok: false, why: "the asks were read only in an attachment" };
   if (r.method === "model") {
     return r.confidence === "high" ? { ok: true, why: "" } : { ok: false, why: `the reading is ${r.confidence || "not"} certain` };
   }
   if (!r.askForm) return { ok: false, why: "no sentence of the email asks" };
-  if (!asks.some((a) => classifyAsk(a.quote).kind !== "unknown")) return { ok: false, why: "no ask names a document" };
+  // The rules count only the email's own asks here.
+  if (!asks.some((a) => a?.from !== "attachment" && classifyAsk(a.quote).kind !== "unknown")) return { ok: false, why: "no ask names a document" };
   return { ok: true, why: "" };
 }
 
@@ -722,6 +772,35 @@ export function asksToSign(asks) {
 
 // ─── The fallback ────────────────────────────────────────────────────────────
 
+/**
+ * The asks the rules read in the attachments' words (intakeFacts.mjs
+ * attachmentText, one string per attachment), each kept only when the
+ * sentence it sits in asks, or when it is an item of a list under a line of
+ * the same attachment that asks ("Please provide the following:"). A letter
+ * that only states things ("Your DEA registration was verified") gives none.
+ */
+export function attachmentAsks(words) {
+  const out = [];
+  const seen = new Set();
+  for (const raw of Array.isArray(words) ? words : []) {
+    const text = attachmentWords(raw);
+    if (!text.trim()) continue;
+    const idx = indexUnits(text);
+    const listAsked = idx.spans.some((u) => !u.item && hasAskForm(u.text) && !OFFER_RE.test(u.text));
+    for (const a of parseAsks(text, "")) {
+      const held = unitsHolding(normalizeForQuote(a), idx);
+      if (!held || !held.length || held.some((u) => OFFER_RE.test(u.text))) continue;
+      const asking = held.some((u) => !u.item && hasAskForm(u.text)) || (held.every((u) => u.item) && listAsked);
+      const key = quoteKey(a);
+      if (!asking || seen.has(key)) continue;
+      seen.add(key);
+      out.push(a);
+      if (out.length >= MAX_ASKS) return out;
+    }
+  }
+  return out;
+}
+
 const cleanSubjectLine = (s) => String(s ?? "").replace(/^\s*(?:(?:re|fwd?|fw|tr|wg|vs|aw)\s*:\s*)+/i, "").replace(/\s+/g, " ").trim();
 
 /**
@@ -737,16 +816,23 @@ const cleanSubjectLine = (s) => String(s ?? "").replace(/^\s*(?:(?:re|fwd?|fw|tr
  * before your start date" was the opposite of the truth. A delivery stays a
  * delivery. The asks themselves come from parseAsks, which refuses a
  * statement too.
+ *
+ * attachmentWords are the attachments' words (intakeFacts.mjs
+ * attachmentText), read apart from the email (attachmentAsks): their asks
+ * are marked from "attachment", make a delivery mixed, and never on their
+ * own warrant an acknowledgement (ackWarranted).
  */
-export function rulesUnderstanding({ subject = "", body = "", attachmentNames = [], attachmentCount, forwarded = false, why = "" } = {}) {
+export function rulesUnderstanding({ subject = "", body = "", attachmentNames = [], attachmentCount, forwarded = false, why = "", attachmentWords = [] } = {}) {
   const rules = classifyIntent({ subject, body, attachmentNames, attachmentCount, forwarded });
   const asks = parseAsks(body, subject);
-  const asking = asks.length > 0 || asksSomething(body, subject);
+  const own = new Set(asks.map((a) => quoteKey(a)));
+  const fromFiles = attachmentAsks(attachmentWords).filter((a) => !own.has(quoteKey(a)));
+  const asking = asks.length > 0 || fromFiles.length > 0 || asksSomething(body, subject);
   const message = currentMessage(body);
   const askForm = hasAskForm(cleanSubjectLine(subject)) || askUnits(message).some((u) => !u.item && hasAskForm(u.text) && !OFFER_RE.test(u.text));
   let intent;
   let unclear = false;
-  if (rules.intent === "delivery") intent = "delivery";
+  if (rules.intent === "delivery") intent = fromFiles.length ? "mixed" : "delivery";
   else {
     intent = rules.intent === "both" ? "mixed" : "request";
     unclear = !asking;
@@ -758,7 +844,7 @@ export function rulesUnderstanding({ subject = "", body = "", attachmentNames = 
     intent,
     rulesIntent: rules.intent,
     reasons: rules.reasons,
-    asks: asks.map((a) => ({ quote: a, kind: null })),
+    asks: [...asks.map((a) => ({ quote: a, kind: null })), ...fromFiles.map((a) => ({ quote: a, kind: null, from: "attachment" }))],
     dropped: [],
     attachments: [],
     summary: subj ? `"${subj}"` : "",

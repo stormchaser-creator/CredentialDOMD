@@ -39,7 +39,9 @@
  * refusal, a reply cut off at max_tokens, or any failure at all returns
  * { ok: false } and the caller reads the email with the rules instead.
  *
- * Never logs the key, the request, or an error's text.
+ * Never logs the key, the request, or an error's text, with one exception:
+ * an error the API itself answered with keeps its type and the first words
+ * of its message (apiErrorWhy), so the ledger can say why the call failed.
  */
 import Anthropic from "npm:@anthropic-ai/sdk@0.115.0";
 import { meterUsage, priceFor } from "./aiPricing.ts";
@@ -113,6 +115,29 @@ export function promptChars(body: unknown): number {
   return Math.min(n, 2_000_000_000);
 }
 
+// The most of the API's own error message kept in a why.
+const API_MESSAGE_CHARS = 160;
+
+/**
+ * What the API said when it answered with an error, for the why: its error
+ * type and the start of its message, whitespace collapsed, links and
+ * anything shaped like a key taken out. Only the parsed error body is read,
+ * never the request, the headers or the SDK's own message. On 2026-11-05 a
+ * 400 came back as "the AI service answered 400" and nothing more, so
+ * nobody could tell a malformed request from an account out of credit.
+ */
+export function apiErrorWhy(body: unknown): string {
+  const inner = body && typeof body === "object" ? (body as { error?: unknown }).error : null;
+  const e = inner && typeof inner === "object" ? inner as { type?: unknown; message?: unknown } : {};
+  const clean = (v: unknown) => typeof v === "string"
+    ? v.replace(/\bhttps?:\/\/\S+/gi, "").replace(/\bsk-[A-Za-z0-9_-]+/g, "").replace(/\s+/g, " ").trim()
+    : "";
+  const type = clean(e.type).slice(0, 40);
+  const message = clean(e.message);
+  const short = message.length > API_MESSAGE_CHARS ? `${message.slice(0, API_MESSAGE_CHARS).trim()}...` : message;
+  return [type, short].filter(Boolean).join(": ");
+}
+
 /**
  * May this email be read by the model? Reserves one of the day's reads on
  * the understanding step's own scope when it may. Called before any
@@ -145,7 +170,8 @@ export async function admitUnderstanding(input: AdmissionInput): Promise<Admissi
 /**
  * Make the call, or decline. Returns the model's message on success, with
  * what it cost; otherwise { ok: false, why } with a reason fit for a log
- * line (never an error's text, which can carry a URL).
+ * line (never a connection error's text, which can carry a URL; for an
+ * error the API answered with, its type and a short message, apiErrorWhy).
  */
 export async function callUnderstanding(input: UnderstandingCall): Promise<UnderstandingCallResult> {
   const { db, profileId, admission, key, request } = input;
@@ -236,7 +262,8 @@ export async function callUnderstanding(input: UnderstandingCall): Promise<Under
       const status = typeof e.status === "number" ? e.status : null;
       await logUsage({ path: ANTHROPIC_USAGE_PATH, ok: false, status, prompt_chars: chars, provider: "anthropic", model });
       await settle(hold, status === null ? null : 0);
-      return { ok: false, why: `the AI service answered ${status ?? "with an error"}` };
+      const said = apiErrorWhy(e.error);
+      return { ok: false, why: `the AI service answered ${status ?? "with an error"}${said ? ` (${said})` : ""}` };
     }
     await logUsage({ path: ANTHROPIC_USAGE_PATH, ok: false, status: null, prompt_chars: chars, provider: "anthropic", model });
     await settle(hold, null);

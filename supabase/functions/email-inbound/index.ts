@@ -1289,6 +1289,15 @@ async function logAiUsage(profileId: string, row: Record<string, unknown>) {
 // deno-lint-ignore no-explicit-any
 type Scan = any;
 
+// What the intake adds to the scanner's instruction. The scanner's own prompt
+// (scannerCore.js, the app's scanner too) knows credentials and receipts, so
+// on 2026-11-05 a hospital's request letter attached to a forward came back
+// with almost nothing in it, and the request inside the PDF was never read.
+// Its asking words go in notes, word for word, where attachmentText
+// (intakeFacts.mjs) hands them to the reading and to the host's check of
+// every quote.
+const SCAN_REQUEST_WORDS = "If the document is a letter, memo, checklist or form that asks the physician for documents or information, put in \"notes\" each sentence that asks and each item it lists, word for word as printed, one per line.";
+
 /**
  * Read one attachment with the app's scanner prompt and validator, on the
  * shared key. Returns the validated result, or null with the reason. Never
@@ -1304,7 +1313,7 @@ async function scanAttachment(profileId: string, f: Downloaded, ctx: ScanContext
 
   const parts = [
     { inlineData: { mimeType: mime, data: encodeBase64(f.bytes) } },
-    { text: mime === "application/pdf" ? scanPdfText(ctx.degree) : SCAN_IMAGE_TEXT },
+    { text: `${mime === "application/pdf" ? scanPdfText(ctx.degree) : SCAN_IMAGE_TEXT} ${SCAN_REQUEST_WORDS}` },
   ];
   const body = scanRequestBody({ degreeType: ctx.degree, categories: ctx.categoryNames, parts });
   const path = `models/${GEMINI_MODEL}:generateContent`;
@@ -2162,7 +2171,8 @@ interface Reading {
   method: "model" | "rules";
   why?: string;
   intent: "request" | "delivery" | "informational" | "mixed";
-  asks: { quote: string; kind: string | null }[];
+  /** from: where the words were found ("subject", "message", "history", or "attachment": an attachment's words, never acknowledged on their own). */
+  asks: { quote: string; kind: string | null; from?: string }[];
   dropped: { quote: string; why: string }[];
   attachments: { index: number; role: string; filing: string }[];
   summary: string;
@@ -2277,19 +2287,24 @@ async function understandEmail(profile: MatchedProfile, ctx: ScanContext, admiss
   // The email and the attachments are also kept apart: a coverage start
   // taken from an attached agreement must be that agreement's own words, and
   // only when the email states none (intakeFacts.mjs agreementCoverageStart).
+  // The attachments' words stay in the order the model sees the files ("" for
+  // one not read), so an ask quoted from one is checked against the role the
+  // reading gave that one (verifyUnderstanding).
   const onFile = existingForModel(input.rows);
   const words = input.files.map((f) => attachmentText(scanOf(f)));
   const facts = {
     corpus: corpusIndex([input.subject, parts.note, parts.message, parts.history, ...words]),
     email: [input.subject, parts.note, parts.message, parts.history].filter(Boolean).join("\n\n"),
-    attachments: words.filter(Boolean),
+    attachments: words,
     refs: onFile.refs,
     physicianName: ctx.physicianName,
   };
   const agencies = (input.rows.locumContracts ?? []).map((c) => String(c.agency ?? "")).filter(Boolean);
+  // The rules read the attachments' words apart from the email: an ask the
+  // sender put in an attached letter is marked as one (rulesUnderstanding).
   const rules = (why: string): Reading => rulesWithFacts(rulesUnderstanding({
     subject: input.subject, body: input.rulesBody, attachmentNames: input.attachmentNames,
-    attachmentCount: input.attachmentCount, forwarded: input.forwarded, why,
+    attachmentCount: input.attachmentCount, forwarded: input.forwarded, why, attachmentWords: words,
   }), { message: [parts.note, parts.message].filter(Boolean).join("\n\n"), subject: input.subject, agencies, facts }) as Reading;
   if (!admission.ok) return rules(admission.why);
   try {
