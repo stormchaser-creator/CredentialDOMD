@@ -377,6 +377,23 @@ test('a bug item\'s data_fix resolution counts only with its files, and the next
     assert.deepEqual([sent.kind, sent.completion, sent.continuation_state], ['reply_stored', true, 'complete']);
   } finally { state.cleanup(); }
 });
+test('the host\'s resolutions and closings never crowd the pending work out of the saved review', async () => {
+  const state = privateDir('ticket-host-done-size-');
+  const db = database();
+  try {
+    await writeChecklist(state.dir, { version: 1, ticket_id: T, owner_ticket: false, items: [ITEMS[0]], non_asks: [], seen: [T, M1] });
+    const context = await loadQueuedContext(db.query, { id: T, mode: 'reply' }, state.dir);
+    const long = 'Synthetic note. '.repeat(40);
+    const resolutions = Object.fromEntries(Array.from({ length: 30 }, (_, i) => [`AC-${i + 1}`, { kind: 'data_fix', at: '2026-11-06T10:00:00Z', note: long, evidence: ['2026-11-06-a.sql'] }]));
+    const closed = Array.from({ length: 10 }, (_, i) => ({ work: `${long} ${i}`, at: '2026-11-06T10:00:00Z', note: long }));
+    const pending = Array.from({ length: 6 }, (_, i) => ({ work: `Synthetic pending work ${i}`, owner: 'support_worker', next_action: 'Synthetic.' }));
+    context.prior_reviews = [{ target_id: T, owner_id: OWNER, summary: long, checklist_states: [], pending_follow_up: pending, resolutions, closed_follow_ups: closed }];
+    const view = sessionEvidence(context).view.saved_review;
+    assert.deepEqual(view.pending_follow_up.map(f => f.work), pending.map(f => f.work), 'every pending work text is still there');
+    assert.ok(view.resolved_by_host.length > 0 && view.resolved_by_host.length < 30, 'the resolutions are bounded on their own');
+    assert.ok(Buffer.byteLength(JSON.stringify([view.resolved_by_host, view.closed_by_host])) <= 2048);
+  } finally { state.cleanup(); }
+});
 test('defect 1: --resolve-item records once, wakes the case without fresh attempts, and the next run sends the completion reply', async () => {
   const state = privateDir('ticket-reply-resolve-');
   const db = database();

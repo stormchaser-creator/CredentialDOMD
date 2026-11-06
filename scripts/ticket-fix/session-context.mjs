@@ -99,6 +99,14 @@ function within(list, share) {
   return out;
 }
 
+const HOST_SHARE = 2048;
+function hostDone(record) {
+  const resolved = Object.entries(record.resolutions && typeof record.resolutions === 'object' ? record.resolutions : {}).slice(0, 30)
+    .map(([id, r]) => ({ id, kind: r?.kind ?? null, note: clip(r?.note, 200) }));
+  const closed = (Array.isArray(record.closed_follow_ups) ? record.closed_follow_ups : []).slice(-10).reverse().map(f => ({ work: clip(f?.work, 160), note: clip(f?.note, 160) }));
+  const resolvedShown = within(resolved, HOST_SHARE);
+  return { resolved_by_host: resolvedShown, closed_by_host: within(closed, Math.max(0, HOST_SHARE - size(resolvedShown))) };
+}
 function savedReviewView(record, share) {
   if (!record) return null;
   const answers = [...(record.remembered_answers ?? []), ...(record.assessment?.answered_questions ?? [])];
@@ -111,10 +119,9 @@ function savedReviewView(record, share) {
     checklist_states: (record.checklist_states ?? []).map(s => ({ id: s.id, state: s.state })),
     // What the host finished itself (an owner decision, a data change it made,
     // the reporter's confirmation, a follow-up it closed): done, never asked
-    // about or worked again.
-    resolved_by_host: Object.entries(record.resolutions && typeof record.resolutions === 'object' ? record.resolutions : {}).slice(0, 30)
-      .map(([id, r]) => ({ id, kind: r?.kind ?? null, note: clip(r?.note, 300) })),
-    closed_by_host: (Array.isArray(record.closed_follow_ups) ? record.closed_follow_ups : []).slice(-10).map(f => ({ work: clip(f?.work, 200), note: clip(f?.note, 300) })),
+    // about or worked again. Bounded on their own (HOST_SHARE), so they never
+    // crowd out the pending work a completion must name.
+    ...hostDone(record),
     ...(record.unreleased_claims ? { unreleased_code_outcome: record.unreleased_claims.code_outcome ?? null } : {}) };
   // The pending work keeps its exact text: completed_follow_up must repeat it.
   const pending = (record.pending_follow_up ?? []).map(f => ({ work: f.work, owner: f.owner, next_action: clip(f.next_action, 300) }));
