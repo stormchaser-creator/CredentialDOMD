@@ -30,6 +30,17 @@ import { isKnownDegree } from "../../constants/professions.js";
 import { appRulesReady, loadAppRules, needsAppRules, APP_RULES_UNAVAILABLE } from "../../utils/appRules.js";
 import { alertWriteRefused } from "../../utils/limitedLaunchAccess.js";
 import ProfessionPicker from "./ProfessionPicker";
+import { normalizeCoveragePeriods } from "../../utils/coverageText";
+import { contractZone, deviceZone } from "../../utils/coverageBlocks";
+import { facilityZone } from "../../utils/facilityZone";
+// A contract Vera writes keeps its block times on the facility's clock, as the
+// Contracts form saves them: a block she leaves without a zone gets the
+// contract's own, else the facility's, else this device's.
+const withBlockZones = (section, fields, existing = null) => {
+  if (section !== "locumContracts" || !Array.isArray(fields?.coveragePeriods)) return fields;
+  const zone = contractZone(existing) || facilityZone({ ...(existing || {}), ...fields }).zone || deviceZone();
+  return { ...fields, coveragePeriods: normalizeCoveragePeriods(fields.coveragePeriods, { zone }) };
+};
 
 // Transcript and archives live on-device under the signed-in user's own key
 // (storageScope), so another account on the same device never sees them.
@@ -774,7 +785,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
         note = withheldNote(withheld);
         if (!Object.keys(clean).length && !extra && withheld.length) throw nothingLeft("saved", withheld);
         const newId = generateId();
-        mustWrite(addItem(current.section, { ...clean, id: newId, ...(extra ? { customFields: extra } : {}) }), "the record");
+        mustWrite(addItem(current.section, { ...withBlockZones(current.section, clean), id: newId, ...(extra ? { customFields: extra } : {}) }), "the record");
         proposeFields(current.section, extra);
         saveSourceDoc(`${current.section}:${newId}`);
       } else if (current.kind === "update_record" && current.section === "customRecords") {
@@ -796,7 +807,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
         const { clean, extra, withheld } = splitFields(action.section, action.fields, action.customFields);
         note = withheldNote(withheld);
         if (!Object.keys(clean).length && !extra && withheld.length) throw nothingLeft("changed", withheld);
-        mustWrite(editItem(action.section, { ...existing, ...clean, ...(extra ? { customFields: { ...(existing.customFields || {}), ...extra } } : {}) }), "the change");
+        mustWrite(editItem(action.section, { ...existing, ...withBlockZones(action.section, clean, existing), ...(extra ? { customFields: { ...(existing.customFields || {}), ...extra } } : {}) }), "the change");
         proposeFields(action.section, extra);
         saveSourceDoc(`${action.section}:${action.id}`);
       } else if (action.kind === "update_document") {

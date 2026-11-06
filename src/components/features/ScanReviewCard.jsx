@@ -11,7 +11,8 @@ import { STATES } from "../../constants/states";
 import { RECEIPT_DOC_TYPE, RECEIPT_CATEGORIES, LEDGER_CATEGORY, isBillableCategory, normalizeReceipt, receiptSaveIssues, toISODate } from "../../utils/receiptScan";
 import { canonicalForDocType, scanShapeIssues } from "../../utils/scanShape";
 import { agencyOptions, agencyForDate, sameAgency } from "../../utils/contractsForDate";
-import { timedBlock, timedBlockLabel, periodProblem } from "../../utils/coverageBlocks";
+import { timedBlock, timedBlockLabel, periodProblem, deviceZone, isTimedPeriod } from "../../utils/coverageBlocks";
+import { facilityZone, ZONE_NAMES } from "../../utils/facilityZone";
 
 const FIELD_DEFS = {
   license: [
@@ -414,6 +415,14 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard, onDele
                         : timedBlockLabel(p) && <div style={{ fontSize: 12, color: T.textDim, marginTop: 3 }}>{timedBlockLabel(p)}</div>}
                     </div>
                   ))}
+                  {/* The clock those times are saved on: the facility's (DocumentsSection save), named so a wrong one is seen. */}
+                  {(edited.coveragePeriods || []).some(p => isTimedPeriod(p)) && (() => {
+                    const where = facilityZone(edited);
+                    const zone = where.zone || deviceZone();
+                    const name = ZONE_NAMES[zone] ? `${ZONE_NAMES[zone]} time` : zone || "this device's time";
+                    const said = where.zone ? (where.sure ? `from ${where.state}` : `most of ${where.state}; check it on the Contracts form`) : "this device's: no state was read";
+                    return <div aria-label="Time zone of the block times" style={{ fontSize: 12, color: T.textDim }}>Times are saved on {name} ({said}).</div>;
+                  })()}
                   <button onClick={() => setEdited(prev => ({ ...prev, coveragePeriods: [...(prev.coveragePeriods || []), { start: "", end: "" }] }))} style={{
                     padding: "9px", borderRadius: 10, border: `1px dashed ${T.border}`, backgroundColor: "transparent",
                     color: T.accent, fontSize: 13, fontWeight: 700, cursor: "pointer",

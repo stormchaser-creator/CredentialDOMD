@@ -48,6 +48,7 @@ import { RECEIPT_DOC_TYPE, normalizeReceipt } from "./app/utils/receiptScan.js";
 import { screenDocument } from "./app/utils/phiGuard.js";
 import { normalizeScanDate } from "./app/utils/scanDates.js";
 import { normalizeCoveragePeriods, fileableCoveragePeriods } from "./app/utils/coverageText.js";
+import { facilityZone } from "./app/utils/facilityZone.js";
 
 // documents.type for a file that arrived at docs@ and is not filed yet. The
 // app lists it under "From your inbox, not filed yet" (src/utils/inboxDocs.js).
@@ -322,16 +323,17 @@ export function builtInFields(section, extracted) {
     placed.incrementMinutes = parseInt(placed.incrementMinutes, 10) || 15;
     placed.minCallMinutes = parseInt(placed.minCallMinutes, 10) || 15;
     // Coverage blocks as the app saves them (src/utils/coverageText.js):
-    // times as HH:MM, a start time only with an end time. No zone: this
-    // server has no local clock, so a block with times is read on the
-    // physician's device clock until the Contracts form saves it with one.
+    // times as HH:MM, a start time only with an end time, on the facility's
+    // zone (its state and city, facilityZone.js). With no state this server
+    // has no clock to use, so such a block is read on the physician's device
+    // clock until the Contracts form saves it with one.
     // A block whose dates cannot be read, or whose times make it end before
     // it starts, would bill nothing: it is kept as text, not as a block.
     if (Array.isArray(placed.coveragePeriods)) {
       const day = (v) => { const t = normalizeScanDate(typeof v === "string" ? v.trim() : ""); return /^\d{4}-\d{2}-\d{2}$/.test(t) ? t : ""; };
       const raw = placed.coveragePeriods.filter((p) => p && typeof p === "object");
       for (const p of raw) if (!day(p.start) && !day(p.end)) putExtra("Coverage block not filed", [p.start, p.end].filter(Boolean).join(" to ") || JSON.stringify(p));
-      const { kept, refused } = fileableCoveragePeriods(normalizeCoveragePeriods(raw, { day }));
+      const { kept, refused } = fileableCoveragePeriods(normalizeCoveragePeriods(raw, { day, zone: facilityZone(placed).zone }));
       for (const r of refused) putExtra("Coverage block not filed", `${r.label} (ends before it starts)`);
       placed.coveragePeriods = kept;
     }

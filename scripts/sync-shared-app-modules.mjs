@@ -47,6 +47,8 @@ export const ROOTS = Object.freeze([
   // email-inbound files an agreement's coverage blocks the way the app saves
   // them (intakeFiling.mjs).
   "utils/coverageText.js",
+  // ...on the facility's zone, from its state and city (facilityZone.js).
+  "utils/facilityZone.js",
   // email-inbound enters the facts an informational email states as the
   // same records the app adds when the physician taps Add (intakeFacts.mjs).
   "utils/intakeRecords.js",

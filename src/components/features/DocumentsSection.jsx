@@ -29,6 +29,7 @@ import { spreadsheetGuard, withRefusals } from "../../utils/spreadsheetGuard";
 import { isIdentityLink } from "../../utils/pausedApplicationRecords.js";
 import { isArchived } from "../../utils/contractsForDate";
 import { deviceZone } from "../../utils/coverageBlocks";
+import { facilityZone } from "../../utils/facilityZone";
 import { supabase, uploadDocumentFile, downloadDocumentBlob } from "../../lib/supabase";
 import useDocumentBytes, { useDocumentFileStatus, useCardsOnScreen } from "../shared/useDocumentBytes";
 import { fileWaitText, statusWithoutStore } from "../../utils/documentBytes";
@@ -651,9 +652,10 @@ function DocumentsSection() {
     if (section === "locumContracts") {
       // Contract terms drive billing math: numbers with defaults, and the
       // coverage blocks the way the Contracts form saves them, with any time
-      // the model left out filled from an Office file's own words and this
-      // device's zone on a block with times (docPrefill.js contractFromScan).
-      const shaped = contractFromScan(entry, { text: scanText, zone: deviceZone() });
+      // the model left out filled from an Office file's own words, and the
+      // facility's zone on a block with times (this device's only when the
+      // agreement names no state): docPrefill.js contractFromScan.
+      const shaped = contractFromScan(entry, { text: scanText, zone: facilityZone(entry).zone || deviceZone() });
       if (shaped.problem) { setScanError(shaped.problem); return; }
       Object.assign(entry, shaped.entry);
     }
