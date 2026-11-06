@@ -741,16 +741,22 @@ export async function closeFollowUp(directory, ticketId, key, { note = '', now =
   const text = oneLineNote(note);
   return withAgentLock(lock, async () => {
     const record = await readCase(directory, id(ticketId));
-    if (record.continuation?.state === 'pending') throw Error('The case is queued; nothing changed');
     const pending = Array.isArray(record.pending_follow_up) ? record.pending_follow_up : [];
     const index = /^\d{1,3}$/.test(String(key)) ? Number(key) : pending.findIndex(f => f.work === key);
     const entry = pending[index];
+    if (record.continuation?.state === 'pending' && entry?.owner !== 'support_worker') throw Error('The case is queued; nothing changed');
     if (!entry) throw Error('No open follow-up with that index or work text');
-    if (entry.owner !== 'support_owner') throw Error('Only an owner follow-up is closed by hand; a run closes the worker\'s');
+    const states = Array.isArray(record.checklist_states) ? record.checklist_states : [];
+    // A worker follow-up keeps its case queued, so it is closed while queued
+    // (the lock keeps runs out), and only once every item is done: a check a
+    // run cannot make (it has no database access) that the host made by hand.
+    // Left open, it held a finished ticket's completion reply until it stalled.
+    if (entry.owner === 'support_worker') {
+      if (!states.length || states.some(f => f.state !== 'done')) throw Error('A worker follow-up is closed by hand only once every item is done; a run carries on with it');
+    } else if (entry.owner !== 'support_owner') throw Error('Only an owner or worker follow-up is closed by hand');
     // The host's own work for an item ("Record how AC-n was resolved") closes
     // only when the host decides the item done: record the resolution with
     // --resolve-item instead (review: closing it hid an open data_fix).
-    const states = Array.isArray(record.checklist_states) ? record.checklist_states : [];
     const item = [...entry.work.matchAll(/\bAC-\d{1,3}\b/g)].map(m => m[0]).find(ac => hostItemWork(ac).some(w => questionKey(w) === questionKey(entry.work)));
     if (item && states.find(f => f.id === item)?.state !== 'done') throw Error(`That is the host's own work for ${item}, which is not done; record its resolution with --resolve-item`);
     record.pending_follow_up = pending.filter((_, i) => i !== index);
@@ -813,7 +819,7 @@ function outstandingWork(previous, result, stage3) {
   for (const closed of Array.isArray(previous?.closed_follow_ups) ? previous.closed_follow_ups : []) {
     const open = outstanding.get(questionKey(closed.work));
     if (openItems.some(f => hostItemWork(f.id).some(w => questionKey(w) === questionKey(closed.work)))) continue;
-    if (open?.owner === 'support_owner') outstanding.delete(questionKey(closed.work));
+    if (['support_owner', 'support_worker'].includes(open?.owner)) outstanding.delete(questionKey(closed.work));
   }
   return outstanding;
 }
@@ -1243,7 +1249,7 @@ async function main(args) {
     // --close-follow-up TICKET INDEX|WORK PRIVATE_STATE; the note from TICKET_RESOLUTION_NOTE.
     const [, target, key, directory] = args;
     const record = await closeFollowUp(directory, id(target), key, { note: process.env.TICKET_RESOLUTION_NOTE ?? '', lock: process.env.TICKET_AGENT_LOCK || AGENT_LOCK });
-    console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} CLOSED — ${target.slice(0, 8)} owner follow-up; case ${record.continuation.state}`);
+    console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} CLOSED — ${target.slice(0, 8)} follow-up; case ${record.continuation.state}`);
     return;
   }
   if (mode === '--note-owner' && args.length === 3) {

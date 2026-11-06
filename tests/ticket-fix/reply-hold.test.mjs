@@ -490,6 +490,32 @@ test('review 3, finding 2: an owner follow-up is closed by hand once, and the ne
     assert.equal(db.statements.filter(x => x.startsWith('DO $ticket_broker$')).length, 1);
   });
 });
+test('a worker follow-up a run cannot finish (a database check) is closed by hand once every item is done, and the next run sends the completion reply', async () => {
+  await answeredTicket(async ({ db, state, due }) => {
+    const WORK = 'Synthetic: check which agreement is in force on this account';
+    const withCheck = () => { const s3 = stage3(DONE); s3.final.follow_up = [{ work: WORK, owner: 'support_worker', next_action: 'Synthetic.' }]; return s3; };
+    assert.equal((await finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: withCheck(), codeOutcome: 'none', requireStructured: true })).kind, 'continuation_saved');
+    assert.equal(record(state.dir).continuation.state, 'pending', 'held on the open worker follow-up');
+    const lock = path.join(state.dir, 'agent.lock');
+    const index = record(state.dir).pending_follow_up.findIndex(f => f.work === WORK);
+    const woken = await closeFollowUp(state.dir, T, String(index), { note: 'Synthetic: checked by hand, the newer agreement is in force.', lock });
+    assert.equal(woken.continuation.state, 'pending');
+    assert.ok(!woken.pending_follow_up.some(f => f.work === WORK));
+    // The run lists the same check again (it still cannot read the database): it stays closed.
+    const sent = await finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: withCheck(), codeOutcome: 'none', requireStructured: true });
+    assert.deepEqual([sent.kind, sent.completion, sent.continuation_state], ['reply_stored', true, 'complete']);
+    assert.equal(db.statements.filter(x => x.startsWith('DO $ticket_broker$')).length, 1);
+  });
+});
+test('a worker follow-up is not closed by hand while an item is open', async () => {
+  const state = privateDir('ticket-reply-worker-open-');
+  try {
+    const caseFile = { version: 1, target_id: T, owner_id: OWNER, checklist_states: [{ id: 'AC-1', state: 'not_done', remaining: 'Synthetic.', detail: null }],
+      pending_follow_up: [{ work: 'Synthetic: finish AC-1', owner: 'support_worker', next_action: 'Synthetic.' }], continuation: { state: 'pending', attempts: 0, due_at: new Date().toISOString() } };
+    writeFileSync(path.join(state.dir, `${T}.json`), JSON.stringify(caseFile), { mode: 0o600 });
+    await assert.rejects(closeFollowUp(state.dir, T, '0', { note: 'Synthetic.', lock: path.join(state.dir, 'agent.lock') }), /only once every item is done/);
+  } finally { state.cleanup(); }
+});
 test('review 3, finding 3: the database check runs before the lock, and a signal or error never leaves the lock', async () => {
   const state = privateDir('ticket-reply-lock-');
   const db = database();
