@@ -107,10 +107,12 @@ test("requestWords is a closed vocabulary: a name in any case, any script or spe
     "operative notes, Roe Mary", "operative notes - Roe, Mary", "notes for roe, mary", "BOARD CASE", "op note bed twelve room four",
     "notes for osterly hospital neurosurgery", "records from st joseph's", "notes for 12 years ago 10 months", "patient roe 1 years",
     "dob march fourteenth nineteen sixty one", "ssn on file please",
+    // Allowed words that are also names, outside their phrases.
+    "operative notes for ray driver", "operative notes for RAY DRIVER", "chest x ray for ray card", "notes for patient ray", "notes (ray) driver",
   ]) assert.equal(requestWords(dropped), "", dropped);
   for (const kept of [
     "DEA registration", "state license", "board certificate", "BLS card", "CV", "malpractice insurance certificate", "TB test",
-    "immunization records", "photo ID", "NPDB query", "state controlled substance registration", "declarations page", "driver's license",
+    "immunization records", "photo ID", "NPDB query", "state controlled substance registration", "declarations page", "driver's license", "drivers license", "chest x ray",
     "chest x-ray", "Please send the following documents to complete your reappointment file", "case log for the past 24 months",
   ]) assert.equal(requestWords(kept), kept, kept);
   // A name in the lead-in drops the lead-in; a name in an item drops that item; the rest stays.

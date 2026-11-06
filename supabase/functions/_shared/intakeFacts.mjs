@@ -203,7 +203,11 @@ const REQUEST_WORDS = new Set((""
   + "for the of past last from and or with to on a an your all any each listed").split(/\s+/).filter(Boolean));
 // Words that are a document's only beside their partner: "case log", "case
 // list", "declarations page", "face sheet". Alone, they could be a name.
-const BOUND_WORDS = { case: { next: /^(?:log|logs|list|lists)$/ }, page: { prev: /^(?:declaration|declarations|face|signature)$/ } };
+const LICENSE_NEXT = { next: /^(?:license|licence|licenses|licences)$/ };
+const BOUND_WORDS = { case: { next: /^(?:log|logs|list|lists)$/ }, page: { prev: /^(?:declaration|declarations|face|signature)$/ },
+  // Also names ("ray driver"): only inside "x ray" and "driver's license".
+  x: { next: /^(?:ray|rays)$/ }, ray: { prev: /^x$/ }, rays: { prev: /^x$/ },
+  driver: LICENSE_NEXT, drivers: LICENSE_NEXT, "driver's": LICENSE_NEXT };
 
 /**
  * One requested item, or the lead-in, as the host keeps it: whitespace
