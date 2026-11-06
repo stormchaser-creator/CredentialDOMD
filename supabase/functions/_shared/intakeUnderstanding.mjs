@@ -507,8 +507,11 @@ const FIELD_LABEL_RE = /^[a-z][A-Za-z0-9]{0,30}:(?:\s+|$)/;
 /** An attachment's words (intakeFacts.mjs attachmentText) with each line's field label taken off, so the units are the letter's own. */
 const attachmentWords = (text) => String(text ?? "").split("\n").map((l) => l.replace(FIELD_LABEL_RE, "")).join("\n");
 
-// The sender's message points at what is attached to it.
-const POINTS_ATTACHED_RE = /\b(?:attached|enclosed|attachment|attachments|checklist)\b/i;
+// The sender's message points at what is attached AS what it asks: "see
+// attached", "per the attached", "please complete the attached", "the
+// attached letter (checklist, form, list, memo)". The bare word "attached"
+// does not: "Attached is my new hospital ID badge" delivers a badge.
+const POINTS_ATTACHED_RE = /\bsee (?:the )?(?:attached|enclosed|attachments?)\b|\bper the (?:attached|enclosed)\b|\b(?:complete|review|fill out|fill in|sign|return|read)(?: and (?:sign|return|send back))? the (?:attached|enclosed)\b|\b(?:attached|enclosed) (?:letter|request|checklist|form|forms|list|memo|questionnaire|application|packet)\b|\bchecklist\b/i;
 // The roles in which an attachment is itself the list of what is asked.
 const ASKING_ROLES = new Set(["request_checklist", "form_to_complete"]);
 
@@ -898,14 +901,19 @@ export function rulesUnderstanding({ subject = "", body = "", attachmentNames = 
   const own = new Set(parsed.map((a) => quoteKey(a)));
   const letters = (Array.isArray(attachmentWords) ? attachmentWords : [])
     .map((w, i) => (LETTER_SCAN_TYPES.includes(String(attachmentTypes?.[i] ?? "unknown")) ? w : ""));
-  const fromFiles = attachmentAsks(letters).filter((a) => !own.has(quoteKey(a)));
+  const read = attachmentAsks(letters).filter((a) => !own.has(quoteKey(a)));
+  const message = currentMessage(body);
+  // A delivery stays a delivery unless the message points to the attachment
+  // as what it asks; then, and on any other reading, the attachment's asks count.
+  const delivery = rules.intent === "delivery" && !(read.length && POINTS_ATTACHED_RE.test(message));
+  const fromFiles = delivery ? [] : read;
   const asks = fromFiles.length ? parsed.filter((a) => !(POINTS_ATTACHED_RE.test(a) && classifyAsk(a).kind === "unknown")) : parsed;
   const asking = asks.length > 0 || fromFiles.length > 0 || asksSomething(body, subject);
-  const message = currentMessage(body);
   const askForm = hasAskForm(cleanSubjectLine(subject)) || askUnits(message).some((u) => !u.item && hasAskForm(u.text) && !OFFER_RE.test(u.text));
   let intent;
   let unclear = false;
-  if (rules.intent === "delivery") intent = fromFiles.length && POINTS_ATTACHED_RE.test(message) ? "mixed" : "delivery";
+  if (delivery) intent = "delivery";
+  else if (rules.intent === "delivery") intent = "mixed";
   else {
     intent = rules.intent === "both" ? "mixed" : "request";
     unclear = !asking;

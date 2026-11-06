@@ -148,22 +148,36 @@ const MAX_FACTS = 60;
 // An address or a link in an attachment's line: never shown, never quoted.
 const CONTACT_RE = /[A-Za-z0-9._%+'-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}|\bhttps?:\/\/|\bwww\./i;
 // "Label: value" or "Label - value" at the head of a line of the scan's
-// notes, the label a few words.
-const NOTE_LABEL_RE = /^([A-Za-z][A-Za-z .'/&()]{0,40}?)(?::|\s+-)\s+(\S.*)$/;
-// A patient named: "patient" (or "pt") and a capitalised word after it.
-// identifierGate.js keeps "Patient Safety Committee" and its kin, and so
-// does this.
-const PATIENT_NAMED_RE = /\b(?:[Pp]atient|PATIENT|[Pp]t)\b\.?(?:'s)?(?:\s+[Nn]ame)?\s*[:,-]?\s*(?!(?:Safety|Care|Experience|Satisfaction|Portal|Relations|Advocate|Access|Services|Rights|Quality|Flow|Centered|Centred|Education|Engagement)\b)[A-Z][a-z]/;
-// Words that end in a person's name ("Smith, John", "Mary Roe", "Pat Q Sample").
-const NAME_BEFORE_RE = /\b[A-Z][a-z'-]+(?:,\s*|\s+)(?:[A-Z]\.?\s+)?[A-Z][a-z'-]+[\s,(]*$/;
-// A date this long ago next to a name is read as a birth date.
-const BIRTH_YEARS = 15;
+// notes, the label a few words ("Case 1: ...").
+const NOTE_LABEL_RE = /^([A-Za-z][A-Za-z0-9 .'/&()#]{0,40}?)(?::|\s+-)\s+(\S.*)$/;
+// A case of the physician's, by number or not: whoever it names is a patient.
+const CASE_LABEL_RE = /^case\b/i;
+// Words that follow "patient" without naming anyone ("Patient Logs",
+// "Patient Safety Committee", "Patient Volume Attestation"): identifierGate.js
+// keeps these, and so does this.
+const NOT_PATIENT_NAME = "Logs?|Cases?|Volumes?|Encounters?|Lists?|Census|Contacts?|Hours|Population|Panels?|Outcomes?|Data|Reports?|Records?|Safety|Care|Experience|Satisfaction|Portal|Relations|Advocate|Access|Services|Rights|Quality|Flow|Centered|Centred|Education|Engagement|Mix|Load|Numbers|Counts?|Totals?|Summary|Attestation|Forms?";
+// A patient named: "patient" (or "pt") and a capitalised word after it that is a name.
+const PATIENT_NAMED_RE = new RegExp(`\\b(?:[Pp]atient|PATIENT|[Pp]t)\\b\\.?(?:'s)?(?:\\s+[Nn]ame)?\\s*[:,-]?\\s*(?!(?:${NOT_PATIENT_NAME})\\b)[A-Z][a-z]`);
+// Words that end in a person's shaped name, "Last, First" or "First [M.] Last",
+// straight before a date ("Sample, Pat 03/14/1961", "Pat Sample (04/11/2026)").
+const NAME_BEFORE_RE = /\b([A-Z][a-z'-]+)(?:,\s*|\s+)(?:([A-Z])\.?\s+)?([A-Z][a-z'-]+)[\s,(-]*$/;
+// Words that make such a pair a place, a body or a heading, not a person:
+// "Johns Hopkins University, May 20, 2005", "Neurological Surgery 06/15/2009",
+// "Mercy Hospital 01/05/2010", "Effective Date 2026-01-01".
+const INSTITUTION_RE = /^(?:University|Universit\w*|Hospitals?|Board|Surgery|Medicine|Medical|College|Centers?|Centres?|Clinics?|School|Staff|Society|Association|Institute|Health|Healthcare|Department|Foundation|Academy|Council|Committee|System|Group|Partners|Services|Program|Residency|Fellowship|Date|Dated|Day|Effective|Expiration|Expires|Expired|Issued|Through|Until|Since|Due|Renewal|Renewed|Certification|Certificate|Registration|License|Licence|Policy|Coverage|Appointment|Approved|Granted|Signed|Received|Updated|Completed|Valid|Begins|Ends|Start|End)$/;
 
-/** Does `v` give someone's date of birth in words: "born" and a date, or a name straight before a date long past ("Smith, John 03/14/1961")? */
-function birthDateIn(v) {
-  const recent = new Date().getUTCFullYear() - BIRTH_YEARS;
-  return datesIn(v).some((d) => /\bborn\b|\bb\.\s*$/i.test(v.slice(Math.max(0, d.index - 30), d.index))
-    || (Number(d.iso.slice(0, 4)) <= recent && NAME_BEFORE_RE.test(v.slice(0, d.index))));
+/**
+ * Does `v` put a person next to a date: "born" and a date, or a name
+ * shaped like a person's straight before any date ("Sample, Pat
+ * 03/14/1961")? A pair with a word of a place or a body in it is not one.
+ */
+function personDateIn(v) {
+  return datesIn(v).some((d) => {
+    const before = v.slice(0, d.index);
+    if (/\bborn\b|\bb\.\s*$/i.test(before.slice(-30))) return true;
+    const m = before.match(NAME_BEFORE_RE);
+    return !!m && ![m[1], m[3]].some((w) => INSTITUTION_RE.test(w));
+  });
 }
 
 /**
@@ -171,7 +185,7 @@ function birthDateIn(v) {
  * identifierReason names (SSN, date of birth, a patient identifier, an
  * account, licence or passport number), a number ID_VALUE_RE or longNumber
  * reads as one (a DEA number, an NPI, "licence MD-48213"), a patient named
- * ("operative note for patient Pat Sample"), a birth date in words ("born
+ * ("operative note for patient Pat Sample"), a person next to a date ("born
  * March 14, 1961", "Sample, Pat 03/14/1961"), or an address or a link?
  * `label` is the field or fact label the words sit under, when any. The
  * records path holds a quote to the same number check (carriesIdentifier).
@@ -179,13 +193,13 @@ function birthDateIn(v) {
  */
 export function attachmentWordsIdentify(label, words) {
   const v = String(words ?? "");
-  if (CONTACT_RE.test(v) || PATIENT_NAMED_RE.test(v) || birthDateIn(v) || carriesIdentifier(null, v)) return true;
+  if (CONTACT_RE.test(v) || PATIENT_NAMED_RE.test(v) || personDateIn(v) || carriesIdentifier(null, v)) return true;
   return !!label && !!identifierReason(label, v);
 }
 
-/** A label and its value that name something no attachment's words may carry: a contact detail, a person's name, an identifier. */
+/** A label and its value that name something no attachment's words may carry: a contact detail, a person's name, a case (its patient), an identifier. */
 function labelledIdentifies(label, value) {
-  if (CONTACT_LABEL_RE.test(label)) return true;
+  if (CONTACT_LABEL_RE.test(label) || CASE_LABEL_RE.test(label)) return true;
   if (PERSON_LABEL_RE.test(label) && PERSON_VALUE_RE.test(value)) return true;
   return attachmentWordsIdentify(label, value);
 }

@@ -303,6 +303,49 @@ test("the scanner's own fields are held to the same identifier check as the note
   assert.equal(t, "title: Reappointment checklist\ncoveragePerClaim: 1000000");
 });
 
+// ── The third review ─────────────────────────────────────────────────────────
+
+test("a case list names patients without the word: a case line, or a person's name straight before a date, is dropped; an institution's is kept", () => {
+  const notes = "Please provide the operative notes for the following cases:\nCase 1: Roe, Lee - craniotomy 03/02/2026\nCase 2: Pat Sample, lumbar fusion, 04/11/2026\nSample, Pat 04/11/2026\nPat Sample (04/11/2026)";
+  const t = attachmentText({ documentType: "other", extracted: { facts: [{ label: "Case", value: "Roe, Lee" }, { label: "Case 3", value: "laminectomy" }] }, notes });
+  assert.ok(!/Roe|Sample|Case/.test(t), JSON.stringify(t));
+  const v = verifyUnderstanding(reading(["Sample, Pat 04/11/2026"]), { subject: "FPPE", parts: { note: "", message: "See attached.", history: "" }, attachmentCount: 1,
+    facts: factsFor({ note: "", message: "See attached.", history: "" }, "FPPE", ["notes:\nPlease provide the following:\nSample, Pat 04/11/2026"]) });
+  assert.deepEqual(v.dropped.map((d) => d.why), [DROP.identifier]);
+  for (const line of [
+    "Doctor of Medicine, Example State University, May 20, 2005",
+    "Board Certification: Example Board of Neurological Surgery 06/15/2009",
+    "Appointed to the Medical Staff of Osterly Hospital 01/05/2010",
+    "Effective Date 2026-01-01",
+  ]) {
+    assert.equal(attachmentText({ documentType: "other", extracted: {}, notes: line }), `notes: ${line}`, line);
+  }
+});
+
+test("a delivery whose message only says what is attached stays a delivery, with no asks, and is filed", async () => {
+  for (const notes of ["Badge must be worn at all times. Please present a photo ID to obtain a replacement.", "To renew, please upload your current BLS card and TB test results to the vendor portal.", "Please keep your DEA registration current with this office."]) {
+    for (const type of ["other", "unknown"]) {
+      for (const body of ["For my file.", "Attached is my new hospital ID badge.", "Attached is my updated vendor registration for my records."]) {
+        const words = [attachmentText({ documentType: type, extracted: { name: "Hospital ID Badge", issuer: "Osterly Example Health" }, notes })];
+        const r = rulesUnderstanding({ subject: "badge", body, attachmentNames: ["badge.pdf"], attachmentCount: 1, attachmentWords: words, attachmentTypes: [type] });
+        assert.equal(r.intent, "delivery", `${type} / ${notes} / ${body}`);
+        assert.equal(r.asks.filter((a) => a.from === "attachment").length, 0, `${type} / ${notes} / ${body}`);
+      }
+    }
+  }
+  // A message that points to the attachment as what it asks still counts.
+  const asked = rulesUnderstanding({ subject: "Reappointment", body: "Please see the attached letter regarding your reappointment.", attachmentNames: ["Reappointment letter.pdf"], attachmentCount: 1, attachmentWords: ["notes: Please send your current DEA registration."], attachmentTypes: ["other"] });
+  assert.equal(asked.intent, "mixed");
+});
+
+test("ordinary reappointment asks that start with Patient are kept", () => {
+  for (const item of ["Patient Logs for the past 24 months", "Patient Case List (last 2 years)", "Patient Volume Attestation", "Patient Encounter Log", "Pt Log for reappointment", "Patient Contact Hours form", "Patient Safety Attestation"]) {
+    assert.ok(attachmentText({ documentType: "other", extracted: {}, notes: `Please provide the following:\n${item}` }).includes(item), item);
+  }
+  // A patient's name after the word still goes.
+  assert.equal(attachmentText({ documentType: "other", extracted: {}, notes: "Operative note for patient Pat Sample" }), "");
+});
+
 // ── End to end ───────────────────────────────────────────────────────────────
 
 const PROFILE = "0b7f1c2e-5a44-4d7e-9b1a-3c2d1e0f9a88";
@@ -368,4 +411,21 @@ test("end to end: a 400 from the AI service says why in the ledger, and nothing 
   assert.ok(!asks.some((a) => /^see attached$/i.test(a)), "the bare pointer is not an ask");
   assert.equal(req.proposal.source, "rules", "still read by keywords");
   assert.equal(r.body.one_tap, false);
+});
+
+test("end to end: a hospital ID badge forwarded as \"Attached is my new hospital ID badge.\" is delivered and filed, not made a request, when the rules read it", async () => {
+  harness.anthropicReply = () => ({ status: 400, body: { type: "error", error: { type: "invalid_request_error", message: "synthetic" } } });
+  harness.geminiReply = () => ({ documentType: "other", confidence: "high", extracted: { name: "Hospital ID Badge", issuer: "Osterly Example Health", facts: [{ label: "Valid through", value: "2027-06-30" }], suggestedCategory: { name: "Hospital ID Badges" } }, notes: "Badge must be worn at all times. Please present a photo ID to obtain a replacement." });
+  const r = await deliver({
+    id: `badge${++n}`, from: `Rowan Testa <${ME}>`, to: "docs@credentialdomd.com", subject: "Fwd: badge",
+    text: composeForward({ subject: "badge", from: { name: "Casey Example", address: "casey.example@osterly-health.example" }, body: "Attached is my new hospital ID badge." }),
+    attachments: [{ filename: "badge.pdf", contentType: "application/pdf", bytes: new TextEncoder().encode("%PDF-1.4 badge") }],
+  });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.read, "rules");
+  assert.equal(r.body.intent, "delivery");
+  assert.equal(rows("document_requests").length, 0, "no request row");
+  assert.equal(rows("documents").length, 1);
+  assert.notEqual(rows("documents")[0].type, "request-attachment-inbox", "not held with a request");
+  assert.equal(harness.sent.filter((m) => m.to?.[0] !== ME).length, 0);
 });
