@@ -96,6 +96,16 @@ what happened.
      `continuation.state` to `pending`, `attempts` to 0 and `due_at` to now
      (stalled). Never delete either file. Tickets parked for a device
      (`failed/<id>.device`) are not listed: the owner was told.
+   - **Failing tickets** (HEALTH names "open tickets a ticket run failed on
+     in the last day"). Read the last failed run (`ticket-work/runs/<id8>-*`:
+     gates-*.json, review-*.json, HELD.txt, and the agent log). If the fix
+     lies outside the worker's reach (anything outside src/, tests/,
+     public/ and landing/: the edge functions under supabase/, a migration,
+     scripts/, a shared module copy, a deploy that did not run), make the fix
+     yourself (step 4), deploy what it needs (`deploy-function.sh` for an
+     edge function), and note the commit in the journal; the ticket's next
+     run then finds it live and replies. If the worker could have fixed it
+     and only made a mistake, leave it to the next run.
    - **Member tickets and replies.** The ticket agent answers these itself
      (pg_cron releases them to it). Check that a new one is queued and that
      a reply is being worked; fix the pipeline if it is stuck. Never write

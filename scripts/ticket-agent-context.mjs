@@ -49,6 +49,7 @@ export const PARK_AFTER = 3;
 // A count file left from an old failure no longer sends its ticket to the
 // back of the queue (FAILING_FOR_MS; collectQueue).
 export const FAILING_FOR_MS = 7 * 24 * 60 * 60 * 1000;
+export const FAILING_RECENT_MS = 24 * 60 * 60 * 1000;
 export async function failCounts(directory) {
   let names;
   try { names = await fs.readdir(path.join(directory, 'failed')); } catch (error) { if (error.code === 'ENOENT') return new Map(); throw error; }
@@ -828,12 +829,23 @@ export async function writeAttention(query, directory, queue, { now = Date.now()
     stuckParked.push(ticketId);
   }
   const stalled = queue.stuck ?? [];
-  const ids = [...new Set([...stalled, ...stuckParked])];
+  // failing: a run failed on it in the last day, not yet parked. Many such
+  // fixes are out of the worker's reach (the edge functions, scripts/, a
+  // deploy): cc9830e4, 11-05, needed supabase/functions/_shared. The
+  // supervisor looks within the hour instead of after two revivals.
+  const failing = [];
+  for (const [ticketId, n] of await failCounts(directory)) {
+    if (n >= PARK_AFTER) continue;
+    const changed = mtimeOf(path.join(directory, 'failed', `${ticketId}.count`));
+    if (changed !== null && now - changed < FAILING_RECENT_MS) failing.push(ticketId);
+  }
+  const ids = [...new Set([...stalled, ...stuckParked, ...failing])];
   const open = ids.length ? await query(readOnly(`SELECT t.id FROM support_tickets t WHERE t.id IN (${ids.map(p => `'${id(p)}'::uuid`).join(',')})
     AND t.status IN ('open', 'in_progress') AND t.archived_at IS NULL ORDER BY t.id`)) : [];
   if (!Array.isArray(open) || open.some(t => !UUID.test(t.id || ''))) throw Error('Malformed open ticket rows');
   const isOpen = new Set(open.map(t => t.id));
-  const record = { at: new Date(now).toISOString(), stalled: stalled.filter(t => isOpen.has(t)).sort(), parked_open: stuckParked.filter(t => isOpen.has(t)).sort() };
+  const record = { at: new Date(now).toISOString(), stalled: stalled.filter(t => isOpen.has(t)).sort(), parked_open: stuckParked.filter(t => isOpen.has(t)).sort(),
+    failing: failing.filter(t => isOpen.has(t)).sort() };
   await writePrivate(path.join(directory, 'attention.json'), `${JSON.stringify(record)}\n`);
   return record;
 }

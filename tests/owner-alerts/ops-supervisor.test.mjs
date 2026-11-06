@@ -302,8 +302,12 @@ test('ops supervisor: open tickets no ticket run will work start a session, name
     assert.match(l.calls()[0].args[1], /HEALTH: open tickets no ticket run will work by itself \(stalled or parked\): 23920b06 292fcbce\n/);
     assert.equal(l.run('05').status, 0);
     assert.equal(l.calls().length, 1, 'unchanged: once a day');
+    fs.writeFileSync(file, JSON.stringify({ at: '2026-11-05T00:00:00Z', stalled: [], parked_open: [], failing: ['cc9830e4-0000-4000-8000-000000000000'] }) + '\n');
+    assert.equal(l.run('05').status, 0);
+    assert.equal(l.calls().length, 2, 'a ticket a run failed on starts a session');
+    assert.match(l.calls()[1].args[1], /HEALTH: open tickets a ticket run failed on in the last day: cc9830e4\n/);
     fs.writeFileSync(file, '{not json');
     assert.equal(l.run('06').status, 0);
-    assert.match(l.calls()[1].args[1], /\(unreadable attention.json\)/);
+    assert.match(l.calls()[2].args[1], /\(unreadable attention.json\)/);
   } finally { l.cleanup(); }
 });

@@ -471,7 +471,7 @@ test('the attention file names stalled work and only the parked tickets still op
     await writeFile(path.join(directory, 'failed', `${uuid(6)}.device`), '', { mode: 0o600 });
     const query = async sql => { seen.push(sql); assert.match(sql, /^begin read only;/); return [{ id: uuid(2) }, { id: uuid(5) }]; };
     const record = await writeAttention(query, directory, { attention: [uuid(5), uuid(7), uuid(8)], stuck: [uuid(5), uuid(7)], parked: [uuid(2), uuid(3), uuid(4), uuid(6)] }, { now: START });
-    assert.deepEqual(record, { at: new Date(START).toISOString(), stalled: [uuid(5)], parked_open: [uuid(2)] }, 'closed (7, 3), revivable (4, 8) and device (6) tickets are left out');
+    assert.deepEqual(record, { at: new Date(START).toISOString(), stalled: [uuid(5)], parked_open: [uuid(2)], failing: [] }, 'closed (7, 3), revivable (4, 8) and device (6) tickets are left out');
     assert.doesNotMatch(seen[0], new RegExp(uuid(4)));
     assert.deepEqual(JSON.parse(await readFile(path.join(directory, 'attention.json'), 'utf8')), record);
     assert.equal(((await stat(path.join(directory, 'attention.json'))).mode & 0o777), 0o600);
@@ -493,4 +493,21 @@ test('only a failure in the last week sends a ticket to the back of the queue', 
     assert.match(sql, new RegExp(`CASE WHEN t.id IN \\('${uuid(1)}'::uuid\\) THEN 1`));
     assert.doesNotMatch(sql, new RegExp(uuid(2)), 'a nine-day-old count no longer counts');
   });
+});
+test('the attention file names open tickets a run failed on in the last day', async () => {
+  const directory = await mkdtemp(path.join(os.tmpdir(), 'support-failing-test-'));
+  try {
+    await mkdir(path.join(directory, 'failed'), { mode: 0o700 });
+    const count = async (n, value, hoursAgo) => {
+      const file = path.join(directory, 'failed', `${uuid(n)}.count`);
+      await writeFile(file, `${value}\n`, { mode: 0o600 });
+      await utimes(file, (START - hoursAgo * HOUR) / 1000, (START - hoursAgo * HOUR) / 1000);
+    };
+    await count(1, 1, 2); await count(2, 2, 30); await count(3, 1, 1); await count(4, 3, 1);
+    const seen = [];
+    const query = async sql => { seen.push(sql); return [{ id: uuid(1) }, { id: uuid(2) }]; };
+    const record = await writeAttention(query, directory, { attention: [], parked: [] }, { now: START });
+    assert.deepEqual(record.failing, [uuid(1)], 'recent and open (1); not a day old (2), closed (3) or parked (4)');
+    assert.match(seen[0], new RegExp(uuid(3)), 'the closed one was asked about');
+  } finally { await rm(directory, { recursive: true, force: true }); }
 });

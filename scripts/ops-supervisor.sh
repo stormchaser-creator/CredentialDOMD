@@ -113,6 +113,10 @@ d = json.load(open(sys.argv[1]))
 print(" ".join(sorted({str(t)[:8] for t in d.get("stalled", []) + d.get("parked_open", [])})))' "$attention" 2>/dev/null) ||
     stuck="(unreadable attention.json)"
   [[ -n $stuck ]] && health+=("open tickets no ticket run will work by itself (stalled or parked): $stuck")
+  failing=$(python3 -c '
+import json, sys
+print(" ".join(sorted({str(t)[:8] for t in json.load(open(sys.argv[1])).get("failing", [])})))' "$attention" 2>/dev/null) || failing=""
+  [[ -n $failing ]] && health+=("open tickets a ticket run failed on in the last day: $failing")
 fi
 
 sweep=queue
