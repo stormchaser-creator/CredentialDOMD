@@ -19,7 +19,7 @@ import { STATE_NAMES } from "../../../constants/states";
 import { isArchived, inForceAmongSiblings } from "../../../utils/contractsForDate";
 import { callDayStartHour, hourLabel, currentCallDay } from "../../../utils/billing";
 import { toClock, savedPeriod, periodProblem, coveragePeriodText, blockSummary, contractZone, deviceZone, validZone, isTimedPeriod } from "../../../utils/coverageBlocks";
-import { facilityZone, ZONE_NAMES } from "../../../utils/facilityZone";
+import { facilityZone, sameClock, ZONE_NAMES } from "../../../utils/facilityZone";
 import { callPeriodsOf, callRate } from "../../../utils/dutyPay";
 import { resolveDocument } from "../../../utils/receiptFiles";
 import { downloadDocumentBlob } from "../../../lib/supabase";
@@ -38,12 +38,26 @@ const agreementTextAnalyzer = async (text, apiKey) => withAgreementFields(await 
 const US_ZONES = [
   ["America/New_York", "Eastern"], ["America/Chicago", "Central"], ["America/Denver", "Mountain"], ["America/Phoenix", "Arizona"],
   ["America/Los_Angeles", "Pacific"], ["America/Anchorage", "Alaska"], ["Pacific/Honolulu", "Hawaii"],
+  ["America/Puerto_Rico", "Atlantic"], ["Pacific/Guam", "Chamorro"],
 ];
 // The zone the block times are on: the one picked or saved, else the
 // facility's, else this device's (no state given).
 const timesZone = (picked, form) => validZone(picked) || facilityZone(form).zone || deviceZone();
-const zoneName = (zone) => (ZONE_NAMES[zone] ? `${ZONE_NAMES[zone]} time` : zone);
+const zoneName = (zone) => {
+  const named = ZONE_NAMES[zone] ? zone : Object.keys(ZONE_NAMES).find(z => sameClock(z, zone));
+  return named ? `${ZONE_NAMES[named]} time` : zone;
+};
 const zoneMismatch = (where, zone) => `This facility (${where.state}) is on ${zoneName(where.zone)}, but the times are set to ${zoneName(zone)}.`;
+const zoneGuess = (where) => `Most of ${where.state} is on ${zoneName(where.zone)}, and the Location does not say which part this facility is in: check it.`;
+// What the form says about the zone: off (a known facility zone keeps another
+// clock), guess (the zone most of a split state keeps), or set from the
+// facility. A zone that only differs in name (America/Boise) is not off.
+const zoneState = (blockZone, form) => {
+  const zone = timesZone(blockZone, form), where = facilityZone(form);
+  const off = where.sure && Boolean(where.zone) && !sameClock(zone, where.zone);
+  const guess = !where.sure && Boolean(where.zone) && sameClock(zone, where.zone);
+  return { zone, where, off, guess, fromFacility: where.sure && !off && Boolean(where.zone) && !validZone(blockZone) };
+};
 
 // The pay model decides where the contract is logged: a day rate on Days &
 // call, a call stipend or hourly rate as time on the Work tab. Until someone
@@ -168,9 +182,12 @@ function Contracts() {
     if (problem) { setFormError(problem); return; }
     // Times on another zone than the facility's file every entry under the
     // wrong call day near the turnover: said once, before anything is saved.
-    const where = facilityZone(form);
-    if (where.sure && zone !== where.zone && periods.some(isTimedPeriod)
-      && !window.confirm(`${zoneMismatch(where, zone)} Save with the times on ${zoneName(zone)}?`)) return;
+    const check = zoneState(blockZone, form);
+    if (periods.some(isTimedPeriod)) {
+      if (check.off && !window.confirm(`${zoneMismatch(check.where, zone)} Save with the times on ${zoneName(zone)}?`)) return;
+      // A guess nobody picked is said once, before it is saved.
+      if (check.guess && !validZone(blockZone) && !window.confirm(`${zoneGuess(check.where)} Save with the times on ${zoneName(zone)}?`)) return;
+    }
     // A block saved without times has its end date as the last call day;
     // with an end time the end date is when coverage ends, one call day
     // fewer. Gaining an end time with the end date left as it was is the
@@ -409,11 +426,9 @@ function Contracts() {
             )}
             {(form.coveragePeriods || []).some(p => toClock(p.startTime) || toClock(p.endTime)) && (() => {
               // The wall clock the times are on: where the work happens.
-              const zone = timesZone(blockZone, form);
+              const { zone, where, off, guess, fromFacility } = zoneState(blockZone, form);
               const options = US_ZONES.some(([z]) => z === zone) || !zone ? US_ZONES : [...US_ZONES, [zone, zone]];
-              const where = facilityZone(form);
-              const note = where.zone && zone !== where.zone ? (where.sure ? zoneMismatch(where, zone) : "")
-                : !validZone(blockZone) && where.zone ? (where.sure ? `Set from the facility (${where.state}).` : `Most of ${where.state} is on ${zoneName(where.zone)}: check it for this facility.`) : "";
+              const note = off ? zoneMismatch(where, zone) : guess ? zoneGuess(where) : fromFacility ? `Set from the facility (${where.state}).` : "";
               return (
                 <div style={{ display: "flex", flexDirection: "column", gap: 4 }}>
                   <label style={{ display: "flex", gap: 8, alignItems: "center", fontSize: 13, color: T.textMuted }}>
@@ -423,9 +438,9 @@ function Contracts() {
                     </select>
                   </label>
                   {note && (
-                    <div aria-label="Time zone check" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 13, color: where.sure && zone !== where.zone ? T.danger : T.textMuted }}>
+                    <div aria-label="Time zone check" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 13, color: off ? T.danger : T.textMuted }}>
                       <span>{note}</span>
-                      {where.sure && zone !== where.zone && (
+                      {off && (
                         <button onClick={() => setBlockZone(where.zone)} style={{ padding: "4px 10px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 8, border: "none", backgroundColor: T.accentDim, color: T.accent, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>Use {zoneName(where.zone)} time</button>
                       )}
                     </div>

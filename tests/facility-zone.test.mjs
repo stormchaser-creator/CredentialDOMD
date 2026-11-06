@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { loadScreens, mount as mountScreen, nodes, textOf, find, field, click, pinClock } from './harness/component-harness.mjs';
-import { facilityZone } from '../src/utils/facilityZone.js';
+import { facilityZone, sameClock } from '../src/utils/facilityZone.js';
 import { contractFromScan } from '../src/utils/docPrefill.js';
 import { deriveCallDay } from '../src/utils/billing.js';
 import { planFiling } from '../supabase/functions/_shared/intakeFiling.mjs';
@@ -22,14 +22,39 @@ test('the facility zone comes from the state, and from the city in a state split
   assert.deepEqual(z({ workState: 'ND' }), ['America/Chicago', false], 'a split state with no city: most of it, not sure');
   assert.deepEqual(z({ workState: 'ND', location: 'Unlisted Town, ND' }), ['America/Chicago', false]);
   assert.deepEqual(z({ location: 'El Paso, Texas' }), ['America/Denver', true]);
-  assert.deepEqual(z({ location: 'Boise ID' }), ['America/Denver', true]);
+  assert.deepEqual(z({ location: 'Boise, ID' }), ['America/Denver', true]);
   assert.deepEqual(z({ location: 'Coeur d’Alene, ID' }), ['America/Los_Angeles', true]);
   assert.deepEqual(z({ workState: 'CA' }), ['America/Los_Angeles', true]);
   assert.deepEqual(z({ location: 'Loveland, CO' }), ['America/Denver', true]);
-  assert.deepEqual(z({ workState: 'AZ' }), ['America/Phoenix', true]);
+  assert.deepEqual(z({ workState: 'AZ' }), ['America/Phoenix', false], 'Arizona with no city: the Navajo Nation keeps Mountain time');
   // A city counts only in the Work state.
   assert.deepEqual(z({ workState: 'TX', location: 'El Paso, NM' }), ['America/Chicago', false]);
   assert.deepEqual(z({ location: 'Somewhere' }), ['', false]);
+  // Review of 2026-11-06: a facility name before the city, a country or a note after the state.
+  assert.deepEqual(z({ location: 'CHI St. Alexius Health Dickinson, ND' }), ['America/Denver', true]);
+  assert.deepEqual(z({ location: 'Monument Health Rapid City Hospital, SD' }), ['America/Denver', true]);
+  assert.deepEqual(z({ location: '801 Broadway N, Fargo, ND 58122, USA' }), ['America/Chicago', true]);
+  assert.deepEqual(z({ location: 'Fargo, North Dakota, United States' }), ['America/Chicago', true]);
+  assert.deepEqual(z({ location: 'Fargo, ND (main campus)' }), ['America/Chicago', true]);
+  // Short forms, and the longest listed name wins.
+  assert.deepEqual(z({ location: 'Ft. Walton Beach, FL' }), ['America/Chicago', true]);
+  assert.deepEqual(z({ location: 'Mt. Vernon, IN' }), ['America/Chicago', true]);
+  assert.deepEqual(z({ location: 'Panama City Beach, FL' }), ['America/Chicago', true]);
+  assert.deepEqual(z({ location: 'Saint Petersburg, FL' }), ['America/New_York', true]);
+  // The Navajo Nation keeps Mountain daylight time; the rest of Arizona does not.
+  assert.deepEqual(z({ location: 'Chinle, AZ' }), ['America/Denver', true]);
+  assert.deepEqual(z({ location: 'Flagstaff, AZ' }), ['America/Phoenix', true]);
+  assert.deepEqual(z({ location: 'Somewhere, AZ' }), ['America/Phoenix', false]);
+  // Loose words are never sure: an operating room, a hospital named for a state, a bare state name.
+  assert.deepEqual(z({ location: 'Synthetic Clinic, Main OR' }).at(1), false);
+  assert.deepEqual(z({ location: 'Mary Washington' }).at(1), false);
+  assert.deepEqual(z({ location: 'Washington' }).at(1), false);
+  assert.deepEqual(z({ location: 'Fargo ND' }), ['America/Chicago', false]);
+  assert.deepEqual(z({ location: 'San Juan, PR' }), ['America/Puerto_Rico', true]);
+  // Zones that keep the same clock under another name.
+  assert.equal(sameClock('America/Boise', 'America/Denver'), true);
+  assert.equal(sameClock('America/Indiana/Indianapolis', 'America/New_York'), true);
+  assert.equal(sameClock('America/Phoenix', 'America/Denver'), false);
   assert.deepEqual(z({}), ['', false]);
 });
 
@@ -95,7 +120,8 @@ test('a saved contract on the wrong zone opens with the mismatch said (the Fargo
 });
 
 test('a state split between zones with no known city is named, never confirmed on a guess', () => {
-  const m = mount();
+  let answer = true;
+  const m = mount({ confirm: () => answer });
   click(m, 'Add');
   fill(m, 'Hospital / Facility', 'Synthetic Hospital');
   fill(m, 'Work state (for taxes)', 'ND');
@@ -105,12 +131,37 @@ test('a state split between zones with no known city is named, never confirmed o
   input(m, 'Block 1 start time (optional)').props.onChange({ target: { value: '06:00' } });
   input(m, 'Block 1 end date').props.onChange({ target: { value: '2026-11-12' } });
   input(m, 'Block 1 end time (optional)').props.onChange({ target: { value: '06:00' } });
-  assert.match(textOf(zoneCheck(m.render())), /Most of ND is on Central time: check it for this facility\./);
-  zoneSelect(m.render()).props.onChange({ target: { value: 'America/Denver' } });
+  const guess = /Most of ND is on Central time, and the Location does not say which part this facility is in: check it\./;
+  assert.match(textOf(zoneCheck(m.render())), guess);
+  // Nobody picked the guess: asked once before it is saved.
+  answer = false;
   const asked = m.dialogs.length;
   save(m);
-  assert.equal(m.dialogs.length, asked);
+  assert.equal(m.dialogs.length, asked + 1);
+  assert.match(m.dialogs.at(-1)[1], guess);
+  assert.equal(m.calls.length, 0, 'declined: nothing saved');
+  // Picked by hand, nothing is asked.
+  zoneSelect(m.render()).props.onChange({ target: { value: 'America/Denver' } });
+  const before = m.dialogs.length;
+  save(m);
+  assert.equal(m.dialogs.length, before);
   assert.equal(saved(m).coveragePeriods[0].tz, 'America/Denver');
+});
+
+test('a saved guess keeps saying it is a guess, and a zone that only differs in name is not flagged', () => {
+  const GUESSED = { ...BASE, id: 'c1', workState: 'TX', location: 'Synthetic Town, TX', coveragePeriods: [{ start: '2026-11-05', startTime: '06:00', end: '2026-11-12', endTime: '06:00', tz: 'America/Chicago' }], startDate: '2026-11-05', endDate: '2026-11-12' };
+  const m = mount({ contracts: [GUESSED] });
+  const card = find(m.render(), n => n.type === 'div' && n.key === 'c1', 'contract card');
+  nodes(card).filter(n => n.type === 'button')[0].props.onClick();
+  assert.match(textOf(zoneCheck(m.render())), /Most of TX is on Central time/);
+  const BOISE = { ...BASE, id: 'c1', workState: 'ID', location: 'Boise, ID', coveragePeriods: [{ start: '2026-11-05', startTime: '06:00', end: '2026-11-12', endTime: '06:00', tz: 'America/Boise' }], startDate: '2026-11-05', endDate: '2026-11-12' };
+  const b = mount({ contracts: [BOISE] });
+  const bc = find(b.render(), n => n.type === 'div' && n.key === 'c1', 'contract card');
+  nodes(bc).filter(n => n.type === 'button')[0].props.onClick();
+  assert.equal(zoneCheck(b.render()), undefined, 'America/Boise keeps Mountain time');
+  const asked = b.dialogs.length;
+  save(b);
+  assert.equal(b.dialogs.length, asked);
 });
 
 test('with no state, the times stay on this device\'s zone, as before', () => {

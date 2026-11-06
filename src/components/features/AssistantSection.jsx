@@ -35,10 +35,13 @@ import { contractZone, deviceZone } from "../../utils/coverageBlocks";
 import { facilityZone } from "../../utils/facilityZone";
 // A contract Vera writes keeps its block times on the facility's clock, as the
 // Contracts form saves them: a block she leaves without a zone gets the
-// contract's own, else the facility's, else this device's.
+// facility's when its state and city say it for sure, else the contract's
+// own, else the facility's likely one, else this device's. (A contract saved
+// on the wrong zone does not pass it on to a new block.)
 const withBlockZones = (section, fields, existing = null) => {
   if (section !== "locumContracts" || !Array.isArray(fields?.coveragePeriods)) return fields;
-  const zone = contractZone(existing) || facilityZone({ ...(existing || {}), ...fields }).zone || deviceZone();
+  const where = facilityZone({ ...(existing || {}), ...fields });
+  const zone = (where.sure && where.zone) || contractZone(existing) || where.zone || deviceZone();
   return { ...fields, coveragePeriods: normalizeCoveragePeriods(fields.coveragePeriods, { zone }) };
 };
 

@@ -420,7 +420,7 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard, onDele
                     const where = facilityZone(edited);
                     const zone = where.zone || deviceZone();
                     const name = ZONE_NAMES[zone] ? `${ZONE_NAMES[zone]} time` : zone || "this device's time";
-                    const said = where.zone ? (where.sure ? `from ${where.state}` : `most of ${where.state}; check it on the Contracts form`) : "this device's: no state was read";
+                    const said = where.zone ? (where.sure ? `from ${where.state}` : `most of ${where.state}; check it on the Contracts form`) : where.state ? `this device's: no zone is known for ${where.state}` : "this device's: no state was read";
                     return <div aria-label="Time zone of the block times" style={{ fontSize: 12, color: T.textDim }}>Times are saved on {name} ({said}).</div>;
                   })()}
                   <button onClick={() => setEdited(prev => ({ ...prev, coveragePeriods: [...(prev.coveragePeriods || []), { start: "", end: "" }] }))} style={{
