@@ -104,7 +104,7 @@ import { prepareResult, refusalHead, RESULT_SCHEMA } from '../ticket-agent-conte
 import { readManifest, reviewedIds, modelView, selectAttachments } from './attachments.mjs';
 import { createAttachmentRoot } from './attachment-temp.mjs';
 import { readChecklist, emptyChecklist, newSources, extractionFacts, checkExtraction, confirmPrompt, extendChecklist, writeChecklist, applyAskVerdicts,
-  coverageHints, finalStates, unseenItems, untrustedItems, readCaseFacts, validResolutions, UNTRUSTED_HEADING, CHECKLIST_SCHEMA } from './checklist.mjs';
+  coverageHints, finalStates, unseenItems, untrustedItems, readCaseFacts, validResolutions, stillAsked, UNTRUSTED_HEADING, CHECKLIST_SCHEMA } from './checklist.mjs';
 import { runBindings, hostBindings, priorBindings, mergeBindings, verifyAgentClaims, baseTestRunner, disputedItems, hostFollowUps, writeStage3 } from './stage3.mjs';
 import { createWorktree, removeWorktree, changedPaths, classifyChanges, commitWork, scratchPaths, addGatesTrailer, git, sanitizeSubject, gateWorktree, hooksDigest,
   checkWorktreeLink, remoteMain, agentCommitsOnMain, GitStateChanged } from './worktree.mjs';
@@ -664,7 +664,7 @@ async function workTicket(o, atEnd) {
     // reporter's confirmations) and the items a stored reply already asked.
     const caseFacts = () => {
       const facts = readCaseFacts(state, ticket);
-      return { resolved: validResolutions(facts.resolutions, { items: checklist.items, context }), asked: facts.asked };
+      return { resolved: validResolutions(facts.resolutions, { items: checklist.items, context, asked: facts.asked }), asked: facts.asked };
     };
     const stage3Pre = () => { const changed = workerChanged(); return { ticket_id: ticket, checklist, worker_items: workerItems, bindings: provisional(output, changed), attachments: attachments(), changed,
       resolved: [...caseFacts().resolved.keys()] }; };
@@ -753,7 +753,8 @@ async function workTicket(o, atEnd) {
       const disputed = disputedItems(observations, edges?.observation_verdicts ?? {});
       const code = { outcome, gates_pass: Boolean(gates?.pass), review_pass: Boolean(review?.pass), review_items: review?.item_verdicts ?? {}, green: headTests ?? green, release_verified: released };
       const asMap = value => new Map(Object.entries(value).map(([k, v]) => [k, new Set(v)]));
-      const { resolved, asked } = caseFacts();
+      const { resolved, asked: everAsked } = caseFacts();
+      const asked = stillAsked(everAsked, { context, codeOutcome: outcome });
       const finals = finalStates({ items: checklist.items, entries: output.structured_output?.checklist ?? [], claims, code, bindings: asMap(trusted), prior: asMap(prior),
         disputed, unseen: unseenItems(checklist.items, attachments()), workerItems: itemIds, resolved });
       // The worker's open items wait on the customer's answer or the owner's

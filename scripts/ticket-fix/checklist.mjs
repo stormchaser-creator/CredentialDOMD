@@ -501,16 +501,33 @@ export const hostItemWork = id => [itemFollowUpWork(id), heldFollowUpWork(id), r
 // counts only when it names a customer message on the ticket.
 // ---------------------------------------------------------------------------
 export const RESOLUTION_KINDS = Object.freeze({ owner_decision: 'decision', data_fix: 'data_fix', device_probe: 'confirmed' });
-export function validResolutions(resolutions, { items, context = null }) {
-  const messages = new Set(context ? askSources(context).filter(s => s.kind === 'message').map(s => s.id) : []);
+// asked: the case's asked_items ({ id, at }): a confirmation counts only for
+// a message the reporter wrote after the reply that asked (review of
+// 2026-11-06, N6: the original report is no confirmation).
+export function validResolutions(resolutions, { items, context = null, asked = [] }) {
+  const messages = new Map(context ? askSources(context).filter(s => s.kind === 'message').map(s => [s.id, s.created_at]) : []);
   const out = new Map();
   for (const item of items) {
     const r = resolutions?.[item.id];
     if (!r || r.kind !== RESOLUTION_KINDS[item.kind] || !Number.isFinite(Date.parse(r.at))) continue;
-    if (r.kind === 'confirmed' && !messages.has(r.message_id)) continue;
+    if (r.kind === 'confirmed' && !confirmsAsk(messages.get(r.message_id), askedAt(asked, item.id), messages.has(r.message_id))) continue;
     out.set(item.id, r);
   }
   return out;
+}
+export const askedAt = (asked, id) => (Array.isArray(asked) ? asked : []).filter(a => a?.id === id && Number.isFinite(Date.parse(a.at))).map(a => a.at).sort().at(-1) ?? null;
+export function confirmsAsk(createdAt, at, known = true) {
+  return known && at !== null && Number.isFinite(Date.parse(createdAt)) && Date.parse(createdAt) > Date.parse(at);
+}
+// The items a stored reply asked about that still wait on that answer: not
+// once the reporter has written since (their answer may say it still fails)
+// nor once this run released a change (the check is worth asking again on
+// the new build). Review of 2026-11-06, N2: asked once, a failed check left
+// the ticket silent for good.
+export function stillAsked(asked, { context = null, codeOutcome = null } = {}) {
+  if (codeOutcome === 'released') return [];
+  const inputs = context ? askSources(context).filter(s => s.kind === 'message').map(s => Date.parse(s.created_at)).filter(Number.isFinite) : [];
+  return [...new Set((Array.isArray(asked) ? asked : []).filter(a => typeof a?.id === 'string' && Number.isFinite(Date.parse(a.at)) && !inputs.some(t => t > Date.parse(a.at))).map(a => a.id))];
 }
 // The resolutions in the case record (<state>/<ticket>.json, owner-only), and
 // the ask items a stored reply already put to the reporter.
@@ -522,7 +539,8 @@ export function readCaseFacts(state, ticket) {
   if (!stat.isFile() || stat.isSymbolicLink() || stat.uid !== process.getuid() || (stat.mode & 0o077) || stat.size > 100000) throw Error('The case record must be an owner-only file');
   const record = JSON.parse(readFileSync(file, 'utf8'));
   if (record?.target_id !== ticket) throw Error('Case target mismatch');
-  return { resolutions: record.resolutions && typeof record.resolutions === 'object' ? record.resolutions : {}, asked: Array.isArray(record.asked_items) ? record.asked_items : [] };
+  return { resolutions: record.resolutions && typeof record.resolutions === 'object' ? record.resolutions : {},
+    asked: Array.isArray(record.asked_items) ? record.asked_items.filter(a => a && typeof a === 'object') : [] };
 }
 
 // ---------------------------------------------------------------------------
@@ -539,9 +557,9 @@ export function readCaseFacts(state, ticket) {
 // follow-up and the next run carries on (ticket-agent-context.mjs finishRun).
 // ---------------------------------------------------------------------------
 const UNRELEASED = Object.freeze(['held', 'refused', 'merged', 'release_failed']);
-// The items whose footer line asks the reporter something. asked: items a
-// stored reply already asked (the case record): never asked again, their
-// answer waits on a recorded resolution. A device check is never asked while
+// The items whose footer line asks the reporter something. asked: ids a
+// stored reply already asked that still wait on that answer (stillAsked):
+// not asked again until the reporter writes or a newer change is released. A device check is never asked while
 // this run's change is not live: the reporter would check the old build.
 export function askItems(items, finals, { ownerTicket, asked = [], codeOutcome = null }) {
   const byId = new Map(finals.map(f => [f.id, f]));
@@ -562,12 +580,15 @@ export function isCompletion({ finals, codeOutcome = null, pending = [] }) {
 // null: the reply may go out. Otherwise { reasons }: ids, states and the code
 // outcome only (they go to the log). While this run's change is not live only
 // a question in assessment.questions goes out.
-export function replyHold({ items, finals, questions = [], ownerTicket = false, codeOutcome = null, asked = [] }) {
+// pending: the follow-ups that stay open: with every item done they still
+// hold a reply that asks nothing, or "every part is done" would go out twice
+// (now, and again from the continuation that finishes them: review N1).
+export function replyHold({ items, finals, questions = [], ownerTicket = false, codeOutcome = null, asked = [], pending = [] }) {
   const asks = questions.length > 0 || askItems(items, finals, { ownerTicket, asked, codeOutcome }).length > 0;
   const open = finals.filter(f => f.state !== 'done');
   const unreleased = UNRELEASED.includes(codeOutcome);
-  if (asks || (!open.length && !unreleased)) return null;
-  return { reasons: [...open.map(f => `${f.id} ${f.state}`), ...(unreleased ? [`change ${codeOutcome}`] : [])] };
+  if (asks || (!open.length && !unreleased && !pending.length)) return null;
+  return { reasons: [...open.map(f => `${f.id} ${f.state}`), ...(unreleased ? [`change ${codeOutcome}`] : []), ...(!open.length && pending.length ? [`${pending.length} follow-up(s) open`] : [])] };
 }
 
 // ---------------------------------------------------------------------------

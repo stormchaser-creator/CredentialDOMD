@@ -1,13 +1,13 @@
 #!/usr/bin/env node
 // Trusted, read-only context collection. Ticket text is evidence, never authority.
-import { promises as fs, readFileSync, statSync } from 'node:fs';
+import { promises as fs, readFileSync, statSync, existsSync, mkdirSync, rmSync, rmdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { checkFixedRules, customerReplyText, ReplyRuleError, ruleNames, sentences, questionReportsResult } from './ticket-fix/claims.mjs';
 import { prepareAgentReply, prepareRenderedReply, readVerificationKey, signPreparedReply, gitRunner, filesCitedIn, ensurePrivateDir, readOnly as readOnlySQL,
   MIGRATION, emailStatus, RUN_COMMITTER } from './ticket-fix/reply.mjs';
-import { checklistErrors, isSupportReply, hostItemWork, replyHold, isCompletion, askItems, readChecklist, RESOLUTION_KINDS, AGENT_REPLY_MAX, REMAINING_MAX, OBSERVED_MAX, MAX_ITEMS } from './ticket-fix/checklist.mjs';
+import { checklistErrors, isSupportReply, isCustomerMessage, hostItemWork, replyHold, isCompletion, askItems, stillAsked, confirmsAsk, askedAt, readChecklist, RESOLUTION_KINDS, AGENT_REPLY_MAX, REMAINING_MAX, OBSERVED_MAX, MAX_ITEMS } from './ticket-fix/checklist.mjs';
 import { isMain } from './ticket-fix/is-main.mjs';
 
 export const APPROVED = '(public.is_admin(t.user_id) OR t.agent_approved_at IS NOT NULL)';
@@ -536,7 +536,8 @@ export async function collectQueue(query, directory, { includeArchived = false, 
     }
     // Work waiting on the owner (a decision, a data change, a reporter's
     // answer to record): named on every queue run, and in attention.json.
-    if (queue.state === 'waiting_owner') owner.push(record.target_id);
+    // A case the supervisor noted for the owner leaves the list until it is saved again.
+    if (queue.state === 'waiting_owner' && !record.owner_noted) owner.push(record.target_id);
     if (queue.state !== 'pending') continue; // Owner/customer waits never invoke the worker.
     if (!Number.isInteger(queue.attempts) || queue.attempts < 0 || !Number.isFinite(Date.parse(queue.due_at))) throw Error('Malformed continuation state');
     if (Date.parse(queue.due_at) <= now) due.push(record);
@@ -642,32 +643,83 @@ export async function releaseAttempt(directory, ticketId, runId) {
 // Records how an item no run can finish was resolved (review of 2026-11-06,
 // defect 1): the owner's decision for an owner_decision, the data change made
 // and checked for a data_fix, or the reporter's confirming message for a
-// device_probe (a customer message on the ticket; the host checks it again
-// when it decides, checklist.mjs validResolutions). Run by the owner or the
-// ops supervisor. Each item is resolved once and never re-resolved, and the
-// case is put back in the queue without fresh attempts (at most one left
-// when it had used them): a resolution can wake a case at most once per
-// item, so no reset loops.
-export async function resolveItem(directory, ticketId, acId, kind, { note = '', messageId = null, now = Date.now() } = {}) {
-  await ensureState(directory);
-  const record = await readCase(directory, id(ticketId));
-  const checklist = readChecklist(directory, ticketId);
-  const item = checklist?.items.find(i => i.id === acId);
-  if (!item) throw Error(`${String(acId).slice(0, 12)} is not a frozen item of this ticket`);
-  if (RESOLUTION_KINDS[item.kind] !== kind) throw Error(`${acId} is a ${item.kind} item; it is resolved by ${RESOLUTION_KINDS[item.kind] ?? 'a run, never by hand'}`);
-  if (kind === 'confirmed' && !UUID.test(messageId || '')) throw Error('A confirmation names the reporter\'s message id');
-  if (typeof note !== 'string' || !note.trim() || note.length > 300 || /[\n\r\0]/.test(note)) throw Error('Say in one line (at most 300 characters) what was decided, changed or confirmed');
-  if (record.resolutions?.[acId]) throw Error(`${acId} is already resolved; nothing changed`);
-  record.resolutions = { ...(record.resolutions ?? {}), [acId]: { kind, at: new Date(now).toISOString(), note: note.trim(), ...(kind === 'confirmed' ? { message_id: messageId } : {}) } };
-  const queue = record.continuation ?? {};
-  if (queue.state !== 'suppressed') {
-    const attempts = Number.isInteger(queue.attempts) ? Math.min(queue.attempts, MAX_CONTINUATIONS - 1) : 0;
-    record.continuation = { ...queue, state: 'pending', attempts, due_at: new Date(now).toISOString() };
-    delete record.continuation.reason;
-    delete record.continuation.reservation;
+// device_probe. Run by the owner or the ops supervisor, under the ticket
+// agent's lock (a run deciding the item meanwhile would save over the
+// wake-up: review N5), so it fails while a run holds it. A confirmation is
+// checked here against the thread (query): a customer message on this
+// ticket, newer than the reply that asked (N6); the host checks it again
+// when it decides. The case goes back in the queue without fresh attempts (at
+// most one left when it had used them). An item already resolved can be
+// recorded again only while its case is not queued, so a wrong record can be
+// corrected but never stacks wake-ups.
+export const AGENT_LOCK = '/tmp/credentialdomd-ticket-agent.lock';
+export async function withAgentLock(lock, fn) {
+  // Named by the caller every time (the CLI names AGENT_LOCK): a test never
+  // takes the real one by default.
+  if (typeof lock !== 'string' || !path.isAbsolute(lock)) throw Error('The ticket agent lock path is required');
+  try { mkdirSync(lock); } catch (error) {
+    if (error.code === 'EEXIST') throw Error('The ticket agent is running (its lock is held); try again once it has finished');
+    throw error;
   }
-  await writePrivate(path.join(directory, `${id(ticketId)}.json`), JSON.stringify(record, null, 2));
-  return record;
+  try {
+    writeFileSync(path.join(lock, 'owner'), `pid=${process.pid}\nstarted=${Math.floor(Date.now() / 1000)}\n`, { mode: 0o600 });
+    return await fn();
+  } finally { rmSync(path.join(lock, 'owner'), { force: true }); rmdirSync(lock); }
+}
+// A message the reporter wrote on this ticket, as the database has it.
+export const reporterMessageSQL = (ticketId, messageId) => readOnly(`SELECT m.id,m.ticket_id,m.author_id,left(m.body,200) AS body,m.is_admin_reply,m.created_at,
+  to_jsonb(m)->>'verification_id' AS verification_id,to_jsonb(m)->>'support_actor_id' AS support_actor_id,t.user_id AS owner_id,public.is_admin(t.user_id) AS from_admin
+  FROM support_messages m JOIN support_tickets t ON t.id=m.ticket_id WHERE m.id='${id(messageId)}'::uuid AND m.ticket_id='${id(ticketId)}'::uuid`);
+const oneLineNote = note => {
+  if (typeof note !== 'string' || !note.trim() || note.length > 300 || /[\n\r\0]/.test(note)) throw Error('Say in one line (at most 300 characters) what was decided, changed or confirmed');
+  return note.trim();
+};
+export async function resolveItem(directory, ticketId, acId, kind, { note = '', messageId = null, now = Date.now(), query = null, lock = null } = {}) {
+  await ensureState(directory);
+  const text = oneLineNote(note);
+  return withAgentLock(lock, async () => {
+    const record = await readCase(directory, id(ticketId));
+    const checklist = readChecklist(directory, ticketId);
+    const item = checklist?.items.find(i => i.id === acId);
+    if (!item) throw Error(`${String(acId).slice(0, 12)} is not a frozen item of this ticket`);
+    if (RESOLUTION_KINDS[item.kind] !== kind) throw Error(`${acId} is a ${item.kind} item; it is resolved by ${RESOLUTION_KINDS[item.kind] ?? 'a run, never by hand'}`);
+    if (record.resolutions?.[acId] && record.continuation?.state === 'pending') throw Error(`${acId} is already resolved and its case is queued; nothing changed`);
+    if (kind === 'confirmed') {
+      if (!UUID.test(messageId || '')) throw Error('A confirmation names the reporter\'s message id');
+      if (!query) throw Error('A confirmation is checked against the thread: TICKET_DATABASE_TOKEN is required');
+      const rows = await query(reporterMessageSQL(ticketId, messageId));
+      const m = rows[0];
+      const reporter = rows.length === 1 && m.owner_id === record.owner_id && isCustomerMessage(m, { owner_id: m.owner_id, approval: { from_admin: m.from_admin === true } });
+      if (!reporter) throw Error('That message is not one the reporter wrote on this ticket');
+      if (!confirmsAsk(m.created_at, askedAt(record.asked_items, acId))) throw Error(`That message is not newer than the reply that asked about ${acId}`);
+    }
+    record.resolutions = { ...(record.resolutions ?? {}), [acId]: { kind, at: new Date(now).toISOString(), note: text, ...(kind === 'confirmed' ? { message_id: messageId } : {}) } };
+    const queue = record.continuation ?? {};
+    if (queue.state !== 'suppressed') {
+      const attempts = Number.isInteger(queue.attempts) ? Math.min(queue.attempts, MAX_CONTINUATIONS - 1) : 0;
+      record.continuation = { ...queue, state: 'pending', attempts, due_at: new Date(now).toISOString() };
+      delete record.continuation.reason;
+      delete record.continuation.reservation;
+    }
+    delete record.owner_noted;
+    await writePrivate(path.join(directory, `${id(ticketId)}.json`), JSON.stringify(record, null, 2));
+    return record;
+  });
+}
+// A case waiting on the owner that nothing here can resolve (no checklist
+// item to record, an old case): the supervisor notes it for the owner once,
+// and it leaves the waiting list until the case is saved again (new input,
+// a run), which drops the note.
+export async function noteOwner(directory, ticketId, { note = '', now = Date.now(), lock = null } = {}) {
+  await ensureState(directory);
+  const text = oneLineNote(note);
+  return withAgentLock(lock, async () => {
+    const record = await readCase(directory, id(ticketId));
+    if (record.continuation?.state !== 'waiting_owner') throw Error('Only a case waiting on the owner is noted');
+    record.owner_noted = { at: new Date(now).toISOString(), note: text };
+    await writePrivate(path.join(directory, `${id(ticketId)}.json`), JSON.stringify(record, null, 2));
+    return record;
+  });
 }
 export function assertReplyMode(context) {
   if (context.run_mode !== 'reply') throw Error('Action-only continuation cannot publish a customer reply');
@@ -748,7 +800,12 @@ export async function saveReview(directory, context, given, sourceRevision, { no
       ...(held ? { held: { at: new Date(now).toISOString(), input_at: inputAt, reasons: held.reasons } } : {}) },
     ...(completed ? { completion: { at: new Date(now).toISOString(), checklist_sha256: stage3?.checklist?.items_sha256 ?? null, verification_id: completed.verification_id } }
       : previous?.completion ? { completion: previous.completion } : {}),
-    ...(completionPending && !completed ? { completion_pending: { at: new Date(now).toISOString(), checklist_sha256: stage3?.checklist?.items_sha256 ?? null, verification_id: completionPending.verification_id } } : {}),
+    // Carried across every run until the completion is recorded (review N4:
+    // a crash, then a run with an item not done, then one with everything
+    // done must still find it).
+    ...(completed ? {} : completionPending ? { completion_pending: { at: new Date(now).toISOString(), checklist_sha256: stage3?.checklist?.items_sha256 ?? null,
+      verification_id: completionPending.verification_id, body_sha256: completionPending.body_sha256 ?? null, run_id: completionPending.run_id ?? null } }
+      : previous?.completion_pending ? { completion_pending: previous.completion_pending } : {}),
     // Recorded by --resolve-item and by a stored reply (finishRun): kept.
     ...(previous?.resolutions ? { resolutions: previous.resolutions } : {}),
     ...(previous?.asked_items ? { asked_items: previous.asked_items } : {}),
@@ -806,9 +863,12 @@ async function storeReply(query, directory, context, prepared, { includeArchived
   await writeLedger(directory, context.target_id, { message_id: rows[0].id, verification_id: verification.id, body_sha256: verification.body_sha256, run_id: prepared.report.run_id });
   return verification;
 }
+// Never over an entry already there: a recovered completion must not replace
+// the entry the run that stored it wrote (review N3).
 async function writeLedger(directory, ticketId, entry) {
   const ledger = path.join(directory, 'replies', ticketId);
   await ensurePrivateDir(ledger);
+  if (existsSync(path.join(ledger, `${entry.verification_id}.json`))) return;
   await writePrivate(path.join(ledger, `${entry.verification_id}.json`), JSON.stringify({ kind: 'reply_stored', path: 'agent', ticket_id: ticketId, ...entry,
     recorded_at: new Date().toISOString() }, null, 2));
 }
@@ -817,22 +877,24 @@ export const storedReplySQL = verificationId => readOnly(`SELECT m.id FROM suppo
 async function previousCase(directory, ticketId) {
   try { return await readCase(directory, ticketId); } catch (error) { if (error.code === 'ENOENT') return null; throw error; }
 }
-// A stored reply that asked the reporter about these items: the case
-// remembers them, so they are not asked again (checklist.mjs askItems).
-async function markAsked(directory, ticketId, ids) {
+// A stored reply that asked the reporter about these items, and when: the
+// case remembers them, so they are not asked again until the reporter
+// writes or a newer change is released (checklist.mjs stillAsked), and a
+// confirmation must be newer than the ask (validResolutions).
+async function markAsked(directory, ticketId, ids, at = new Date().toISOString()) {
   if (!ids.length) return;
   const record = await readCase(directory, ticketId);
-  record.asked_items = [...new Set([...(record.asked_items ?? []), ...ids])];
+  record.asked_items = [...(record.asked_items ?? []).filter(a => a && typeof a === 'object' && !ids.includes(a.id)), ...ids.map(id => ({ id, at }))];
   await writePrivate(path.join(directory, `${id(ticketId)}.json`), JSON.stringify(record, null, 2));
 }
 export async function finishRun(query, directory, context, result, { sourceRevision = null, includeArchived = false, repo = REPO, preHead = null, runStarted = null, runCommitter = null, runId = null, release = null, fetchBuild, codeOutcome = undefined,
   stage3: given = null, requireStructured = false } = {}) {
   const previous = await previousCase(directory, context.target_id);
-  // Items a stored reply already asked about, from the case (never re-asked).
-  const stage3 = given ? { ...given, asked: previous?.asked_items ?? given.asked ?? [] } : null;
+  const outcome = codeOutcome ?? given?.final?.code_outcome ?? null;
+  // Items a stored reply asked about that still wait on that answer (the case).
+  const stage3 = given ? { ...given, asked: stillAsked(previous?.asked_items ?? [], { context, codeOutcome: outcome }) } : null;
   const prepared = await prepareResult(context, result, { repo, preHead, runStarted, runCommitter, runId, release, fetchBuild, codeOutcome, stage3, requireStructured });
   const structured = isStructured(result);
-  const outcome = codeOutcome ?? stage3?.final?.code_outcome ?? null;
   const ownerTicket = context.approval?.from_admin === true;
   // Every item the host decided done, this run's change (if any) released,
   // nothing asked and no follow-up left open, the host's or the worker's
@@ -864,7 +926,7 @@ export async function finishRun(query, directory, context, result, { sourceRevis
     if (!sameChecklist(begun) || !UUID.test(begun.verification_id || '')) return false;
     const rows = await query(storedReplySQL(begun.verification_id));
     if (rows.length !== 1 || !UUID.test(rows[0].id || '')) return false;
-    await writeLedger(directory, context.target_id, { message_id: rows[0].id, verification_id: begun.verification_id, body_sha256: null, run_id: null, recovered: true });
+    await writeLedger(directory, context.target_id, { message_id: rows[0].id, verification_id: begun.verification_id, body_sha256: begun.body_sha256 ?? null, run_id: begun.run_id ?? null, recovered: true });
     await saveReview(directory, context, result, sourceRevision, { ...options, completed: { verification_id: begun.verification_id } });
     return true;
   };
@@ -872,7 +934,8 @@ export async function finishRun(query, directory, context, result, { sourceRevis
     const verification = await storeReply(query, directory, context, reply, { includeArchived, structured, continuation: mode === 'continuation',
       // Until it is recorded the case stays open (held), so a run that died
       // before the database stored it sends it on the next run.
-      beforeStore: v => saveReview(directory, context, result, sourceRevision, { ...options, held: { reasons: ['completion being stored'] }, completionPending: { verification_id: v.id } }) });
+      beforeStore: v => saveReview(directory, context, result, sourceRevision, { ...options, held: { reasons: ['completion being stored'] },
+        completionPending: { verification_id: v.id, body_sha256: v.body_sha256, run_id: reply.report.run_id ?? null } }) });
     return complete(verification, mode);
   };
   if (context.run_mode === 'continuation') {
@@ -895,7 +958,7 @@ export async function finishRun(query, directory, context, result, { sourceRevis
   // emailed: the case keeps its follow-up and a later run finishes the work.
   // agent_last_reply_at stays unset, so the ticket still shows unanswered.
   const asked = stage3?.asked ?? [];
-  const hold = structured ? replyHold({ items: stage3.checklist.items, finals: stage3.final.items, questions: result.assessment.questions, ownerTicket, codeOutcome: outcome, asked })
+  const hold = structured ? replyHold({ items: stage3.checklist.items, finals: stage3.final.items, questions: result.assessment.questions, ownerTicket, codeOutcome: outcome, asked, pending })
     : null;
   if (hold) {
     const record = await saveReview(directory, context, result, sourceRevision, { ...options, held: hold });
@@ -1041,12 +1104,23 @@ export async function writeAttention(query, directory, queue, { now = Date.now()
   // No run works it until someone decides, so the supervisor sees it.
   const owner = queue.waiting_owner ?? [];
   const ids = [...new Set([...stalled, ...stuckParked, ...failing, ...owner])];
-  const open = ids.length ? await query(readOnly(`SELECT t.id FROM support_tickets t WHERE t.id IN (${ids.map(p => `'${id(p)}'::uuid`).join(',')})
+  const open = ids.length ? await query(readOnly(`SELECT t.id,(SELECT max(m.created_at) FROM support_messages m WHERE m.ticket_id=t.id AND m.author_id=t.user_id AND ${NEW_INPUT}) AS last_input_at
+    FROM support_tickets t WHERE t.id IN (${ids.map(p => `'${id(p)}'::uuid`).join(',')})
     AND t.status IN ('open', 'in_progress') AND t.archived_at IS NULL ORDER BY t.id`)) : [];
   if (!Array.isArray(open) || open.some(t => !UUID.test(t.id || ''))) throw Error('Malformed open ticket rows');
   const isOpen = new Set(open.map(t => t.id));
   const record = { at: new Date(now).toISOString(), stalled: stalled.filter(t => isOpen.has(t)).sort(), parked_open: stuckParked.filter(t => isOpen.has(t)).sort(),
     failing: failing.filter(t => isOpen.has(t)).sort(), waiting_owner: owner.filter(t => isOpen.has(t)).sort() };
+  // answered: the reporter wrote after the case was last saved, so the
+  // supervisor's health finding changes and it looks within the hour
+  // instead of a day later (review N7).
+  const answered = [];
+  for (const row of open.filter(r => record.waiting_owner.includes(r.id) && Number.isFinite(Date.parse(r.last_input_at)))) {
+    let saved = null;
+    try { saved = Date.parse((await readCase(directory, row.id)).recorded_at); } catch { saved = null; }
+    if (!Number.isFinite(saved) || Date.parse(row.last_input_at) > saved) answered.push(row.id);
+  }
+  record.waiting_owner_answered = answered.sort();
   await writePrivate(path.join(directory, 'attention.json'), `${JSON.stringify(record)}\n`);
   return record;
 }
@@ -1096,8 +1170,14 @@ async function main(args) {
     // the note (and a confirmation's message id) from TICKET_RESOLUTION_NOTE
     // and TICKET_RESOLUTION_MESSAGE.
     const [, target, item, kind, directory] = args;
-    const record = await resolveItem(directory, id(target), item, kind, { note: process.env.TICKET_RESOLUTION_NOTE ?? '', messageId: process.env.TICKET_RESOLUTION_MESSAGE ?? null });
+    const record = await resolveItem(directory, id(target), item, kind, { note: process.env.TICKET_RESOLUTION_NOTE ?? '', messageId: process.env.TICKET_RESOLUTION_MESSAGE ?? null,
+      query: process.env.TICKET_DATABASE_TOKEN ? databaseQuery : null, lock: process.env.TICKET_AGENT_LOCK || AGENT_LOCK });
     console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} RESOLVED — ${target.slice(0, 8)} ${item} (${kind}); case ${record.continuation.state}`);
+    return;
+  }
+  if (mode === '--note-owner' && args.length === 3) {
+    await noteOwner(filename, id(ticketId), { note: process.env.TICKET_RESOLUTION_NOTE ?? '', lock: process.env.TICKET_AGENT_LOCK || AGENT_LOCK });
+    console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} NOTED — ${ticketId.slice(0, 8)} for the owner; off the waiting list until the case changes`);
     return;
   }
   if (mode === '--validate' && args.length === 3) {
@@ -1137,6 +1217,6 @@ async function main(args) {
     if (status.completion) console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} COMPLETION REPLY — ${context.target_id.slice(0, 8)}: every item done; stored from a ${status.run_mode} run, case closed`);
     console.log(JSON.stringify(status)); return;
   }
-  throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --release-attempt TICKET_ID PRIVATE_STATE | --resolve-item TICKET_ID AC-n decision|data_fix|confirmed PRIVATE_STATE | --validate CONTEXT MODEL_OUTPUT | --session MODEL_OUTPUT | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');
+  throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --release-attempt TICKET_ID PRIVATE_STATE | --resolve-item TICKET_ID AC-n decision|data_fix|confirmed PRIVATE_STATE | --note-owner TICKET_ID PRIVATE_STATE | --validate CONTEXT MODEL_OUTPUT | --session MODEL_OUTPUT | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');
 }
 if (isMain(import.meta.url)) main(process.argv.slice(2)).catch(error => { console.error(`ERROR: ${logSafe(error)}`); process.exitCode = 1; });

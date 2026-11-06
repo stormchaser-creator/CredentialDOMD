@@ -117,13 +117,20 @@ what happened.
      confirms the device check), make any code change under step 4, then
      record it, once per item:
      `TICKET_RESOLUTION_NOTE='<one line>' node scripts/ticket-agent-context.mjs --resolve-item <ticket id> AC-n decision|data_fix|confirmed "$HOME/Library/Application Support/CredentialDOMD/ticket-context"`
-     (a confirmation also sets `TICKET_RESOLUTION_MESSAGE=<message id>`). That
-     puts the case back in the queue; its next run decides the item done and,
-     with everything done, sends the completion reply. A data change is the
-     owner's: record `data_fix` only after he made it and you checked it.
-     Never edit the case file's `continuation` for these, and never resolve
-     an item twice. Otherwise note it under `## For the owner`: the ticket's
-     first 8 characters and what is needed, one line.
+     (a confirmation also sets `TICKET_RESOLUTION_MESSAGE=<message id>` and
+     `TICKET_DATABASE_TOKEN=$(security find-generic-password -l "Supabase CLI" -w)`:
+     the message must be the reporter's, newer than the reply that asked).
+     It takes the ticket agent's lock and fails while a run holds it; try
+     again later. That puts the case back in the queue; its next run decides
+     the item done and, with everything done, sends the completion reply. A
+     data change is the owner's: record `data_fix` only after he made it and
+     you checked it. Never edit the case file's `continuation` for these. A
+     wrong record can be corrected the same way while the case is not
+     queued. HEALTH "of those, the reporter has written since" means an
+     answer arrived: read it first. Otherwise note it under `## For the
+     owner` (the ticket's first 8 characters and what is needed, one line)
+     and mark it noted once, so it stops appearing until the case changes:
+     `TICKET_RESOLUTION_NOTE='<one line>' node scripts/ticket-agent-context.mjs --note-owner <ticket id> "$HOME/Library/Application Support/CredentialDOMD/ticket-context"`.
    - **Member tickets and replies.** The ticket agent answers these itself
      (pg_cron releases them to it). Check that a new one is queued and that
      a reply is being worked; fix the pipeline if it is stuck. Never write

@@ -9,9 +9,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
-import { finishRun, collectQueue, loadQueuedContext, queueSQL, heldLine, saveReview, resolveItem, targetSQL, HELD_REPLY_WORK } from '../../scripts/ticket-agent-context.mjs';
+import { finishRun, collectQueue, loadQueuedContext, queueSQL, heldLine, saveReview, resolveItem, noteOwner, writeAttention, targetSQL, HELD_REPLY_WORK } from '../../scripts/ticket-agent-context.mjs';
 import { prepareRenderedReply } from '../../scripts/ticket-fix/reply.mjs';
-import { replyHold, itemsDigest, itemFollowUpWork, resolveFollowUpWork, finalStates, validResolutions, writeChecklist, renderAgentReply } from '../../scripts/ticket-fix/checklist.mjs';
+import { replyHold, itemsDigest, itemFollowUpWork, resolveFollowUpWork, finalStates, validResolutions, writeChecklist, renderAgentReply, stillAsked } from '../../scripts/ticket-fix/checklist.mjs';
 import { hostFollowUps } from '../../scripts/ticket-fix/stage3.mjs';
 import { uuid, privateDir } from './helpers.mjs';
 
@@ -279,12 +279,13 @@ test('a continuation with items not done, or a change not released, sends nothin
 // ---------------------------------------------------------------------------
 const KINDS3 = [{ ...ITEMS[0], id: 'AC-1', kind: 'owner_decision' }, { ...ITEMS[1], id: 'AC-2', kind: 'data_fix' }, { ...ITEMS[1], id: 'AC-3', kind: 'device_probe', source_id: M1 }];
 const CONTEXT3 = { target_id: T, owner_id: OWNER, approval: { from_admin: false },
-  tickets: [{ id: T, subject: 'Synthetic', body: 'Synthetic body.', messages: [{ id: M1, author_id: OWNER, is_admin_reply: false, body: 'Synthetic follow-up.' }] }] };
+  tickets: [{ id: T, subject: 'Synthetic', body: 'Synthetic body.', messages: [{ id: M1, author_id: OWNER, is_admin_reply: false, body: 'Synthetic follow-up.', created_at: W1 }] }] };
+const ASKED3 = [{ id: 'AC-3', at: '2026-11-06T08:00:00Z' }];
 test('defect 1: an owner decision, a data change and a device check are done only once their resolution is recorded', () => {
   const entries = [{ ac_id: 'AC-1', state: 'needs_owner', remaining: 'decide' }, { ac_id: 'AC-2', state: 'needs_owner', remaining: 'run it' }, { ac_id: 'AC-3', state: 'partial', remaining: 'check it' }];
   const at = '2026-11-06T10:00:00Z';
   const resolved = validResolutions({ 'AC-1': { kind: 'decision', at, note: 'Synthetic.' }, 'AC-2': { kind: 'data_fix', at, note: 'Synthetic.' }, 'AC-3': { kind: 'confirmed', at, note: 'Synthetic.', message_id: M1 } },
-    { items: KINDS3, context: CONTEXT3 });
+    { items: KINDS3, context: CONTEXT3, asked: ASKED3 });
   assert.deepEqual(finalStates({ items: KINDS3, entries, resolved }).map(f => [f.id, f.state, f.detail]), [['AC-1', 'done', 'resolved'], ['AC-2', 'done', 'resolved'], ['AC-3', 'done', 'resolved']]);
   assert.deepEqual(finalStates({ items: KINDS3, entries }).map(f => f.state), ['needs_owner', 'needs_owner', 'partial'], 'unresolved: never done');
   // The wrong kind, or a confirmation naming no customer message, resolves nothing.
@@ -309,11 +310,12 @@ test('defect 1: --resolve-item records once, wakes the case without fresh attemp
     open.final.follow_up = hostFollowUps({ finals: open.final.items, items, waiting: true });
     const held = await finishRun(db.query, state.dir, context, waiting, { stage3: open, codeOutcome: 'none', requireStructured: true });
     assert.deepEqual([held.kind, held.continuation_state], ['reply_held', 'waiting_owner']);
-    await assert.rejects(resolveItem(state.dir, T, 'AC-1', 'decision', { note: 'Synthetic.' }), /bug item; it is resolved by a run/);
-    await assert.rejects(resolveItem(state.dir, T, 'AC-2', 'decision', { note: 'Synthetic.' }), /resolved by data_fix/);
-    const woken = await resolveItem(state.dir, T, 'AC-2', 'data_fix', { note: 'Synthetic title corrected and checked.' });
+    const lock = path.join(state.dir, 'agent.lock');
+    await assert.rejects(resolveItem(state.dir, T, 'AC-1', 'decision', { note: 'Synthetic.', lock }), /bug item; it is resolved by a run/);
+    await assert.rejects(resolveItem(state.dir, T, 'AC-2', 'decision', { note: 'Synthetic.', lock }), /resolved by data_fix/);
+    const woken = await resolveItem(state.dir, T, 'AC-2', 'data_fix', { note: 'Synthetic title corrected and checked.', lock });
     assert.deepEqual([woken.continuation.state, woken.continuation.attempts], ['pending', 0]);
-    await assert.rejects(resolveItem(state.dir, T, 'AC-2', 'data_fix', { note: 'Again.' }), /already resolved/, 'a resolution wakes the case once');
+    await assert.rejects(resolveItem(state.dir, T, 'AC-2', 'data_fix', { note: 'Again.', lock }), /already resolved and its case is queued/, 'a queued case is never woken twice');
     const queue = await collectQueue(db.query, state.dir, { now: Date.now() + 1000 });
     assert.deepEqual(queue.items, [{ id: T, mode: 'continuation' }]);
     const next = await loadQueuedContext(db.query, queue.items[0], state.dir, { now: Date.now() + 1000 });
@@ -412,4 +414,133 @@ test('defect 7: a completion the database withheld keeps the case open for the n
 });
 test('defect 9: the held watermark ignores status notes and support replies, like the queue', () => {
   assert.match(targetSQL(T), /SELECT max\(m\.created_at\) FROM support_messages m WHERE m\.ticket_id=t\.id AND m\.body NOT ILIKE 'Status set to%' AND m\.body NOT ILIKE 'CredentialDOMD Support%'\) AS last_message_at/);
+});
+
+// ---------------------------------------------------------------------------
+// Second review of 2026-11-06 (reply-review-2.md), one test per finding.
+// ---------------------------------------------------------------------------
+const DEVICE_ITEMS = [{ ...ITEMS[0], kind: 'device_probe' }, ITEMS[1]];
+const PROBE = [{ id: 'AC-1', state: 'partial', remaining: '', detail: null }, DONE[1]];
+const probeResult = () => ({ ...result({ done: true }), checklist: [{ ac_id: 'AC-1', state: 'partial', remaining: 'open the summary on your phone', tests: [] }, { ac_id: 'AC-2', state: 'done', remaining: '', tests: [] }],
+  reply: { opening: 'update', closing: 'reply_here', claims: [result().reply.claims[1]] },
+  assessment: { ...result().assessment, follow_up: [{ work: 'Hear back on the device check', owner: 'support_worker', next_action: 'Synthetic.' }] } });
+const probeStage3 = () => { const s3 = stage3(PROBE, { items: DEVICE_ITEMS }); s3.final.claims = [{ ...s3.final.claims[1], index: 0 }]; s3.final.follow_up = []; return s3; };
+test('N1: every item done but a follow-up open, nothing asked: the reply is held, not sent as "done" now and again later', async () => {
+  const state = privateDir('ticket-reply-n1-');
+  const db = database();
+  try {
+    const context = await loadQueuedContext(db.query, { id: T, mode: 'reply' }, state.dir);
+    const s3 = stage3(DONE);
+    s3.final.follow_up = [{ work: 'Retrieve and review attachment att-1 (tickets/x/shot.png)', owner: 'support_worker', next_action: 'The next run downloads it again' }];
+    const status = await finishRun(db.query, state.dir, context, result({ done: true }), { stage3: s3, codeOutcome: 'none', requireStructured: true });
+    assert.deepEqual([status.kind, status.reasons], ['reply_held', ['1 follow-up(s) open']]);
+    assert.deepEqual(db.writes(), []);
+  } finally { state.cleanup(); }
+});
+test('N2: a device check is asked again once the reporter writes or a newer change is released, never while it is unreleased', async () => {
+  const asked = [{ id: 'AC-1', at: '2026-11-06T10:00:00Z' }];
+  const thread = created => ({ ...CONTEXT3, tickets: [{ ...CONTEXT3.tickets[0], messages: [{ ...CONTEXT3.tickets[0].messages[0], created_at: created }] }] });
+  assert.deepEqual(stillAsked(asked, { context: thread('2026-11-06T09:00:00Z') }), ['AC-1'], 'no answer yet: not asked again');
+  assert.deepEqual(stillAsked(asked, { context: thread('2026-11-06T11:00:00Z') }), [], 'the reporter wrote since');
+  assert.deepEqual(stillAsked(asked, { context: thread('2026-11-06T09:00:00Z'), codeOutcome: 'released' }), [], 'a newer change is live');
+  const state = privateDir('ticket-reply-n2-');
+  const db = database();
+  try {
+    await writeChecklist(state.dir, { version: 1, ticket_id: T, owner_ticket: false, items: DEVICE_ITEMS, non_asks: [], seen: [T, M1] });
+    const first = await loadQueuedContext(db.query, { id: T, mode: 'reply' }, state.dir);
+    assert.equal((await finishRun(db.query, state.dir, first, probeResult(), { stage3: probeStage3(), codeOutcome: 'none', requireStructured: true })).kind, 'reply_stored');
+    assert.deepEqual(record(state.dir).asked_items.map(a => a.id), ['AC-1'], 'the ask and its time are remembered');
+    // "Still broken": a new message lets the check be asked again.
+    db.messages.push({ id: M2, ticket_id: T, author_id: OWNER, is_admin_reply: false, body: 'Synthetic: still the same.', created_at: new Date(Date.now() + 60000).toISOString() });
+    const second = await loadQueuedContext(db.query, { id: T, mode: 'reply' }, state.dir);
+    assert.equal((await finishRun(db.query, state.dir, second, probeResult(), { stage3: probeStage3(), codeOutcome: 'none', requireStructured: true })).kind, 'reply_stored');
+    assert.match(replyBody(db.statements.filter(x => x.startsWith('DO $ticket_broker$'))[1]), /please check this on your device/);
+  } finally { state.cleanup(); }
+});
+test('N3: crash recovery writes the stored body digest and run, and never replaces an existing ledger entry', async () => {
+  await answeredTicket(async ({ db, state, due }) => {
+    db.crash = true;
+    await assert.rejects(finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: stage3(DONE), codeOutcome: 'none', requireStructured: true, runId: '0123456789abcdef' }), /502/);
+    const marker = record(state.dir).completion_pending;
+    assert.match(marker.body_sha256, /^[0-9a-f]{64}$/);
+    assert.equal(marker.run_id, '0123456789abcdef');
+    await finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: stage3(DONE), codeOutcome: 'none', requireStructured: true });
+    const entry = JSON.parse(readFileSync(path.join(state.dir, 'replies', T, `${db.stored[0]}.json`), 'utf8'));
+    assert.deepEqual([entry.body_sha256, entry.run_id, entry.recovered], [marker.body_sha256, '0123456789abcdef', true]);
+  });
+  await answeredTicket(async ({ db, state, due }) => {
+    db.crash = true;
+    await assert.rejects(finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: stage3(DONE), codeOutcome: 'none', requireStructured: true }), /502/);
+    // The run that stored it had written its entry before dying.
+    const { mkdirSync } = await import('node:fs');
+    mkdirSync(path.join(state.dir, 'replies', T), { recursive: true, mode: 0o700 });
+    writeFileSync(path.join(state.dir, 'replies', T, `${db.stored[0]}.json`), '{"kind":"reply_stored","synthetic":"original"}', { mode: 0o600 });
+    await finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: stage3(DONE), codeOutcome: 'none', requireStructured: true });
+    assert.equal(JSON.parse(readFileSync(path.join(state.dir, 'replies', T, `${db.stored[0]}.json`), 'utf8')).synthetic, 'original');
+  });
+});
+test('N4: a crash, then a run with an item not done, then one with everything done still sends the completion once', async () => {
+  await answeredTicket(async ({ db, state, due }) => {
+    db.crash = true;
+    await assert.rejects(finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: stage3(DONE), codeOutcome: 'none', requireStructured: true }), /502/);
+    assert.equal((await finishRun(db.query, state.dir, await due(), result(), { stage3: stage3(OPEN), codeOutcome: 'none', requireStructured: true })).kind, 'continuation_saved');
+    assert.equal(record(state.dir).completion_pending.verification_id, db.stored[0], 'carried across the run in between');
+    assert.equal((await finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: stage3(DONE), codeOutcome: 'none', requireStructured: true })).kind, 'continuation_saved');
+    assert.equal(db.statements.filter(x => x.startsWith('DO $ticket_broker$')).length, 1, 'sent once');
+    assert.equal(record(state.dir).completion.verification_id, db.stored[0]);
+  });
+});
+test('N5 and N6: --resolve-item checks a confirmation against the thread and the ask, takes the agent lock, and a wrong record can be corrected', async () => {
+  const state = privateDir('ticket-reply-n5-');
+  const db = database();
+  try {
+    await writeChecklist(state.dir, { version: 1, ticket_id: T, owner_ticket: false, items: DEVICE_ITEMS, non_asks: [], seen: [T, M1] });
+    const first = await loadQueuedContext(db.query, { id: T, mode: 'reply' }, state.dir);
+    await finishRun(db.query, state.dir, first, probeResult(), { stage3: probeStage3(), codeOutcome: 'none', requireStructured: true });
+    const askedAtTime = record(state.dir).asked_items[0].at;
+    const OLD = M1, NEW = M2, STAFF = uuid(7103), later = new Date(Date.parse(askedAtTime) + 60000).toISOString();
+    const rows = { [OLD]: { created_at: W1, author_id: OWNER, is_admin_reply: false, body: 'Synthetic follow-up.' },
+      [NEW]: { created_at: later, author_id: OWNER, is_admin_reply: false, body: 'Synthetic: it works now.' },
+      [STAFF]: { created_at: later, author_id: uuid(9999), is_admin_reply: true, body: 'Synthetic staff note.' } };
+    const query = async sql => {
+      const mid = /WHERE m.id='([^']+)'::uuid/.exec(sql)?.[1];
+      return rows[mid] ? [{ id: mid, ticket_id: T, owner_id: OWNER, from_admin: false, verification_id: null, support_actor_id: null, ...rows[mid] }] : [];
+    };
+    const lock = path.join(state.dir, 'agent.lock');
+    const resolve = (messageId, more = {}) => resolveItem(state.dir, T, 'AC-1', 'confirmed', { note: 'Synthetic.', messageId, query, lock, ...more });
+    await assert.rejects(resolve(STAFF), /not one the reporter wrote/);
+    await assert.rejects(resolve(OLD), /not newer than the reply that asked/, 'the original report confirms nothing');
+    await assert.rejects(resolve(uuid(7777)), /not one the reporter wrote/);
+    const { mkdirSync } = await import('node:fs');
+    mkdirSync(lock);
+    await assert.rejects(resolve(NEW), /ticket agent is running/);
+    const { rmdirSync } = await import('node:fs');
+    rmdirSync(lock);
+    assert.equal((await resolve(NEW)).continuation.state, 'pending');
+    // A wrong record is corrected once its case is no longer queued.
+    const queued = record(state.dir);
+    writeFileSync(path.join(state.dir, `${T}.json`), JSON.stringify({ ...queued, continuation: { ...queued.continuation, state: 'waiting_owner' } }), { mode: 0o600 });
+    assert.equal((await resolve(NEW, { note: 'Synthetic: corrected.' })).resolutions['AC-1'].note, 'Synthetic: corrected.');
+    // And the host itself refuses a confirmation older than the ask.
+    assert.equal(validResolutions({ 'AC-1': { kind: 'confirmed', at: later, message_id: M1 } }, { items: DEVICE_ITEMS, context: first, asked: record(state.dir).asked_items }).size, 0);
+  } finally { state.cleanup(); }
+});
+test('N7 and noted: attention.json says when the reporter wrote since; a case noted for the owner leaves the list until it changes', async () => {
+  const state = privateDir('ticket-reply-n7-');
+  const db = database({ awaiting: false });
+  try {
+    const context = await loadQueuedContext(db.query, { id: T, mode: 'reply' }, state.dir);
+    await saveReview(state.dir, context, { ...result(), needs_owner_review: true, assessment: { ...result().assessment, follow_up: [{ work: 'Owner decides', owner: 'support_owner', next_action: 'Synthetic.' }] } },
+      null, { stage3: { ...stage3(OPEN), final: { ...stage3(OPEN).final, follow_up: [] } } });
+    const saved = record(state.dir).recorded_at;
+    const attention = after => writeAttention(async () => [{ id: T, last_input_at: after }], state.dir, { attention: [], parked: [], waiting_owner: [T] });
+    assert.deepEqual((await attention(new Date(Date.parse(saved) - 60000).toISOString())).waiting_owner_answered, []);
+    assert.deepEqual((await attention(new Date(Date.parse(saved) + 60000).toISOString())).waiting_owner_answered, [T], 'answered since: a new finding');
+    assert.deepEqual((await collectQueue(db.query, state.dir, { now: Date.now() + HOUR })).waiting_owner, [T]);
+    await noteOwner(state.dir, T, { note: 'Synthetic: old case, nothing to resolve.', lock: path.join(state.dir, 'agent.lock') });
+    assert.equal((await collectQueue(db.query, state.dir, { now: Date.now() + HOUR })).waiting_owner, undefined, 'noted: off the list');
+    await saveReview(state.dir, context, { ...result(), needs_owner_review: true, assessment: { ...result().assessment, follow_up: [{ work: 'Owner decides', owner: 'support_owner', next_action: 'Synthetic.' }] } },
+      null, { stage3: { ...stage3(OPEN), final: { ...stage3(OPEN).final, follow_up: [] } } });
+    assert.deepEqual((await collectQueue(db.query, state.dir, { now: Date.now() + HOUR })).waiting_owner, [T], 'the case changed: back on the list');
+  } finally { state.cleanup(); }
 });

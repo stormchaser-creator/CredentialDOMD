@@ -471,7 +471,7 @@ test('the attention file names stalled work and only the parked tickets still op
     await writeFile(path.join(directory, 'failed', `${uuid(6)}.device`), '', { mode: 0o600 });
     const query = async sql => { seen.push(sql); assert.match(sql, /^begin read only;/); return [{ id: uuid(2) }, { id: uuid(5) }]; };
     const record = await writeAttention(query, directory, { attention: [uuid(5), uuid(7), uuid(8)], stuck: [uuid(5), uuid(7)], parked: [uuid(2), uuid(3), uuid(4), uuid(6)] }, { now: START });
-    assert.deepEqual(record, { at: new Date(START).toISOString(), stalled: [uuid(5)], parked_open: [uuid(2)], failing: [], waiting_owner: [] }, 'closed (7, 3), revivable (4, 8) and device (6) tickets are left out');
+    assert.deepEqual(record, { at: new Date(START).toISOString(), stalled: [uuid(5)], parked_open: [uuid(2)], failing: [], waiting_owner: [], waiting_owner_answered: [] }, 'closed (7, 3), revivable (4, 8) and device (6) tickets are left out');
     assert.doesNotMatch(seen[0], new RegExp(uuid(4)));
     assert.deepEqual(JSON.parse(await readFile(path.join(directory, 'attention.json'), 'utf8')), record);
     assert.equal(((await stat(path.join(directory, 'attention.json'))).mode & 0o777), 0o600);

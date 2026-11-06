@@ -123,6 +123,11 @@ print(" ".join(sorted({str(t)[:8] for t in json.load(open(sys.argv[1])).get("fai
 import json, sys
 print(" ".join(sorted({str(t)[:8] for t in json.load(open(sys.argv[1])).get("waiting_owner", [])})))' "$attention" 2>/dev/null) || deciding=""
   [[ -n $deciding ]] && health+=("open tickets waiting on the owner's decision: $deciding")
+  # The reporter wrote since: a new finding, so a session looks this hour.
+  answered=$(python3 -c '
+import json, sys
+print(" ".join(sorted({str(t)[:8] for t in json.load(open(sys.argv[1])).get("waiting_owner_answered", [])})))' "$attention" 2>/dev/null) || answered=""
+  [[ -n $answered ]] && health+=("of those, the reporter has written since: $answered")
 fi
 
 sweep=queue

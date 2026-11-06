@@ -311,8 +311,14 @@ test('ops supervisor: open tickets no ticket run will work start a session, name
     assert.equal(l.run('06').status, 0);
     assert.equal(l.calls().length, 3, 'a ticket waiting on the owner\'s decision starts a session');
     assert.match(l.calls()[2].args[1], /HEALTH: open tickets waiting on the owner's decision: b3ea3291\n/);
+    // The reporter answers one of them: a new finding, seen this hour (review N7).
+    fs.writeFileSync(file, JSON.stringify({ at: '2026-11-06T01:00:00Z', stalled: [], parked_open: [], failing: [], waiting_owner: ['b3ea3291-0000-4000-8000-000000000000'],
+      waiting_owner_answered: ['b3ea3291-0000-4000-8000-000000000000'] }) + '\n');
+    assert.equal(l.run('06').status, 0);
+    assert.equal(l.calls().length, 4, 'an answer changes the finding, so a session starts');
+    assert.match(l.calls()[3].args[1], /of those, the reporter has written since: b3ea3291/);
     fs.writeFileSync(file, '{not json');
     assert.equal(l.run('06').status, 0);
-    assert.match(l.calls()[3].args[1], /\(unreadable attention.json\)/);
+    assert.match(l.calls()[4].args[1], /\(unreadable attention.json\)/);
   } finally { l.cleanup(); }
 });
