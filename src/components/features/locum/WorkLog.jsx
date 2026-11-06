@@ -39,7 +39,7 @@ import { identifierReason } from "../../../utils/identifierGate";
 import InvoiceDayPicker from "../../shared/InvoiceDayPicker";
 import DeskTable from "../../shared/DeskTable";
 import DutyLog from "./DutyLog";
-import { pickableContracts, hiddenEndedCount, isArchived, SHOW_ENDED, showEndedLabel } from "../../../utils/contractsForDate";
+import { pickableContracts, hiddenEndedCount, isArchived, SHOW_ENDED, showEndedLabel, contractIdForDate, termLabel, coversDate, hasFacilitySibling } from "../../../utils/contractsForDate";
 import {
   localDate, callDayOf, deriveCallDay, entryOrder, fmtTime, findContainer, overlapSiblings,
   money, billedSpan, isStipendDay as isStipendDayPure, rateFor as rateForPure, computeBilling as computeBillingPure,
@@ -330,11 +330,29 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
   );
   const scheduledId = scheduled[0]?.id || "";
   const chosenId = pickHolds(chosen, contracts, new Date(now)) ? chosen.contractId : "";
-  // With nothing on the schedule for today this is the old default exactly:
-  // the running timer's contract, else the one last used.
-  const preferredId = chosenId || timer?.contractId || scheduledId || lastUsedId;
-  const resolved = openable(preferredId) || openable(scheduledId)
-    || pickable.find(c => c.id === lastLoggedContractId)
+  // An explicit signal for the call day in progress — a pick, a running
+  // timer, or the schedule — outranks everything below it, unchanged.
+  const explicitId = chosenId || timer?.contractId || scheduledId;
+  // The call day in progress by the generic 7 AM rule (billing.js
+  // currentCallDay), not the raw calendar date: before a contract's own
+  // start hour the prior call day is still the one in progress.
+  const today = currentCallDay(null, new Date(now));
+  const inForceContract = pickable.find(c => c.id === contractIdForDate(pickable, today));
+  // The contract last used (device storage) or the most recent log entry's
+  // are only fallbacks for lack of anything better; when the one they point
+  // to no longer covers today and a sibling agreement at the same facility
+  // does, the sibling wins (ticket 8acf7241: a renewed Sanford agreement
+  // kept opening on the term that had already ended, because it was the
+  // contract last used or last logged against).
+  const unlessStale = (candidate) => (
+    candidate && inForceContract && candidate.id !== inForceContract.id
+      && candidate.facility === inForceContract.facility && !coversDate(candidate, today)
+      ? inForceContract : candidate
+  );
+  const resolved = openable(explicitId) || openable(scheduledId)
+    || unlessStale(openable(lastUsedId))
+    || unlessStale(pickable.find(c => c.id === lastLoggedContractId))
+    || inForceContract
     || pickable[0]
     || contracts.find(c => !isArchived(c)) || contracts[0] || null;
   const busy = !!(showManual || invoicePick || invoicePreview || markSent || unrecorded || viewEntry || placement || dictating || dictBusy || dutyBusy);
@@ -2145,7 +2163,13 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
         Logging against
       </div>
       <select aria-labelledby="work-log-contract" value={contract?.id || ""} onChange={e => (e.target.value === SHOW_ENDED ? setShowEnded(true) : rememberContract(e.target.value))} style={{ ...iS, appearance: "auto" }}>
-        {pickableContracts(contracts, contract?.id, { showEnded }).map(c => <option key={c.id} value={c.id}>{c.facility}{c.agency ? ` (${c.agency})` : ""}</option>)}
+        {(() => {
+          const options = pickableContracts(contracts, contract?.id, { showEnded });
+          // The term only needs to show when another option is at the same
+          // facility — a lone agreement per facility needs no disambiguation,
+          // and the suffix would only lengthen that option for nothing.
+          return options.map(c => <option key={c.id} value={c.id}>{c.facility}{c.agency ? ` (${c.agency})` : ""}{hasFacilitySibling(options, c) ? ` · ${termLabel(c)}` : ""}</option>);
+        })()}
         {hiddenEndedCount(contracts, contract?.id, { showEnded }) > 0 && <option value={SHOW_ENDED}>{showEndedLabel(hiddenEndedCount(contracts, contract?.id, { showEnded }))}</option>}
       </select>
       {scheduleNote && (
@@ -2450,7 +2474,7 @@ function WorkLog({ billDraft, onBillDraftDone, openContractId }) {
                   {(contracts.find(c => c.id === manual.contractId)?.facility || "Original contract")} (day rate; time doesn't bill here)
                 </option>
               )}
-              {manualOptions.map(c => <option key={c.id} value={c.id}>{c.facility}</option>)}
+              {manualOptions.map(c => <option key={c.id} value={c.id}>{c.facility}{hasFacilitySibling(manualOptions, c) ? ` · ${termLabel(c)}` : ""}</option>)}
               {manualHidden > 0 && <option value={SHOW_ENDED}>{showEndedLabel(manualHidden)}</option>}
             </select>
             {formScheduleNote && (

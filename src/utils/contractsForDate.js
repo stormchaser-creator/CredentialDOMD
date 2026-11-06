@@ -68,12 +68,46 @@ export function selectableContracts(contracts, currentId) {
   return (contracts || []).filter(c => !isArchived(c) || c.id === currentId);
 }
 
-/** "Jul 2026 to Jun 2029", for telling two agreements at one facility apart. */
+const termBounds = (c) => {
+  const starts = [c?.startDate, c?.termStart, ...blocksOf(c).map(p => p?.start)].filter(Boolean).sort();
+  const ends = [c?.endDate, c?.termEnd, ...blocksOf(c).map(p => p?.end || p?.start)].filter(Boolean).sort();
+  return { start: starts[0] || "", end: ends[ends.length - 1] || "" };
+};
+
+/** "Jul 2026 to Jun 2029", for telling two agreements at one facility apart.
+ *  Reads termBounds, so an agreement whose dates live only in coverage
+ *  blocks (no startDate/endDate of its own) still gets a real label. */
 export function termLabel(contract) {
-  const from = contract?.startDate || contract?.termStart;
-  const to = contract?.endDate || contract?.termEnd;
+  const { start: from, end: to } = termBounds(contract);
   const fmt = (d) => d ? new Date(d + "T00:00:00").toLocaleDateString("en-US", { month: "short", year: "numeric" }) : "";
   return from ? `${fmt(from)} to ${to ? fmt(to) : "open"}` : "";
+}
+
+/** True when another contract in `contracts` shares this one's facility
+ *  name, so a picker needs termLabel to tell them apart (a lone agreement
+ *  per facility does not). */
+export function hasFacilitySibling(contracts, contract) {
+  return (contracts || []).some(c => c.id !== contract.id && (c.facility || "") === (contract.facility || ""));
+}
+
+/** Ids of the contracts that are in force on `date` among contracts sharing
+ *  a facility with at least one other on file — a lone agreement at a
+ *  facility needs no "in force" marker, since there is nothing to tell it
+ *  apart from. */
+export function inForceAmongSiblings(contracts, date) {
+  const byFacility = new Map();
+  for (const c of contracts || []) {
+    const key = c.facility || "";
+    if (!byFacility.has(key)) byFacility.set(key, []);
+    byFacility.get(key).push(c);
+  }
+  const inForce = new Set();
+  for (const group of byFacility.values()) {
+    if (group.length < 2) continue;
+    const id = contractIdForDate(group, date);
+    if (id) inForce.add(id);
+  }
+  return inForce;
 }
 
 // ── Ended contracts ─────────────────────────────────────────────
@@ -90,12 +124,6 @@ export const SHOW_ENDED = "__show_ended__";
 const ymd = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 /** Today on this device's calendar, YYYY-MM-DD. */
 export const todayLocal = () => ymd(new Date());
-
-const termBounds = (c) => {
-  const starts = [c?.startDate, c?.termStart, ...blocksOf(c).map(p => p?.start)].filter(Boolean).sort();
-  const ends = [c?.endDate, c?.termEnd, ...blocksOf(c).map(p => p?.end || p?.start)].filter(Boolean).sort();
-  return { start: starts[0] || "", end: ends[ends.length - 1] || "" };
-};
 
 /** The contract's last day in force (the latest of its end date, term end and coverage blocks), or "" when open-ended. */
 export function contractEndDate(contract) {

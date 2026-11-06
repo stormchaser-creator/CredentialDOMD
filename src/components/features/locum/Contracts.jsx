@@ -16,8 +16,8 @@ import { analyzeAgreement, analyzeAgreementText } from "../../../utils/documentS
 import { agreementDocCandidates, attachExistingDoc, withAgreementFields } from "../../../utils/docPrefill";
 import { TAX_STATES, MODELED_STATES, NO_INCOME_TAX_STATES } from "../../../utils/taxConstants";
 import { STATE_NAMES } from "../../../constants/states";
-import { isArchived } from "../../../utils/contractsForDate";
-import { callDayStartHour, hourLabel } from "../../../utils/billing";
+import { isArchived, inForceAmongSiblings } from "../../../utils/contractsForDate";
+import { callDayStartHour, hourLabel, currentCallDay } from "../../../utils/billing";
 import { toClock, savedPeriod, periodProblem, coveragePeriodText, blockSummary, contractZone, deviceZone, validZone, isTimedPeriod } from "../../../utils/coverageBlocks";
 import { callPeriodsOf, callRate } from "../../../utils/dutyPay";
 import { resolveDocument } from "../../../utils/receiptFiles";
@@ -101,6 +101,10 @@ function Contracts() {
   const activeItems = items.filter(i => !isArchived(i));
   const archivedItems = items.filter(isArchived);
   const shownItems = showArchived ? archivedItems : activeItems;
+  // Two agreements can cover one facility (a prior term and the current
+  // one); mark whichever is in force today so the physician does not have
+  // to work it out from the dates themselves (ticket 8acf7241).
+  const inForceIds = inForceAmongSiblings(activeItems, currentCallDay(null, new Date()));
   // Unbilled work and duty days are reached and invoiced through their
   // agreement; deleting it would leave them where no screen can bill them,
   // and Needs invoicing would keep naming them. Same "unbilled" rule as
@@ -497,6 +501,9 @@ function Contracts() {
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <div onClick={() => setSummaryFor(item)} style={{ fontSize: 15, fontWeight: 700, color: T.text, cursor: "pointer", display: "flex", alignItems: "center", gap: 6 }}>
                     <span style={{ overflow: "hidden", textOverflow: "ellipsis" }}>{item.facility || "Facility"}</span>
+                    {inForceIds.has(item.id) && (
+                      <span style={{ fontSize: 11, fontWeight: 700, color: T.accent, flexShrink: 0 }}>In force now</span>
+                    )}
                     <span style={{ fontSize: 11, fontWeight: 700, color: T.accent, flexShrink: 0 }}>summary ›</span>
                   </div>
                   {/* Identity + dates here — rate terms, docs, and notes
