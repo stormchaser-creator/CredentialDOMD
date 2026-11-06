@@ -19,7 +19,7 @@ test('a transaction-abort refusal explains itself on the device that saw it', ()
   const m = mount(SyncIssuesNotice, { data: {} });
   Object.assign(globalThis.__screen.app, { syncIssues: [], pendingWrites: 1, offlineMode: false, offlineCopyStale: 'unavailable', navigate() {} });
   const html = m.html();
-  assert.match(html, /offline storage could not be opened, so its offline copy of your records could not be updated/,
-    'the member sees why the write was refused while it is still unsent');
+  assert.match(html, /offline storage could not be opened/, 'the member sees why the write was refused while it is still unsent');
+  assert.match(html, /records could not be updated/, 'and that the copy on the device is behind');
   assert.match(html, /Reload the app to open it again\./, 'and what to do about it');
 });
