@@ -1220,15 +1220,24 @@ export function storageRefusalKind(refused) {
 export const LOST_CONNECTION_CONFIRM_MS = 30000;
 let heldLostSince = null;
 let heldWasLost = false;
+// Set once reportStorageRefusal actually sends a "storage_unavailable" report
+// (not just holds it for retries), so offlineCopySaved() can still tell a
+// write that lands AFTER that report was sent apart from one that landed
+// before anything was ever reported. reportStorageRefusal clears heldLostSince
+// the moment it reports, so that alone can't carry this past the report.
+let awaitingRecoveryReport = false;
+let awaitingRecoveryWasLost = false;
 /**
  * A write of the offline copy landed: a refusal held for the report was only
  * that, and is reported as fixed (once a session).
  */
 export function offlineCopySaved() {
-  if (heldLostSince === null) return;
+  if (heldLostSince === null && !awaitingRecoveryReport) return;
+  const wasLost = heldLostSince !== null ? heldWasLost : awaitingRecoveryWasLost;
   heldLostSince = null;
-  const wasLost = heldWasLost;
   heldWasLost = false;
+  awaitingRecoveryReport = false;
+  awaitingRecoveryWasLost = false;
   if (storageReported.has("storage_recovered") || !storageFullReporter) return;
   storageReported.add("storage_recovered");
   const message = wasLost
@@ -1246,6 +1255,10 @@ export function reportStorageRefusal({ store, reason, chars = 0 }, now = Date.no
     try { if (offlineStoreState().lost === true) heldWasLost = true; } catch { /* unknown */ }
     return false;
   }
+  if (event === "storage_unavailable") {
+    awaitingRecoveryReport = true;
+    awaitingRecoveryWasLost = heldWasLost;
+  }
   heldLostSince = null;
   heldWasLost = false;
   storageReported.add(event);
@@ -1261,7 +1274,13 @@ export function reportStorageRefusal({ store, reason, chars = 0 }, now = Date.no
   return true;
 }
 /** Tests only: a new session. */
-export function resetStorageFullReport() { storageReported.clear(); heldLostSince = null; heldWasLost = false; }
+export function resetStorageFullReport() {
+  storageReported.clear();
+  heldLostSince = null;
+  heldWasLost = false;
+  awaitingRecoveryReport = false;
+  awaitingRecoveryWasLost = false;
+}
 
 function lsText(key) {
   try { return localStorage.getItem(key); } catch { return null; }

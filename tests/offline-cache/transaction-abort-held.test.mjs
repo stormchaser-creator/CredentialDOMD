@@ -6,7 +6,8 @@
 // and a retry that then landed was never reported as fixed. A refusal the
 // retries may fix is now held like a lost connection: reported only if a
 // write LOST_CONNECTION_CONFIRM_MS on is refused as well, and "Fixed by
-// itself" when one lands first. Synthetic data only.
+// itself" when one lands first, or when one lands after that report went
+// out. Synthetic data only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createMemoryIndexedDB, QuotaLocalStorage } from '../helpers/memory-indexeddb.mjs';
@@ -66,7 +67,9 @@ test('a refusal the retries did not fix is still reported, once, with what faile
   assert.equal(reports[0].extra.idbLost, false);
   assert.equal(scope.reportStorageRefusal({ store: 'cache', reason: REASON, chars: 2_000_000 }, t0 + 2 * scope.LOST_CONNECTION_CONFIRM_MS), false, 'once a session');
   scope.offlineCopySaved();
-  assert.equal(reports.length, 1, 'a refusal already reported is not held, so a later save sends nothing');
+  assert.equal(reports.length, 2, 'the write that lands after the reported refusal is reported as fixed, not left unresolved');
+  assert.equal(reports[1].kind, 'info');
+  assert.match(reports[1].message, /^Fixed by itself: /);
 });
 
 test('a full device is still reported at once: no retry makes room', () => {
