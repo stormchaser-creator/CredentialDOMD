@@ -39,7 +39,12 @@ const mergeKinds = (a, b) => {
  * saved in unless every rule below ties:
  *  1. the call day that began first: a call still running (last night's,
  *     under its contract's 7 AM rule) outranks a contract whose call day has
- *     only just started or reached a timed block's lead-in at midnight;
+ *     only just started or reached a timed block's lead-in at midnight. A
+ *     row with only a day is not running once another contract's call day
+ *     has turned over (each on its own facility's clock, billing.js
+ *     callDayZone): it goes last. A Pacific contract's day row from
+ *     yesterday no longer wins at 5 AM Pacific over a Central contract whose
+ *     7 AM has come (ticket 29874d99);
  *  2. on one date, a row with call before a row with only a day, since the
  *     call covers the whole call day;
  *  3. `prefer` (the contract last used);
@@ -63,8 +68,11 @@ export function scheduledContracts(scheduleDays, contracts, now = new Date(), { 
     else hits.set(c.id, { c, date: row.date, kind: row.kind || "", order });
   });
   const fit = (h) => (coversDate(h.c, h.date) ? specificity(h.c, h.date) : 4);
+  const latest = [...hits.values()].reduce((m, h) => (h.date > m ? h.date : m), "");
+  const over = (h) => (kindRank(h.kind) === 1 && h.date < latest ? 1 : 0);
   return [...hits.values()]
-    .sort((a, b) => a.date.localeCompare(b.date)
+    .sort((a, b) => over(a) - over(b)
+      || a.date.localeCompare(b.date)
       || kindRank(a.kind) - kindRank(b.kind)
       || (a.c.id === prefer ? 0 : 1) - (b.c.id === prefer ? 0 : 1)
       || fit(a) - fit(b)

@@ -2,8 +2,9 @@ import { formatDate } from "./helpers.js";
 import {
   hasTimedPeriods, isTimedPeriod, timedBlock, timedBlockAt, timedCallDay, blockCallDays, blockForCallDay,
   callDayWindow, callDayWindowText, clockLabel, coveredIntervals, spanAgainstBlock, periodHasCallDay,
-  leadInCallDay, blockTurnoversWithin,
+  leadInCallDay, blockTurnoversWithin, contractZone,
 } from "./coverageBlocks.js";
+import { facilityZone } from "./facilityZone.js";
 
 /**
  * Locum time-engine billing math — shared between WorkLog (invoice
@@ -47,29 +48,73 @@ export function callDayStartHour(contract, at) {
   return block ? Math.floor(block.turnover / 60) : hour;
 }
 
-// The call day is decided on the WALL CLOCK. Subtracting 7 hours of elapsed
-// time (the old rule) is wrong on the two daylight-saving Sundays: after the
-// November fall-back, 6:00 to 6:59 filed under the new day, and after the
-// March spring-forward, 7:00 to 7:59 filed under the day before.
+// The wall clock a contract's call-day start hour is read on: the zone its
+// timed blocks state, else the facility's (its Work state or Location,
+// facilityZone.js), else this device's (""). A Pacific phone read a Central
+// contract's 7:00 AM turnover at 7:00 AM Pacific, so 7:05 AM at the facility
+// filed under the day before (owner's ticket 29874d99).
+export function callDayZone(contract) {
+  return contractZone(contract) || facilityZone(contract || {}).zone || "";
+}
+
+const ZONE_CLOCKS = new Map();
+// The calendar date and hour at a moment on a zone's clock ("" = this device's).
+function wallClockAt(at, zone) {
+  const d = new Date(at);
+  if (!zone) return { y: d.getFullYear(), m: d.getMonth() + 1, day: d.getDate(), hour: d.getHours(), minute: d.getMinutes() };
+  if (!ZONE_CLOCKS.has(zone)) {
+    ZONE_CLOCKS.set(zone, new Intl.DateTimeFormat("en-US", {
+      timeZone: zone, hourCycle: "h23", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit",
+    }));
+  }
+  const p = {};
+  for (const x of ZONE_CLOCKS.get(zone).formatToParts(d)) p[x.type] = x.value;
+  return { y: Number(p.year), m: Number(p.month), day: Number(p.day), hour: Number(p.hour) % 24, minute: Number(p.minute) };
+}
+
+// YYYY-MM-DD of a calendar date, the day number allowed to run over (day 0
+// is the last day of the month before).
+function dayKey(y, m, day) {
+  const d = new Date(Date.UTC(y, m - 1, day));
+  return `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, "0")}-${String(d.getUTCDate()).padStart(2, "0")}`;
+}
+
+// Epoch ms of `hour`:00 on a calendar date on a zone's clock ("" = this
+// device's), resolved as new Date(y, m, d, hour) resolves the device's: an
+// hour the clock skips moves forward, an hour it repeats is the first.
+function momentAt(y, m, day, hour, zone) {
+  if (!zone) return new Date(y, m - 1, day, hour, 0, 0, 0).getTime();
+  const wall = Date.UTC(y, m - 1, day, hour);
+  const offset = (t) => { const w = wallClockAt(t, zone); return Date.UTC(w.y, w.m - 1, w.day, w.hour, w.minute) - Math.floor(t / 60000) * 60000; };
+  const before = offset(wall - 86400000), after = offset(wall + 86400000);
+  const hits = [wall - before, wall - after].filter((t) => offset(t) === wall - t).sort((a, b) => a - b);
+  return hits.length ? hits[0] : wall - before;
+}
+
+// The call day is decided on the WALL CLOCK, the facility's (callDayZone).
+// Subtracting 7 hours of elapsed time (the old rule) is wrong on the two
+// daylight-saving Sundays: after the November fall-back, 6:00 to 6:59 filed
+// under the new day, and after the March spring-forward, 7:00 to 7:59 filed
+// under the day before.
 //
-// The second argument is an hour, or the CONTRACT: then the call day follows
-// its coverage blocks with times (a 6 AM to 6 AM block files 6:15 AM under
-// that same day), and the contract's start hour everywhere else, except on a
-// timed block's start date before it begins, which files under the block's
-// first day when the contract hour would put it on a day that is no call day
-// (coverageBlocks.js leadInCallDay). Every save path passes the contract; a
-// stored call_day is never re-derived.
-export function deriveCallDay(startTime, startHour = DEFAULT_CALL_DAY_START_HOUR) {
+// The second argument is an hour (read on `zone`, "" = this device), or the
+// CONTRACT: then the call day follows its coverage blocks with times (a 6 AM
+// to 6 AM block files 6:15 AM under that same day), and the contract's start
+// hour on its callDayZone everywhere else, except on a timed block's start
+// date before it begins, which files under the block's first day when the
+// contract hour would put it on a day that is no call day (coverageBlocks.js
+// leadInCallDay). Every save path passes the contract; a stored call_day is
+// never re-derived.
+export function deriveCallDay(startTime, startHour = DEFAULT_CALL_DAY_START_HOUR, zone = "") {
   if (startHour === null || typeof startHour === "object") {
     const contract = startHour || {};
     const inBlock = timedCallDay(contract, startTime);
     if (inBlock) return inBlock;
-    const byHour = deriveCallDay(startTime, callDayStartHour(contract));
+    const byHour = deriveCallDay(startTime, callDayStartHour(contract), callDayZone(contract));
     return leadInCallDay(contract, startTime, byHour) ?? byHour;
   }
-  const d = new Date(startTime);
-  if (d.getHours() >= startHour) return localDate(d);
-  return localDate(new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1, 12));
+  const { y, m, day, hour } = wallClockAt(startTime, zone);
+  return dayKey(y, m, hour >= startHour ? day : day - 1);
 }
 export function callDayOf(e) {
   // The stamp wins: it froze the call day in the timezone where the work
@@ -682,14 +727,14 @@ export function splitsAtDayStart(contract) {
   return contract?.splitAtDayStart === true && (contract.callStipend || 0) > 0;
 }
 
-// Each wall-clock `hour`:00 strictly inside (s, en), as epoch ms. Built from
-// the calendar (new Date(y, m, d, hour)), so a daylight-saving morning cuts at
-// 7:00 on the clock, not 7 elapsed hours after midnight.
-function dayStartsWithin(s, en, hour) {
+// Each wall-clock `hour`:00 strictly inside (s, en) on a zone's clock ("" =
+// this device's), as epoch ms. Built from the calendar, so a daylight-saving
+// morning cuts at 7:00 on the clock, not 7 elapsed hours after midnight.
+function dayStartsWithin(s, en, hour, zone = "") {
   const out = [];
-  const d0 = new Date(s);
+  const w = wallClockAt(s, zone);
   for (let k = 0; k < 400; k++) {
-    const b = new Date(d0.getFullYear(), d0.getMonth(), d0.getDate() + k, hour, 0, 0, 0).getTime();
+    const b = momentAt(w.y, w.m, w.day + k, hour, zone);
     if (b >= en) break;
     if (b > s) out.push(b);
   }
@@ -703,10 +748,10 @@ function dayStartsWithin(s, en, hour) {
  * moments, and its own turnover time inside it).
  */
 export function callDayCuts(contract, s, en) {
-  const hour = callDayStartHour(contract);
-  if (!hasTimedPeriods(contract)) return dayStartsWithin(s, en, hour);
+  const hour = callDayStartHour(contract), zone = callDayZone(contract);
+  if (!hasTimedPeriods(contract)) return dayStartsWithin(s, en, hour, zone);
   // Each block's moments are on its own zone's clock (coverageBlocks.js).
-  const candidates = new Set([...dayStartsWithin(s, en, hour), ...blockTurnoversWithin(contract, s, en)]);
+  const candidates = new Set([...dayStartsWithin(s, en, hour, zone), ...blockTurnoversWithin(contract, s, en)]);
   const out = [];
   let prev = deriveCallDay(s, contract);
   for (const t of [...candidates].sort((a, b) => a - b)) {
