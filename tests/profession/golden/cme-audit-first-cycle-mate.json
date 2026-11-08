@@ -1,10 +1,10 @@
 {
-  "reason": "CME shortfall audit, three rule fixes. (1) CO: a license issued after the default window start cannot be a renewed term, so the DORA first-cycle tier is the requirement for the total and the Category 1 minimum (C.R.S. 12-240-130.5(3)(c)). (2) ND: a license issued inside the current cycle has not yet renewed for the first time since it was granted, so that renewal owes no CME however long it was held (N.D. Admin. Code 50-04-01-02(2)); the twenty hours of 50-04-01-04(1) bind only the later reporting period. The golden ND fixture (issued 2025-11-15, expiring 2027-03-31) owes 0. (3) MATE Act: a one-time DEA registration item (DEA letter to registrants), carried by one card only (the first tracked state whose card can alert), so the other complianceFor, list and viewer cards no longer repeat it. Every other state and field is unchanged. Review: the ND first-cycle note quotes 50-04-01-02(2) verbatim from the ndlegis.gov text.",
+  "reason": "CME shortfall audit, three rule fixes. (1) CO: a license issued after the default window start cannot be a renewed term, so the DORA first-cycle tier is the requirement for the total and the Category 1 minimum (C.R.S. 12-240-130.5(3)(c)). (2) ND: a license issued inside the current cycle is on its first reporting period, counted from the issue date: under one year licensed owes no CME (N.D. Admin. Code 50-04-01-02(2)), one year up to two owes twenty hours (50-04-01-04(1)). The golden ND fixture (issued 2025-11-15, expiring 2027-03-31, 16 months) owes 20. (3) MATE Act: a one-time DEA registration item (DEA letter to registrants), carried by one card only (the first tracked state whose card can alert), so the other complianceFor, list and viewer cards no longer repeat it. Every other state and field is unchanged. Review: the ND first-cycle note quotes 50-04-01-02(2) and 50-04-01-04(1) verbatim from the ndlegis.gov text, each tier with its own citation. Review of 2026-11-07: (4) a DEA registration expiring more than 39 months after 2023-06-27 (21 CFR 1301.13 term) was issued or renewed after it, so it carries the MATE affirmation even with no or an original issue date; the golden DEA fixture expires 20 days after the frozen date, so the TX card and the list and viewer now read MATE as affirmed. (5) An issue date within 31 days of the cycle start may be a renewed term's, so no first-cycle proration applies to it.",
   "entries": [
     {
       "key": "rules:getStateEntry:ND:MD",
       "originalHash": "dbe55f5149f4eaca4d926596877402b30f51b9dd868dbf92bc39391f3b2ed648",
-      "reviewedHash": "c27c8295eb56a99a946a8044ad9b5a9ca9f175e691749538f3582cc0f91874d5"
+      "reviewedHash": "581277122751a5d299582ed3c107b1748ee458ebbf427eaeadefdc82893adad7"
     },
     {
       "key": "engine:CO:MD:empty:anchored",
@@ -24,17 +24,17 @@
     {
       "key": "engine:ND:MD:empty:anchored",
       "originalHash": "77ad34f72758b5ee055ef9599c415d5278eac7976a8d1a77b6090d9c4f6eaee7",
-      "reviewedHash": "f64a3835385d58daac5d5037cd05cbd44e80d72bdfe23536857053c56c27db02"
+      "reviewedHash": "61d52eb0d0effb5e58ce614eeef2a841502a7e55c27f13e9d6122623de835fb0"
     },
     {
       "key": "engine:ND:MD:mixed:anchored",
       "originalHash": "3721867366bb615c23adfbf707c572bb2447af71bac544fcc2633616e88a2530",
-      "reviewedHash": "b1498f16046cab43ae886a0c42e1a7789c388913424f406106152b32f2d66294"
+      "reviewedHash": "b84d2a87125d55789c354957851e63629f24e0240b509132ad116b57a465880d"
     },
     {
       "key": "engine:ND:MD:boundary:anchored",
       "originalHash": "2a36f2b5ae265796d1321e9a8f9062caf5145380e21343f6cd4c3557aa824de7",
-      "reviewedHash": "161bb32e301a9458d01f0870b7720497466dac2ab567505dc096c6b33fed9033"
+      "reviewedHash": "7e0c4885f1d01d8b09f5a246ce3eb4ebcea44f30f72b7a8f3d5449f6e815f722"
     },
     {
       "key": "complianceFor:CA:MD",
@@ -69,17 +69,17 @@
     {
       "key": "list:MD",
       "originalHash": "8d39d3550effd2aca3215995d78dc79a23c4aaba54a182e27f407d07aefb0524",
-      "reviewedHash": "0083022666ce491d3e609f5d9d57a192eab68c715a0f1a49a29ea226651e55d7"
+      "reviewedHash": "a32a6600712f428e5c579a0d62858a264155b3d6340f174e8e1f331ebcb6eaef"
     },
     {
       "key": "viewer:MD",
       "originalHash": "c44a6a4369285542d85c309a8008580beb7e73d5098516bec5c95fd7af9b1495",
-      "reviewedHash": "215592429484d51c9d89633e0087059c5f4a248134c784e357f1f4176e469821"
+      "reviewedHash": "eedb82eed81dd384e5767f64329102e2d93de4b78881e1a69e0c2f21257dcc31"
     },
     {
       "key": "rules:getStateEntry:ND:DO",
       "originalHash": "dbe55f5149f4eaca4d926596877402b30f51b9dd868dbf92bc39391f3b2ed648",
-      "reviewedHash": "c27c8295eb56a99a946a8044ad9b5a9ca9f175e691749538f3582cc0f91874d5"
+      "reviewedHash": "581277122751a5d299582ed3c107b1748ee458ebbf427eaeadefdc82893adad7"
     },
     {
       "key": "engine:CO:DO:empty:anchored",
@@ -99,17 +99,17 @@
     {
       "key": "engine:ND:DO:empty:anchored",
       "originalHash": "eb8998608510cb442cd33f6c3a352f874d5375a8eca09e7030e8cd05fb57ab0c",
-      "reviewedHash": "3987a94fa837cda52b11f9daaf2c7667e0cf3e485a3d49df473edd9b160dd356"
+      "reviewedHash": "c51151802211c730d8dd937ad2b28a48e7049e94ab9cb2e81d957e459a13e8e2"
     },
     {
       "key": "engine:ND:DO:mixed:anchored",
       "originalHash": "bdd7d220fc7c3dbce451eba64fec73f92b8b89e7dc3838b617a7e6f3babafd1e",
-      "reviewedHash": "387e4f8a9e1f551cb9e47f730ff9772e7f6f005a76a9402f607c81e28e6344c2"
+      "reviewedHash": "00ed80588fe34526722e80335ec6df4151659caaa458bec00b72616640366eed"
     },
     {
       "key": "engine:ND:DO:boundary:anchored",
       "originalHash": "5841a8a536432d569ae80f41b658070c266b8a8641c6bd6e246294e2614b2d5d",
-      "reviewedHash": "e4b0dcb3443b7c0d8d4fdec75bb7aa864b13ae02a6dace3fa619cc458077c4ea"
+      "reviewedHash": "be28ba2d3321e23486075ecc3ec67ab758880abfcb0ab9e6279a168fdafa6a29"
     },
     {
       "key": "complianceFor:CA:DO",
@@ -144,12 +144,22 @@
     {
       "key": "list:DO",
       "originalHash": "c60b87612f7e1e15fbc7cadddf6d496c154ca406fa353e37ea3732d782cc1969",
-      "reviewedHash": "ef206331118c682b41da361094765a03626aea8a1147220090160d8f5374a4f2"
+      "reviewedHash": "d25b3153c7bb9c8a83af2f24c3399a55b45fac78f8a3a74e33aba0ee27355f81"
     },
     {
       "key": "viewer:DO",
       "originalHash": "5c5e270cedfb4599f07ac2098cb69e247d80deeec933600589326ecc4bdc0ed9",
-      "reviewedHash": "505c50f4e855b58fa14c91e6720eaa52ad6849b15b489e726413068f827d88d6"
+      "reviewedHash": "513d875bb01af489f617febe9877d7b20a996b67c17aa5ab475ab20fa4d7584c"
+    },
+    {
+      "key": "complianceFor:TX:MD",
+      "originalHash": "5e8d248fc22af24551af6ba4e8433017cde6255bf4769e5d6267679095b4fbdb",
+      "reviewedHash": "2affdb47612314bfe99b9e9b7c581b226d3256d4f254619a5c4141c1d2de49f5"
+    },
+    {
+      "key": "complianceFor:TX:DO",
+      "originalHash": "337b5b384716bea3641469116cd608c3a6609e3ad394848ccd72c8b7d955fc36",
+      "reviewedHash": "0fc7cf5408d434a3700e51a7046c479216c81589f506fe7b473e49cef378d27a"
     }
   ]
 }

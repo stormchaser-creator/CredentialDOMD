@@ -187,6 +187,9 @@ export function rollingWindowLabel(st, cycle, waiting = null) {
 export function mateStatusText(mate) {
   if (!mate) return "";
   if (mate.via === "registration") {
+    // No issue date on file, but the registration's term shows a renewal after
+    // the cutoff (mateAttestationDate).
+    if (String(mate.attestedOn).startsWith("after:")) return "Affirmed at a DEA registration renewed after Jun 27, 2023: one time, done";
     const d = new Date(`${mate.attestedOn}T00:00:00`);
     const when = Number.isNaN(d.getTime()) ? mate.attestedOn : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
     return `Affirmed at DEA registration ${when}: one time, done`;

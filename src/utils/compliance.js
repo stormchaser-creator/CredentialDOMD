@@ -99,7 +99,11 @@ function firstCycleAllowance(rule, licenseIssued, windowEnd, defaultStart, ancho
   const months = wholeMonthsBetween(licenseIssued, windowEnd);
   // Without a license expiration the span runs to today, not to the renewal,
   // so the tier is not known: the figure stays beside the full number.
-  const applied = anchored && licenseIssued > defaultStart;
+  // A renewed term starts the day after the old one expired, so an issue date
+  // within a month of the cycle start may be that renewal's, not a first
+  // license: only a later one is a first cycle (review of 2026-11-07).
+  const renewalSlack = new Date(defaultStart.getTime()); renewalSlack.setDate(renewalSlack.getDate() + 31);
+  const applied = anchored && licenseIssued > renewalSlack;
   const base = { months, mode: rule.mode, applied, note: rule.note || "", source: rule.source || "" };
   if (rule.mode === "tiered") {
     // Tiers ascend by `underMonths`; the first one the span falls under wins.
@@ -584,7 +588,10 @@ export function hasDEARegistration(licenses) {
  * affirmed on the first registration submission, initial or renewal, on or
  * after June 27, 2023, and not asked at later renewals. Any registration on
  * file (current or past) issued or renewed on or after that date carries the
- * affirmation, so the earliest such issue date is returned; null otherwise.
+ * affirmation, so the earliest such issue date is returned. A registration
+ * runs at most 39 months (21 CFR 1301.13), so one expiring more than 39 months
+ * after that date was issued or renewed after it even when no issue date is
+ * recorded: "after:2023-06-27" is returned then. null otherwise.
  */
 export const MATE_AFFIRMATION_FROM = "2023-06-27";
 export function mateAttestationDate(licenses) {
@@ -594,7 +601,10 @@ export function mateAttestationDate(licenses) {
     .map(l => ({ raw: l.issuedDate, d: parseLocalDate(l.issuedDate) }))
     .filter(x => x.d && x.d >= from)
     .sort((a, b) => a.d - b.d);
-  return dates.length ? String(dates[0].raw).slice(0, 10) : null;
+  if (dates.length) return String(dates[0].raw).slice(0, 10);
+  const latest = new Date(from.getTime()); latest.setMonth(latest.getMonth() + 39);
+  const renewed = (licenses || []).filter(isDEARegistrationRecord).some(l => { const e = parseLocalDate(l.expirationDate); return e && e > latest; });
+  return renewed ? `after:${MATE_AFFIRMATION_FROM}` : null;
 }
 
 /**

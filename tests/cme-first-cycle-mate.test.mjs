@@ -3,10 +3,9 @@
 //   1. Colorado: a license issued inside the current cycle cannot be a renewed
 //      term, so the prorated first-cycle figure is the requirement
 //      (C.R.S. 12-240-130.5(3)(c), "the board shall adjust proportionately").
-//   2. North Dakota: a first renewal after the permanent license owes no CME,
-//      however long it was held (N.D. Admin. Code 50-04-01-02(2)); the twenty
-//      hours of 50-04-01-04(1) bind only a physician required to report, i.e.
-//      the period after that renewal. The window starts at licensure.
+//   2. North Dakota: a first renewal under one year licensed owes no CME
+//      (N.D. Admin. Code 50-04-01-02(2)); one year up to two owes twenty
+//      hours (50-04-01-04(1)); the window starts at licensure.
 //   3. MATE Act: a one-time DEA registration item (DEA letter to registrants,
 //      MATE_Training_Letter_Final.pdf), shown once, and met by the affirmation
 //      on any registration issued or renewed on or after 2023-06-27.
@@ -60,19 +59,19 @@ test("ND: a first renewal under one year licensed owes 0, counted from the issue
   assert.ok(note && note.includes("0 hours required") && note.includes("50-04-01-02(2)") && !note.includes("50-04-01-04(1)"), note);
 });
 
-test("ND: a first renewal one year up to two years licensed still owes nothing (50-04-01-02(2))", () => {
+test("ND: a first renewal one year up to two years licensed owes twenty hours, total and Category 1", () => {
   const entries = [course(3, "2025-06-01"), course(12, "2026-04-10")];
   // Issued 2025-11-01, expires 2027-09-30: 22 months licensed.
   const comp = computeCompliance(entries, "ND", "MD", { licenseExpiration: "2027-09-30", licenseIssued: "2025-11-01" });
   assert.equal(comp.firstCycleRule.applied, true);
   assert.equal(comp.firstCycleRule.months, 22);
-  assert.equal(comp.totalRequired, 0);
-  assert.equal(comp.cat1Required, 0);
+  assert.equal(comp.totalRequired, 20);
+  assert.equal(comp.cat1Required, 20);
   assert.equal(day(comp.windowStart), "2025-11-01");
   assert.equal(comp.totalEarned, 12, "CME dated before licensure is not counted");
-  assert.notEqual(comp.assessmentStatus, "needs-hours");
+  assert.equal(comp.assessmentStatus, "needs-hours");
   const note = windowNotes(comp).find(n => n.startsWith("ND first renewal"));
-  assert.ok(note && note.includes("50-04-01-02(2)") && !note.includes("50-04-01-04(1)"), note);
+  assert.ok(note && note.includes("20 hours required") && note.includes("50-04-01-04(1)") && !note.includes("50-04-01-02(2)"), note);
 });
 
 test("ND: a hand-entered cycle start before licensure never counts CME from before the license", () => {
@@ -121,7 +120,7 @@ test("MATE: a registration from before 2023-06-27 keeps the 8-hour line with its
   const data = member([
     lic({ id: "co", state: "CO", name: "CO Medical License", issuedDate: "2024-01-10" }),
     lic({ id: "nd", state: "ND", name: "ND Medical License", issuedDate: "2024-03-01" }),
-    { id: "dea1", type: "DEA Registration", name: "DEA Registration", state: "CO", issuedDate: "2023-06-26", expirationDate: "2026-12-31" },
+    { id: "dea1", type: "DEA Registration", name: "DEA Registration", state: "CO", issuedDate: "2023-06-26", expirationDate: "2026-06-30" },
   ]);
   assert.equal(mateAttestationDate(data.licenses), null);
   const withMate = complianceListFor(data).filter(c => c.comp.mate);
@@ -147,15 +146,16 @@ test("CO: an issue date with no expiration on file keeps the full 30; the tier i
   assert.notEqual(comp.assessmentStatus, "met");
 });
 
-test("ND: the first-cycle note quotes 50-04-01-02(2) as written", () => {
+test("ND: the first-cycle note quotes 50-04-01-02(2) and 50-04-01-04(1) as written", () => {
   const note = STATE_REQS.ND.firstCycle.note;
   assert.ok(note.includes("physicians who have not renewed their licenses for the first time since being granted a regular permanent license by the board."), note);
+  assert.ok(note.includes("for more than one year but less than two full years will be required to demonstrate completion of twenty hours of board-approved CME credits during that physician's initial CME reporting period."), note);
   assert.doesNotMatch(note, /after that|thereafter/i);
 });
 
 test("MATE: a record that is not a DEA registration by type never carries the affirmation", () => {
   const licenses = [
-    { type: "DEA Registration", name: "DEA Registration", issuedDate: "2022-05-31", expirationDate: "2026-12-31" },
+    { type: "DEA Registration", name: "DEA Registration", issuedDate: "2022-05-31", expirationDate: "2025-05-31" },
     { type: "Hospital Privileges", name: "Beth Israel Deaconess Medical Center", issuedDate: "2024-02-01", expirationDate: "2026-12-31" },
   ];
   assert.equal(mateAttestationDate(licenses), null);
@@ -170,7 +170,7 @@ test("MATE: the CME page card reads met by the registration, with no hours deman
   assert.deepEqual(mateProgress(entries, null), { required: 8, earned: 1, met: false });
 });
 
-const deaPre = { id: "dea", type: "DEA Registration", name: "DEA Registration", state: "TX", issuedDate: "2022-05-31", expirationDate: "2027-05-31" };
+const deaPre = { id: "dea", type: "DEA Registration", name: "DEA Registration", state: "TX", issuedDate: "2022-05-31", expirationDate: "2025-05-31" };
 
 test("MATE: a PA in two states gets the line on one card only", async () => {
   await loadAppRules();
@@ -197,7 +197,7 @@ test("MATE: carried by a card that can alert, not a pending primary licence besi
     licenses: [
       { id: "ca", state: "CA", type: "State Medical License (MD)", name: "CA Medical License", issuedDate: "2021-01-01", expirationDate: "2027-06-30", lifecycleStatus: "pending_confirmation" },
       { id: "tx", state: "TX", type: "State Medical License (MD)", name: "TX Medical License", issuedDate: "2020-01-01", expirationDate: "2028-08-31", lifecycleStatus: "active" },
-      { id: "dea", type: "DEA Registration", name: "DEA Registration", state: "TX", issuedDate: "", expirationDate: "2027-05-31" },
+      { id: "dea", type: "DEA Registration", name: "DEA Registration", state: "TX", issuedDate: "", expirationDate: "2026-06-30" },
     ],
     cme: [],
   };
@@ -216,4 +216,20 @@ test("MATE: a PA's line moves to the card that can alert when the primary licenc
   const withMate = complianceListFor(data).filter(c => c.comp.mate);
   assert.equal(withMate.length, 1, withMate.map(c => c.key).join(","));
   assert.equal(withMate[0].key, "CO:pa");
+});
+
+test("MATE: a DEA registration expiring more than 39 months after the cutoff was renewed after it, even with no issue date", () => {
+  const current = [{ type: "DEA Registration", name: "DEA Registration", issuedDate: "", expirationDate: "2027-05-31" }];
+  assert.equal(mateAttestationDate(current), "after:2023-06-27");
+  assert.equal(mateStatusText(mateProgress([], mateAttestationDate(current))), "Affirmed at a DEA registration renewed after Jun 27, 2023: one time, done");
+  const original = [{ type: "DEA Registration", name: "DEA Registration", issuedDate: "2015-03-01", expirationDate: "2027-05-31" }];
+  assert.equal(mateAttestationDate(original), "after:2023-06-27", "an original issue date on a current registration");
+  assert.equal(mateAttestationDate([{ type: "DEA Registration", name: "DEA Registration", issuedDate: "", expirationDate: "2026-09-27" }]), null, "within 39 months: not shown either way");
+});
+
+test("CO/ND: an issue date within a month of the cycle start may be a renewal's, so the full requirement stands", () => {
+  // ND cycle ending 2027-09-30 starts 2025-09-30; a renewed term starts the day after.
+  const comp = computeCompliance([], "ND", "MD", { licenseExpiration: "2027-09-30", licenseIssued: "2025-10-01" });
+  assert.equal(comp.firstCycleRule?.applied ?? false, false);
+  assert.equal(comp.totalRequired, 40);
 });
