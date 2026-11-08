@@ -864,3 +864,21 @@ test('a run cannot tick the host\'s attachment work: an unread file still holds 
     assert.equal(db.statements.filter(x => x.startsWith('DO $ticket_broker$')).length, 0, 'no "done" while the file is unread');
   });
 });
+test('a finished result is accepted when only older tickets were cut by the history bound (29874d99)', async () => {
+  const state = privateDir('ticket-reply-older-cut-');
+  const db = database();
+  try {
+    const context = await loadQueuedContext(db.query, { id: T, mode: 'reply' }, state.dir);
+    const cut = { ...context, history_complete: false, limitations: ['ticket_limit'], target_complete: true };
+    const done = { ...result({ done: true }), assessment: { ...result({ done: true }).assessment, follow_up: [] } };
+    const s3 = stage3(DONE); s3.final.follow_up = [];
+    const status = await finishRun(db.query, state.dir, cut, done, { stage3: s3, codeOutcome: 'none', requireStructured: true });
+    assert.deepEqual([status.kind, status.completion], ['reply_stored', true]);
+    // The target's own thread cut: still refused without a next step.
+    const partial = { ...cut, target_complete: false, limitations: ['ticket_limit', 'target_thread_partial'] };
+    const state2 = privateDir('ticket-reply-target-cut-');
+    try {
+      await assert.rejects(finishRun(db.query, state2.dir, partial, done, { stage3: s3, codeOutcome: 'none', requireStructured: true }), /Unfinished work requires follow-through/);
+    } finally { state2.cleanup(); }
+  } finally { state.cleanup(); }
+});

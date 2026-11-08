@@ -91,15 +91,19 @@ test('fails closed for unavailable approval, invalid IDs, and cross-customer/mis
   await assert.rejects(loadContext(bad.query, targetId), /Cross-ticket/);
 });
 
-test('bounds never silently erase missing history and block questions when incomplete', async () => {
-  for (const limits of [{ tickets: 1 }, { messages: 1 }, { bytes: 1 }]) {
+test('bounds never silently erase missing history and block questions while the target\'s own thread is incomplete', async () => {
+  for (const [limits, blocked] of [[{ tickets: 1 }, false], [{ messages: 1 }, true], [{ bytes: 1 }, true]]) {
     const f = fixtureQuery([ticket(1), ticket(2)], [message(1), message(2)]);
     const context = await loadContext(f.query, targetId, { limits });
     assert.equal(context.history_complete, false);
     assert.ok(context.limitations.length);
     assert.ok(context.tickets.some(t => t.id === targetId));
+    assert.equal(context.target_complete, !blocked, JSON.stringify(limits));
     const result = assessment(context, { questions: [{ question: 'Please repeat your issue?', why_needed: 'History missing', evidence_ids: [targetId], required_attachment_paths: [] }] });
-    assert.throws(() => validateAssessment(result, context), /missing history/);
+    // Only a gap in the target's own thread blocks a question: an older
+    // ticket cut by the bound does not (the owner always has some).
+    if (blocked) assert.throws(() => validateAssessment(result, context), /missing history/);
+    else assert.doesNotThrow(() => validateAssessment(result, context));
   }
   const f = fixtureQuery([ticket(1, { body_truncated: true })], []);
   assert.deepEqual((await loadContext(f.query, targetId)).limitations, ['ticket_body_truncated']);
@@ -541,4 +545,16 @@ test('the target ticket and its whole thread load first, even for a customer wit
   assert.ok(!context.limitations.includes('target_thread_not_loaded'));
   assert.ok(context.limitations.includes('ticket_limit'), 'the older history is what the bound cuts');
   assert.equal(context.tickets.filter(t => t.id === target.id).length, 1, 'never loaded twice');
+});
+
+test('older tickets cut by the bound leave the target complete; a bound inside the target\'s own thread does not (29874d99)', async () => {
+  const rows = Array.from({ length: 120 }, (_, i) => ticket(i + 1, { created_at: new Date(Date.UTC(2026, 0, 1) + i * 86400000).toISOString() }));
+  const target = rows[119];
+  const { query } = fixtureQuery(rows, [message(1, target.id)], { target });
+  const context = await loadContext(query, target.id);
+  assert.equal(context.history_complete, false, 'older history was cut');
+  assert.equal(context.target_complete, true, 'the target and its thread are whole');
+  const tight = await loadContext(fixtureQuery(rows, Array.from({ length: 3 }, (_, i) => message(i + 1, target.id)), { target }).query, target.id, { limits: { messages: 2 } });
+  assert.equal(tight.target_complete, false, 'a bound inside the target\'s thread');
+  assert.ok(tight.limitations.includes('target_thread_partial'));
 });

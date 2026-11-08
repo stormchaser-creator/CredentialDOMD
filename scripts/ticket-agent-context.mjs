@@ -247,7 +247,9 @@ export async function loadContext(query, ticketId, options = {}) {
   // loaded: every follow-up he wrote on an open ticket was invisible to the
   // runs ("I archived a contract ... it still asks", 8acf7241).
   const targetRow = (await query(historyRowSQL(target.user_id, ticketId))).find(r => r?.id === ticketId);
-  if (targetRow) await loadTicket(targetRow);
+  // A bound that stops inside the target's own thread is the only one that
+  // hides this request; older tickets cut by the bounds do not (target_complete).
+  if (targetRow && !await loadTicket(targetRow)) note('target_thread_partial');
   let cursor = null;
   outer: while (true) {
     const page = await query(historySQL(target.user_id, cursor));
@@ -264,6 +266,7 @@ export async function loadContext(query, ticketId, options = {}) {
     context.tickets.push({ ...target, context_only: false, messages: [], thread_not_loaded: true });
     context.attachments.push(...attachments(target, ticketId)); note('target_thread_not_loaded');
   }
+  context.target_complete = !context.limitations.some(l => l === 'target_thread_not_loaded' || l === 'target_thread_partial');
   const currentTarget = context.tickets.find(t => t.id === ticketId);
   if (currentTarget.updated_at !== target.updated_at) note('target_changed_during_collection');
   return context;
@@ -437,7 +440,12 @@ export function validateAssessment(result, context, { isolated = false, codeOutc
     const broken = checkFixedRules(customerReplyText(result.reply), { claims: true });
     if (broken.length) throw new ReplyRuleError(broken);
   }
-  if (!context.history_complete && review.questions.length) throw Error('Read missing history before asking the customer');
+  // The target's own thread is what a question or "finished" rests on: a
+  // customer with more tickets than the history bound (the owner, 111) always
+  // has older ones cut, and that refused every finished result of his
+  // ("Unfinished work requires follow-through", 29874d99, 2026-11-07).
+  const targetComplete = typeof context.target_complete === 'boolean' ? context.target_complete : context.history_complete;
+  if (!targetComplete && review.questions.length) throw Error('Read missing history before asking the customer');
   const answered = new Set([...review.answered_questions, ...context.prior_reviews.flatMap(r => [...(r.assessment?.answered_questions || []), ...(r.remembered_answers || [])])].map(q => questionKey(q.question)));
   // The legacy free text is parsed for questions; the structured reply's
   // questions are exactly the assessment's (the host renders them).
@@ -467,7 +475,7 @@ export function validateAssessment(result, context, { isolated = false, codeOutc
   const decided = structured && Array.isArray(stage3?.final?.items) ? stage3.final.items : null;
   const open = structured ? (decided ?? result.checklist).some(e => e.state !== 'done') : review.acceptance_criteria.some(a => a.state === 'open');
   const hostFollowUp = decided && Array.isArray(stage3.final.follow_up) ? stage3.final.follow_up.length : 0;
-  if ((open || !context.history_complete) && !review.questions.length && !review.follow_up.length && !hostFollowUp) throw Error('Unfinished work requires follow-through');
+  if ((open || !targetComplete) && !review.questions.length && !review.follow_up.length && !hostFollowUp) throw Error('Unfinished work requires follow-through');
   if (isolated && review.verification.kind === 'verified_change') throw Error('Isolated source review cannot claim runtime verification');
   if (!structured && review.verification.kind !== 'verified_change' && COMPLETION_CLAIM.test(result.reply)) throw Error('Completion claim lacks runtime/release verification');
   if (review.verification.kind === 'verified_change' &&
