@@ -72,34 +72,21 @@ export function mergeBindings(...maps) {
   return out;
 }
 
-// The paths a push must touch for the web deploy to run
-// (.github/workflows/deploy-gh-pages.yml on.push.paths), read at `commit`.
-export function deployPaths(yaml) {
-  const lines = String(yaml ?? '').split('\n');
-  const start = lines.findIndex(l => /^\s{4}paths:\s*$/.test(l));
-  if (start < 0) return null;
-  const out = [];
-  for (const line of lines.slice(start + 1)) {
-    if (/^\s*#/.test(line)) continue;
-    const m = line.match(/^\s{6}-\s*'([^']+)'\s*$/) || line.match(/^\s{6}-\s*"([^"]+)"\s*$/) || line.match(/^\s{6}-\s*(\S+)\s*$/);
-    if (!m) break;
-    out.push(m[1]);
-  }
-  return out.length ? out : null;
-}
-const globToRegExp = glob => new RegExp(`^${glob.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '\u0000').replace(/\*/g, '[^/]*').replace(/\u0000/g, '.*')}$`);
-// The base is the app that is live when the live build is an ancestor of it
-// and nothing between them is a path the web deploy publishes: a push that
-// touched only the runner (scripts/ticket-*) never redeploys, so before this
+// Files that ship nowhere: the ticket runner and ops tooling, tests and
+// docs. A base whose only differences from the live build are such files is
+// the live app: a push that touched only them never redeploys, so before this
 // every claim failed "not live yet" until an unrelated app change deployed
-// (16ba1758, 2026-11-07). Unknown paths or diff: not the same.
+// (16ba1758, 2026-11-07). An allowlist, so anything else (src/, public/, the
+// edge functions, migrations, the /api Worker, config) keeps "not live yet"
+// until its own deploy (review: a deny list called an undeployed edge
+// function fix live).
+export const UNSHIPPED = [/^scripts\/ticket-[^/]+$/, /^scripts\/ticket-fix\//, /^scripts\/ops-supervisor[^/]*$/, /^scripts\/[^/]+\.test\.(?:mjs|js|py)$/,
+  /^tests\//, /^docs\//, /^[^/]+\.md$/];
 export function sameAppAsLive(git, base, liveCommit) {
   if (!liveCommit || !git.isAncestor(liveCommit, base)) return false;
-  const globs = deployPaths(git.fileAt(base, '.github/workflows/deploy-gh-pages.yml'));
   const changed = git.diffNames?.(liveCommit, base);
-  if (!globs || !Array.isArray(changed)) return false;
-  const published = globs.map(globToRegExp);
-  return !changed.some(file => published.some(re => re.test(file)));
+  if (!Array.isArray(changed)) return false;
+  return changed.every(file => UNSHIPPED.some(re => re.test(file)));
 }
 
 // The host's verdict on each claim in the worker's reply.

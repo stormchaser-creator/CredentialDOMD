@@ -177,8 +177,9 @@ export function gitRunner(repo, { binary = 'git' } = {}) {
     parents: sha => run(['rev-list', '--parents', '-n', '1', sha]).trim().split(' ').slice(1),
     isAncestor: (a, b) => spawnSync(binary, ['-C', repo, 'merge-base', '--is-ancestor', a, b], { timeout: 30000 }).status === 0,
     changedFiles: sha => run(['diff-tree', '--no-commit-id', '--name-only', '-r', '--root', sha]).split('\n').filter(Boolean),
-    // Files that differ between two commits (null when either is unknown).
-    diffNames: (a, b) => (SHA.test(a || '') && SHA.test(b || '') ? run(['diff', '--name-only', a, b], true)?.split('\n').filter(Boolean) ?? null : null),
+    // Files that differ between two commits, both sides of a rename (null
+    // when either commit is unknown).
+    diffNames: (a, b) => (SHA.test(a || '') && SHA.test(b || '') ? run(['diff', '--no-renames', '--name-only', a, b], true)?.split('\n').filter(Boolean) ?? null : null),
     // Non-merge commits after base whose committer is this run's identity,
     // newest first. A pull brings in commits with other committers; a docs
     // note the run also made is filtered later by the files it touches.
