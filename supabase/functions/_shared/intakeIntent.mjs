@@ -201,13 +201,15 @@ const trivialMessage = (message) => {
  * @param {{ subject?: string, body?: string, attachmentNames?: string[], attachmentCount?: number, forwarded?: boolean }} input
  *   forwarded: the forward carried a third party's header block (the words
  *   are the requester's, not the physician's own note).
- * @returns {{ intent: "delivery"|"request"|"both", reasons: string[], requestScore: number, deliveryScore: number }}
+ * @returns {{ intent: "delivery"|"request"|"both", reasons: string[], requestScore: number, deliveryScore: number, deliveryWordScore: number }}
+ *   deliveryWordScore: the delivery score from the subject and message
+ *   alone, without the file names' lean.
  */
 export function classifyIntent({ subject = "", body = "", attachmentNames = [], attachmentCount, forwarded = false } = {}) {
   const names = (Array.isArray(attachmentNames) ? attachmentNames : []).map((n) => String(n ?? "")).filter(Boolean);
   const count = Number.isFinite(attachmentCount) ? Math.max(0, attachmentCount) : names.length;
   if (count === 0) {
-    return { intent: "request", reasons: ["no attachments: nothing to keep, so it is read as a request"], requestScore: 0, deliveryScore: 0 };
+    return { intent: "request", reasons: ["no attachments: nothing to keep, so it is read as a request"], requestScore: 0, deliveryScore: 0, deliveryWordScore: 0 };
   }
 
   const cleanSubject = String(subject ?? "").replace(/^\s*(?:(?:re|fwd?|fw)\s*:\s*)+/i, "");
@@ -224,6 +226,8 @@ export function classifyIntent({ subject = "", body = "", attachmentNames = [], 
   // The files' own names lean too, a little: "Reappointment_Application.pdf"
   // is a form to fill in, "Approval_Letter.pdf" is a document to keep.
   const roles = names.map(attachmentRole);
+  // What the words alone say is delivered, before the file names lean.
+  const deliveryWordScore = del.score;
   if (roles.length && roles.every((r) => r === "form")) { req.score += 1; req.names.push("every attachment is named like a form"); }
   if (roles.some((r) => r === "document")) { del.score += 1; del.names.push("an attachment is named like a finished document"); }
 
@@ -251,5 +255,5 @@ export function classifyIntent({ subject = "", body = "", attachmentNames = [], 
     intent = "delivery";
     reasons.push("the physician's own note with a file and no ask: a file to keep");
   }
-  return { intent, reasons, requestScore: req.score, deliveryScore: del.score };
+  return { intent, reasons, requestScore: req.score, deliveryScore: del.score, deliveryWordScore };
 }

@@ -508,6 +508,9 @@ const POINTS_ATTACHED_RE = /\b(?:attached|enclosed|attachment|attachments|checkl
 // (checklist, form, list, memo)". Only this turns a delivery the rules read
 // into a request: "Attached is my new hospital ID badge" delivers a badge.
 const POINTS_AS_REQUEST_RE = /\bsee (?:the )?(?:attached|enclosed|attachments?)\b|\bper the (?:attached|enclosed)\b|\b(?:complete|review|fill out|fill in|sign|return|read)(?: and (?:sign|return|send back))? the (?:attached|enclosed)\b|\b(?:attached|enclosed) (?:letter|request|checklist|form|forms|list|memo|questionnaire|application|packet)\b|\bchecklist\b/i;
+// The physician's own words for a file to keep: "For my file." A delivery
+// that says so stays one whatever its attachment's scan lists.
+const KEEP_FILE_RE = /\bfor\s+my\s+(?:files?|records?|reference)\b|\b(?:keep|file|save)\s+(?:this|these|it)\b/i;
 // The roles in which an attachment is itself the list of what is asked.
 const ASKING_ROLES = new Set(["request_checklist", "form_to_complete"]);
 // The roles in which an attachment is the physician's own, to keep: its
@@ -861,7 +864,10 @@ const cleanSubjectLine = (s) => String(s ?? "").replace(/^\s*(?:(?:re|fwd?|fw|tr
  * (ackWarranted); an ask of the email's own that only points to the
  * attachment ("See attached") gives way to them. A delivery stays a delivery
  * unless the message points to the attachment as what it asks
- * (POINTS_AS_REQUEST_RE: "see attached", not "Attached is my badge").
+ * (POINTS_AS_REQUEST_RE: "see attached", not "Attached is my badge") or
+ * says nothing of a delivery itself (an empty note, "FYI", a name: the
+ * rules' delivery then rests on the file names or the thin note alone).
+ * "For my file." says the file is to keep, so it stays a delivery.
  */
 export function rulesUnderstanding({ subject = "", body = "", attachmentNames = [], attachmentCount, forwarded = false, why = "", attachmentWords = [], attachmentTypes = [] } = {}) {
   const rules = classifyIntent({ subject, body, attachmentNames, attachmentCount, forwarded });
@@ -872,10 +878,17 @@ export function rulesUnderstanding({ subject = "", body = "", attachmentNames = 
   const read = attachmentAsks(letters).filter((a) => !own.has(quoteKey(a)));
   const message = currentMessage(body);
   // A delivery stays a delivery unless the message points to the attachment
-  // as what it asks; then, and on any other reading, the attachment's asks count.
-  const delivery = rules.intent === "delivery" && !(read.length && POINTS_AS_REQUEST_RE.test(message));
+  // as what it asks, or says nothing of a delivery itself: the rules called
+  // it one only for an empty or thin note or a file name ("Hospital_Letter.pdf",
+  // "scan001.pdf" under "FYI"), and the letter's own asks are what it says.
+  // Then, and on any other reading, the attachment's asks count.
+  const silent = rules.requestScore === 0 && rules.deliveryWordScore === 0 && !KEEP_FILE_RE.test(message);
+  const delivery = rules.intent === "delivery" && !(read.length && (POINTS_AS_REQUEST_RE.test(message) || silent));
   const fromFiles = delivery ? [] : read;
-  const asks = fromFiles.length ? parsed.filter((a) => !(POINTS_ATTACHED_RE.test(a) && classifyAsk(a).kind === "unknown")) : parsed;
+  // Beside the letter's asks, a silent note's own words ("FYI", a signature)
+  // ask nothing unless they name a document.
+  const quiet = fromFiles.length && rules.intent === "delivery" && silent;
+  const asks = fromFiles.length ? parsed.filter((a) => classifyAsk(a).kind !== "unknown" || !(quiet || POINTS_ATTACHED_RE.test(a))) : parsed;
   const asking = asks.length > 0 || fromFiles.length > 0 || asksSomething(body, subject);
   const askForm = hasAskForm(cleanSubjectLine(subject)) || askUnits(message).some((u) => !u.item && hasAskForm(u.text) && !OFFER_RE.test(u.text));
   let intent;
