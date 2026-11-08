@@ -258,7 +258,7 @@ export const STATE_REQS = {
     // issued inside the current 2-year cycle is on its first renewal, so it
     // owes 0, counted from the issue date. Later cycles owe the 40 hours.
     mode: "fixed", hours: 0, underMonths: 24, windowFromIssue: true,
-    note: "No CME is required before the first renewal of a regular permanent ND license. After that, 50-04-01-04(1): a physician who reports CME after being licensed in ND for more than one year but less than two full years must show twenty hours of board-approved CME during the initial CME reporting period; 40 hours every two years thereafter.",
+    note: "50-04-01-02(2): not required to meet the requirements of this chapter: \"physicians who have not renewed their licenses for the first time since being granted a regular permanent license by the board.\" 50-04-01-04(1): \"Any physician who is required to report CME credits after having been licensed to practice medicine in North Dakota for more than one year but less than two full years will be required to demonstrate completion of twenty hours of board-approved CME credits during that physician's initial CME reporting period.\"",
     source: "N.D. Admin. Code 50-04-01-02(2), 50-04-01-04(1)",
   }, topics: [], notes: "Not specified", rollover: "No", moc: "ABMS/AOA/RCPSC cert/MOC exempt from CME", source: "N.D. Admin. Code 50-04-01 (hours in 50-04-01-01, MOC exemption in 50-04-01-02)", verified: "2026-08", sourceUrl: "https://www.ndbom.org/practitioners/physicians/current/cme.asp" },
   NE: { total: 50, cycle: 2, cat1min: 50, cat1note: "All Cat 1", topics: [

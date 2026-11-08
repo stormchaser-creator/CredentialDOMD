@@ -1,6 +1,6 @@
 import ConditionalCmeTopics from "../shared/ConditionalCmeTopics";
 import AppCardDetails from "../shared/AppCardDetails";
-import { cmeAssessmentLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE, appCardTitle, certificationMetLine } from "../../utils/cmePresentation";
+import { cmeAssessmentLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE, appCardTitle, certificationMetLine, mateStatusText } from "../../utils/cmePresentation";
 import { useState, useMemo, useCallback, useEffect, useRef, memo } from "react";
 import { supabase, downloadDocumentBlob } from "../../lib/supabase";
 import { useApp } from "../../context/AppContext";
@@ -33,7 +33,7 @@ import { BOARD_REQS_META } from "../../constants/boardRequirements";
 import { getStateEntry, hasSeparateBoards, STATE_REQS_META } from "../../constants/stateRequirements";
 import { STATE_NAMES } from "../../constants/states";
 import { generateId, formatDate } from "../../utils/helpers";
-import { complianceFor, complianceListFor, mainCardFor, hasDEARegistration, cardWindowNotes, topicOutsidePeriod, cycleBucket, round2 } from "../../utils/compliance";
+import { complianceFor, complianceListFor, mainCardFor, hasDEARegistration, mateAttestationDate, cardWindowNotes, topicOutsidePeriod, cycleBucket, round2 } from "../../utils/compliance";
 import { boardComplianceFor, effectiveBoardSpecialties, aoaNationalEntry } from "../../utils/boardCompliance";
 import { certificationCards } from "../../utils/certCompliance";
 import { stateTranscriptModel, boardTranscriptOptions, boardTranscriptModel, shareTranscriptPdf, certificateDocsForModels, prefetchCertificates, certificateSummary, certificatesNotIncludedMessage } from "../../utils/cmeTranscriptPdf";
@@ -785,17 +785,26 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
 
           // DEA MATE Act training: one time, for a DEA registrant. Shown here so
           // courses tagged Opioid Prescribing or Substance Use Disorders visibly
-          // count toward something (ticket 53890221).
+          // count toward something (ticket 53890221). A DEA registration issued
+          // or renewed on or after 2023-06-27 carried the one-time affirmation,
+          // so the card reads met with no hours demanded.
           const mateCard = hasDea && (() => {
-            const m = mateProgress(data.cme);
+            const m = mateProgress(data.cme, mateAttestationDate(data.licenses));
             return (
               <div style={cardStyle(T.border)}>
                 <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 2 }}>DEA MATE Act training</div>
                 <div style={{ fontSize: 13, color: T.textDim, marginBottom: 12 }}>One time, for your DEA registration</div>
-                <ComplianceBar label="Opioid and substance use disorder training" earned={m.earned} required={m.required} met={m.met} />
-                <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.5, marginTop: -4 }}>
-                  Counts courses tagged Opioid Prescribing or Substance Use Disorders, from any date.
-                </div>
+                {m.via === "registration"
+                  ? <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13.5, marginBottom: 10 }}>
+                      <span style={{ color: T.text, fontWeight: 600 }}>Opioid and substance use disorder training</span>
+                      <span style={{ fontWeight: 800, color: T.success }}>{mateStatusText(m)}</span>
+                    </div>
+                  : <ComplianceBar label="Opioid and substance use disorder training" earned={m.earned} required={m.required} met={m.met} />}
+                {m.via !== "registration" && (
+                  <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.5, marginTop: -4 }}>
+                    Counts courses tagged Opioid Prescribing or Substance Use Disorders, from any date.
+                  </div>
+                )}
               </div>
             );
           })();

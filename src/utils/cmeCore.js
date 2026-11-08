@@ -195,11 +195,15 @@ export function outsidePeriodText(topic, out) {
  * The DEA MATE Act training a CME list has earned (one time, any date): hours
  * of courses tagged with a MATE topic. The CME page shows it to a member with
  * a DEA registration, so the Opioid Prescribing and Substance Use Disorders
- * tags visibly count toward something (ticket 53890221).
+ * tags visibly count toward something (ticket 53890221). `attestedOn` is the
+ * DEA registration date that carried the one-time affirmation
+ * (compliance.js mateAttestationDate): no hours are then demanded, the same
+ * shape the compliance engine returns.
  */
-export function mateProgress(entries) {
+export function mateProgress(entries, attestedOn = null) {
   const earned = round2((entries || []).filter((c) => cmeTopics(c).some((t) => MATE_TOPICS.includes(t)))
     .reduce((s, c) => s + (parseFloat(c?.hours) || 0), 0));
+  if (attestedOn) return { required: 0, earned, met: true, via: "registration", attestedOn };
   return { required: MATE_HOURS, earned, met: earned >= MATE_HOURS };
 }
 

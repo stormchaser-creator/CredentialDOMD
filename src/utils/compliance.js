@@ -89,13 +89,16 @@ export { MATE_HOURS, cmeTopics, cycleBucket, splitByCycle, topicPeriodLabel, rou
  * inside the current cycle cannot be a renewed term, so its first renewal is
  * this one (CO: C.R.S. 12-240-130.5(3)(c) "the board shall adjust
  * proportionately"; ND: N.D. Admin. Code 50-04-01-02(2)). An issue date at or
- * before the window start leaves the full requirement in force; the figure is
- * then shown beside it with its citation (`applied: false`).
+ * before the window start, or no license expiration on file (the span to the
+ * renewal is then unknown), leaves the full requirement in force; the figure
+ * is then shown beside it with its citation (`applied: false`).
  */
-function firstCycleAllowance(rule, licenseIssued, windowEnd, defaultStart) {
+function firstCycleAllowance(rule, licenseIssued, windowEnd, defaultStart, anchored) {
   if (!rule || !licenseIssued || licenseIssued >= windowEnd) return null;
   const months = wholeMonthsBetween(licenseIssued, windowEnd);
-  const applied = licenseIssued > defaultStart;
+  // Without a license expiration the span runs to today, not to the renewal,
+  // so the tier is not known: the figure stays beside the full number.
+  const applied = anchored && licenseIssued > defaultStart;
   const base = { months, mode: rule.mode, applied, note: rule.note || "", source: rule.source || "" };
   if (rule.mode === "tiered") {
     // Tiers ascend by `underMonths`; the first one the span falls under wins.
@@ -138,7 +141,7 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   // State-modeled first-cycle proration, from the license issue date. When
   // the issue date falls inside the default window it is the requirement.
   const licenseIssued = parseLocalDate(opts.licenseIssued);
-  const firstCycleRule = firstCycleAllowance(entry?.firstCycle, licenseIssued, windowEnd, defaultStart);
+  const firstCycleRule = firstCycleAllowance(entry?.firstCycle, licenseIssued, windowEnd, defaultStart, hasAnchor);
   // A state whose first reporting period runs from licensure (`windowFromIssue`,
   // ND) never counts CME dated before the license was issued.
   const issueStart = firstCycleRule?.applied && entry.firstCycle.windowFromIssue ? licenseIssued : null;
@@ -559,6 +562,10 @@ export function alertingStates(primaryState, additionalStates, licenses, degreeT
 }
 
 const isDEARecord = (l) => !!l && (/dea/i.test(l.type || "") || /dea/i.test(l.name || ""));
+// A record whose date can clear the MATE line must be a DEA registration by
+// its type ("DEA Registration"), never a name that happens to contain "dea"
+// (a "Deaconess" privileges record).
+const isDEARegistrationRecord = (l) => !!l && /\bDEA\b/i.test(l.type || "");
 
 /** DEA registration detection (drives the MATE Act line). */
 export function hasDEARegistration(licenses) {
@@ -579,7 +586,7 @@ export const MATE_AFFIRMATION_FROM = "2023-06-27";
 export function mateAttestationDate(licenses) {
   const from = parseLocalDate(MATE_AFFIRMATION_FROM);
   const dates = (licenses || [])
-    .filter(isDEARecord)
+    .filter(isDEARegistrationRecord)
     .map(l => ({ raw: l.issuedDate, d: parseLocalDate(l.issuedDate) }))
     .filter(x => x.d && x.d >= from)
     .sort((a, b) => a.d - b.d);
@@ -592,9 +599,27 @@ export function mateAttestationDate(licenses) {
  * it is shown once, never repeated on every state license card.
  */
 export function mateCardState(data) {
-  const s = data?.settings || {};
-  return trackedStates(s.primaryState, s.additionalStates, data?.licenses, s.degreeType)[0] || null;
+  return mateCard(data)?.st || null;
 }
+
+/**
+ * The one card ({ st, kind }) that carries the MATE Act line. A physician:
+ * the first tracked state. A PA: that state's PA card. An NP: the first card
+ * in complianceListFor order that the MATE line applies to (an APRN card, or
+ * an RN card when no APRN licence is on file).
+ */
+function mateCard(data) {
+  const s = data?.settings || {};
+  const deg = s.degreeType;
+  if (!isAdvancedPractice(deg)) {
+    const st = trackedStates(s.primaryState, s.additionalStates, data?.licenses, deg)[0];
+    return st ? { st, kind: "medical" } : null;
+  }
+  const hasAprn = hasAprnLicense(data.licenses);
+  return appCardOrder(data).find(c => c.kind !== "rn" || !hasAprn) || null;
+}
+
+const hasAprnLicense = (licenses) => (licenses || []).some(l => l && !isInactive(l) && licenseKindOf(l.type) === "aprn");
 
 /**
  * Convenience: compliance for a state using everything we know — the state
@@ -640,22 +665,23 @@ const deaAnswersOf = (licenses) => (licenses || []).find(l => l && !isInactive(l
 /**
  * One PA or NP card: the licence of that kind anchors the window, its
  * answers decide conditional topics and practice hours, current national
- * certification records may satisfy the hours, and MATE shows on the primary
- * practice card only. An RN card in a state whose APRN hours also satisfy
+ * certification records may satisfy the hours, and MATE shows on one card
+ * only (mateCard), since it is a DEA registration item. An RN card in a state whose APRN hours also satisfy
  * the RN hours (verified satisfiesRn) is read with the APRN card beside it.
  */
 function appComplianceFor(data, state, kind) {
   const deg = data.settings.degreeType;
   const k = kind || defaultKind(deg);
   const lic = findStateLicense(data.licenses, state, k);
-  const hasAprn = (data.licenses || []).some(l => l && !isInactive(l) && licenseKindOf(l.type) === "aprn");
+  const hasAprn = hasAprnLicense(data.licenses);
+  const mc = mateCard(data);
   const opts = {
     kind: k,
     licenseExpiration: lic?.expirationDate || null,
     licenseIssued: lic?.issuedDate || null,
     cycleStart: lic?.cmeCycleStart || null,
     licenseAnswers: lic?.customFields || {},
-    hasDEA: hasDEARegistration(data.licenses),
+    hasDEA: hasDEARegistration(data.licenses) && mc?.st === state && mc?.kind === k,
     deaAnswers: deaAnswersOf(data.licenses),
     mateAttestedOn: mateAttestationDate(data.licenses),
     mateApplies: k === "pa" || k === "aprn" || (k === "rn" && !hasAprn),
@@ -683,18 +709,24 @@ export function complianceListFor(data) {
   if (!isAdvancedPractice(deg)) {
     return states.map(st => ({ st, kind: "medical", key: st, comp: complianceFor(data, st), lic: findStateLicense(data.licenses, st) }));
   }
+  return appCardOrder(data).map(({ st, kind }) => ({ st, kind, key: `${st}:${kind}`, comp: complianceFor(data, st, kind), lic: findStateLicense(data.licenses, st, kind) }));
+}
+
+/** A PA's or NP's cards ({ st, kind }) in complianceListFor order. */
+function appCardOrder(data) {
+  const deg = data.settings.degreeType;
+  const states = trackedStates(data.settings.primaryState, data.settings.additionalStates, data.licenses, deg);
+  if (professionOf(deg) === "pa") return states.map(st => ({ st, kind: "pa" }));
   const held = (kind) => new Set((data.licenses || []).filter(l => l && !isInactive(l) && l.state && licenseKindOf(l.type) === kind).map(l => l.state));
-  const card = (st, kind) => ({ st, kind, key: `${st}:${kind}`, comp: complianceFor(data, st, kind), lic: findStateLicense(data.licenses, st, kind) });
-  if (professionOf(deg) === "pa") return states.map(st => card(st, "pa"));
   const aprn = held("aprn"), rn = held("rn");
   const picked = new Set([data.settings.primaryState, ...(Array.isArray(data.settings.additionalStates) ? data.settings.additionalStates : [])].filter(Boolean));
   const out = [];
   for (const st of states) {
-    if (aprn.has(st) || picked.has(st)) out.push(card(st, "aprn"));
-    if (rn.has(st)) out.push(card(st, "rn"));
+    if (aprn.has(st) || picked.has(st)) out.push({ st, kind: "aprn" });
+    if (rn.has(st)) out.push({ st, kind: "rn" });
   }
   const primary = data.settings.primaryState;
-  if (!rn.size && primary && !out.some(c => c.st === primary && c.kind === "rn")) out.push(card(primary, "rn"));
+  if (!rn.size && primary && !out.some(c => c.st === primary && c.kind === "rn")) out.push({ st: primary, kind: "rn" });
   return out;
 }
 

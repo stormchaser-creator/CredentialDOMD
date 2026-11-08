@@ -15,6 +15,9 @@ import {
   computeCompliance, complianceListFor, mateAttestationDate, mateCardState, windowNotes,
 } from "../src/utils/compliance.js";
 import { mateStatusText } from "../src/utils/cmePresentation.js";
+import { mateProgress } from "../src/utils/cmeCore.js";
+import { loadAppRules } from "../src/utils/appRules.js";
+import { STATE_REQS } from "../src/constants/stateRequirements.js";
 
 const course = (hours, date, category = "AMA PRA Category 1", topics = []) => ({ id: `c-${date}-${hours}`, title: "Synthetic course", category, hours: String(hours), date, topics });
 const day = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
@@ -108,4 +111,59 @@ test("MATE: the cutoff day itself carries the affirmation; a past registration o
     { type: "DEA Registration", issuedDate: "2023-06-27", status: "historical" },
     { type: "DEA Registration", issuedDate: "" },
   ]), "2023-06-27");
+});
+
+// Review fixes.
+
+test("CO: an issue date with no expiration on file keeps the full 30; the tier is not known", () => {
+  const comp = computeCompliance([], "CO", "MD", { licenseIssued: day(new Date(Date.now() - 20 * 86400000)) });
+  assert.equal(comp.firstCycleRule?.applied, false);
+  assert.equal(comp.totalRequired, 30);
+  assert.equal(comp.cat1Required, 30);
+  assert.notEqual(comp.assessmentStatus, "met");
+});
+
+test("ND: the first-cycle note quotes 50-04-01-02(2) and 50-04-01-04(1) as written", () => {
+  const note = STATE_REQS.ND.firstCycle.note;
+  assert.ok(note.includes("physicians who have not renewed their licenses for the first time since being granted a regular permanent license by the board."), note);
+  assert.ok(note.includes("for more than one year but less than two full years will be required to demonstrate completion of twenty hours of board-approved CME credits during that physician's initial CME reporting period."), note);
+  assert.doesNotMatch(note, /after that|thereafter/i);
+});
+
+test("MATE: a record that is not a DEA registration by type never carries the affirmation", () => {
+  const licenses = [
+    { type: "DEA Registration", name: "DEA Registration", issuedDate: "2022-05-31", expirationDate: "2026-12-31" },
+    { type: "Hospital Privileges", name: "Beth Israel Deaconess Medical Center", issuedDate: "2024-02-01", expirationDate: "2026-12-31" },
+  ];
+  assert.equal(mateAttestationDate(licenses), null);
+});
+
+test("MATE: the CME page card reads met by the registration, with no hours demanded", () => {
+  const entries = [course(1, "2026-02-01", "AMA PRA Category 1", ["Opioid Prescribing"])];
+  const attested = mateProgress(entries, "2026-03-04");
+  assert.equal(attested.met, true);
+  assert.equal(attested.required, 0);
+  assert.equal(mateStatusText(attested), "Affirmed at DEA registration Mar 4, 2026: one time, done");
+  assert.deepEqual(mateProgress(entries, null), { required: 8, earned: 1, met: false });
+});
+
+const deaPre = { id: "dea", type: "DEA Registration", name: "DEA Registration", state: "TX", issuedDate: "2022-05-31", expirationDate: "2027-05-31" };
+
+test("MATE: a PA in two states gets the line on one card only", async () => {
+  await loadAppRules();
+  const pa = (st) => ({ id: `pa-${st}`, state: st, type: "State Physician Assistant License", name: `${st} PA License`, issuedDate: "2020-01-01", expirationDate: "2028-03-31" });
+  const data = { settings: { degreeType: "PA", primaryState: "TX", additionalStates: ["CO"] }, licenses: [pa("TX"), pa("CO"), deaPre], cme: [] };
+  const withMate = complianceListFor(data).filter(c => c.comp.mate);
+  assert.equal(withMate.length, 1, withMate.map(c => c.key).join(","));
+  assert.equal(withMate[0].key, "TX:pa");
+  assert.equal(withMate[0].comp.mate.required, 8);
+});
+
+test("MATE: an NP gets the line on one APRN card only, never on an RN card beside it", async () => {
+  await loadAppRules();
+  const l = (st, type) => ({ id: `${st}-${type}`, state: st, type, name: `${st} ${type}`, issuedDate: "2020-01-01", expirationDate: "2028-03-31" });
+  const data = { settings: { degreeType: "NP", primaryState: "TX", additionalStates: ["CO"] }, licenses: [l("TX", "APRN License (NP)"), l("TX", "RN License"), l("CO", "APRN License (NP)"), deaPre], cme: [] };
+  const withMate = complianceListFor(data).filter(c => c.comp.mate);
+  assert.equal(withMate.length, 1, withMate.map(c => c.key).join(","));
+  assert.equal(withMate[0].key, "TX:aprn");
 });

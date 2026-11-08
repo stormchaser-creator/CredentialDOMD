@@ -1,10 +1,10 @@
 {
-  "reason": "CME shortfall audit, three rule fixes. (1) CO: a license issued after the default window start cannot be a renewed term, so the DORA first-cycle tier is the requirement for the total and the Category 1 minimum (C.R.S. 12-240-130.5(3)(c)). (2) ND: the first renewal after a regular permanent license owes no CME (N.D. Admin. Code 50-04-01-02(2)) and its window starts at the issue date. (3) MATE Act: a one-time DEA registration item (DEA letter to registrants), carried by one card only (the primary tracked state), so the other complianceFor, list and viewer cards no longer repeat it. Every other state and field is unchanged.",
+  "reason": "CME shortfall audit, three rule fixes. (1) CO: a license issued after the default window start cannot be a renewed term, so the DORA first-cycle tier is the requirement for the total and the Category 1 minimum (C.R.S. 12-240-130.5(3)(c)). (2) ND: the first renewal after a regular permanent license owes no CME (N.D. Admin. Code 50-04-01-02(2)) and its window starts at the issue date. (3) MATE Act: a one-time DEA registration item (DEA letter to registrants), carried by one card only (the primary tracked state), so the other complianceFor, list and viewer cards no longer repeat it. Every other state and field is unchanged. Review: the ND first-cycle note quotes 50-04-01-02(2) and 50-04-01-04(1) verbatim from the ndlegis.gov text; the eight ND entries move by that note text only.",
   "entries": [
     {
       "key": "rules:getStateEntry:ND:MD",
       "originalHash": "dbe55f5149f4eaca4d926596877402b30f51b9dd868dbf92bc39391f3b2ed648",
-      "reviewedHash": "cfb9a62079969ec519b0861ec2709c659c1c3965de79b5c3eb1e25afb491ae96"
+      "reviewedHash": "48fbec41ad3c12896d3b494eb0fd9c686f42cd9c09046172ee08cd949e6560e5"
     },
     {
       "key": "engine:CO:MD:empty:anchored",
@@ -24,17 +24,17 @@
     {
       "key": "engine:ND:MD:empty:anchored",
       "originalHash": "77ad34f72758b5ee055ef9599c415d5278eac7976a8d1a77b6090d9c4f6eaee7",
-      "reviewedHash": "5a3c4016cae96411209575a7d20a2fe4fbc85278b92544bbc28a6b45e529d3cc"
+      "reviewedHash": "c3dd04dbaa3138344e73ba2475fff2b3a3370d786faa9bf688ebcb5f79e0b1b3"
     },
     {
       "key": "engine:ND:MD:mixed:anchored",
       "originalHash": "3721867366bb615c23adfbf707c572bb2447af71bac544fcc2633616e88a2530",
-      "reviewedHash": "d7ba689e730a4b0596b27189e32f738618aa0e09c2e8aa29304476d78dc161fa"
+      "reviewedHash": "799316abc2a05249d3b808d0a8fe5d74a1bea7fa4d6631299e858351943971bc"
     },
     {
       "key": "engine:ND:MD:boundary:anchored",
       "originalHash": "2a36f2b5ae265796d1321e9a8f9062caf5145380e21343f6cd4c3557aa824de7",
-      "reviewedHash": "a8c47b0a7be8fdaf7644e8adf13a37762eb32547e08526fc67b50878724a3280"
+      "reviewedHash": "85c554a34b0883bdfb75a6b58a8c7bac450c401a24c06b886345750064d5d41a"
     },
     {
       "key": "complianceFor:CA:MD",
@@ -79,7 +79,7 @@
     {
       "key": "rules:getStateEntry:ND:DO",
       "originalHash": "dbe55f5149f4eaca4d926596877402b30f51b9dd868dbf92bc39391f3b2ed648",
-      "reviewedHash": "cfb9a62079969ec519b0861ec2709c659c1c3965de79b5c3eb1e25afb491ae96"
+      "reviewedHash": "48fbec41ad3c12896d3b494eb0fd9c686f42cd9c09046172ee08cd949e6560e5"
     },
     {
       "key": "engine:CO:DO:empty:anchored",
@@ -99,17 +99,17 @@
     {
       "key": "engine:ND:DO:empty:anchored",
       "originalHash": "eb8998608510cb442cd33f6c3a352f874d5375a8eca09e7030e8cd05fb57ab0c",
-      "reviewedHash": "88010b486d4668cc5bf047b5cbd6dfc01f90387042b27f4669dde0b892ba078b"
+      "reviewedHash": "d45bfcf57a50e0d608f7d3591f8e9ea78c36cf675f687d5741b6c523db361fad"
     },
     {
       "key": "engine:ND:DO:mixed:anchored",
       "originalHash": "bdd7d220fc7c3dbce451eba64fec73f92b8b89e7dc3838b617a7e6f3babafd1e",
-      "reviewedHash": "a086a991e2ebcbe82b83cd236e86c32ab2355a3215dc766c28556e587374cf0b"
+      "reviewedHash": "e04083fdf651a7a07cdb002792d9df758620609981956d4debd43ea075a74701"
     },
     {
       "key": "engine:ND:DO:boundary:anchored",
       "originalHash": "5841a8a536432d569ae80f41b658070c266b8a8641c6bd6e246294e2614b2d5d",
-      "reviewedHash": "bb6fe906d121d0c04d10625913b006a49cdf7832f0916be4bb4a06a39716da9e"
+      "reviewedHash": "4fd5fb73b588f47003381d7d6b13fe4afd860d7e5c122e476ea0db4d4fd7107a"
     },
     {
       "key": "complianceFor:CA:DO",
