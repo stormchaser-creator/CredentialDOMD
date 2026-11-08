@@ -117,16 +117,17 @@ test("Vera's snapshot: an off-year PA card sends the licence countdown with the 
   assert.equal(entry.cmePeriodDaysLeft, 638);
   assert.equal(entry.hoursAndTopicsDueBy, 'cmePeriodEnds');
   assert.deepEqual(entry.dueAtRenewal, []);
-  // An open MATE item moves only the countdown: the hours stay due at the
-  // period end, and the MATE item is the one thing named for the renewal.
+  // A current DEA registration expiring more than 39 months after
+  // 2023-06-27 was issued or renewed after it (21 CFR 1301.13), so it carries
+  // the MATE affirmation: nothing is due at the renewal, and the hours stay
+  // due at the period end (CME shortfall audit, 2026-11-07).
   const msDea = { ...ms, licenses: [...ms.licenses, { id: 'dea', type: 'DEA Registration', name: 'DEA', state: 'MS', expirationDate: '2027-06-30', licenseNumber: 'XX0000001' }] };
   const deaEntry = buildSnapshot(msDea, ['MS']).cmeSummary.byState['MS:pa'];
   assert.equal(deaEntry.renewal, '2026-12-15');
   assert.equal(deaEntry.daysLeft, 75);
   assert.equal(deaEntry.cmePeriodEnds, '2028-06-30');
-  assert.equal(deaEntry.hoursAndTopicsDueBy, 'cmePeriodEnds', 'an open MATE item never moves the hours to the renewal');
-  assert.equal(deaEntry.dueAtRenewal.length, 1);
-  assert.match(deaEntry.dueAtRenewal[0], /MATE Act 8 hours/);
+  assert.equal(deaEntry.hoursAndTopicsDueBy, 'cmePeriodEnds');
+  assert.deepEqual(deaEntry.dueAtRenewal, [], 'the affirmed MATE item is not due');
   // A card whose period ends with the licence carries no second countdown.
   const al = d('AL', [{ id: 'b', type: 'State Physician Assistant License', name: 'AL PA License', state: 'AL', expirationDate: '2026-12-31', licenseNumber: 'b-0001' }]);
   const alEntry = buildSnapshot(al, ['AL']).cmeSummary.byState['AL:pa'];
