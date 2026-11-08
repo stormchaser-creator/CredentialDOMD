@@ -155,8 +155,11 @@ what happened.
      open"). The ticket was finished and answered; its case file's
      `leftover_follow_ups` are what the run noticed on the way (a bug next
      to the fix, an attachment to read, a check after release). Do each one
-     that is real work (fix it like a ticket, or note it for the owner), then
-     note it done in the journal. Never write to the member about them.
+     that is real work (fix it like a ticket, or note it for the owner),
+     then close it, under the ticket agent's lock, with one line saying what
+     you did: `TICKET_RESOLUTION_NOTE='<one line>' node scripts/ticket-agent-context.mjs --close-leftover <ticket id> <index in leftover_follow_ups or its exact work text> "$HOME/Library/Application Support/CredentialDOMD/ticket-context"`.
+     A note that is not real work is closed the same way, saying why. Never
+     write to the member about them.
 4. Merging, yours or a held run's: run `npm test` in the worktree with the
    credential removed (`env -u CLAUDE_CODE_OAUTH_TOKEN npm test`; all of it
    must pass), commit, then take the ticket agent's lock in its own format:

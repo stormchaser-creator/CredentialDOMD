@@ -589,9 +589,12 @@ export function askItems(items, finals, { ownerTicket, asked = [], codeOutcome =
 // and by a refused side change, stalled after three tries and never answered.
 // Leftover notes are internal work (saveReview keeps them as
 // leftover_follow_ups); they never hold a finished ticket's reply.
-// (codeOutcome and pending are accepted and no longer consulted.)
-export function isCompletion({ finals }) {
-  return finals.length > 0 && finals.every(f => f.state === 'done');
+// One thing still holds it: an attachment nobody has read (the host's
+// "Retrieve and review" / "Open attachment" work), which may carry a second
+// request no item was made for (review of 2026-11-07).
+export const isAttachmentWork = work => /^(?:Retrieve and review attachment|Open attachment) /.test(String(work ?? ''));
+export function isCompletion({ finals, pending = [] }) {
+  return finals.length > 0 && finals.every(f => f.state === 'done') && !pending.some(f => isAttachmentWork(f?.work));
 }
 // null: the reply may go out. Otherwise { reasons }: ids, states and the code
 // outcome only (they go to the log). While this run's change is not live only
@@ -603,9 +606,10 @@ export function replyHold({ items, finals, questions = [], ownerTicket = false, 
   const asks = questions.length > 0 || askItems(items, finals, { ownerTicket, asked, codeOutcome }).length > 0;
   const open = finals.filter(f => f.state !== 'done');
   const unreleased = UNRELEASED.includes(codeOutcome);
-  // Every item done: never held (isCompletion).
-  if (asks || !open.length) return null;
-  return { reasons: [...open.map(f => `${f.id} ${f.state}`), ...(unreleased ? [`change ${codeOutcome}`] : [])] };
+  // Every item done: never held (isCompletion), unless an attachment is unread.
+  const unread = pending.filter(f => isAttachmentWork(f?.work)).length;
+  if (asks || (!open.length && !unread)) return null;
+  return { reasons: [...open.map(f => `${f.id} ${f.state}`), ...(unreleased ? [`change ${codeOutcome}`] : []), ...(!open.length && unread ? [`${unread} attachment(s) not read`] : [])] };
 }
 
 // ---------------------------------------------------------------------------

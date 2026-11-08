@@ -794,6 +794,26 @@ export async function closeFollowUp(directory, ticketId, key, { note = '', now =
     return record;
   });
 }
+// Closes a note a finished ticket's run left open (leftover_follow_ups) once
+// the supervisor has dealt with it: it moves to closed_follow_ups with one
+// line saying what was done, and stops showing in attention.json. The case
+// stays as it is.
+export async function closeLeftover(directory, ticketId, key, { note = '', now = Date.now(), lock = null } = {}) {
+  await ensureState(directory);
+  const text = oneLineNote(note);
+  return withAgentLock(lock, async () => {
+    const record = await readCase(directory, id(ticketId));
+    const left = Array.isArray(record.leftover_follow_ups) ? record.leftover_follow_ups : [];
+    const index = /^\d{1,3}$/.test(String(key)) ? Number(key) : left.findIndex(f => f.work === key);
+    const entry = left[index];
+    if (!entry) throw Error('No leftover note with that index or work text');
+    record.leftover_follow_ups = left.filter((_, i) => i !== index);
+    if (!record.leftover_follow_ups.length) delete record.leftover_follow_ups;
+    record.closed_follow_ups = [...(record.closed_follow_ups ?? []), { work: entry.work, at: new Date(now).toISOString(), note: text }];
+    await writePrivate(path.join(directory, `${id(ticketId)}.json`), JSON.stringify(record, null, 2));
+    return record;
+  });
+}
 // Puts a case back in the queue with fresh attempts: a stalled or waiting
 // case the host knows a run can now finish (the runner changed under it, or
 // its blocker is gone). Same lock as the other host commands; never one
@@ -802,7 +822,11 @@ export async function wakeCase(directory, ticketId, { now = Date.now(), lock = n
   await ensureState(directory);
   return withAgentLock(lock, async () => {
     const record = await readCase(directory, id(ticketId));
-    if (record.completion) throw Error('That case was answered as complete; a new message reopens it');
+    // Closed by its completion on the checklist it has now: a new message
+    // (a grown checklist) reopens it, and then it may be woken.
+    if (record.continuation?.state === 'complete' && record.completion && record.completion.checklist_sha256 === (record.checklist_sha256 ?? null)) {
+      throw Error('That case was answered as complete; a new message reopens it');
+    }
     wake(record, now);
     record.continuation.attempts = 0;
     await writePrivate(path.join(directory, `${id(ticketId)}.json`), JSON.stringify(record, null, 2));
@@ -857,7 +881,13 @@ function outstandingWork(previous, result, stage3) {
   // has open ("Finish AC-1: the host has not confirmed it done"): 53890221
   // closed all three that way and went quiet with every item partial.
   const hostOpen = new Set((Array.isArray(stage3?.final?.items) ? stage3.final.items : []).filter(f => f.state !== 'done').flatMap(f => hostItemWork(f.id)).map(questionKey));
-  for (const done of result.assessment.completed_follow_up) if (!hostOpen.has(questionKey(done.work))) outstanding.delete(questionKey(done.work));
+  // closedByRun: what this run's completions really closed (the attempts
+  // count resets only on that, or a run ticking host work loops for ever).
+  let closedByRun = 0;
+  for (const done of result.assessment.completed_follow_up) {
+    if (hostOpen.has(questionKey(done.work))) continue;
+    if (outstanding.delete(questionKey(done.work))) closedByRun++;
+  }
   for (const f of Array.isArray(stage3?.final?.items) ? stage3.final.items : []) if (f.state === 'done') for (const work of hostItemWork(f.id)) outstanding.delete(questionKey(work));
   // An owner follow-up closed by hand (closeFollowUp) stays closed when a
   // run lists the same work again, except the host's own work for an item
@@ -868,6 +898,7 @@ function outstandingWork(previous, result, stage3) {
     if (openItems.some(f => hostItemWork(f.id).some(w => questionKey(w) === questionKey(closed.work)))) continue;
     if (['support_owner', 'support_worker'].includes(open?.owner)) outstanding.delete(questionKey(closed.work));
   }
+  outstanding.closedByRun = closedByRun;
   return outstanding;
 }
 // completionPending: a completion reply is about to be stored with this
@@ -898,14 +929,18 @@ export async function saveReview(directory, context, given, sourceRevision, { no
   if (!held) outstanding.delete(questionKey(HELD_REPLY_WORK));
   // A completion closes the case: what a run left open is kept as internal
   // work (leftover_follow_ups), never a reason to run or hold again.
-  const leftovers = completed ? [...outstanding.values()].filter(f => f.work !== HELD_REPLY_WORK) : [];
+  // Merged with any still open from an earlier completion (by work), never
+  // replaced; --close-leftover closes one.
+  const leftoverMap = new Map((Array.isArray(previous?.leftover_follow_ups) ? previous.leftover_follow_ups : []).map(f => [questionKey(f.work), f]));
+  if (completed) for (const f of outstanding.values()) if (f.work !== HELD_REPLY_WORK) leftoverMap.set(questionKey(f.work), f);
+  const leftovers = [...leftoverMap.values()].slice(0, 30);
   if (completed) outstanding.clear();
   const pendingWork = [...outstanding.values()];
   const workerPending = pendingWork.some(f => f.owner === 'support_worker');
   const ownerPending = pendingWork.some(f => f.owner === 'support_owner');
   const inputAt = typeof context.input_watermark === 'string' ? context.input_watermark : null;
   const heldRetry = Boolean(held && previous?.continuation?.held && (previous.continuation.held.input_at ?? null) === inputAt);
-  const attempts = (context.run_mode === 'continuation' && !result.assessment.completed_follow_up.length) || heldRetry ? previous?.continuation?.attempts ?? 0 : 0;
+  const attempts = (context.run_mode === 'continuation' && !outstanding.closedByRun) || heldRetry ? previous?.continuation?.attempts ?? 0 : 0;
   // "complete" only once every item is done (or the reply saying so is
   // stored): a case with an item open and nothing left listed (53890221) went
   // quiet as "complete" with no reply. It goes back to the worker instead.
@@ -935,7 +970,7 @@ export async function saveReview(directory, context, given, sourceRevision, { no
     ...(previous?.resolutions ? { resolutions: previous.resolutions } : {}),
     ...(previous?.asked_items ? { asked_items: previous.asked_items } : {}),
     ...(previous?.closed_follow_ups ? { closed_follow_ups: previous.closed_follow_ups } : {}),
-    ...(leftovers.length ? { leftover_follow_ups: leftovers.slice(0, 30) } : previous?.leftover_follow_ups ? { leftover_follow_ups: previous.leftover_follow_ups } : {}),
+    ...(leftovers.length ? { leftover_follow_ups: leftovers } : {}),
     history_complete: context.history_complete, limitations: context.limitations,
     // A saved draft is evidence of follow-through, never proof of delivery or deployment.
     publication: 'not_confirmed', remembered_answers: [...answers.values()], follow_up_history: [...followUps.values()], ...result,
@@ -1023,11 +1058,9 @@ export async function finishRun(query, directory, context, result, { sourceRevis
   const prepared = await prepareResult(context, result, { repo, preHead, runStarted, runCommitter, runId, release, fetchBuild, codeOutcome, stage3, requireStructured });
   const structured = isStructured(result);
   const ownerTicket = context.approval?.from_admin === true;
-  // Every item the host decided done, this run's change (if any) released,
-  // nothing asked and no follow-up left open, the host's or the worker's
-  // (review of 2026-11-06: an unread attachment or an owner item must not be
-  // erased by "every part is done"): the reply reports finished work and the
-  // case closes.
+  // Every item the host decided done, nothing asked and no attachment left
+  // unread: the reply reports finished work and the case closes. Other notes
+  // a run left open become leftovers for the supervisor (owner, 2026-11-07).
   const pending = structured && stage3?.final
     ? [...outstandingWork(previous, withHostFollowUps(demoteUnreleased(result, codeOutcome), stage3), stage3).values()].filter(f => f.work !== HELD_REPLY_WORK) : [];
   const completion = structured && Boolean(stage3?.final) && isCompletion({ finals: stage3.final.items, codeOutcome: outcome, pending }) && !result.assessment.questions.length;
@@ -1091,7 +1124,15 @@ export async function finishRun(query, directory, context, result, { sourceRevis
     const record = await saveReview(directory, context, result, sourceRevision, { ...options, held: hold });
     return { kind: 'reply_held', reasons: hold.reasons, continuation_state: record.continuation.state, attempts: record.continuation.attempts };
   }
-  if (completion) return sendCompletion(prepared, 'reply');
+  if (completion) {
+    // "Thanks" on a ticket already answered as done on this checklist: no
+    // second "done" reply (review of 2026-11-07).
+    if (sameChecklist(previous?.completion)) {
+      const record = await saveReview(directory, context, result, sourceRevision, { ...options, completed: { verification_id: previous.completion.verification_id } });
+      return { kind: 'already_answered', continuation_state: record.continuation.state };
+    }
+    return sendCompletion(prepared, 'reply');
+  }
   const verification = await storeReply(query, directory, context, prepared, { includeArchived, structured,
     beforeStore: () => saveReview(directory, context, result, sourceRevision, options) });
   if (!verification) return { kind: 'reply_withheld', verification_id: null };
@@ -1249,16 +1290,16 @@ export async function writeAttention(query, directory, queue, { now = Date.now()
   }
   record.waiting_owner_answered = answered.sort();
   // leftover: notes a finished ticket's run left open (saveReview keeps them
-  // when the completion closes the case), answered in the last week: real
-  // work the supervisor takes up, never a reason to hold the reply.
+  // when the completion closes the case) that nobody has closed yet
+  // (--close-leftover): real work the supervisor takes up, never a reason to
+  // hold the reply. Listed until closed, however old.
   record.leftover = [];
   for (const entry of await fs.readdir(directory).catch(() => [])) {
     const ticketId = entry.replace(/\.json$/, '');
     if (!UUID.test(ticketId) || !entry.endsWith('.json')) continue;
     let saved = null;
     try { saved = await readCase(directory, ticketId); } catch { continue; }
-    const at = Date.parse(saved.completion?.at ?? '');
-    if (saved.leftover_follow_ups?.length && Number.isFinite(at) && now - at < 7 * 24 * 3600000) record.leftover.push(ticketId);
+    if (saved.leftover_follow_ups?.length) record.leftover.push(ticketId);
   }
   record.leftover.sort();
   await writePrivate(path.join(directory, 'attention.json'), `${JSON.stringify(record)}\n`);
@@ -1324,6 +1365,13 @@ async function main(args) {
     console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} CLOSED — ${target.slice(0, 8)} follow-up; case ${record.continuation.state}`);
     return;
   }
+  if (mode === '--close-leftover' && args.length === 4) {
+    // --close-leftover TICKET INDEX|WORK PRIVATE_STATE; the note from TICKET_RESOLUTION_NOTE.
+    const [, target, key, directory] = args;
+    const record = await closeLeftover(directory, id(target), key, { note: process.env.TICKET_RESOLUTION_NOTE ?? '', lock: process.env.TICKET_AGENT_LOCK || AGENT_LOCK });
+    console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} CLOSED — ${target.slice(0, 8)} leftover note; ${(record.leftover_follow_ups ?? []).length} left`);
+    return;
+  }
   if (mode === '--wake' && args.length === 3) {
     // --wake TICKET PRIVATE_STATE
     const [, target, directory] = args;
@@ -1373,6 +1421,6 @@ async function main(args) {
     if (status.completion) console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} COMPLETION REPLY — ${context.target_id.slice(0, 8)}: every item done; stored from a ${status.run_mode} run, case closed`);
     console.log(JSON.stringify(status)); return;
   }
-  throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --release-attempt TICKET_ID PRIVATE_STATE | --resolve-item TICKET_ID AC-n decision|data_fix|confirmed PRIVATE_STATE | --note-owner TICKET_ID PRIVATE_STATE | --close-follow-up TICKET_ID INDEX|WORK PRIVATE_STATE | --wake TICKET_ID PRIVATE_STATE | --validate CONTEXT MODEL_OUTPUT | --session MODEL_OUTPUT | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');
+  throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --release-attempt TICKET_ID PRIVATE_STATE | --resolve-item TICKET_ID AC-n decision|data_fix|confirmed PRIVATE_STATE | --note-owner TICKET_ID PRIVATE_STATE | --close-follow-up TICKET_ID INDEX|WORK PRIVATE_STATE | --wake TICKET_ID PRIVATE_STATE | --close-leftover TICKET_ID INDEX|WORK PRIVATE_STATE | --validate CONTEXT MODEL_OUTPUT | --session MODEL_OUTPUT | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');
 }
 if (isMain(import.meta.url)) main(process.argv.slice(2)).catch(error => { console.error(`ERROR: ${logSafe(error)}`); process.exitCode = 1; });

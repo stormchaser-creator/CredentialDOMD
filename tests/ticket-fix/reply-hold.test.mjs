@@ -9,7 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdirSync, symlinkSync } from 'node:fs';
 import path from 'node:path';
-import { wakeCase, checkDataFixes, finishRun, collectQueue, loadQueuedContext, queueSQL, heldLine, saveReview, resolveItem, noteOwner, closeFollowUp, withAgentLock, writeAttention, targetSQL, HELD_REPLY_WORK } from '../../scripts/ticket-agent-context.mjs';
+import { closeLeftover, wakeCase, checkDataFixes, finishRun, collectQueue, loadQueuedContext, queueSQL, heldLine, saveReview, resolveItem, noteOwner, closeFollowUp, withAgentLock, writeAttention, targetSQL, HELD_REPLY_WORK } from '../../scripts/ticket-agent-context.mjs';
 import { spawn } from 'node:child_process';
 import { prepareRenderedReply } from '../../scripts/ticket-fix/reply.mjs';
 import { DATA_FIX_FILE, replyHold, itemsDigest, itemFollowUpWork, resolveFollowUpWork, finalStates, validResolutions, writeChecklist, renderAgentReply, stillAsked } from '../../scripts/ticket-fix/checklist.mjs';
@@ -484,14 +484,14 @@ test('every item done with notes left open (the host\'s or the worker\'s): the r
     const queue = await collectQueue(db.query, state.dir, { now: Date.now() + HOUR });
     const context = await loadQueuedContext(db.query, queue.items[0], state.dir, { now: Date.now() + HOUR });
     const s3 = stage3(DONE);
-    s3.final.follow_up = [{ work: 'Open attachment att-1 (synthetic.docx) yourself', owner: 'support_owner', next_action: 'Synthetic.' }];
+    s3.final.follow_up = [{ work: 'Confirm AC-1 after the next release', owner: 'support_worker', next_action: 'Synthetic.' }];
     const status = await finishRun(db.query, state.dir, context, { ...result({ done: true }), needs_owner_review: true,
-      assessment: { ...result({ done: true }).assessment, follow_up: [{ work: 'Owner reads the attachment', owner: 'support_owner', next_action: 'Synthetic.' }] } }, { stage3: s3, codeOutcome: 'none', requireStructured: true });
+      assessment: { ...result({ done: true }).assessment, follow_up: [{ work: 'Owner reviews a nearby bug', owner: 'support_owner', next_action: 'Synthetic.' }] } }, { stage3: s3, codeOutcome: 'none', requireStructured: true });
     assert.deepEqual([status.kind, status.completion, status.continuation_state], ['reply_stored', true, 'complete']);
     const kept = record(state.dir);
     assert.deepEqual(kept.pending_follow_up, []);
-    assert.ok(kept.leftover_follow_ups.some(f => f.work.startsWith('Open attachment att-1')), 'the owner note is kept');
-    assert.ok(kept.leftover_follow_ups.some(f => f.work === 'Owner reads the attachment'));
+    assert.ok(kept.leftover_follow_ups.some(f => f.work === 'Confirm AC-1 after the next release'), 'the worker note is kept');
+    assert.ok(kept.leftover_follow_ups.some(f => f.work === 'Owner reviews a nearby bug'), 'the owner note is kept');
   } finally { state.cleanup(); }
 });
 test('defect 6: a run that dies after the database stored the completion never sends it twice', async () => {
@@ -531,14 +531,22 @@ const probeResult = () => ({ ...result({ done: true }), checklist: [{ ac_id: 'AC
   reply: { opening: 'update', closing: 'reply_here', claims: [result().reply.claims[1]] },
   assessment: { ...result().assessment, follow_up: [{ work: 'Hear back on the device check', owner: 'support_worker', next_action: 'Synthetic.' }] } });
 const probeStage3 = () => { const s3 = stage3(PROBE, { items: DEVICE_ITEMS }); s3.final.claims = [{ ...s3.final.claims[1], index: 0 }]; s3.final.follow_up = []; return s3; };
-test('N1: every item done with a note open, nothing asked: "done" goes out once, never again from a later run', async () => {
+test('N1: every item done but an attachment nobody read: held (it may carry a second request); "done" goes out once it is read', async () => {
   await answeredTicket(async ({ db, state, due }) => {
-    const s3 = () => { const x = stage3(DONE); x.final.follow_up = [{ work: 'Retrieve and review attachment att-1 (tickets/x/shot.png)', owner: 'support_worker', next_action: 'The next run downloads it again' }]; return x; };
-    const sent = await finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: s3(), codeOutcome: 'none', requireStructured: true });
+    const unread = () => { const x = stage3(DONE); x.final.follow_up = [{ work: 'Retrieve and review attachment att-1 (tickets/x/shot.png)', owner: 'support_worker', next_action: 'The next run downloads it again' }]; return x; };
+    const held = await finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: unread(), codeOutcome: 'none', requireStructured: true });
+    assert.equal(held.kind, 'continuation_saved');
+    assert.ok(record(state.dir).pending_follow_up.some(f => f.work.startsWith('Retrieve and review attachment')));
+    assert.equal(db.statements.filter(x => x.startsWith('DO $ticket_broker$')).length, 0);
+    const read = stage3(DONE); read.final.follow_up = [];
+    const done = { ...result({ done: true }), assessment: { ...result({ done: true }).assessment, completed_follow_up: [{ work: 'Retrieve and review attachment att-1 (tickets/x/shot.png)', verification: 'Synthetic: read it.' }] } };
+    const sent = await finishRun(db.query, state.dir, await due(), done, { stage3: read, codeOutcome: 'none', requireStructured: true });
     assert.deepEqual([sent.kind, sent.completion, sent.continuation_state], ['reply_stored', true, 'complete']);
-    assert.deepEqual(record(state.dir).pending_follow_up, [], 'the note does not keep the case running');
     assert.equal(db.statements.filter(x => x.startsWith('DO $ticket_broker$')).length, 1);
   });
+});
+test('replyHold: an unread attachment holds an otherwise finished reply', () => {
+  assert.deepEqual(replyHold({ items: ITEMS, finals: DONE, pending: [{ work: 'Open attachment att-2 (tickets/x/a.docx) yourself', owner: 'support_owner' }] }), { reasons: ['1 attachment(s) not read'] });
 });
 test('N2 and review 3, finding 1: a device check is asked again only for a newer released change; the reporter\'s answer is what gets recorded', async () => {
   const asked = [{ id: 'AC-1', at: '2026-11-06T10:00:00Z' }];
@@ -773,8 +781,12 @@ test('--wake puts a stalled case back with fresh attempts, never one already ans
       continuation: { state: 'stalled', attempts: 3, due_at: new Date().toISOString(), reason: 'Synthetic.' } }), { mode: 0o600 });
     const woken = await wakeCase(state.dir, T, { lock });
     assert.deepEqual([woken.continuation.state, woken.continuation.attempts, woken.continuation.reason], ['pending', 0, undefined]);
-    writeFileSync(path.join(state.dir, `${T}.json`), JSON.stringify({ ...woken, completion: { at: new Date().toISOString(), verification_id: uuid(7300) } }), { mode: 0o600 });
+    const SHA = 'a'.repeat(64);
+    writeFileSync(path.join(state.dir, `${T}.json`), JSON.stringify({ ...woken, checklist_sha256: SHA, continuation: { ...woken.continuation, state: 'complete' }, completion: { at: new Date().toISOString(), checklist_sha256: SHA, verification_id: uuid(7300) } }), { mode: 0o600 });
     await assert.rejects(wakeCase(state.dir, T, { lock }), /answered as complete/);
+    // A new message grew the checklist and the new work stalled: it may be woken.
+    writeFileSync(path.join(state.dir, `${T}.json`), JSON.stringify({ ...woken, checklist_sha256: 'b'.repeat(64), continuation: { ...woken.continuation, state: 'stalled' }, completion: { at: new Date().toISOString(), checklist_sha256: SHA, verification_id: uuid(7300) } }), { mode: 0o600 });
+    assert.equal((await wakeCase(state.dir, T, { lock })).continuation.state, 'pending');
   } finally { state.cleanup(); }
 });
 test('the notes a finished ticket left open reach the supervisor (attention leftover)', async () => {
@@ -797,5 +809,42 @@ test('a run cannot tick off the host\'s own work for an item the host still has 
     const kept = record(state.dir);
     assert.ok(kept.pending_follow_up.some(f => f.work === itemFollowUpWork('AC-2')), 'the host work stays while AC-2 is open');
     assert.notEqual(kept.continuation.state, 'complete');
+  });
+});
+test('a run ticking the host\'s work every time still stalls after its attempts (no hourly loop)', async () => {
+  await answeredTicket(async ({ db, state, due }) => {
+    const open = stage3(OPEN); open.final.follow_up = hostFollowUp(OPEN);
+    const ticked = { ...result(), assessment: { ...result().assessment, completed_follow_up: [{ work: itemFollowUpWork('AC-2'), verification: 'Synthetic: looked at it.' }] } };
+    await finishRun(db.query, state.dir, await due(), result(), { stage3: open, codeOutcome: 'none', requireStructured: true });
+    for (let i = 0; i < 4 && record(state.dir).continuation.state === 'pending'; i++) {
+      const again = stage3(OPEN); again.final.follow_up = hostFollowUp(OPEN);
+      await finishRun(db.query, state.dir, await due(), ticked, { stage3: again, codeOutcome: 'none', requireStructured: true });
+    }
+    assert.equal(record(state.dir).continuation.state, 'stalled');
+  });
+});
+test('"thanks" on a ticket already answered as done sends no second "done" reply', async () => {
+  const state = privateDir('ticket-reply-thanks-');
+  const db = database();
+  try {
+    const context = await loadQueuedContext(db.query, { id: T, mode: 'reply' }, state.dir);
+    const first = await finishRun(db.query, state.dir, context, result({ done: true }), { stage3: stage3(DONE), codeOutcome: 'none', requireStructured: true });
+    assert.equal(first.kind, 'reply_stored');
+    const again = await finishRun(db.query, state.dir, context, result({ done: true }), { stage3: stage3(DONE), codeOutcome: 'none', requireStructured: true });
+    assert.equal(again.kind, 'already_answered');
+    assert.equal(db.statements.filter(x => x.startsWith('DO $ticket_broker$')).length, 1, 'one "done" reply');
+  } finally { state.cleanup(); }
+});
+test('a leftover note is closed by hand with a one line note, merged across completions, and leaves the attention list', async () => {
+  await answeredTicket(async ({ db, state, due }) => {
+    const s3 = stage3(DONE); s3.final.follow_up = [{ work: 'Synthetic: a bug next to the fix', owner: 'support_worker', next_action: 'Synthetic.' }];
+    await finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: s3, codeOutcome: 'none', requireStructured: true });
+    const lock = path.join(state.dir, 'agent.lock');
+    await assert.rejects(closeLeftover(state.dir, T, '0', { note: '', lock }), /one line/);
+    await assert.rejects(closeLeftover(state.dir, T, '5', { note: 'Synthetic.', lock }), /No leftover note/);
+    const closed = await closeLeftover(state.dir, T, '0', { note: 'Synthetic: fixed in a separate change.', lock });
+    assert.equal(closed.leftover_follow_ups, undefined);
+    assert.ok(closed.closed_follow_ups.some(f => f.work === 'Synthetic: a bug next to the fix'));
+    assert.deepEqual((await writeAttention(async () => [], state.dir, { parked: [], stuck: [], waiting_owner: [] })).leftover, []);
   });
 });
