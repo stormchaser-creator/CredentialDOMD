@@ -794,6 +794,21 @@ export async function closeFollowUp(directory, ticketId, key, { note = '', now =
     return record;
   });
 }
+// Puts a case back in the queue with fresh attempts: a stalled or waiting
+// case the host knows a run can now finish (the runner changed under it, or
+// its blocker is gone). Same lock as the other host commands; never one
+// whose completion reply was stored.
+export async function wakeCase(directory, ticketId, { now = Date.now(), lock = null } = {}) {
+  await ensureState(directory);
+  return withAgentLock(lock, async () => {
+    const record = await readCase(directory, id(ticketId));
+    if (record.completion) throw Error('That case was answered as complete; a new message reopens it');
+    wake(record, now);
+    record.continuation.attempts = 0;
+    await writePrivate(path.join(directory, `${id(ticketId)}.json`), JSON.stringify(record, null, 2));
+    return record;
+  });
+}
 // A case waiting on the owner that nothing here can resolve (no checklist
 // item to record, an old case): the supervisor notes it for the owner once,
 // and it leaves the waiting list until the case is saved again (new input,
@@ -877,13 +892,22 @@ export async function saveReview(directory, context, given, sourceRevision, { no
     outstanding.set(questionKey(HELD_REPLY_WORK), { work: HELD_REPLY_WORK, owner: 'support_worker', next_action: 'The next run carries on with the items that are not done' });
   }
   if (!held) outstanding.delete(questionKey(HELD_REPLY_WORK));
+  // A completion closes the case: what a run left open is kept as internal
+  // work (leftover_follow_ups), never a reason to run or hold again.
+  const leftovers = completed ? [...outstanding.values()].filter(f => f.work !== HELD_REPLY_WORK) : [];
+  if (completed) outstanding.clear();
   const pendingWork = [...outstanding.values()];
   const workerPending = pendingWork.some(f => f.owner === 'support_worker');
   const ownerPending = pendingWork.some(f => f.owner === 'support_owner');
   const inputAt = typeof context.input_watermark === 'string' ? context.input_watermark : null;
   const heldRetry = Boolean(held && previous?.continuation?.held && (previous.continuation.held.input_at ?? null) === inputAt);
   const attempts = (context.run_mode === 'continuation' && !result.assessment.completed_follow_up.length) || heldRetry ? previous?.continuation?.attempts ?? 0 : 0;
-  const state = workerPending ? (attempts >= MAX_CONTINUATIONS ? 'stalled' : 'pending') : ownerPending ? 'waiting_owner' :
+  // "complete" only once every item is done (or the reply saying so is
+  // stored): a case with an item open and nothing left listed (53890221) went
+  // quiet as "complete" with no reply. It goes back to the worker instead.
+  const itemsOpen = Array.isArray(stage3?.final?.items) && stage3.final.items.some(f => f.state !== 'done');
+  const quiet = workerPending || (!ownerPending && !result.assessment.questions.length && itemsOpen && !completed);
+  const state = completed ? 'complete' : quiet ? (attempts >= MAX_CONTINUATIONS ? 'stalled' : 'pending') : ownerPending ? 'waiting_owner' :
     result.assessment.questions.length ? 'waiting_customer' : 'complete';
   const record = { version: 1, target_id: context.target_id, owner_id: context.owner_id,
     run_mode: context.run_mode,
@@ -907,6 +931,7 @@ export async function saveReview(directory, context, given, sourceRevision, { no
     ...(previous?.resolutions ? { resolutions: previous.resolutions } : {}),
     ...(previous?.asked_items ? { asked_items: previous.asked_items } : {}),
     ...(previous?.closed_follow_ups ? { closed_follow_ups: previous.closed_follow_ups } : {}),
+    ...(leftovers.length ? { leftover_follow_ups: leftovers.slice(0, 30) } : previous?.leftover_follow_ups ? { leftover_follow_ups: previous.leftover_follow_ups } : {}),
     history_complete: context.history_complete, limitations: context.limitations,
     // A saved draft is evidence of follow-through, never proof of delivery or deployment.
     publication: 'not_confirmed', remembered_answers: [...answers.values()], follow_up_history: [...followUps.values()], ...result,
@@ -1219,6 +1244,19 @@ export async function writeAttention(query, directory, queue, { now = Date.now()
     if (!Number.isFinite(saved) || Date.parse(row.last_input_at) > saved) answered.push(row.id);
   }
   record.waiting_owner_answered = answered.sort();
+  // leftover: notes a finished ticket's run left open (saveReview keeps them
+  // when the completion closes the case), answered in the last week: real
+  // work the supervisor takes up, never a reason to hold the reply.
+  record.leftover = [];
+  for (const entry of await fs.readdir(directory).catch(() => [])) {
+    const ticketId = entry.replace(/\.json$/, '');
+    if (!UUID.test(ticketId) || !entry.endsWith('.json')) continue;
+    let saved = null;
+    try { saved = await readCase(directory, ticketId); } catch { continue; }
+    const at = Date.parse(saved.completion?.at ?? '');
+    if (saved.leftover_follow_ups?.length && Number.isFinite(at) && now - at < 7 * 24 * 3600000) record.leftover.push(ticketId);
+  }
+  record.leftover.sort();
   await writePrivate(path.join(directory, 'attention.json'), `${JSON.stringify(record)}\n`);
   return record;
 }
@@ -1282,6 +1320,13 @@ async function main(args) {
     console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} CLOSED — ${target.slice(0, 8)} follow-up; case ${record.continuation.state}`);
     return;
   }
+  if (mode === '--wake' && args.length === 3) {
+    // --wake TICKET PRIVATE_STATE
+    const [, target, directory] = args;
+    const record = await wakeCase(directory, id(target), { lock: process.env.TICKET_AGENT_LOCK || AGENT_LOCK });
+    console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} WOKEN — ${target.slice(0, 8)}; case ${record.continuation.state}`);
+    return;
+  }
   if (mode === '--note-owner' && args.length === 3) {
     await noteOwner(filename, id(ticketId), { note: process.env.TICKET_RESOLUTION_NOTE ?? '', lock: process.env.TICKET_AGENT_LOCK || AGENT_LOCK });
     console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} NOTED — ${ticketId.slice(0, 8)} for the owner; off the waiting list until the case changes`);
@@ -1324,6 +1369,6 @@ async function main(args) {
     if (status.completion) console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} COMPLETION REPLY — ${context.target_id.slice(0, 8)}: every item done; stored from a ${status.run_mode} run, case closed`);
     console.log(JSON.stringify(status)); return;
   }
-  throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --release-attempt TICKET_ID PRIVATE_STATE | --resolve-item TICKET_ID AC-n decision|data_fix|confirmed PRIVATE_STATE | --note-owner TICKET_ID PRIVATE_STATE | --close-follow-up TICKET_ID INDEX|WORK PRIVATE_STATE | --validate CONTEXT MODEL_OUTPUT | --session MODEL_OUTPUT | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');
+  throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --release-attempt TICKET_ID PRIVATE_STATE | --resolve-item TICKET_ID AC-n decision|data_fix|confirmed PRIVATE_STATE | --note-owner TICKET_ID PRIVATE_STATE | --close-follow-up TICKET_ID INDEX|WORK PRIVATE_STATE | --wake TICKET_ID PRIVATE_STATE | --validate CONTEXT MODEL_OUTPUT | --session MODEL_OUTPUT | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');
 }
 if (isMain(import.meta.url)) main(process.argv.slice(2)).catch(error => { console.error(`ERROR: ${logSafe(error)}`); process.exitCode = 1; });

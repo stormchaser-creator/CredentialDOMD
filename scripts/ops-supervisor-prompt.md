@@ -151,6 +151,12 @@ what happened.
      owner (money), note it in the journal under `## For the owner`.
    - **FEEDBACK.** If it reports a bug, fix it like a ticket. Otherwise note it.
    - **FIXED / FIXED BY ITSELF / INVITE SENT.** Nothing to do; note counts.
+   - **Leftover notes** (HEALTH "answered tickets with notes their run left
+     open"). The ticket was finished and answered; its case file's
+     `leftover_follow_ups` are what the run noticed on the way (a bug next
+     to the fix, an attachment to read, a check after release). Do each one
+     that is real work (fix it like a ticket, or note it for the owner), then
+     note it done in the journal. Never write to the member about them.
 4. Merging, yours or a held run's: run `npm test` in the worktree with the
    credential removed (`env -u CLAUDE_CODE_OAUTH_TOKEN npm test`; all of it
    must pass), commit, then take the ticket agent's lock in its own format:

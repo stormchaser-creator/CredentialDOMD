@@ -9,7 +9,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdirSync, symlinkSync } from 'node:fs';
 import path from 'node:path';
-import { checkDataFixes, finishRun, collectQueue, loadQueuedContext, queueSQL, heldLine, saveReview, resolveItem, noteOwner, closeFollowUp, withAgentLock, writeAttention, targetSQL, HELD_REPLY_WORK } from '../../scripts/ticket-agent-context.mjs';
+import { wakeCase, checkDataFixes, finishRun, collectQueue, loadQueuedContext, queueSQL, heldLine, saveReview, resolveItem, noteOwner, closeFollowUp, withAgentLock, writeAttention, targetSQL, HELD_REPLY_WORK } from '../../scripts/ticket-agent-context.mjs';
 import { spawn } from 'node:child_process';
 import { prepareRenderedReply } from '../../scripts/ticket-fix/reply.mjs';
 import { DATA_FIX_FILE, replyHold, itemsDigest, itemFollowUpWork, resolveFollowUpWork, finalStates, validResolutions, writeChecklist, renderAgentReply, stillAsked } from '../../scripts/ticket-fix/checklist.mjs';
@@ -83,7 +83,11 @@ test('replyHold: a reply goes out only when every item is done and released, or 
   assert.deepEqual(hold(OPEN), { reasons: ['AC-1 partial', 'AC-2 not_done'] });
   assert.equal(hold(DONE), null, 'everything done');
   assert.equal(hold(DONE, { codeOutcome: 'released' }), null);
-  assert.deepEqual(hold(DONE, { codeOutcome: 'refused' }), { reasons: ['change refused'] }, 'a refused change of this run holds it');
+  // Owner, 2026-11-07: every item done is a finished ticket, whatever else a
+  // run tried. (An item that needed this run's change is not done when the
+  // change is refused: finalStates.)
+  assert.equal(hold(DONE, { codeOutcome: 'refused' }), null, 'every item done: a refused side change does not hold it');
+  assert.equal(hold(DONE, { pending: [{ work: 'Synthetic leftover', owner: 'support_worker' }] }), null, 'nor a note a run left open');
   assert.deepEqual(hold([DONE[0], { id: 'AC-2', state: 'in_progress', remaining: '', detail: 'held' }], { codeOutcome: 'held' }), { reasons: ['AC-2 in_progress', 'change held'] });
   assert.equal(hold(OPEN, { questions: ['Which invoice shows the summary you mean?'] }), null, 'a question only the reporter can answer');
   const decision = [DONE[0], { id: 'AC-2', state: 'needs_owner', remaining: 'Should the title follow the invoice name?', detail: null }];
@@ -121,12 +125,11 @@ test('an unfinished reply is held: nothing stored or emailed, the case stays pen
     assert.deepEqual(saved.continuation.held.reasons, ['AC-1 partial', 'AC-2 not_done']);
     assert.ok(saved.pending_follow_up.some(f => f.work === itemFollowUpWork('AC-2')), 'the host follow-up keeps the work');
     assert.equal(heldLine(T, status, new Date('2026-11-06T12:00:00Z')), `2026-11-06 12:00:00 REPLY HELD — ${T.slice(0, 8)}: not complete (AC-1 partial, AC-2 not_done); continuing`);
-    // A change the gates refused: held too, with every item done.
+    // Every item done with a side change the gates refused: the finished
+    // ticket is answered and closed (owner, 2026-11-07).
     const refused = await finishRun(db.query, state.dir, context, result({ done: true }), { stage3: stage3(DONE, { code: 'refused' }), codeOutcome: 'refused', requireStructured: true });
-    assert.equal(refused.kind, 'reply_held');
-    assert.deepEqual(refused.reasons, ['change refused']);
-    assert.ok(record(state.dir).pending_follow_up.some(f => f.work === HELD_REPLY_WORK), 'a held reply with no item work left still has work pending');
-    assert.deepEqual(db.writes(), []);
+    assert.deepEqual([refused.kind, refused.completion, refused.continuation_state], ['reply_stored', true, 'complete']);
+    assert.deepEqual(record(state.dir).pending_follow_up, [], 'nothing left to run');
   } finally { state.cleanup(); }
 });
 
@@ -264,15 +267,17 @@ test('a continuation that finishes every item sends one completion reply on the 
     assert.equal(db.statements.filter(x => x.startsWith('DO $ticket_broker$')).length, 1, 'sent once');
   });
 });
-test('a continuation with items not done, or a change not released, sends nothing', async () => {
+test('a continuation with items not done sends nothing; with every item done it answers, whatever side change is still unreleased', async () => {
   await answeredTicket(async ({ db, state, due }) => {
     const open = await finishRun(db.query, state.dir, await due(), result(), { stage3: stage3(OPEN), codeOutcome: 'none', requireStructured: true });
     assert.equal(open.kind, 'continuation_saved');
     assert.equal(record(state.dir).continuation.state, 'pending');
-    const unreleased = await finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: stage3(DONE, { code: 'merged' }), codeOutcome: 'merged', requireStructured: true });
-    assert.equal(unreleased.kind, 'continuation_saved');
     assert.deepEqual(db.writes(), [], 'no reply row, no verification key read');
     assert.equal(record(state.dir).completion, undefined);
+    // An item that needed this run's change is not done until it is released
+    // (finalStates); every item done here was proven otherwise.
+    const done = await finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: stage3(DONE, { code: 'merged' }), codeOutcome: 'merged', requireStructured: true });
+    assert.deepEqual([done.kind, done.completion], ['reply_stored', true]);
   });
 });
 
@@ -470,7 +475,7 @@ test('defect 3 and 5: no device check while this run\'s change is not live, and 
   assert.doesNotMatch(live, /deploy next week|still to do/);
   assert.match(renderAgentReply({ opening: 'update', items, finals, closing: 'reply_here', ownerTicket: false, asked: ['AC-1'] }), /^(?![\s\S]*check this on your device)/, 'never asked twice');
 });
-test('defect 4: every item done but follow-ups open (the host\'s or the worker\'s) is no completion: nothing erased, the case stays open', async () => {
+test('every item done with notes left open (the host\'s or the worker\'s): the reply goes out, and the notes are kept for the supervisor, not erased', async () => {
   const state = privateDir('ticket-reply-open-work-');
   const db = database({ awaiting: false });
   try {
@@ -482,11 +487,11 @@ test('defect 4: every item done but follow-ups open (the host\'s or the worker\'
     s3.final.follow_up = [{ work: 'Open attachment att-1 (synthetic.docx) yourself', owner: 'support_owner', next_action: 'Synthetic.' }];
     const status = await finishRun(db.query, state.dir, context, { ...result({ done: true }), needs_owner_review: true,
       assessment: { ...result({ done: true }).assessment, follow_up: [{ work: 'Owner reads the attachment', owner: 'support_owner', next_action: 'Synthetic.' }] } }, { stage3: s3, codeOutcome: 'none', requireStructured: true });
-    assert.equal(status.kind, 'continuation_saved');
-    assert.deepEqual(db.writes(), []);
+    assert.deepEqual([status.kind, status.completion, status.continuation_state], ['reply_stored', true, 'complete']);
     const kept = record(state.dir);
-    assert.ok(kept.pending_follow_up.some(f => f.work.startsWith('Open attachment att-1')), 'the owner item is kept');
-    assert.equal(kept.needs_owner_review, true);
+    assert.deepEqual(kept.pending_follow_up, []);
+    assert.ok(kept.leftover_follow_ups.some(f => f.work.startsWith('Open attachment att-1')), 'the owner note is kept');
+    assert.ok(kept.leftover_follow_ups.some(f => f.work === 'Owner reads the attachment'));
   } finally { state.cleanup(); }
 });
 test('defect 6: a run that dies after the database stored the completion never sends it twice', async () => {
@@ -526,17 +531,14 @@ const probeResult = () => ({ ...result({ done: true }), checklist: [{ ac_id: 'AC
   reply: { opening: 'update', closing: 'reply_here', claims: [result().reply.claims[1]] },
   assessment: { ...result().assessment, follow_up: [{ work: 'Hear back on the device check', owner: 'support_worker', next_action: 'Synthetic.' }] } });
 const probeStage3 = () => { const s3 = stage3(PROBE, { items: DEVICE_ITEMS }); s3.final.claims = [{ ...s3.final.claims[1], index: 0 }]; s3.final.follow_up = []; return s3; };
-test('N1: every item done but a follow-up open, nothing asked: the reply is held, not sent as "done" now and again later', async () => {
-  const state = privateDir('ticket-reply-n1-');
-  const db = database();
-  try {
-    const context = await loadQueuedContext(db.query, { id: T, mode: 'reply' }, state.dir);
-    const s3 = stage3(DONE);
-    s3.final.follow_up = [{ work: 'Retrieve and review attachment att-1 (tickets/x/shot.png)', owner: 'support_worker', next_action: 'The next run downloads it again' }];
-    const status = await finishRun(db.query, state.dir, context, result({ done: true }), { stage3: s3, codeOutcome: 'none', requireStructured: true });
-    assert.deepEqual([status.kind, status.reasons], ['reply_held', ['1 follow-up(s) open']]);
-    assert.deepEqual(db.writes(), []);
-  } finally { state.cleanup(); }
+test('N1: every item done with a note open, nothing asked: "done" goes out once, never again from a later run', async () => {
+  await answeredTicket(async ({ db, state, due }) => {
+    const s3 = () => { const x = stage3(DONE); x.final.follow_up = [{ work: 'Retrieve and review attachment att-1 (tickets/x/shot.png)', owner: 'support_worker', next_action: 'The next run downloads it again' }]; return x; };
+    const sent = await finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: s3(), codeOutcome: 'none', requireStructured: true });
+    assert.deepEqual([sent.kind, sent.completion, sent.continuation_state], ['reply_stored', true, 'complete']);
+    assert.deepEqual(record(state.dir).pending_follow_up, [], 'the note does not keep the case running');
+    assert.equal(db.statements.filter(x => x.startsWith('DO $ticket_broker$')).length, 1);
+  });
 });
 test('N2 and review 3, finding 1: a device check is asked again only for a newer released change; the reporter\'s answer is what gets recorded', async () => {
   const asked = [{ id: 'AC-1', at: '2026-11-06T10:00:00Z' }];
@@ -571,41 +573,33 @@ test('N2 and review 3, finding 1: a device check is asked again only for a newer
     assert.match(replyBody(db.statements.filter(x => x.startsWith('DO $ticket_broker$'))[1]), /please check this on your device/);
   } finally { state.cleanup(); }
 });
-test('review 3, finding 2: an owner follow-up is closed by hand once, and the next run sends the single completion reply', async () => {
-  await answeredTicket(async ({ db, state, due }) => {
+// A case held because an item is open can still have an owner note closed by
+// hand (an attachment read, a check made); the close wakes it.
+const heldCase = (items, followUp, state = 'waiting_owner') => ({ version: 1, target_id: T, owner_id: OWNER, checklist_states: items,
+  pending_follow_up: [followUp], continuation: { state, attempts: 1, due_at: new Date().toISOString() } });
+test('review 3, finding 2: an owner follow-up is closed by hand once, with a one line note, and wakes the case', async () => {
+  const state = privateDir('ticket-reply-close-owner-');
+  try {
     const OWNER_WORK = 'Open attachment att-1 (tickets/x/synthetic.docx) yourself';
-    const withDocx = () => { const s3 = stage3(DONE); s3.final.follow_up = [{ work: OWNER_WORK, owner: 'support_owner', next_action: 'Synthetic.' }]; return s3; };
-    assert.equal((await finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: withDocx(), codeOutcome: 'none', requireStructured: true })).kind, 'continuation_saved');
-    assert.equal(record(state.dir).continuation.state, 'waiting_owner', 'held on the open owner follow-up');
+    writeFileSync(path.join(state.dir, `${T}.json`), JSON.stringify(heldCase([{ id: 'AC-1', state: 'partial', remaining: 'Synthetic.', detail: null }], { work: OWNER_WORK, owner: 'support_owner', next_action: 'Synthetic.' })), { mode: 0o600 });
     const lock = path.join(state.dir, 'agent.lock');
-    const index = record(state.dir).pending_follow_up.findIndex(f => f.work === OWNER_WORK);
-    await assert.rejects(closeFollowUp(state.dir, T, String(index), { note: '', lock }), /one line/);
+    await assert.rejects(closeFollowUp(state.dir, T, '0', { note: '', lock }), /one line/);
     await assert.rejects(closeFollowUp(state.dir, T, 'no such work', { note: 'Synthetic.', lock }), /No open follow-up/);
-    const woken = await closeFollowUp(state.dir, T, String(index), { note: 'Synthetic: read the document, nothing more to change.', lock });
+    const woken = await closeFollowUp(state.dir, T, '0', { note: 'Synthetic: read the document, nothing more to change.', lock });
     assert.equal(woken.continuation.state, 'pending');
+    assert.deepEqual(woken.pending_follow_up, []);
     await assert.rejects(closeFollowUp(state.dir, T, OWNER_WORK, { note: 'Again.', lock }), /queued/);
-    // The run lists the same host follow-up again (the file is still there): it stays closed.
-    const sent = await finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: withDocx(), codeOutcome: 'none', requireStructured: true });
-    assert.deepEqual([sent.kind, sent.completion, sent.continuation_state], ['reply_stored', true, 'complete']);
-    assert.equal(db.statements.filter(x => x.startsWith('DO $ticket_broker$')).length, 1);
-  });
+  } finally { state.cleanup(); }
 });
-test('a worker follow-up a run cannot finish (a database check) is closed by hand once every item is done, and the next run sends the completion reply', async () => {
-  await answeredTicket(async ({ db, state, due }) => {
+test('a worker follow-up a run cannot finish (a database check) is closed by hand once every item is done', async () => {
+  const state = privateDir('ticket-reply-close-worker-');
+  try {
     const WORK = 'Synthetic: check which agreement is in force on this account';
-    const withCheck = () => { const s3 = stage3(DONE); s3.final.follow_up = [{ work: WORK, owner: 'support_worker', next_action: 'Synthetic.' }]; return s3; };
-    assert.equal((await finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: withCheck(), codeOutcome: 'none', requireStructured: true })).kind, 'continuation_saved');
-    assert.equal(record(state.dir).continuation.state, 'pending', 'held on the open worker follow-up');
-    const lock = path.join(state.dir, 'agent.lock');
-    const index = record(state.dir).pending_follow_up.findIndex(f => f.work === WORK);
-    const woken = await closeFollowUp(state.dir, T, String(index), { note: 'Synthetic: checked by hand, the newer agreement is in force.', lock });
+    writeFileSync(path.join(state.dir, `${T}.json`), JSON.stringify(heldCase([{ id: 'AC-1', state: 'done', remaining: '', detail: null }], { work: WORK, owner: 'support_worker', next_action: 'Synthetic.' }, 'pending')), { mode: 0o600 });
+    const woken = await closeFollowUp(state.dir, T, '0', { note: 'Synthetic: checked by hand, the newer agreement is in force.', lock: path.join(state.dir, 'agent.lock') });
     assert.equal(woken.continuation.state, 'pending');
-    assert.ok(!woken.pending_follow_up.some(f => f.work === WORK));
-    // The run lists the same check again (it still cannot read the database): it stays closed.
-    const sent = await finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: withCheck(), codeOutcome: 'none', requireStructured: true });
-    assert.deepEqual([sent.kind, sent.completion, sent.continuation_state], ['reply_stored', true, 'complete']);
-    assert.equal(db.statements.filter(x => x.startsWith('DO $ticket_broker$')).length, 1);
-  });
+    assert.deepEqual(woken.pending_follow_up, []);
+  } finally { state.cleanup(); }
 });
 test('a worker follow-up is not closed by hand while an item is open', async () => {
   const state = privateDir('ticket-reply-worker-open-');
@@ -752,4 +746,42 @@ test('the host\'s own follow-up for an open item cannot be closed by hand, and a
     assert.ok(record(state.dir).pending_follow_up.some(f => f.work === host), 'still open while AC-2 is open');
     assert.equal(record(state.dir).continuation.state, 'waiting_owner');
   } finally { state.cleanup(); }
+});
+
+// Owner, 2026-11-07, "tickets are still not being completed".
+test('a case with an item open and nothing listed is never "complete": it goes back to the worker (53890221)', async () => {
+  const state = privateDir('ticket-reply-quiet-open-');
+  const db = database();
+  try {
+    const context = await loadQueuedContext(db.query, { id: T, mode: 'reply' }, state.dir);
+    // The only note left was an owner one the host already closed by hand:
+    // nothing is listed, yet AC-1 and AC-2 are open.
+    const OWNER_WORK = 'Synthetic: owner reads the attachment';
+    writeFileSync(path.join(state.dir, `${T}.json`), JSON.stringify({ version: 1, target_id: T, owner_id: OWNER, pending_follow_up: [],
+      closed_follow_ups: [{ work: OWNER_WORK, at: new Date().toISOString(), note: 'Synthetic.' }], continuation: { state: 'pending', attempts: 0, due_at: new Date().toISOString() } }), { mode: 0o600 });
+    const open = stage3(OPEN); open.final.follow_up = [];
+    await saveReview(state.dir, context, { ...result(), needs_owner_review: true, assessment: { ...result().assessment, follow_up: [{ work: OWNER_WORK, owner: 'support_owner', next_action: 'Synthetic.' }] } }, null, { stage3: open });
+    assert.deepEqual(record(state.dir).pending_follow_up, []);
+    assert.equal(record(state.dir).continuation.state, 'pending', 'open items: never "complete"');
+  } finally { state.cleanup(); }
+});
+test('--wake puts a stalled case back with fresh attempts, never one already answered', async () => {
+  const state = privateDir('ticket-reply-wake-');
+  try {
+    const lock = path.join(state.dir, 'agent.lock');
+    writeFileSync(path.join(state.dir, `${T}.json`), JSON.stringify({ version: 1, target_id: T, owner_id: OWNER, pending_follow_up: [],
+      continuation: { state: 'stalled', attempts: 3, due_at: new Date().toISOString(), reason: 'Synthetic.' } }), { mode: 0o600 });
+    const woken = await wakeCase(state.dir, T, { lock });
+    assert.deepEqual([woken.continuation.state, woken.continuation.attempts, woken.continuation.reason], ['pending', 0, undefined]);
+    writeFileSync(path.join(state.dir, `${T}.json`), JSON.stringify({ ...woken, completion: { at: new Date().toISOString(), verification_id: uuid(7300) } }), { mode: 0o600 });
+    await assert.rejects(wakeCase(state.dir, T, { lock }), /answered as complete/);
+  } finally { state.cleanup(); }
+});
+test('the notes a finished ticket left open reach the supervisor (attention leftover)', async () => {
+  await answeredTicket(async ({ db, state, due }) => {
+    const s3 = stage3(DONE); s3.final.follow_up = [{ work: 'Synthetic: a bug next to the fix', owner: 'support_worker', next_action: 'Synthetic.' }];
+    await finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: s3, codeOutcome: 'none', requireStructured: true });
+    const seen = await writeAttention(async () => [], state.dir, { parked: [], stuck: [], waiting_owner: [] });
+    assert.deepEqual(seen.leftover, [T]);
+  });
 });

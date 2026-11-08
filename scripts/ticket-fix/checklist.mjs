@@ -582,12 +582,16 @@ export function askItems(items, finals, { ownerTicket, asked = [], codeOutcome =
       (item.kind === 'device_probe' && f.state === 'partial' && !UNRELEASED.includes(codeOutcome));
   }).map(item => item.id);
 }
-// Every item done, no change of this run waiting unreleased and no work left
-// in the case (pending: the follow-ups that would stay open, the host's and
-// the worker's): a reply then reports finished work and closes the case (a
-// continuation may send it: finishRun).
-export function isCompletion({ finals, codeOutcome = null, pending = [] }) {
-  return finals.length > 0 && finals.every(f => f.state === 'done') && !UNRELEASED.includes(codeOutcome) && !pending.length;
+// Every item the host decided done: the reply reports finished work and
+// closes the case (a continuation may send it: finishRun). Owner, 2026-11-07,
+// "tickets are still not being completed": finished tickets were held for
+// good by notes a run left behind ("confirm after release", a bug it noticed)
+// and by a refused side change, stalled after three tries and never answered.
+// Leftover notes are internal work (saveReview keeps them as
+// leftover_follow_ups); they never hold a finished ticket's reply.
+// (codeOutcome and pending are accepted and no longer consulted.)
+export function isCompletion({ finals }) {
+  return finals.length > 0 && finals.every(f => f.state === 'done');
 }
 // null: the reply may go out. Otherwise { reasons }: ids, states and the code
 // outcome only (they go to the log). While this run's change is not live only
@@ -599,8 +603,9 @@ export function replyHold({ items, finals, questions = [], ownerTicket = false, 
   const asks = questions.length > 0 || askItems(items, finals, { ownerTicket, asked, codeOutcome }).length > 0;
   const open = finals.filter(f => f.state !== 'done');
   const unreleased = UNRELEASED.includes(codeOutcome);
-  if (asks || (!open.length && !unreleased && !pending.length)) return null;
-  return { reasons: [...open.map(f => `${f.id} ${f.state}`), ...(unreleased ? [`change ${codeOutcome}`] : []), ...(!open.length && pending.length ? [`${pending.length} follow-up(s) open`] : [])] };
+  // Every item done: never held (isCompletion).
+  if (asks || !open.length) return null;
+  return { reasons: [...open.map(f => `${f.id} ${f.state}`), ...(unreleased ? [`change ${codeOutcome}`] : [])] };
 }
 
 // ---------------------------------------------------------------------------

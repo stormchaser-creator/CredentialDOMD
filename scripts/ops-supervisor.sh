@@ -128,6 +128,11 @@ print(" ".join(sorted({str(t)[:8] for t in json.load(open(sys.argv[1])).get("wai
 import json, sys
 print(" ".join(sorted({str(t)[:8] for t in json.load(open(sys.argv[1])).get("waiting_owner_answered", [])})))' "$attention" 2>/dev/null) || answered=""
   [[ -n $answered ]] && health+=("of those, the reporter has written since: $answered")
+  # A finished ticket was answered; notes its run left open are internal work.
+  leftover=$(python3 -c '
+import json, sys
+print(" ".join(sorted({str(t)[:8] for t in json.load(open(sys.argv[1])).get("leftover", [])})))' "$attention" 2>/dev/null) || leftover=""
+  [[ -n $leftover ]] && health+=("answered tickets with notes their run left open (leftover_follow_ups in the case file): $leftover")
 fi
 
 sweep=queue
