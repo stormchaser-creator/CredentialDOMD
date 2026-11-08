@@ -177,3 +177,19 @@ export function rollingWindowLabel(st, cycle, waiting = null) {
     ? `${st} license: ${String(waiting).toLowerCase()}, so the app tracks a rolling ${cycle}-yr window`
     : `No ${st} license on file, so the app tracks a rolling ${cycle}-yr window`;
 }
+
+/**
+ * The MATE Act line's value, one wording on every surface. A DEA registration
+ * issued or renewed on or after 2023-06-27 carried the one-time affirmation,
+ * so that case names the date and demands no hours; otherwise hours recorded
+ * against the 8.
+ */
+export function mateStatusText(mate) {
+  if (!mate) return "";
+  if (mate.via === "registration") {
+    const d = new Date(`${mate.attestedOn}T00:00:00`);
+    const when = Number.isNaN(d.getTime()) ? mate.attestedOn : d.toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+    return `Affirmed at DEA registration ${when}: one time, done`;
+  }
+  return `${mate.earned} / ${mate.required}`;
+}

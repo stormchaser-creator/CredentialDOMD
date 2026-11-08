@@ -40,10 +40,14 @@ import { ruleSetFor } from "../utils/ruleResolver.js";
 //   { mode: "tiered", basis: "monthsFromIssueToExpiry",
 //     tiers: [ { underMonths: N, hours: H }, ... ] }  // ascending underMonths
 //   { mode: "fixed", hours: H, underMonths: N }       // single step
+//   windowFromIssue: true  // the first reporting period starts at licensure
 // The compliance engine reads it with the LICENSE ISSUE DATE (never a
-// hand-entered cycle start) and shows the result BESIDE the full requirement
-// with its citation. A state without the field owes its full number, always;
-// showing a prorated alternative where no rule exists would invent a number.
+// hand-entered cycle start). An issue date after the default window start
+// (one full cycle back from the expiration) cannot be a renewed term, so the
+// result is the requirement for the total and the Category 1 minimum; an
+// earlier issue date leaves the full number in force with the figure shown
+// beside it. A state without the field owes its full number, always; a
+// prorated number where no rule exists would invent one.
 
 export const STATE_REQS_META = {
   databaseDate: "2026-02",
@@ -247,7 +251,16 @@ export const STATE_REQS = {
   NC: { total: 60, cycle: 3, cat1min: 60, cat1note: "All Cat 1 (in specialty/practice area)", topics: [
     { topic: "Controlled Substances", hours: 3.0, note: "3 hrs controlled substance prescribing" },
   ], notes: "3 hrs controlled substance prescribing", rollover: "No", moc: "ABMS/AOA/RCPSC recert/MOC = entire requirement", source: "N.C. Admin. Code tit. 21, r. 32R.0101", verified: "2026-08", sourceUrl: "https://www.ncmedboard.org/resources-information/faqs/professional-faqs/cme" },
-  ND: { total: 40, cycle: 2, cat1min: 40, cat1note: "All Cat 1", topics: [], notes: "Not specified", rollover: "No", moc: "ABMS/AOA/RCPSC cert/MOC exempt from CME", source: "N.D. Admin. Code 50-04-01 (hours in 50-04-01-01, MOC exemption in 50-04-01-02)", verified: "2026-08", sourceUrl: "https://www.ndbom.org/practitioners/physicians/current/cme.asp" },
+  ND: { total: 40, cycle: 2, cat1min: 40, cat1note: "All Cat 1", firstCycle: {
+    // N.D. Admin. Code 50-04-01-02(2): "physicians who have not renewed their
+    // licenses for the first time since being granted a regular permanent
+    // license by the board" are not required to meet the chapter. A license
+    // issued inside the current 2-year cycle is on its first renewal, so it
+    // owes 0, counted from the issue date. Later cycles owe the 40 hours.
+    mode: "fixed", hours: 0, underMonths: 24, windowFromIssue: true,
+    note: "No CME is required before the first renewal of a regular permanent ND license. After that, 50-04-01-04(1): a physician who reports CME after being licensed in ND for more than one year but less than two full years must show twenty hours of board-approved CME during the initial CME reporting period; 40 hours every two years thereafter.",
+    source: "N.D. Admin. Code 50-04-01-02(2), 50-04-01-04(1)",
+  }, topics: [], notes: "Not specified", rollover: "No", moc: "ABMS/AOA/RCPSC cert/MOC exempt from CME", source: "N.D. Admin. Code 50-04-01 (hours in 50-04-01-01, MOC exemption in 50-04-01-02)", verified: "2026-08", sourceUrl: "https://www.ndbom.org/practitioners/physicians/current/cme.asp" },
   NE: { total: 50, cycle: 2, cat1min: 50, cat1note: "All Cat 1", topics: [
     { topic: "Opioid Prescribing", hours: 3.0, note: "3 hrs opioid prescribing (incl. 0.5 hr PDMP) biennially (controlled substance prescribers)" },
   ], notes: "3 hrs opioid prescribing (incl. 0.5 hr PDMP) biennially (controlled substance prescribers)", rollover: "Yes (up to 25 hrs)", moc: "AMA PRA or AOA CME Certification accepted", source: "Neb. Admin. R. & Regs. Tit. 172, Ch. 88", verified: "2026-08", sourceUrl: "https://dhhs.ne.gov/licensure/pages/medicine-and-surgery.aspx", upcoming: [

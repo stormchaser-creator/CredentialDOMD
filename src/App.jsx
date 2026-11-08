@@ -112,7 +112,7 @@ import AppCardDetails from "./components/shared/AppCardDetails";
 import RecordQuestions from "./components/shared/RecordQuestions";
 import ProfessionReviewCard from "./components/shared/ProfessionReviewCard";
 import CmeReviewSummary from "./components/shared/CmeReviewSummary";
-import { cmeReviewSummary, cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE, rollingWindowLabel, appCardTitle, appRenewalLine, anchoredRenewalLine, certificationMetLine } from "./utils/cmePresentation";
+import { cmeReviewSummary, cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE, rollingWindowLabel, appCardTitle, appRenewalLine, anchoredRenewalLine, certificationMetLine, mateStatusText } from "./utils/cmePresentation";
 import { complianceFor, complianceListFor, standingScore, cardWindowNotes, splitByCycle, alertingStates, resolvePendingLicense, undatedLicenseOnFile, cmeTopics } from "./utils/compliance";
 import { topicTags, stillCountingTopics } from "./utils/cmeCore.js";
 import { isPracticeLicense, isAdvancedPractice } from "./constants/professions";
@@ -1722,8 +1722,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
                   ))}
                   {comp.mate && (
                     <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
-                      <span style={{ color: T.text, fontWeight: 600 }}>MATE Act (one-time, any date)</span>
-                      <span style={{ fontWeight: 800, color: comp.mate.met ? T.success : T.warning }}>{comp.mate.earned} / {comp.mate.required}</span>
+                      <span style={{ color: T.text, fontWeight: 600 }}>MATE Act (DEA registration, one time, any date)</span>
+                      <span style={{ fontWeight: 800, color: comp.mate.met ? T.success : T.warning }}>{mateStatusText(comp.mate)}</span>
                     </div>
                   )}
                   {needsPriorCompletionReview(comp) && <p style={{ fontSize: 12, color: T.textMuted }}>{PRIOR_COMPLETION_NOTE}</p>}

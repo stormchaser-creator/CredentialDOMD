@@ -1,0 +1,155 @@
+{
+  "reason": "CME shortfall audit, three rule fixes. (1) CO: a license issued after the default window start cannot be a renewed term, so the DORA first-cycle tier is the requirement for the total and the Category 1 minimum (C.R.S. 12-240-130.5(3)(c)). (2) ND: the first renewal after a regular permanent license owes no CME (N.D. Admin. Code 50-04-01-02(2)) and its window starts at the issue date. (3) MATE Act: a one-time DEA registration item (DEA letter to registrants), carried by one card only (the primary tracked state), so the other complianceFor, list and viewer cards no longer repeat it. Every other state and field is unchanged.",
+  "entries": [
+    {
+      "key": "rules:getStateEntry:ND:MD",
+      "originalHash": "dbe55f5149f4eaca4d926596877402b30f51b9dd868dbf92bc39391f3b2ed648",
+      "reviewedHash": "cfb9a62079969ec519b0861ec2709c659c1c3965de79b5c3eb1e25afb491ae96"
+    },
+    {
+      "key": "engine:CO:MD:empty:anchored",
+      "originalHash": "d1024eeaaf706953e5d1f50e9d3914fc8f1335c82ed422674b6ef5c2be4c503b",
+      "reviewedHash": "b05a338ea741800479d9063a29582b65d01224d17e9786981e3aec33cfd26cbe"
+    },
+    {
+      "key": "engine:CO:MD:mixed:anchored",
+      "originalHash": "1af39d66e9694f41e3419beda7a0ea14f37e3b7f5d2ff3be98c206b45cb4356f",
+      "reviewedHash": "74e3762ba68b3e7c6236ac72d903ccdaf09dfdafd60534582eba94e20f28de37"
+    },
+    {
+      "key": "engine:CO:MD:boundary:anchored",
+      "originalHash": "e3e539aecedabfba6e0151a0194809029254d5ce0fe8b18a99fc6c9da66323ee",
+      "reviewedHash": "ea533e55e3229b62b07d787e58ecdb96f7acb7a70f40e7a1a113e1d44aa3f221"
+    },
+    {
+      "key": "engine:ND:MD:empty:anchored",
+      "originalHash": "77ad34f72758b5ee055ef9599c415d5278eac7976a8d1a77b6090d9c4f6eaee7",
+      "reviewedHash": "5a3c4016cae96411209575a7d20a2fe4fbc85278b92544bbc28a6b45e529d3cc"
+    },
+    {
+      "key": "engine:ND:MD:mixed:anchored",
+      "originalHash": "3721867366bb615c23adfbf707c572bb2447af71bac544fcc2633616e88a2530",
+      "reviewedHash": "d7ba689e730a4b0596b27189e32f738618aa0e09c2e8aa29304476d78dc161fa"
+    },
+    {
+      "key": "engine:ND:MD:boundary:anchored",
+      "originalHash": "2a36f2b5ae265796d1321e9a8f9062caf5145380e21343f6cd4c3557aa824de7",
+      "reviewedHash": "a8c47b0a7be8fdaf7644e8adf13a37762eb32547e08526fc67b50878724a3280"
+    },
+    {
+      "key": "complianceFor:CA:MD",
+      "originalHash": "2c75fce5f997a38c18401efe0d01dd2d7de23e1671a4b9d152260d19d7127255",
+      "reviewedHash": "9b46726fbcc63535999ff1c7aee280fe3191b542da20c0f3fd7fa7c588edbed9"
+    },
+    {
+      "key": "complianceFor:FL:MD",
+      "originalHash": "0a80b380f32f417c8bdb902c4bfd67f270f4e19cbe727bbf9a479cfb160cee1b",
+      "reviewedHash": "8954c071f604831dcc437700cc14c191cdd820a880c6166b4637a61f4873695f"
+    },
+    {
+      "key": "complianceFor:WV:MD",
+      "originalHash": "7df7406824d6a63c55b4f3298d8d765183dff037c43f5318ec7152a2ebcd13b8",
+      "reviewedHash": "bf1df46dc6e09551c3a638954414b17d39bb1878458cf249c23f2f1317a122eb"
+    },
+    {
+      "key": "complianceFor:OH:MD",
+      "originalHash": "f05566f5b4e1d5c63883659df94a174844eea71b972f058e1213e8f8174ce312",
+      "reviewedHash": "a4f6e0052722371fe5610a9c58e8116b457b56e475fc9455898b0ca3463d0210"
+    },
+    {
+      "key": "complianceFor:CO:MD",
+      "originalHash": "99d5fb4d53e027dff9e1dfe494a30726cc4e28a90431dfc628c7492d9d0f7664",
+      "reviewedHash": "d19dc6db0145bb1a498467cd4a336fe6cb25ab42b112b90a799c5fa503ab3272"
+    },
+    {
+      "key": "complianceFor:NY:MD",
+      "originalHash": "d428745ed5e4cd91bbc7c1155192ee7b0f923803b1e70ee199fa0108ccfaf44a",
+      "reviewedHash": "1833983ec23b2cc9328ab2deaf1be8234a6b421014e899c099cfc0de55c536ca"
+    },
+    {
+      "key": "list:MD",
+      "originalHash": "8d39d3550effd2aca3215995d78dc79a23c4aaba54a182e27f407d07aefb0524",
+      "reviewedHash": "0083022666ce491d3e609f5d9d57a192eab68c715a0f1a49a29ea226651e55d7"
+    },
+    {
+      "key": "viewer:MD",
+      "originalHash": "c44a6a4369285542d85c309a8008580beb7e73d5098516bec5c95fd7af9b1495",
+      "reviewedHash": "215592429484d51c9d89633e0087059c5f4a248134c784e357f1f4176e469821"
+    },
+    {
+      "key": "rules:getStateEntry:ND:DO",
+      "originalHash": "dbe55f5149f4eaca4d926596877402b30f51b9dd868dbf92bc39391f3b2ed648",
+      "reviewedHash": "cfb9a62079969ec519b0861ec2709c659c1c3965de79b5c3eb1e25afb491ae96"
+    },
+    {
+      "key": "engine:CO:DO:empty:anchored",
+      "originalHash": "931c642fb6cc5a3946af5a99eb8bb2f7da2954ebbd8c2ac97965aa387c94a0a8",
+      "reviewedHash": "5945d4e30ca6037ab6a3f6378a4e040ef6c409ddaf64dd5a6c8cd8cd4f2f8ae8"
+    },
+    {
+      "key": "engine:CO:DO:mixed:anchored",
+      "originalHash": "8e9f822fea58d0f7acf77392df43ebde3f2e887f8d0cee37fcef1cabac546500",
+      "reviewedHash": "d7e0ff0edacba3315beed1679bb0248371f0ee826343c9a26ef319930e14e9fc"
+    },
+    {
+      "key": "engine:CO:DO:boundary:anchored",
+      "originalHash": "dddbba46ece2e6d1627aea90af3b0c0bc0993f9449b535174ba109dd8e0199d8",
+      "reviewedHash": "cf9e9a0acf897d34b4dbddc6e92d5a45dc462400145a814ece16a0bdb2bb4cb8"
+    },
+    {
+      "key": "engine:ND:DO:empty:anchored",
+      "originalHash": "eb8998608510cb442cd33f6c3a352f874d5375a8eca09e7030e8cd05fb57ab0c",
+      "reviewedHash": "88010b486d4668cc5bf047b5cbd6dfc01f90387042b27f4669dde0b892ba078b"
+    },
+    {
+      "key": "engine:ND:DO:mixed:anchored",
+      "originalHash": "bdd7d220fc7c3dbce451eba64fec73f92b8b89e7dc3838b617a7e6f3babafd1e",
+      "reviewedHash": "a086a991e2ebcbe82b83cd236e86c32ab2355a3215dc766c28556e587374cf0b"
+    },
+    {
+      "key": "engine:ND:DO:boundary:anchored",
+      "originalHash": "5841a8a536432d569ae80f41b658070c266b8a8641c6bd6e246294e2614b2d5d",
+      "reviewedHash": "bb6fe906d121d0c04d10625913b006a49cdf7832f0916be4bb4a06a39716da9e"
+    },
+    {
+      "key": "complianceFor:CA:DO",
+      "originalHash": "db1d94a9071eb25972373b2c900af03481e30b65ada65cfd88b5775ec66cca3c",
+      "reviewedHash": "30ec31458aa20bbf1664cb0a26fd8c107c46a94ee16497cf81fac055f38687d2"
+    },
+    {
+      "key": "complianceFor:FL:DO",
+      "originalHash": "75c4fc0e34a0b4f0d038324500c0eee06770807a289150553194b9bcec870191",
+      "reviewedHash": "f1dec54abd18f0e8fd8894e0d88f9f34cf6f4518bc67713ac9a85fda7337d3cc"
+    },
+    {
+      "key": "complianceFor:WV:DO",
+      "originalHash": "24b623f95a46030482cdc1b6e3ae1e028a7a69f688946f3802c1c2c665157cc8",
+      "reviewedHash": "91591aa7d772dd8e6e91734d88b853a208589369c7bfb033bcbc5da20a8c425d"
+    },
+    {
+      "key": "complianceFor:OH:DO",
+      "originalHash": "264daafacf6dc8e0214814ac2d81f2c5ab76c9b94ea3b8088b67ce629a0d58c8",
+      "reviewedHash": "006ad6483e7b5a8845ca63cd24dc945ebaf57e25feac2515287c5469f2e43aed"
+    },
+    {
+      "key": "complianceFor:CO:DO",
+      "originalHash": "fdb801b81119a6fa1cb3bf9e183c25f95efc403a036df26f62d23b8963132c6d",
+      "reviewedHash": "4413e4c6996ad1227dea2aa918d04c9dcc45390dfc13a9b68c61827dac5e9d58"
+    },
+    {
+      "key": "complianceFor:NY:DO",
+      "originalHash": "02dc2e3c091d9d3a475560a569dd4d3d90cc960e6ce1f5ea35ec0b1682941f04",
+      "reviewedHash": "d535ff577a0671e5961223be128338eefc4b1ff89a8d216e5db46ca3a3cd7f72"
+    },
+    {
+      "key": "list:DO",
+      "originalHash": "c60b87612f7e1e15fbc7cadddf6d496c154ca406fa353e37ea3732d782cc1969",
+      "reviewedHash": "ef206331118c682b41da361094765a03626aea8a1147220090160d8f5374a4f2"
+    },
+    {
+      "key": "viewer:DO",
+      "originalHash": "5c5e270cedfb4599f07ac2098cb69e247d80deeec933600589326ecc4bdc0ed9",
+      "reviewedHash": "505c50f4e855b58fa14c91e6720eaa52ad6849b15b489e726413068f827d88d6"
+    }
+  ]
+}

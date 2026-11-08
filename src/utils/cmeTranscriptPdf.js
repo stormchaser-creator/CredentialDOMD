@@ -7,6 +7,7 @@ import { STATE_NAMES } from "../constants/states";
 import { boardComplianceFor, aoaNationalEntry } from "./boardCompliance";
 import { certificationCards } from "./certCompliance.js";
 import { cat1BucketLabel } from "../constants/creditEquivalence";
+import { mateStatusText } from "./cmePresentation.js";
 import { resolveDocument } from "./receiptFiles.js";
 import { shareAtHandoff, shareNotStartedMessage } from "./shareHandoff.js";
 import { fileShareText } from "./shareText.js";
@@ -373,6 +374,8 @@ export function stateTranscriptModel(data, state, { certFiles = null, kind } = {
       // whether it came from the license record or from the physician.
       label: comp.windowSource === "custom"
         ? `CME cycle start set on the ${state} license record, ending at license expiration`
+        : comp.windowSource === "issue"
+          ? `first reporting period, license issue date to license expiration`
         : comp.windowAnchored
           ? `${comp.cycle}-year cycle ending at license expiration`
           : `rolling ${comp.cycle}-year window ending today (no ${state} license expiration on file)`,
@@ -553,7 +556,7 @@ function appRequirementRows(model) {
     rows.push({ name: c.label, rule: [c.cite, c.url].filter(Boolean).join(" "), required: "Yes", earned: c.met === true ? "Yes" : c.met === false ? "No" : "-", met: c.met, ...(c.met == null ? { status: "Not answered" } : {}) });
   }
   if (comp.mate) {
-    rows.push({ name: "MATE Act opioid/SUD training", rule: "One-time 8 hours of opioid or substance use disorder training for DEA registrants; counted across all dates, not just this cycle", required: fmtHrs(comp.mate.required), earned: fmtHrs(comp.mate.earned), met: comp.mate.met });
+    rows.push(mateRow(comp.mate, fmtHrs));
   }
   const unverified = [...new Set([...(comp.unverifiedItems || []).map(u => u.item), ...(comp.unverifiedTopics || []).filter(t => t.applicability !== "not-applicable").map(t => t.unverifiedItem || `${t.topic} requirement`)])].filter(Boolean);
   if (comp.rulesVerified) for (const item of unverified) {
@@ -616,15 +619,19 @@ export function stateRequirementRows(model) {
     });
   }
   if (comp.mate) {
-    rows.push({
-      name: "MATE Act opioid/SUD training",
-      rule: "One-time 8 hours of opioid or substance use disorder training for DEA registrants; counted across all dates, not just this cycle",
-      required: fmtHrs(comp.mate.required),
-      earned: fmtHrs(comp.mate.earned),
-      met: comp.mate.met,
-    });
+    rows.push(mateRow(comp.mate, fmtHrs));
   }
   return rows;
+}
+
+// The MATE Act row: a DEA registration item, one time. A registration issued
+// or renewed on or after 2023-06-27 carried the affirmation, so no hours.
+function mateRow(mate, fmtHrs) {
+  const rule = "One-time 8 hours of opioid or substance use disorder training for DEA registrants; counted across all dates, not just this cycle";
+  if (mate.via === "registration") {
+    return { name: "MATE Act opioid/SUD training", rule: `${rule}. Affirmed once at the first DEA registration submission on or after June 27, 2023 (DEA letter to registrants).`, required: "Affirmed", earned: mateStatusText(mate), met: true };
+  }
+  return { name: "MATE Act opioid/SUD training", rule, required: fmtHrs(mate.required), earned: fmtHrs(mate.earned), met: mate.met };
 }
 
 function drawKeyValue(doc, y, label, value) {

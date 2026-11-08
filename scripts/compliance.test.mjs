@@ -173,12 +173,13 @@ ok("refused cycleStart is reported", bad.cycleStartIgnored === true && bad.windo
 eq("refused cycleStart does not discard hours", bad.totalEarned, 30);
 
 // ── First-cycle proration: state data only, keyed to the license issue date ──
-// CO models it (C.R.S. 12-240-130.5 / DORA, 22/15/10/5/0). It is shown BESIDE
-// the 30, never substituted for it, and a hand-entered cycle start can't reach it.
+// CO models it (C.R.S. 12-240-130.5 / DORA, 22/15/10/5/0). A license issued
+// inside the current cycle cannot be a renewed term, so the prorated figure is
+// the requirement; a hand-entered cycle start can't reach it.
 const coFirst = computeCompliance([], "CO", "MD", { licenseExpiration: "2027-09-30", licenseIssued: "2026-07-15" });
 eq("CO first-cycle tier for 14 months licensed", coFirst.firstCycleRule.hours, 15);
 eq("CO first-cycle months read from the license", coFirst.firstCycleRule.months, 14);
-eq("CO proration does NOT move the requirement", coFirst.totalRequired, 30);
+eq("CO proration is the requirement for a license issued inside the cycle", coFirst.totalRequired, 15);
 const coTiers = [["2027-08-15", 0], ["2027-04-15", 5], ["2027-01-15", 10], ["2026-06-15", 15], ["2026-02-15", 22]];
 for (const [issued, hrs] of coTiers) {
   eq(`CO tier for issue date ${issued}`, computeCompliance([], "CO", "MD", { licenseExpiration: "2027-09-30", licenseIssued: issued }).firstCycleRule.hours, hrs);

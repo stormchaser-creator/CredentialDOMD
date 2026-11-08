@@ -360,7 +360,11 @@ export function computeAppCompliance(cmeEntries, state, degreeType, opts = {}) {
   if (opts.hasDEA && opts.mateApplies !== false) {
     const earned = round2((cmeEntries || []).filter((c) => cmeTopics(c).some((t) => MATE_TOPICS.includes(t))).reduce((s, c) => s + hours(c), 0));
     const school = yes(opts.deaAnswers?.[QUESTION_FIELDS.mateSchool]);
-    mate = { required: MATE_HOURS, earned, met: school || earned >= MATE_HOURS, ...(school ? { via: "school" } : {}) };
+    // A DEA registration issued or renewed on or after 2023-06-27 carries the
+    // one-time affirmation (compliance.js mateAttestationDate): no hours due.
+    mate = opts.mateAttestedOn
+      ? { required: 0, earned, met: true, via: "registration", attestedOn: opts.mateAttestedOn }
+      : { required: MATE_HOURS, earned, met: school || earned >= MATE_HOURS, ...(school ? { via: "school" } : {}) };
   }
 
   // ── Status ──

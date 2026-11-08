@@ -36,8 +36,8 @@ export { MATE_HOURS, cmeTopics, cycleBucket, splitByCycle, topicPeriodLabel, rou
  * variables in the rules, and a user-editable field that silently lowered the
  * target would be a false-compliant generator. Where a state's own data models
  * first-cycle proration (`firstCycle`), the prorated number is computed from
- * the license ISSUE DATE and surfaced beside the full requirement, never
- * substituted for it.
+ * the license ISSUE DATE, and it becomes the requirement when that issue date
+ * falls after the default window start (see firstCycleAllowance).
  *
  * Category strictness:
  *   - cat1min > 0 → those hours must be Category 1 (for DOs, states whose
@@ -66,7 +66,11 @@ export { MATE_HOURS, cmeTopics, cycleBucket, splitByCycle, topicPeriodLabel, rou
  * MATE Act: DEA registrants owe a ONE-TIME 8 hours of opioid or substance use
  * disorder training — checked against ALL entries (not windowed) tagged with a
  * qualifying topic. Generic pain-management or controlled-substance CME does
- * NOT satisfy it, so only the two specific topics count here.
+ * NOT satisfy it, so only the two specific topics count here. It is a DEA
+ * registration item, not a state license rule: complianceFor attaches it to
+ * one card only (mateCardState), and a DEA registration issued or renewed on
+ * or after 2023-06-27 carries the one-time affirmation (mateAttestationDate),
+ * so no hours are demanded once one is on file.
  */
 
 /**
@@ -80,15 +84,19 @@ export { MATE_HOURS, cmeTopics, cycleBucket, splitByCycle, topicPeriodLabel, rou
  * entirely. Otherwise a physician could move a regulatory number by typing a
  * different date.
  *
- * The result is an ALTERNATIVE shown beside the full requirement with its
- * citation, not a replacement for it. The app cannot tell a first renewal from
- * a later one (an `issuedDate` may be the current term's), and under-stating
- * the requirement is the failure that surfaces in a board audit.
+ * The result is the REQUIREMENT when the issue date falls after the default
+ * window start (one full cycle back from the expiration): a license issued
+ * inside the current cycle cannot be a renewed term, so its first renewal is
+ * this one (CO: C.R.S. 12-240-130.5(3)(c) "the board shall adjust
+ * proportionately"; ND: N.D. Admin. Code 50-04-01-02(2)). An issue date at or
+ * before the window start leaves the full requirement in force; the figure is
+ * then shown beside it with its citation (`applied: false`).
  */
-function firstCycleAllowance(rule, licenseIssued, windowEnd) {
+function firstCycleAllowance(rule, licenseIssued, windowEnd, defaultStart) {
   if (!rule || !licenseIssued || licenseIssued >= windowEnd) return null;
   const months = wholeMonthsBetween(licenseIssued, windowEnd);
-  const base = { months, mode: rule.mode, note: rule.note || "", source: rule.source || "" };
+  const applied = licenseIssued > defaultStart;
+  const base = { months, mode: rule.mode, applied, note: rule.note || "", source: rule.source || "" };
   if (rule.mode === "tiered") {
     // Tiers ascend by `underMonths`; the first one the span falls under wins.
     const tier = (rule.tiers || []).find(t => months < t.underMonths);
@@ -126,8 +134,16 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   // discard every entry, so it is refused and reported rather than applied.
   const requestedStart = parseLocalDate(opts.cycleStart);
   const startUsable = !!requestedStart && requestedStart < windowEnd;
-  const windowStart = startUsable ? requestedStart : defaultStart;
-  const windowSource = startUsable ? "custom" : "cycle";
+
+  // State-modeled first-cycle proration, from the license issue date. When
+  // the issue date falls inside the default window it is the requirement.
+  const licenseIssued = parseLocalDate(opts.licenseIssued);
+  const firstCycleRule = firstCycleAllowance(entry?.firstCycle, licenseIssued, windowEnd, defaultStart);
+  // A state whose first reporting period runs from licensure (`windowFromIssue`,
+  // ND) never counts CME dated before the license was issued.
+  const issueStart = firstCycleRule?.applied && entry.firstCycle.windowFromIssue ? licenseIssued : null;
+  const windowStart = startUsable ? requestedStart : (issueStart || defaultStart);
+  const windowSource = startUsable ? "custom" : issueStart ? "issue" : "cycle";
   const cycleStartIgnored = !!requestedStart && !startUsable;
 
   const windowDays = Math.round((windowEnd - windowStart) / MS_PER_DAY);
@@ -135,10 +151,6 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   const windowShort = windowDays < fullCycleDays;
   const windowLong = windowDays > fullCycleDays;
   const windowLabel = `Counting CME dated ${showDate(windowStart)} through ${showDate(windowEnd)}`;
-
-  // State-modeled first-cycle proration, from the license issue date. Shown
-  // beside the full requirement; `totalRequired` never moves.
-  const firstCycleRule = firstCycleAllowance(entry?.firstCycle, parseLocalDate(opts.licenseIssued), windowEnd);
 
   const daysLeft = hasAnchor
     ? Math.ceil((licenseExpiration - new Date()) / MS_PER_DAY)
@@ -253,12 +265,15 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     const mateHrs = round2((cmeEntries || [])
       .filter(c => cmeTopics(c).some(t => MATE_TOPICS.includes(t)))
       .reduce((s, c) => s + hours(c), 0));
-    mate = { required: MATE_HOURS, earned: mateHrs, met: mateHrs >= MATE_HOURS };
+    mate = opts.mateAttestedOn
+      ? { required: 0, earned: mateHrs, met: true, via: "registration", attestedOn: opts.mateAttestedOn }
+      : { required: MATE_HOURS, earned: mateHrs, met: mateHrs >= MATE_HOURS };
   }
 
   const noGeneralReq = !entry || (entry.total || 0) === 0;
-  const totalRequired = entry?.total || 0;
-  const cat1Required = entry?.cat1min || 0;
+  const firstCycleHours = firstCycleRule?.applied ? firstCycleRule.hours : null;
+  const totalRequired = firstCycleHours ?? (entry?.total || 0);
+  const cat1Required = firstCycleHours != null ? Math.min(entry?.cat1min || 0, firstCycleHours) : (entry?.cat1min || 0);
   const totalMet = noGeneralReq || totalHrs >= totalRequired;
   const cat1Met = cat1Required <= 0 || cat1Hrs >= cat1Required;
   const allTopicsMet = topicResults.every(t => t.met);
@@ -325,8 +340,9 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     windowEnd,
     windowLabel,
     windowAnchored: hasAnchor,
-    // "custom" when the license carries a cmeCycleStart, "cycle" when the
-    // window is the default full cycle back from the expiration.
+    // "custom" when the license carries a cmeCycleStart, "issue" when a
+    // first cycle in force starts at the license issue date (ND), "cycle"
+    // when the window is the default full cycle back from the expiration.
     windowSource,
     windowShort,
     windowLong,
@@ -336,7 +352,8 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     // the default window is in force and the UI should say so.
     cycleStartIgnored,
     // The state's own first-cycle number when its data models one, computed
-    // from the license issue date. Advisory: `totalRequired` is unchanged.
+    // from the license issue date. `applied` when it is the requirement
+    // (`totalRequired` and `cat1Required` then carry it).
     firstCycleRule,
     daysLeft,
   };
@@ -359,6 +376,8 @@ export function windowNotes(comp) {
 
   if (comp.windowSource === "custom") {
     out.push(`Start set on this license, not derived from the renewal date.`);
+  } else if (comp.windowSource === "issue") {
+    out.push(`Starts on the license issue date: ${comp.state}'s first reporting period runs from licensure.`);
   } else if (comp.windowAnchored) {
     out.push(`Default window: one full ${cyc} back from your renewal date.`);
   } else {
@@ -370,19 +389,26 @@ export function windowNotes(comp) {
   }
 
   // A shorter or longer window never moves the hour target. Say so, because
-  // the physician who just set a start date is about to assume it did.
-  if (comp.totalRequired > 0 && comp.windowShort) {
+  // the physician who just set a start date is about to assume it did. A
+  // first-cycle figure in force says what the target is on its own line.
+  const fc = comp.firstCycleRule;
+  if (fc?.applied) {
+    // Stated below.
+  } else if (comp.totalRequired > 0 && comp.windowShort) {
     out.push(`This window is shorter than a full ${cyc}. ${comp.state} still requires ${comp.totalRequired} hours inside it.`);
   } else if (comp.totalRequired > 0 && comp.windowLong) {
     out.push(`This window is longer than a full ${cyc}, which is what a first requirement period running from initial licensure looks like. The requirement is still ${comp.totalRequired} hours.`);
   }
 
-  // The state's own proration, computed from the license issue date and shown
-  // beside the full number rather than replacing it: the app cannot tell a
-  // first renewal from a later one, and a short number the board does not
-  // accept is the failure that shows up in an audit.
-  const fc = comp.firstCycleRule;
-  if (fc) {
+  // The state's own proration, computed from the license issue date. Issued
+  // inside this cycle, the license cannot be a renewed term, so the prorated
+  // figure is the requirement; issued earlier, it is shown beside the full one.
+  if (fc?.applied) {
+    out.push(
+      `${comp.state} first renewal: ${fc.hours} hours required. This license was issued ${fc.months} months before it expires, inside this cycle, so this is its first renewal. ` +
+      `${fc.note}${fc.source ? ` (${fc.source})` : ""}`
+    );
+  } else if (fc) {
     out.push(
       `${comp.state} prorates a first renewal: ${fc.hours} hours for a license issued ${fc.months} months before it expires. ` +
       `Shown against the full ${comp.totalRequired} until you confirm with the board that this is your first renewal. ` +
@@ -532,10 +558,42 @@ export function alertingStates(primaryState, additionalStates, licenses, degreeT
   return trackedStates(primaryState, additionalStates, licenses, degreeType).filter(st => held.get(st) !== false);
 }
 
+const isDEARecord = (l) => !!l && (/dea/i.test(l.type || "") || /dea/i.test(l.name || ""));
+
 /** DEA registration detection (drives the MATE Act line). */
 export function hasDEARegistration(licenses) {
   // A historical or superseded registration is not one held today.
-  return (licenses || []).some(l => l && !isInactive(l) && (/dea/i.test(l.type || "") || /dea/i.test(l.name || "")));
+  return (licenses || []).some(l => isDEARecord(l) && !isInactive(l));
+}
+
+/**
+ * The MATE Act one-time affirmation, from the DEA registrations on file. The
+ * DEA letter to registrants (deadiversion.usdoj.gov/pubs/docs/
+ * MATE_Training_Letter_Final.pdf) makes the 8 hours a one-time requirement,
+ * affirmed on the first registration submission, initial or renewal, on or
+ * after June 27, 2023, and not asked at later renewals. Any registration on
+ * file (current or past) issued or renewed on or after that date carries the
+ * affirmation, so the earliest such issue date is returned; null otherwise.
+ */
+export const MATE_AFFIRMATION_FROM = "2023-06-27";
+export function mateAttestationDate(licenses) {
+  const from = parseLocalDate(MATE_AFFIRMATION_FROM);
+  const dates = (licenses || [])
+    .filter(isDEARecord)
+    .map(l => ({ raw: l.issuedDate, d: parseLocalDate(l.issuedDate) }))
+    .filter(x => x.d && x.d >= from)
+    .sort((a, b) => a.d - b.d);
+  return dates.length ? String(dates[0].raw).slice(0, 10) : null;
+}
+
+/**
+ * The one card that carries the MATE Act line: the primary state when it is
+ * tracked, else the first tracked state. MATE is a DEA registration item, so
+ * it is shown once, never repeated on every state license card.
+ */
+export function mateCardState(data) {
+  const s = data?.settings || {};
+  return trackedStates(s.primaryState, s.additionalStates, data?.licenses, s.degreeType)[0] || null;
 }
 
 /**
@@ -551,7 +609,8 @@ export function complianceFor(data, state, kind) {
     licenseIssued: lic?.issuedDate || null,
     cycleStart: lic?.cmeCycleStart || null,
     topicApplicability: lic?.customFields || {},
-    hasDEA: hasDEARegistration(data.licenses),
+    hasDEA: hasDEARegistration(data.licenses) && state === mateCardState(data),
+    mateAttestedOn: mateAttestationDate(data.licenses),
   });
 }
 
@@ -598,6 +657,7 @@ function appComplianceFor(data, state, kind) {
     licenseAnswers: lic?.customFields || {},
     hasDEA: hasDEARegistration(data.licenses),
     deaAnswers: deaAnswersOf(data.licenses),
+    mateAttestedOn: mateAttestationDate(data.licenses),
     mateApplies: k === "pa" || k === "aprn" || (k === "rn" && !hasAprn),
     certifications: certificationsFor(data.licenses),
     pendingCertifications: pendingCertificationsFor(data.licenses, deg),
