@@ -1,10 +1,10 @@
 {
-  "reason": "CME shortfall audit, three rule fixes. (1) CO: a license issued after the default window start cannot be a renewed term, so the DORA first-cycle tier is the requirement for the total and the Category 1 minimum (C.R.S. 12-240-130.5(3)(c)). (2) ND: the first renewal after a regular permanent license owes no CME (N.D. Admin. Code 50-04-01-02(2)) and its window starts at the issue date. (3) MATE Act: a one-time DEA registration item (DEA letter to registrants), carried by one card only (the primary tracked state), so the other complianceFor, list and viewer cards no longer repeat it. Every other state and field is unchanged. Review: the ND first-cycle note quotes 50-04-01-02(2) and 50-04-01-04(1) verbatim from the ndlegis.gov text; the eight ND entries move by that note text only.",
+  "reason": "CME shortfall audit, three rule fixes. (1) CO: a license issued after the default window start cannot be a renewed term, so the DORA first-cycle tier is the requirement for the total and the Category 1 minimum (C.R.S. 12-240-130.5(3)(c)). (2) ND: a license issued inside the current cycle is on its first reporting period, counted from the issue date: under one year licensed owes no CME (N.D. Admin. Code 50-04-01-02(2)), one year up to two owes twenty hours (50-04-01-04(1)). The golden ND fixture (issued 2025-11-15, expiring 2027-03-31, 16 months) owes 20. (3) MATE Act: a one-time DEA registration item (DEA letter to registrants), carried by one card only (the first tracked state whose card can alert), so the other complianceFor, list and viewer cards no longer repeat it. Every other state and field is unchanged. Review: the ND first-cycle note quotes 50-04-01-02(2) and 50-04-01-04(1) verbatim from the ndlegis.gov text, each tier with its own citation.",
   "entries": [
     {
       "key": "rules:getStateEntry:ND:MD",
       "originalHash": "dbe55f5149f4eaca4d926596877402b30f51b9dd868dbf92bc39391f3b2ed648",
-      "reviewedHash": "48fbec41ad3c12896d3b494eb0fd9c686f42cd9c09046172ee08cd949e6560e5"
+      "reviewedHash": "581277122751a5d299582ed3c107b1748ee458ebbf427eaeadefdc82893adad7"
     },
     {
       "key": "engine:CO:MD:empty:anchored",
@@ -24,17 +24,17 @@
     {
       "key": "engine:ND:MD:empty:anchored",
       "originalHash": "77ad34f72758b5ee055ef9599c415d5278eac7976a8d1a77b6090d9c4f6eaee7",
-      "reviewedHash": "c3dd04dbaa3138344e73ba2475fff2b3a3370d786faa9bf688ebcb5f79e0b1b3"
+      "reviewedHash": "61d52eb0d0effb5e58ce614eeef2a841502a7e55c27f13e9d6122623de835fb0"
     },
     {
       "key": "engine:ND:MD:mixed:anchored",
       "originalHash": "3721867366bb615c23adfbf707c572bb2447af71bac544fcc2633616e88a2530",
-      "reviewedHash": "799316abc2a05249d3b808d0a8fe5d74a1bea7fa4d6631299e858351943971bc"
+      "reviewedHash": "b84d2a87125d55789c354957851e63629f24e0240b509132ad116b57a465880d"
     },
     {
       "key": "engine:ND:MD:boundary:anchored",
       "originalHash": "2a36f2b5ae265796d1321e9a8f9062caf5145380e21343f6cd4c3557aa824de7",
-      "reviewedHash": "85c554a34b0883bdfb75a6b58a8c7bac450c401a24c06b886345750064d5d41a"
+      "reviewedHash": "7e0c4885f1d01d8b09f5a246ce3eb4ebcea44f30f72b7a8f3d5449f6e815f722"
     },
     {
       "key": "complianceFor:CA:MD",
@@ -79,7 +79,7 @@
     {
       "key": "rules:getStateEntry:ND:DO",
       "originalHash": "dbe55f5149f4eaca4d926596877402b30f51b9dd868dbf92bc39391f3b2ed648",
-      "reviewedHash": "48fbec41ad3c12896d3b494eb0fd9c686f42cd9c09046172ee08cd949e6560e5"
+      "reviewedHash": "581277122751a5d299582ed3c107b1748ee458ebbf427eaeadefdc82893adad7"
     },
     {
       "key": "engine:CO:DO:empty:anchored",
@@ -99,17 +99,17 @@
     {
       "key": "engine:ND:DO:empty:anchored",
       "originalHash": "eb8998608510cb442cd33f6c3a352f874d5375a8eca09e7030e8cd05fb57ab0c",
-      "reviewedHash": "d45bfcf57a50e0d608f7d3591f8e9ea78c36cf675f687d5741b6c523db361fad"
+      "reviewedHash": "c51151802211c730d8dd937ad2b28a48e7049e94ab9cb2e81d957e459a13e8e2"
     },
     {
       "key": "engine:ND:DO:mixed:anchored",
       "originalHash": "bdd7d220fc7c3dbce451eba64fec73f92b8b89e7dc3838b617a7e6f3babafd1e",
-      "reviewedHash": "e04083fdf651a7a07cdb002792d9df758620609981956d4debd43ea075a74701"
+      "reviewedHash": "00ed80588fe34526722e80335ec6df4151659caaa458bec00b72616640366eed"
     },
     {
       "key": "engine:ND:DO:boundary:anchored",
       "originalHash": "5841a8a536432d569ae80f41b658070c266b8a8641c6bd6e246294e2614b2d5d",
-      "reviewedHash": "4fd5fb73b588f47003381d7d6b13fe4afd860d7e5c122e476ea0db4d4fd7107a"
+      "reviewedHash": "be28ba2d3321e23486075ecc3ec67ab758880abfcb0ab9e6279a168fdafa6a29"
     },
     {
       "key": "complianceFor:CA:DO",

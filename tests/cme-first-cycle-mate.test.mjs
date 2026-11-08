@@ -3,9 +3,9 @@
 //   1. Colorado: a license issued inside the current cycle cannot be a renewed
 //      term, so the prorated first-cycle figure is the requirement
 //      (C.R.S. 12-240-130.5(3)(c), "the board shall adjust proportionately").
-//   2. North Dakota: physicians "who have not renewed their licenses for the
-//      first time since being granted a regular permanent license" owe no CME
-//      (N.D. Admin. Code 50-04-01-02(2)); the window starts at licensure.
+//   2. North Dakota: a first renewal under one year licensed owes no CME
+//      (N.D. Admin. Code 50-04-01-02(2)); one year up to two owes twenty
+//      hours (50-04-01-04(1)); the window starts at licensure.
 //   3. MATE Act: a one-time DEA registration item (DEA letter to registrants,
 //      MATE_Training_Letter_Final.pdf), shown once, and met by the affirmation
 //      on any registration issued or renewed on or after 2023-06-27.
@@ -23,9 +23,9 @@ const course = (hours, date, category = "AMA PRA Category 1", topics = []) => ({
 const day = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 test("CO: a license issued inside the cycle owes the prorated first-cycle hours, total and Category 1", () => {
-  const entries = [course(10.25, "2026-08-19", "AOA Category 1-A"), course(5, "2026-06-23")];
-  // Issued 2026-04-09, expires 2027-04-30: 12 months licensed, the 12-18 band.
-  const comp = computeCompliance(entries, "CO", "DO", { licenseExpiration: "2027-04-30", licenseIssued: "2026-04-09" });
+  const entries = [course(9.5, "2026-07-14", "AOA Category 1-A"), course(5.5, "2026-05-20")];
+  // Issued 2026-03-12, expires 2027-03-31: 12 months licensed, the 12-18 band.
+  const comp = computeCompliance(entries, "CO", "DO", { licenseExpiration: "2027-03-31", licenseIssued: "2026-03-12" });
   assert.equal(comp.firstCycleRule.applied, true);
   assert.equal(comp.totalRequired, 15);
   assert.equal(comp.cat1Required, 15);
@@ -37,31 +37,48 @@ test("CO: a license issued inside the cycle owes the prorated first-cycle hours,
 });
 
 test("CO: a license issued at or before the window start keeps the full 30", () => {
-  const comp = computeCompliance([course(16, "2026-06-01")], "CO", "MD", { licenseExpiration: "2027-04-30", licenseIssued: "2023-04-30" });
+  const comp = computeCompliance([course(16, "2026-06-01")], "CO", "MD", { licenseExpiration: "2027-03-31", licenseIssued: "2022-11-15" });
   assert.equal(comp.totalRequired, 30);
   assert.equal(comp.cat1Required, 30);
   assert.equal(comp.assessmentStatus, "needs-hours");
 });
 
-test("ND: the first renewal after a regular license owes 0, counted from the issue date", () => {
-  const entries = [course(6, "2026-01-10"), course(4, "2026-09-01")];
-  const comp = computeCompliance(entries, "ND", "DO", { licenseExpiration: "2027-09-06", licenseIssued: "2026-07-31" });
+test("ND: a first renewal under one year licensed owes 0, counted from the issue date", () => {
+  const entries = [course(6, "2026-01-10"), course(4, "2027-01-05")];
+  // Issued 2026-10-15, expires 2027-09-30: 11 months licensed.
+  const comp = computeCompliance(entries, "ND", "DO", { licenseExpiration: "2027-09-30", licenseIssued: "2026-10-15" });
   assert.equal(comp.firstCycleRule.applied, true);
+  assert.equal(comp.firstCycleRule.months, 11);
   assert.equal(comp.totalRequired, 0);
   assert.equal(comp.cat1Required, 0);
   assert.equal(comp.assessmentStatus, "met");
-  assert.equal(day(comp.windowStart), "2026-07-31", "the window never starts before the license issue date");
+  assert.equal(day(comp.windowStart), "2026-10-15", "the window never starts before the license issue date");
   assert.equal(comp.windowSource, "issue");
   assert.equal(comp.totalEarned, 4, "CME dated before licensure is not counted");
-  const notes = windowNotes(comp);
-  assert.ok(notes.some(n => n.includes("ND first renewal: 0 hours required") && n.includes("50-04-01-02(2)")), notes.join("\n"));
+  const note = windowNotes(comp).find(n => n.startsWith("ND first renewal"));
+  assert.ok(note && note.includes("0 hours required") && note.includes("50-04-01-02(2)") && !note.includes("50-04-01-04(1)"), note);
+});
+
+test("ND: a first renewal one year up to two years licensed owes twenty hours, total and Category 1", () => {
+  const entries = [course(3, "2025-06-01"), course(12, "2026-04-10")];
+  // Issued 2025-11-01, expires 2027-09-30: 22 months licensed.
+  const comp = computeCompliance(entries, "ND", "MD", { licenseExpiration: "2027-09-30", licenseIssued: "2025-11-01" });
+  assert.equal(comp.firstCycleRule.applied, true);
+  assert.equal(comp.firstCycleRule.months, 22);
+  assert.equal(comp.totalRequired, 20);
+  assert.equal(comp.cat1Required, 20);
+  assert.equal(day(comp.windowStart), "2025-11-01");
+  assert.equal(comp.totalEarned, 12, "CME dated before licensure is not counted");
+  assert.equal(comp.assessmentStatus, "needs-hours");
+  const note = windowNotes(comp).find(n => n.startsWith("ND first renewal"));
+  assert.ok(note && note.includes("20 hours required") && note.includes("50-04-01-04(1)") && !note.includes("50-04-01-02(2)"), note);
 });
 
 test("ND: a license issued before the cycle owes the 40 hours over the full two years", () => {
-  const comp = computeCompliance([course(19.25, "2026-08-19")], "ND", "MD", { licenseExpiration: "2027-09-06", licenseIssued: "2019-02-01" });
+  const comp = computeCompliance([course(18.5, "2026-08-03")], "ND", "MD", { licenseExpiration: "2027-09-30", licenseIssued: "2019-02-01" });
   assert.equal(comp.totalRequired, 40);
   assert.equal(comp.cat1Required, 40);
-  assert.equal(day(comp.windowStart), "2025-09-06");
+  assert.equal(day(comp.windowStart), "2025-09-30");
   assert.equal(comp.windowSource, "cycle");
   assert.equal(comp.assessmentStatus, "needs-hours");
 });
@@ -166,4 +183,31 @@ test("MATE: an NP gets the line on one APRN card only, never on an RN card besid
   const withMate = complianceListFor(data).filter(c => c.comp.mate);
   assert.equal(withMate.length, 1, withMate.map(c => c.key).join(","));
   assert.equal(withMate[0].key, "TX:aprn");
+});
+
+test("MATE: carried by a card that can alert, not a pending primary licence beside an active one", () => {
+  const data = {
+    settings: { degreeType: "MD", primaryState: "CA", additionalStates: ["TX"] },
+    licenses: [
+      { id: "ca", state: "CA", type: "State Medical License (MD)", name: "CA Medical License", issuedDate: "2021-01-01", expirationDate: "2027-06-30", lifecycleStatus: "pending_confirmation" },
+      { id: "tx", state: "TX", type: "State Medical License (MD)", name: "TX Medical License", issuedDate: "2020-01-01", expirationDate: "2028-08-31", lifecycleStatus: "active" },
+      { id: "dea", type: "DEA Registration", name: "DEA Registration", state: "TX", issuedDate: "", expirationDate: "2027-05-31" },
+    ],
+    cme: [],
+  };
+  assert.equal(mateCardState(data), "TX");
+  const withMate = complianceListFor(data).filter(c => c.comp.mate);
+  assert.equal(withMate.length, 1);
+  assert.equal(withMate[0].st, "TX");
+  assert.equal(withMate[0].comp.mate.required, 8);
+  assert.equal(withMate[0].comp.fullyCompliant, false, "the unmet one-time 8 hours keep the alerting card from reading compliant");
+});
+
+test("MATE: a PA's line moves to the card that can alert when the primary licence is pending", async () => {
+  await loadAppRules();
+  const pa = (st, over = {}) => ({ id: `pa-${st}`, state: st, type: "State Physician Assistant License", name: `${st} PA License`, issuedDate: "2020-01-01", expirationDate: "2028-03-31", ...over });
+  const data = { settings: { degreeType: "PA", primaryState: "TX", additionalStates: ["CO"] }, licenses: [pa("TX", { lifecycleStatus: "pending_confirmation" }), pa("CO"), deaPre], cme: [] };
+  const withMate = complianceListFor(data).filter(c => c.comp.mate);
+  assert.equal(withMate.length, 1, withMate.map(c => c.key).join(","));
+  assert.equal(withMate[0].key, "CO:pa");
 });

@@ -88,9 +88,10 @@ export { MATE_HOURS, cmeTopics, cycleBucket, splitByCycle, topicPeriodLabel, rou
  * window start (one full cycle back from the expiration): a license issued
  * inside the current cycle cannot be a renewed term, so its first renewal is
  * this one (CO: C.R.S. 12-240-130.5(3)(c) "the board shall adjust
- * proportionately"; ND: N.D. Admin. Code 50-04-01-02(2)). An issue date at or
- * before the window start, or no license expiration on file (the span to the
- * renewal is then unknown), leaves the full requirement in force; the figure
+ * proportionately"; ND: 50-04-01-02(2) under one year, 50-04-01-04(1) 20 hours
+ * from one year to two). An issue date at or before the window start, or no
+ * license expiration on file (the span to the renewal is then unknown), leaves
+ * the full requirement in force; the figure
  * is then shown beside it with its citation (`applied: false`).
  */
 function firstCycleAllowance(rule, licenseIssued, windowEnd, defaultStart, anchored) {
@@ -103,7 +104,9 @@ function firstCycleAllowance(rule, licenseIssued, windowEnd, defaultStart, ancho
   if (rule.mode === "tiered") {
     // Tiers ascend by `underMonths`; the first one the span falls under wins.
     const tier = (rule.tiers || []).find(t => months < t.underMonths);
-    return tier ? { ...base, hours: tier.hours } : null;
+    // A tier with its own citation (ND: 0 under 50-04-01-02(2), 20 under
+    // 50-04-01-04(1)) is quoted alone, so the line states the rule that applies.
+    return tier ? { ...base, hours: tier.hours, note: tier.note || base.note, source: tier.source || base.source } : null;
   }
   if (rule.mode === "fixed") {
     if (rule.underMonths != null && months >= rule.underMonths) return null;
@@ -594,29 +597,35 @@ export function mateAttestationDate(licenses) {
 }
 
 /**
- * The one card that carries the MATE Act line: the primary state when it is
- * tracked, else the first tracked state. MATE is a DEA registration item, so
- * it is shown once, never repeated on every state license card.
+ * The state whose card carries the MATE Act line (mateCard). MATE is a DEA
+ * registration item, so it is shown once, never repeated on every state
+ * license card.
  */
 export function mateCardState(data) {
   return mateCard(data)?.st || null;
 }
 
 /**
- * The one card ({ st, kind }) that carries the MATE Act line. A physician:
- * the first tracked state. A PA: that state's PA card. An NP: the first card
- * in complianceListFor order that the MATE line applies to (an APRN card, or
- * an RN card when no APRN licence is on file).
+ * The one card ({ st, kind }) that carries the MATE Act line, chosen among
+ * the cards that can alert (alertingStates), since only those reach the Home
+ * ring and the bell: an unmet MATE on a Resolve-task card would count
+ * nowhere. A physician: the first alerting state, else the first tracked
+ * state. A PA: that state's PA card. An NP: the first card in
+ * complianceListFor order that the MATE line applies to (an APRN card, or an
+ * RN card when no APRN licence is on file), alerting first.
  */
 function mateCard(data) {
   const s = data?.settings || {};
   const deg = s.degreeType;
+  const alerting = new Set(alertingStates(s.primaryState, s.additionalStates, data?.licenses, deg));
   if (!isAdvancedPractice(deg)) {
-    const st = trackedStates(s.primaryState, s.additionalStates, data?.licenses, deg)[0];
+    const tracked = trackedStates(s.primaryState, s.additionalStates, data?.licenses, deg);
+    const st = tracked.find(x => alerting.has(x)) || tracked[0];
     return st ? { st, kind: "medical" } : null;
   }
   const hasAprn = hasAprnLicense(data.licenses);
-  return appCardOrder(data).find(c => c.kind !== "rn" || !hasAprn) || null;
+  const eligible = appCardOrder(data).filter(c => c.kind !== "rn" || !hasAprn);
+  return eligible.find(c => alerting.has(c.st)) || eligible[0] || null;
 }
 
 const hasAprnLicense = (licenses) => (licenses || []).some(l => l && !isInactive(l) && licenseKindOf(l.type) === "aprn");
