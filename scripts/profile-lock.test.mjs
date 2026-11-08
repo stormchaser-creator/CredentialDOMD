@@ -236,7 +236,7 @@ ok("APPROVED admits the owner or an owner-released ticket, nothing else",
   for (const name of ["queueSQL", "continuationSQL", "targetSQL"]) {
     ok(`${name} selects targets only through APPROVED`, /\$\{APPROVED\}/.test(fn(name)), name);
   }
-  for (const name of ["historySQL", "messagesSQL"]) {
+  for (const name of ["historySQL", "historyRowSQL", "messagesSQL"]) {
     ok(`${name} loads history only for the approved target's owner`, /t\.user_id='\$\{id\(ownerId\)\}'::uuid/.test(fn(name)), name);
   }
 }
