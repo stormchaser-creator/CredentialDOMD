@@ -785,3 +785,17 @@ test('the notes a finished ticket left open reach the supervisor (attention left
     assert.deepEqual(seen.leftover, [T]);
   });
 });
+test('a run cannot tick off the host\'s own work for an item the host still has open (53890221)', async () => {
+  await answeredTicket(async ({ db, state, due }) => {
+    const open = stage3(OPEN); open.final.follow_up = hostFollowUp(OPEN);
+    await finishRun(db.query, state.dir, await due(), result(), { stage3: open, codeOutcome: 'none', requireStructured: true });
+    const before = record(state.dir).pending_follow_up.filter(f => f.work === itemFollowUpWork('AC-2'));
+    assert.equal(before.length, 1);
+    const ticked = { ...result(), assessment: { ...result().assessment, completed_follow_up: before.map(f => ({ work: f.work, verification: 'Synthetic: looked at it.' })) } };
+    const again = stage3(OPEN); again.final.follow_up = hostFollowUp(OPEN);
+    await finishRun(db.query, state.dir, await due(), ticked, { stage3: again, codeOutcome: 'none', requireStructured: true });
+    const kept = record(state.dir);
+    assert.ok(kept.pending_follow_up.some(f => f.work === itemFollowUpWork('AC-2')), 'the host work stays while AC-2 is open');
+    assert.notEqual(kept.continuation.state, 'complete');
+  });
+});

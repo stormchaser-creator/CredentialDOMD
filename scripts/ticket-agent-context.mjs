@@ -853,7 +853,11 @@ function withHostFollowUps(result, stage3) {
 // own per-item work for items the host decided done.
 function outstandingWork(previous, result, stage3) {
   const outstanding = new Map([...(previous?.pending_follow_up || []), ...result.assessment.follow_up].map(f => [questionKey(f.work), f]));
-  for (const done of result.assessment.completed_follow_up) outstanding.delete(questionKey(done.work));
+  // A run cannot tick off the host's own work for an item the host still
+  // has open ("Finish AC-1: the host has not confirmed it done"): 53890221
+  // closed all three that way and went quiet with every item partial.
+  const hostOpen = new Set((Array.isArray(stage3?.final?.items) ? stage3.final.items : []).filter(f => f.state !== 'done').flatMap(f => hostItemWork(f.id)).map(questionKey));
+  for (const done of result.assessment.completed_follow_up) if (!hostOpen.has(questionKey(done.work))) outstanding.delete(questionKey(done.work));
   for (const f of Array.isArray(stage3?.final?.items) ? stage3.final.items : []) if (f.state === 'done') for (const work of hostItemWork(f.id)) outstanding.delete(questionKey(work));
   // An owner follow-up closed by hand (closeFollowUp) stays closed when a
   // run lists the same work again, except the host's own work for an item
