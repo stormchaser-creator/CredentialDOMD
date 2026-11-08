@@ -434,3 +434,161 @@ test('a transcript read that errors is a failure: a refused save of it is report
   idb.readHook = null;
   scope.setActiveUserId(null);
 });
+
+// Review: a transcript or archives read that errored left the key unread, and
+// the Assistant's writes of it (largeSet) were kept in memory only, so
+// writeOfflineText never ran and nothing was ever reported: the session's
+// conversation was lost on reload in silence. A write the unread copy keeps
+// out of IndexedDB after a read that failed is now reported, once.
+test('the Assistant writing a transcript whose read errored: reported once, past the hold', async () => {
+  const U = 'user_syntheticChatUnreadWrite';
+  const key = scope.scopedKey(scope.BASE_KEYS.data, U);
+  const chatKey = scope.scopedKey(scope.BASE_KEYS.chat, U);
+  const idb = createMemoryIndexedDB();
+  offlineStore.setOfflineStoreFactory(idb);
+  offlineStore.setOfflineTransactionTimeout(BASE_WAIT * SEC);
+  offlineStore.setOfflineTransactionBound(BOUND * SEC);
+  scope.setActiveUserId(U);
+  scope.adoptLocalFence(U);
+  assert.equal((await scope.writeOfflineText(key, JSON.stringify(deviceFile()), () => true)).saved, true, 'precondition: the file is stored');
+  await otherTabPut(idb, chatKey, JSON.stringify([{ id: 'chat-synthetic-1', text: 'synthetic' }]));
+  ({ scope, storage } = await newPage());
+  offlineStore.setOfflineStoreFactory(idb);
+  scope.resetStorageFullReport();
+  const reports = [];
+  scope.setStorageFullReporter((message, extra, kind = 'error') => reports.push({ message, extra, kind }));
+  idb.readHook = (k, v) => {
+    if (k === chatKey) throw Object.assign(new Error('Synthetic IndexedDB failure'), { name: 'UnknownError' });
+    return v;
+  };
+  scope.setActiveUserId(U);
+  await scope.hydrateOfflineStores(U);
+  // The member talks to the Assistant: each turn writes the transcript.
+  for (let turn = 2; turn <= 4; turn += 1) {
+    assert.equal(scope.largeSetJSON(scope.BASE_KEYS.chat, [{ id: `chat-synthetic-${turn}`, text: 'new' }], U), true);
+    await sleep(31);
+  }
+  const failed = errors(reports);
+  assert.equal(failed.length, 1, `one report (${JSON.stringify(failed)})`);
+  assert.equal(failed[0].message, 'Offline copy not saved: storage_unavailable');
+  assert.equal(failed[0].extra.store, scope.BASE_KEYS.chat);
+  assert.equal(JSON.parse(idb.dump().get(chatKey))[0].id, 'chat-synthetic-1', 'the stored transcript is not written over');
+  idb.readHook = null;
+  scope.setActiveUserId(null);
+});
+
+test('the Assistant writing a transcript whose read is only slow: nothing is reported', async () => {
+  const U = 'user_syntheticChatSlowWrite';
+  const key = scope.scopedKey(scope.BASE_KEYS.data, U);
+  const chatKey = scope.scopedKey(scope.BASE_KEYS.chat, U);
+  const idb = createMemoryIndexedDB();
+  offlineStore.setOfflineStoreFactory(idb);
+  offlineStore.setOfflineTransactionTimeout(BASE_WAIT * SEC);
+  offlineStore.setOfflineTransactionBound(BOUND * SEC);
+  scope.setActiveUserId(U);
+  scope.adoptLocalFence(U);
+  assert.equal((await scope.writeOfflineText(key, JSON.stringify(deviceFile()), () => true)).saved, true, 'precondition: the file is stored');
+  await otherTabPut(idb, chatKey, JSON.stringify([{ id: 'chat-synthetic-1', text: 's'.repeat(1_500_000) }]));
+  ({ scope, storage } = await newPage());
+  offlineStore.setOfflineStoreFactory(idb);
+  scope.resetStorageFullReport();
+  const reports = [];
+  scope.setStorageFullReporter((message, extra, kind = 'error') => reports.push({ message, extra, kind }));
+  idb.slowLargeValues = { minChars: 1_000_000, ms: 100 * SEC };
+  scope.setActiveUserId(U);
+  await scope.hydrateOfflineStores(U);
+  for (let turn = 2; turn <= 4; turn += 1) {
+    scope.largeSetJSON(scope.BASE_KEYS.chat, [{ id: `chat-synthetic-${turn}`, text: 'new' }], U);
+    await sleep(31);
+  }
+  assert.deepEqual(errors(reports), [], 'a read still running is "not yet"');
+  idb.slowLargeValues = null;
+  scope.setActiveUserId(null);
+});
+
+// Review: the bound was per connection only, so one transaction that never
+// settled went unbounded while others on the connection kept settling. A
+// transaction now fails on its own once it has made no progress for three
+// minutes since its turn came (the transactions ahead of it settled).
+test('a hung file read while the Assistant keeps writing: it fails about three minutes after its turn, reported once', async () => {
+  const U = 'user_syntheticHungFileRead';
+  const key = scope.scopedKey(scope.BASE_KEYS.data, U);
+  const idb = createMemoryIndexedDB();
+  offlineStore.setOfflineStoreFactory(idb);
+  offlineStore.setOfflineTransactionTimeout(BASE_WAIT * SEC);
+  offlineStore.setOfflineTransactionBound(BOUND * SEC);
+  scope.setActiveUserId(U);
+  scope.adoptLocalFence(U);
+  assert.equal((await scope.writeOfflineText(key, JSON.stringify(deviceFile()), () => true)).saved, true, 'precondition: the file is stored');
+  ({ scope, storage } = await newPage());
+  offlineStore.setOfflineStoreFactory(idb);
+  scope.resetStorageFullReport();
+  const reports = [];
+  const T0 = deviceNow();
+  const at = () => deviceNow() - T0;
+  scope.setStorageFullReporter((message, extra, kind = 'error') => reports.push({ message, extra, kind, at: at() }));
+  scope.setActiveUserId(U);
+  await scope.hydrateOfflineStores(U);
+  idb.slowLargeValues = { minChars: 1_000_000, ms: 60 * SEC };
+  idb.hangKeys = new Set([key]);
+  const big = (base, n) => [{ id: `${base}-synthetic-${n}`, text: 's'.repeat(1_500_000) }];
+  const start = deviceNow();
+  // A transcript write that takes 60 seconds, then the load's read of the file behind it.
+  scope.largeSetJSON(scope.BASE_KEYS.chat, big('chat', 1), U);
+  await sleep(1);
+  const turn = deviceNow() - start + 59;
+  const began = deviceNow();
+  await storage.readCachedData(U, { current: () => true });
+  assert.ok(deviceNow() - began <= BASE_WAIT + 1, 'the first screen waits no longer than the base wait');
+  // The Assistant keeps writing: something on the connection settles every 60 seconds.
+  let n = 1;
+  while (deviceNow() - start < turn + BOUND + 40) {
+    await sleep(60 - ((deviceNow() - start) % 60));
+    n += 1;
+    scope.largeSetJSON(n % 2 ? scope.BASE_KEYS.chat : scope.BASE_KEYS.archives, big(n % 2 ? 'chat' : 'archives', n), U);
+  }
+  const failed = errors(reports);
+  assert.equal(failed.length, 1, `one report (${JSON.stringify(failed)})`);
+  assert.equal(failed[0].message, 'Offline copy not saved: storage_unavailable');
+  assert.equal(failed[0].extra.idbError, 'TransactionTimeout');
+  const since = failed[0].at - (start - T0);
+  assert.ok(since >= turn + BOUND - 5, `not before three minutes from its turn (at ${since.toFixed(1)} s, turn ${turn.toFixed(1)} s)`);
+  assert.ok(since <= turn + BOUND + 15, `about three minutes from its turn (at ${since.toFixed(1)} s, turn ${turn.toFixed(1)} s)`);
+  idb.hangKeys = null;
+  idb.slowLargeValues = null;
+  scope.setActiveUserId(null);
+});
+
+// Review (pre-existing): an indexedDB.open that never answered held the first
+// screen for the open timeout, twice with the load's second try (8 to 12
+// seconds). The open is now waited for no longer than the load's own wait.
+test('an open that never answers: the first screen keeps the base wait', async () => {
+  const U = 'user_syntheticHungOpen';
+  const key = scope.scopedKey(scope.BASE_KEYS.data, U);
+  const idb = createMemoryIndexedDB();
+  offlineStore.setOfflineStoreFactory(idb);
+  offlineStore.setOfflineTransactionTimeout(BASE_WAIT * SEC);
+  offlineStore.setOfflineTransactionBound(BOUND * SEC);
+  scope.setActiveUserId(U);
+  scope.adoptLocalFence(U);
+  assert.equal((await scope.writeOfflineText(key, JSON.stringify(deviceFile()), () => true)).saved, true, 'precondition: the file is stored');
+  ({ scope, storage } = await newPage());
+  // The open timeout on the scaled clock (4 seconds), above the wait's share left for a second try.
+  offlineStore.setOfflineOpenTimeout(4 * SEC);
+  offlineStore.setOfflineStoreFactory(idb);
+  scope.resetStorageFullReport();
+  idb.hangOpens = true;
+  scope.setActiveUserId(U);
+  const current = () => true;
+  const waits = [];
+  for (let i = 0; i < 2; i += 1) {
+    const began = deviceNow();
+    await storage.readCachedData(U, { current });
+    waits.push(deviceNow() - began);
+  }
+  assert.ok(waits[0] <= BASE_WAIT + 1, `the first read waited ${waits[0].toFixed(1)} s`);
+  assert.ok(waits[0] + waits[1] <= BASE_WAIT + 1, `the load waited ${waits.map(w => w.toFixed(1))} s in all`);
+  idb.hangOpens = false;
+  offlineStore.setOfflineOpenTimeout(undefined);
+  scope.setActiveUserId(null);
+});

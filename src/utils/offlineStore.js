@@ -30,6 +30,7 @@ const OFFLINE_DB_VERSION = 1;
 // iOS has shipped builds whose first indexedDB.open never answers. Past this
 // the store counts as unavailable for the call and the next call tries again.
 const OPEN_TIMEOUT_MS = 4000;
+let openTimeoutMs = OPEN_TIMEOUT_MS;
 // After an open that failed or never answered, calls within this window are
 // answered "unavailable" at once instead of each waiting out the timeout
 // again (a load makes several reads in a row).
@@ -50,7 +51,9 @@ let transactionTimeoutMs = TRANSACTION_TIMEOUT_MS;
 // A connection with transactions running on which none has settled for this
 // long has failed (OfflineStoreStuck): the store is broken, not slow. Every
 // transaction still on it fails, the connection is dropped and the next call
-// opens a fresh one. Measured from the last one that settled, not from when
+// opens a fresh one. So has one transaction that has not settled this long
+// after its turn came (the transactions created before it on the connection
+// had settled), while others around it settle. Measured from the last one that settled, not from when
 // each was created: IndexedDB runs them one after another, and the time one
 // spends queued behind the others is not time it was stuck (at 65 seconds a
 // transaction, the file's read queued behind a large transcript and archives
@@ -110,9 +113,14 @@ export function setOfflineTransactionTimeout(ms) {
   transactionTimeoutMs = Number(ms) > 0 ? Number(ms) : TRANSACTION_TIMEOUT_MS;
 }
 
-/** Tests: how long a connection may go with no transaction settling before they have failed (ms); undefined restores the default. */
+/** Tests: how long a connection may go with no transaction settling, or one transaction past its turn, before failing (ms); undefined restores the default. */
 export function setOfflineTransactionBound(ms) {
   transactionBoundMs = Number(ms) > 0 ? Number(ms) : TRANSACTION_BOUND_MS;
+}
+
+/** Tests: how long an open may go unanswered before it counts as failed (ms); undefined restores the default. */
+export function setOfflineOpenTimeout(ms) {
+  openTimeoutMs = Number(ms) > 0 ? Number(ms) : OPEN_TIMEOUT_MS;
 }
 
 /** Tests: use `idb` (an IDBFactory, or null for "unavailable"); undefined restores the global. */
@@ -144,7 +152,7 @@ export class OfflineStoreUnavailable extends Error {
 export class OfflineStoreBusy extends OfflineStoreUnavailable {
   constructor() { super(); this.name = "OfflineStoreBusy"; this.message = "IndexedDB still working"; }
 }
-/** A transaction on a connection where none settled for TRANSACTION_BOUND_MS: a failure. */
+/** A transaction unsettled TRANSACTION_BOUND_MS after its turn, or on a connection where none settled for that long: a failure. */
 export class OfflineStoreStuck extends OfflineStoreUnavailable {
   constructor() { super(); this.name = "OfflineStoreStuck"; this.message = "IndexedDB transaction never settled"; }
 }
@@ -158,7 +166,7 @@ function openDb() {
   const attempt = new Promise((resolve) => {
     let settled = false;
     const done = (db) => { if (!settled) { settled = true; resolve(db); } };
-    const timer = setTimeout(() => { if (!settled) noteFailure(null, "OpenTimeout"); done(null); }, OPEN_TIMEOUT_MS);
+    const timer = setTimeout(() => { if (!settled) noteFailure(null, "OpenTimeout"); done(null); }, openTimeoutMs);
     let req;
     try { req = idb.open(OFFLINE_DB_NAME, OFFLINE_DB_VERSION); }
     catch (error) { clearTimeout(timer); noteFailure(error, "OpenThrew"); if (LOST_ERRORS.has(error?.name)) retryAfter = LOST_RETRY_MS; done(null); return; }
@@ -219,38 +227,51 @@ function isQuota(error) {
   return error?.name === "QuotaExceededError" || error?.code === 22;
 }
 
-// The transactions still unsettled on each connection, and the bound running
-// since the last of them settled (TRANSACTION_BOUND_MS).
-const watches = new WeakMap();   // db -> { pending: Set<fail>, timer }
+// The transactions still unsettled on each connection, in the order they
+// were created, and the bound running since the last of them settled
+// (TRANSACTION_BOUND_MS). Each one also has a bound of its own, from its
+// turn: when every transaction created before it on the connection has
+// settled, so time spent queued is never counted. Without it, one transaction
+// that never settled went unbounded while the others kept settling around it.
+const watches = new WeakMap();   // db -> { pending: [{ fail, timer }], timer }
 function watchOf(db) {
   let watch = watches.get(db);
-  if (!watch) { watch = { pending: new Set(), timer: null }; watches.set(db, watch); }
+  if (!watch) { watch = { pending: [], timer: null }; watches.set(db, watch); }
   return watch;
 }
-// The bound starts again: a transaction settled, or one began on an idle connection.
+function stuck(db, failing) {
+  dropConnection(db);
+  noteFailure(null, "TransactionTimeout");
+  for (const t of failing) t.fail();
+}
+// The bound starts again: a transaction settled, or one began on an idle
+// connection. The first transaction still unsettled has its turn from now.
 function rearm(db, watch) {
   clearTimeout(watch.timer);
   watch.timer = null;
-  if (!watch.pending.size) return;
+  if (!watch.pending.length) return;
   watch.timer = setTimeout(() => {
     watch.timer = null;
-    if (!watch.pending.size) return;
-    dropConnection(db);
-    noteFailure(null, "TransactionTimeout");
-    for (const fail of [...watch.pending]) fail();
+    if (watch.pending.length) stuck(db, [...watch.pending]);
   }, transactionBoundMs);
   watch.timer?.unref?.();
+  const first = watch.pending[0];
+  if (first.timer) return;
+  first.timer = setTimeout(() => { if (watch.pending.includes(first)) stuck(db, [first]); }, transactionBoundMs);
+  first.timer?.unref?.();
 }
 
 function run(db, mode, body) {
   return new Promise((resolve, reject) => {
     let tx, result, settled = false;
     const watch = watchOf(db);
-    const fail = () => finish(reject, new OfflineStoreStuck());
+    const self = { fail: () => finish(reject, new OfflineStoreStuck()), timer: null };
     const finish = (fn, value) => {
       if (settled) return;
       settled = true;
-      watch.pending.delete(fail);
+      clearTimeout(self.timer);
+      const at = watch.pending.indexOf(self);
+      if (at >= 0) watch.pending.splice(at, 1);
       rearm(db, watch);
       fn(value);
     };
@@ -262,8 +283,8 @@ function run(db, mode, body) {
     tx.oncomplete = () => finish(resolve, result);
     tx.onerror = () => { noteFailure(tx.error, "TransactionError"); finish(reject, tx.error || new Error("IndexedDB transaction failed")); };
     tx.onabort = () => { noteFailure(tx.error, "TransactionAbort"); finish(reject, tx.error || new Error("IndexedDB transaction aborted")); };
-    watch.pending.add(fail);
-    if (watch.pending.size === 1) rearm(db, watch);
+    watch.pending.push(self);
+    if (watch.pending.length === 1) rearm(db, watch);
   });
 }
 
@@ -351,8 +372,9 @@ function begin(db, mode, body, key, tag) {
  * more on a fresh one. `brief` (reads and deletes by default): the caller
  * waits TRANSACTION_TIMEOUT_MS at most, all told, and is then told
  * OfflineStoreBusy while the transaction runs on; otherwise it waits for the
- * transaction to settle, or for TRANSACTION_BOUND_MS with none on the
- * connection settling (OfflineStoreStuck). `wait` (offlineWait): a brief call waits no longer
+ * transaction to settle, or for TRANSACTION_BOUND_MS from its turn or with
+ * none on the connection settling (OfflineStoreStuck). A brief call waits on
+ * the open as well no longer than that. `wait` (offlineWait): a brief call waits no longer
  * than what is left of it, so the calls given one wait share it; with none
  * left, the transaction is still begun and runs on as above. `tag`: a read joins, or takes the held answer of, a
  * read begun with the same tag only (the caller's account of what the key
@@ -385,10 +407,14 @@ async function transact(mode, body, { key = null, tag = null, guard, retryOpen =
         done = held();
         if (done) return { result: done.value };
       }
-      let db = await openDb();
+      // An open that never answers is waited for no longer than the call
+      // (a brief one: the load's wait), and is then "not yet": it runs on
+      // to its own timeout. Waited for in full, it held the first screen
+      // for the open timeout, twice with `retryOpen` (8 to 12 seconds).
+      let db = await within(openDb(), limit);
       if (!db && retryOpen && attempt === 0 && offlineStoreSupported()) {
         unavailableUntil = 0;
-        db = await openDb();
+        db = await within(openDb(), limit);
       }
       if (!db) throw new OfflineStoreUnavailable();
       // Another transaction on the key began while this one waited for the

@@ -2162,6 +2162,14 @@ export function largeSet(base, value, userId = activeUserId) {
   }
   if (sessionOnly.has(k) || unreadKeys.has(k)) {
     sessionOnly.set(k, value);
+    // Kept out of IndexedDB because a read of the stored copy failed (an
+    // IndexedDB error, not a read still running): this session's
+    // conversation is in memory only, and is lost on reload unless a read
+    // gets through. Reported (once, past the hold), as a refused save of the
+    // file is; kept silent, nothing ever said so. "Not yet" stays silent.
+    if (unreadKeys.has(k) && failedReads.has(k) && !offlineRunning(k)) {
+      reportStorageRefusal({ store: base, reason: "indexeddb_unread", chars: typeof value === "string" ? value.length : 0 });
+    }
     // Another try at reading it: there may have been nothing there after all.
     if (unreadKeys.has(k) && !hydrated.has(userId)) hydrateOfflineStores(userId).catch(() => {});
     return true;

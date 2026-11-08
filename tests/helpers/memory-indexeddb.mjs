@@ -15,7 +15,10 @@
 // minChars characters answers ms later; later transactions wait behind it),
 // a store whose transactions never settle (`hangTransactions`: neither that
 // transaction nor any behind it ever answers) and one whose every transaction
-// aborts (`failTransactions`).
+// aborts (`failTransactions`), a transaction on one key that never settles
+// while the others on the store run on (`hangKeys`: a Set of keys; WebKit
+// runs read-only transactions side by side), and an open that never answers
+// (`hangOpens`).
 // Synthetic data only.
 
 function quotaError() {
@@ -43,6 +46,8 @@ export function createMemoryIndexedDB({ quotaBytes = Infinity } = {}) {
     readHook: null,
     slowLargeValues: null,
     hangTransactions: false,
+    hangKeys: null,
+    hangOpens: false,
     failTransactions: false,
     opened: 0,
     writes: [],
@@ -69,6 +74,7 @@ export function createMemoryIndexedDB({ quotaBytes = Infinity } = {}) {
       const req = { result: null, error: null, onsuccess: null, onerror: null, onupgradeneeded: null };
       factory.opened += 1;
       const openEpoch = factory.pageEpoch;
+      if (factory.hangOpens) return req;
       setImmediate(() => {
         if (openEpoch !== factory.pageEpoch) return;
         if (factory.failOpens > 0) {
@@ -134,6 +140,8 @@ export function createMemoryIndexedDB({ quotaBytes = Infinity } = {}) {
           if (db.epoch !== factory.pageEpoch) return;
           const store = rec.stores.get(storeName);
           if (factory.hangTransactions) await new Promise(() => {});
+          // Never answers, and holds up nothing behind it.
+          if (factory.hangKeys && ops.some(({ key }) => factory.hangKeys.has(key))) return;
           const slow = factory.slowLargeValues;
           if (slow && ops.some(({ key, value }) => {
             const v = value !== undefined ? value : (key !== undefined ? store.get(key) : undefined);
