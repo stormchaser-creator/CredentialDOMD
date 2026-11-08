@@ -106,7 +106,7 @@ with tempfile.TemporaryDirectory(prefix='ticket-context-pg-') as tmp:
         check('same-customer history includes resolved archive and closed/unapproved context',set(x['id'] for x in history)=={T,R,U})
         check('other customer excluded',all(x['id']!=X for x in history))
         page=rows(js(f"historySQL('{A}',{{id:'{R}',created_at:'2026-09-01T00:00:00Z'}})"))
-        check('equal-timestamp cursor advances by ID without duplicates',[x['id'] for x in page]==[U])
+        check('equal-timestamp cursor advances by ID without duplicates (newest first)',[x['id'] for x in page]==[T])
         message_query=js(f"messagesSQL('{R}','{A}')")
         envelope=rows(message_query)
         check('message page explicitly binds its current owner and ticket',len(envelope)==1 and envelope[0]['context_owner_id']==A and envelope[0]['context_ticket_id']==R)

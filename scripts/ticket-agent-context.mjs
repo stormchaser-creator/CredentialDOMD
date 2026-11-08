@@ -144,10 +144,13 @@ export function targetSQL(ticketId, includeArchived = false) {
   return readOnly(`SELECT ${FIELDS},${LAST_MESSAGE} FROM support_tickets t WHERE t.id='${id(ticketId)}'::uuid
     AND ${APPROVED} AND ${AWAITING} AND ${REFUND_HELD}${includeArchived ? '' : ' AND t.archived_at IS NULL'}`);
 }
+// Newest first: the bounds then cut only the oldest tickets, never the recent
+// ones most likely to hold an answer the customer already gave (review of
+// 2026-11-07; the target itself loads before any of them).
 export function historySQL(ownerId, cursor = null) {
-  const after = cursor ? `AND (t.created_at,t.id)>(${literal(cursor.created_at)}::timestamptz,'${id(cursor.id)}'::uuid)` : '';
+  const before = cursor ? `AND (t.created_at,t.id)<(${literal(cursor.created_at)}::timestamptz,'${id(cursor.id)}'::uuid)` : '';
   return readOnly(`SELECT ${FIELDS} FROM support_tickets t WHERE t.user_id='${id(ownerId)}'::uuid
-    ${after} ORDER BY t.created_at,t.id LIMIT 25`);
+    ${before} ORDER BY t.created_at DESC,t.id DESC LIMIT 25`);
 }
 // The target's own row, in the history's shape (loadContext reads it first).
 export function historyRowSQL(ownerId, ticketId) {
@@ -216,7 +219,7 @@ export async function loadContext(query, ticketId, options = {}) {
     if (context.tickets.some(t => t.id === row.id)) throw Error('Repeated history page');
     if (context.tickets.length >= limits.tickets) { note('ticket_limit'); return false; }
     if (!collect(row)) { note('byte_limit'); return false; }
-    if (row.body_truncated) note('ticket_body_truncated');
+    if (row.body_truncated) { note('ticket_body_truncated'); if (row.id === ticketId) note('target_body_truncated'); }
     const ticket = { ...row, context_only: row.id !== ticketId, messages: [] };
     context.tickets.push(ticket); context.attachments.push(...attachments(row, row.id));
     let messageCursor = null;
@@ -232,7 +235,7 @@ export async function loadContext(query, ticketId, options = {}) {
         if (ticket.messages.some(m => m.id === message.id)) throw Error('Repeated message page');
         if (messageCount >= limits.messages) { note('message_limit'); return false; }
         if (!collect(message)) { note('byte_limit'); return false; }
-        if (message.body_truncated) note('message_body_truncated');
+        if (message.body_truncated) { note('message_body_truncated'); if (row.id === ticketId) note('target_body_truncated'); }
         ticket.messages.push({ ...message, actor_label: actorLabel(message, target.user_id, { ownerIsAdmin: target.from_admin === true }) });
         context.attachments.push(...attachments(message, row.id)); messageCount++;
       }
@@ -266,7 +269,7 @@ export async function loadContext(query, ticketId, options = {}) {
     context.tickets.push({ ...target, context_only: false, messages: [], thread_not_loaded: true });
     context.attachments.push(...attachments(target, ticketId)); note('target_thread_not_loaded');
   }
-  context.target_complete = !context.limitations.some(l => l === 'target_thread_not_loaded' || l === 'target_thread_partial');
+  context.target_complete = !context.limitations.some(l => ['target_thread_not_loaded', 'target_thread_partial', 'target_body_truncated'].includes(l));
   const currentTarget = context.tickets.find(t => t.id === ticketId);
   if (currentTarget.updated_at !== target.updated_at) note('target_changed_during_collection');
   return context;

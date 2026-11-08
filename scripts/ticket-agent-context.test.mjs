@@ -36,9 +36,11 @@ function fixtureQuery(tickets, messages, { target = tickets[0], corrupt = null }
     }
     if (sql.includes('FROM support_tickets t WHERE t.user_id=')) {
       assert.ok(sql.includes(`t.user_id='${owner}'::uuid`));
-      const after = /\(t.created_at,t.id\)>\([^]*,'([^']+)'::uuid\)/.exec(sql)?.[1];
-      const start = after ? tickets.findIndex(t => t.id === after) + 1 : 0;
-      return tickets.slice(start, start + 25);
+      // Newest first, paged by the (created_at, id) cursor.
+      const ordered = [...tickets].sort((a, b) => (b.created_at === a.created_at ? (b.id < a.id ? -1 : 1) : (b.created_at < a.created_at ? -1 : 1)));
+      const before = /\(t.created_at,t.id\)<\([^]*,'([^']+)'::uuid\)/.exec(sql)?.[1];
+      const start = before ? ordered.findIndex(t => t.id === before) + 1 : 0;
+      return ordered.slice(start, start + 25);
     }
     throw Error('Unexpected query');
   };
@@ -77,7 +79,7 @@ test('paginates beyond 20 recent replies and across equal-timestamp ticket/messa
   assert.equal(context.tickets[0].messages.length, 102);
   assert.equal(context.tickets[0].messages[0].body, msgs[0].body);
   assert.ok(f.calls.some(c => c.includes('(m.created_at,m.id)>')));
-  assert.ok(f.calls.some(c => c.includes('(t.created_at,t.id)>')));
+  assert.ok(f.calls.some(c => c.includes('(t.created_at,t.id)<')), 'older history pages newest first');
   assert.equal(new Set(context.tickets[0].messages.map(m => m.id)).size, 102);
 });
 
@@ -106,7 +108,7 @@ test('bounds never silently erase missing history and block questions while the 
     else assert.doesNotThrow(() => validateAssessment(result, context));
   }
   const f = fixtureQuery([ticket(1, { body_truncated: true })], []);
-  assert.deepEqual((await loadContext(f.query, targetId)).limitations, ['ticket_body_truncated']);
+  assert.deepEqual((await loadContext(f.query, targetId)).limitations, ['ticket_body_truncated', 'target_body_truncated']);
 });
 
 test('legacy replies cannot be mistaken for customer confirmations or named humans', () => {
@@ -195,7 +197,7 @@ test('private durable reviews survive a new run and block the same answered ques
 test('read cursors bind UUID and timestamps as data; target gates do not leak into related history authority', () => {
   const sql = historySQL(owner, { id: uuid(5), created_at: "2026-09-01'; DELETE FROM x;--" });
   assert.doesNotMatch(sql, /DELETE FROM/);
-  assert.match(sql, /ORDER BY t.created_at,t.id LIMIT 25/);
+  assert.match(sql, /ORDER BY t.created_at DESC,t.id DESC LIMIT 25/);
   assert.match(messagesSQL(targetId, owner), /ORDER BY m.created_at,m.id LIMIT 50/);
   assert.match(targetSQL(targetId), /public.is_admin\(t.user_id\) OR t.agent_approved_at IS NOT NULL/);
   assert.match(targetSQL(targetId), /t.archived_at IS NULL/);
@@ -557,4 +559,19 @@ test('older tickets cut by the bound leave the target complete; a bound inside t
   const tight = await loadContext(fixtureQuery(rows, Array.from({ length: 3 }, (_, i) => message(i + 1, target.id)), { target }).query, target.id, { limits: { messages: 2 } });
   assert.equal(tight.target_complete, false, 'a bound inside the target\'s thread');
   assert.ok(tight.limitations.includes('target_thread_partial'));
+});
+
+test('older history loads newest first, so the bound cuts only the oldest tickets; a truncated message on the target is a gap in it', async () => {
+  const rows = Array.from({ length: 120 }, (_, i) => ticket(i + 1, { created_at: new Date(Date.UTC(2026, 0, 1) + i * 86400000).toISOString() }));
+  const target = rows[60];
+  const context = await loadContext(fixtureQuery(rows, [], { target }).query, target.id);
+  const loaded = new Set(context.tickets.map(t => t.id));
+  assert.ok(loaded.has(rows[119].id) && loaded.has(rows[118].id), 'the newest are loaded');
+  assert.ok(!loaded.has(rows[0].id), 'the oldest are what the bound cuts');
+  assert.equal(context.tickets.length, 100);
+  const long = await loadContext(fixtureQuery(rows, [message(1, target.id, { body_truncated: true })], { target }).query, target.id);
+  assert.equal(long.target_complete, false);
+  assert.ok(long.limitations.includes('target_body_truncated'));
+  const other = await loadContext(fixtureQuery(rows, [message(1, rows[119].id, { body_truncated: true })], { target }).query, target.id);
+  assert.equal(other.target_complete, true, 'a truncated message on another ticket is not');
 });
