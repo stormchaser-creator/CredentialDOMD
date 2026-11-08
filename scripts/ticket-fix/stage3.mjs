@@ -72,6 +72,36 @@ export function mergeBindings(...maps) {
   return out;
 }
 
+// The paths a push must touch for the web deploy to run
+// (.github/workflows/deploy-gh-pages.yml on.push.paths), read at `commit`.
+export function deployPaths(yaml) {
+  const lines = String(yaml ?? '').split('\n');
+  const start = lines.findIndex(l => /^\s{4}paths:\s*$/.test(l));
+  if (start < 0) return null;
+  const out = [];
+  for (const line of lines.slice(start + 1)) {
+    if (/^\s*#/.test(line)) continue;
+    const m = line.match(/^\s{6}-\s*'([^']+)'\s*$/) || line.match(/^\s{6}-\s*"([^"]+)"\s*$/) || line.match(/^\s{6}-\s*(\S+)\s*$/);
+    if (!m) break;
+    out.push(m[1]);
+  }
+  return out.length ? out : null;
+}
+const globToRegExp = glob => new RegExp(`^${glob.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*\*/g, '\u0000').replace(/\*/g, '[^/]*').replace(/\u0000/g, '.*')}$`);
+// The base is the app that is live when the live build is an ancestor of it
+// and nothing between them is a path the web deploy publishes: a push that
+// touched only the runner (scripts/ticket-*) never redeploys, so before this
+// every claim failed "not live yet" until an unrelated app change deployed
+// (16ba1758, 2026-11-07). Unknown paths or diff: not the same.
+export function sameAppAsLive(git, base, liveCommit) {
+  if (!liveCommit || !git.isAncestor(liveCommit, base)) return false;
+  const globs = deployPaths(git.fileAt(base, '.github/workflows/deploy-gh-pages.yml'));
+  const changed = git.diffNames?.(liveCommit, base);
+  if (!globs || !Array.isArray(changed)) return false;
+  const published = globs.map(globToRegExp);
+  return !changed.some(file => published.some(re => re.test(file)));
+}
+
 // The host's verdict on each claim in the worker's reply.
 //   code: { released: bool (G7 verified), green: Set(test ids green at head) }
 //   bindings: {ac: [test ids]} this run bound, as the host trusts them
@@ -80,7 +110,7 @@ export function mergeBindings(...maps) {
 export async function verifyAgentClaims({ claims = [], repo, base, code = {}, bindings = {}, prior = {}, fetchBuild = fetchLiveBuild, runAtBase, binary = 'git' }) {
   const git = gitRunner(repo, { binary });
   const live = await readLiveBuild(git, fetchBuild);
-  const baseLive = Boolean(live.commit && git.isAncestor(base, live.commit));
+  const baseLive = Boolean(live.commit && (git.isAncestor(base, live.commit) || sameAppAsLive(git, base, live.commit)));
   const parsed = claims.map((c, index) => ({ index, ac_id: c.ac_id, text: c.text, ...parseClaimEvidence(c.evidence, `claims[${index}]`) }));
   const own = (ac, id) => (bindings[ac] ?? []).includes(id);
   const earlier = (ac, id) => (prior[ac] ?? []).includes(id);
@@ -112,7 +142,7 @@ export async function verifyAgentClaims({ claims = [], repo, base, code = {}, bi
     const run = runs.get(file);
     if (!run) return { ...verdict, reason: 'the host could not run the test at the base' };
     const status = greenVerdict(run, { file, name });
-    return status === 'green' ? { ...verdict, verified: true, source: 'base', reason: `a released run's test for the item, passed at ${base.slice(0, 12)}, which the live build contains` }
+    return status === 'green' ? { ...verdict, verified: true, source: 'base', reason: `a released run's test for the item, passed at ${base.slice(0, 12)}, ${git.isAncestor(base, live.commit) ? 'which the live build contains' : 'whose app is the live build\'s (only unpublished files differ)'}` }
       : { ...verdict, reason: `the test ${status.replace(/_/g, ' ')} at the base` };
   });
 }
