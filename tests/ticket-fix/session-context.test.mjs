@@ -295,3 +295,13 @@ test('run.mjs: session evidence that cannot be shaped is a host failure on the r
     assert.equal(r.facts.code_outcome, 'none');
   } finally { r?.cleanup(); p.cleanup(); }
 });
+
+test('the session header and case facts carry target_complete (only older tickets cut: the target is whole)', async () => {
+  const { sessionEvidence: build } = await import('../../scripts/ticket-fix/session-context.mjs');
+  const context = { target_id: '00000000-0000-4000-8000-000000000001', owner_id: '00000000-0000-4000-8000-000000009000', run_mode: 'reply', approval: {}, action_scope: [],
+    history_complete: false, target_complete: true, limitations: ['ticket_limit'], interpretation: '', prior_reviews: [],
+    tickets: [{ id: '00000000-0000-4000-8000-000000000001', subject: 'Synthetic', body: 'Synthetic.', created_at: '2026-11-07T00:00:00Z', messages: [] }] };
+  const view = build(context).view;
+  assert.equal(view.target_complete, true);
+  assert.equal(view.history_complete, false);
+});

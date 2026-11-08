@@ -178,6 +178,7 @@ export function sessionEvidence(context, { limit = EVIDENCE_LIMIT } = {}) {
     view: 'session',
     about: 'The host trimmed the case history for this session so each turn stays small: the target ticket and its thread, this ticket\'s saved review, answers saved on the customer\'s other tickets, and a summary of those tickets. The history the host loaded (this ticket and its whole thread first, then the customer\'s other tickets newest first; history_complete is false when the bounds cut the oldest) is in the case history file named in the host facts: Grep it before you ask the customer anything or cite a confirmation, and Read only the lines you need. Any ticket or message id in it may be cited. The host checks every cited id against the whole history, and completed_follow_up must repeat a saved_review.pending_follow_up work text exactly. The host refuses a question only when its wording matches an answer saved in a case review; it does not read the messages for you, so an answer given only in a message is yours to find. Attachments are listed in the host facts (att-N with local_path).',
     target_id: context.target_id, run_mode: context.run_mode, owner_id: context.owner_id, approval: context.approval, action_scope: context.action_scope,
+    target_complete: typeof context.target_complete === 'boolean' ? context.target_complete : context.history_complete,
     history_complete: context.history_complete, limitations: context.limitations, interpretation: context.interpretation,
   };
   const view = { ...header, target: thread.view,
@@ -226,7 +227,8 @@ export function caseHistory(context) {
   const lines = [];
   // The kind is first and cannot be overwritten by a field of the record.
   const add = (kind, ...parts) => lines.push(JSON.stringify(Object.assign({ kind }, ...parts, { kind })));
-  add('case', { target_id: context.target_id, run_mode: context.run_mode ?? null, owner_id: context.owner_id ?? null, history_complete: context.history_complete ?? null,
+  add('case', { target_id: context.target_id, run_mode: context.run_mode ?? null, owner_id: context.owner_id ?? null,
+    target_complete: typeof context.target_complete === 'boolean' ? context.target_complete : context.history_complete ?? null, history_complete: context.history_complete ?? null,
     limitations: context.limitations ?? [], approval: context.approval ?? null, action_scope: context.action_scope ?? null });
   for (const ticket of context.tickets ?? []) {
     const { messages = [], ...fields } = ticket;

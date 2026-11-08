@@ -18,8 +18,10 @@ confirmed. A prior “shipped” reply is a claim, not proof, and open status do
 all parts remain broken. Link cross-ticket answers: do not ask which Add button or
 request another screenshot when a related ticket already identifies/confirms it.
 
-Check history_complete/limitations. If truncated or missing, record internal retrieval
-follow-through; do not make absence claims or ask the customer to repeat the history.
+Check target_complete, history_complete and limitations. If target_complete is false (this
+ticket's own thread was not loaded, cut or truncated), record internal retrieval follow-through
+and do not ask the customer to repeat it. If only history_complete is false (the oldest other
+tickets were cut), you may finish; never make absence claims about the older history.
 Attachment `access: not_loaded` means you have not seen its contents. You cannot fetch
 attachments in this container. Record the existing path and a support_worker next action
 for authorized review, without asking for a duplicate file or pretending it was read.
