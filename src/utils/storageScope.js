@@ -635,6 +635,13 @@ function pendingPurge(userId) {
 // rows that tab added. Every purge of the account removes it. Holds a random
 // marker only. Outside BASE_KEYS (a purge removes it explicitly).
 export const OFFLINE_WRITTEN_BASE = "credentialdomd-offline-written";
+// The same for the account's other IndexedDB stores (the transcript, the
+// archives, the record acknowledgements), moved by every write of any of
+// them: a read of one held for later (offlineStore.js) is handed out only
+// while it is unmoved, so another tab's newer write is never taken for what
+// the store holds. Holds a random marker only. Outside BASE_KEYS (a purge
+// removes it explicitly).
+export const OFFLINE_STORES_WRITTEN_BASE = "credentialdomd-offline-stores-written";
 
 /** The account's offline-file write stamp now (null when none is recorded). */
 export function offlineWriteStamp(userId) {
@@ -643,8 +650,8 @@ export function offlineWriteStamp(userId) {
 // Move it. When localStorage refuses, the old value is removed instead, so
 // no tab mistakes it for the one it knows; the writer gets a value that
 // matches nothing stored, and so trusts nothing it holds either.
-function bumpWriteStamp(userId) {
-  const k = scopedKey(OFFLINE_WRITTEN_BASE, userId);
+function bumpWriteStamp(userId, base = OFFLINE_WRITTEN_BASE) {
+  const k = scopedKey(base, userId);
   const value = `${Math.random().toString(36).slice(2, 12)}${Math.random().toString(36).slice(2, 8)}`;
   if (!k) return value;
   try {
@@ -1046,6 +1053,7 @@ function catchUpOfflineWipe(userId) {
   bumpPurgeEpoch(userId);
   forgetLargeStoreMemory(userId);
   lsRemove(OFFLINE_WRITTEN_BASE, userId);
+  lsRemove(OFFLINE_STORES_WRITTEN_BASE, userId);
 }
 
 /**
@@ -1344,12 +1352,14 @@ setOfflineLateListener(({ key, mode, ok, error }) => {
     reportStorageRefusal({ store: key.slice(0, key.indexOf(":")), reason: mode === "readonly" ? "indexeddb_unread,indexeddb_stuck" : "indexeddb_stuck", chars: 0 });
   }
 });
-// What a read of `key` is sure of: a purge since (in any tab) or, for the
-// file, another writer since moves it, and a read begun under another tag is
-// never joined or taken from (offlineStore.js transact).
+// What a read of `key` is sure of: a purge since (in any tab) or another
+// writer since (the file's write stamp, or the other stores') moves it, and a
+// read begun under another tag is never joined or taken from (offlineStore.js
+// transact).
 function readTag(key) {
   const owner = keyOwner(key);
-  return `${offlineGeneration() ?? ""}|${owner && isDataKey(key) ? offlineWriteStamp(owner) ?? "" : ""}`;
+  const stamp = !owner ? null : isDataKey(key) ? offlineWriteStamp(owner) : lsGet(OFFLINE_STORES_WRITTEN_BASE, owner);
+  return `${offlineGeneration() ?? ""}|${stamp ?? ""}`;
 }
 
 /**
@@ -1614,7 +1624,7 @@ async function putOffline(key, text, guard, how = {}) {
       how.stamp = bumpWriteStamp(owner);
       noteOwnStamp(how.stamp, prev, !how.foreign);
       how.expectedStamp = offlineWriteStamp(owner);
-    }
+    } else bumpWriteStamp(owner, OFFLINE_STORES_WRITTEN_BASE);
     // A localStorage copy this build wrote is brought up to what this write
     // will hold: with a merge, the merge with that copy, never the unmerged
     // text (which put a copy without the other writer's rows over the only
@@ -2310,6 +2320,7 @@ export async function purgeUserStorage(userId, { keepVault = false, retireRecove
   // own). Device-only changes held aside go too, unless the session merely
   // ended: they exist nowhere else.
   lsRemove(OFFLINE_WRITTEN_BASE, userId);
+  lsRemove(OFFLINE_STORES_WRITTEN_BASE, userId);
   lsRemove(LOCAL_COPIES_BASE, userId);
   lsRemove(OFFLINE_BEHIND_BASE, userId);
   if (keptOwnCopy != null) noteOwnLocalCopy(scopedKey(BASE_KEYS.data, userId), keptOwnCopy);

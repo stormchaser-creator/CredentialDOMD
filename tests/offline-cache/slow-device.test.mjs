@@ -238,14 +238,100 @@ test('a wait that runs out is "not yet": the read runs on, nothing is locked out
   assert.equal(await offlineStore.offlineWrite(key, text), true);
   idb.slowLargeValues = { minChars: 1_000_000, ms: 20 * SEC };
   const opened = idb.opened;
-  await assert.rejects(offlineStore.offlineRead(key), { name: 'OfflineStoreBusy' });
+  const tag = 'synthetic-stamp';
+  await assert.rejects(offlineStore.offlineRead(key, { tag }), { name: 'OfflineStoreBusy' });
   assert.equal(offlineStore.offlineStoreState().lastError, null, 'no failure recorded');
   // A second read joins the one running instead of queueing another behind it.
-  await assert.rejects(offlineStore.offlineRead(key), { name: 'OfflineStoreBusy' });
+  await assert.rejects(offlineStore.offlineRead(key, { tag }), { name: 'OfflineStoreBusy' });
   await sleep(16);
   idb.slowLargeValues = { minChars: 1_000_000, ms: 60 * SEC };
   const began = deviceNow();
-  assert.equal(await offlineStore.offlineRead(key), text, 'the read that landed answers the next one');
+  assert.equal(await offlineStore.offlineRead(key, { tag }), text, 'the read that landed answers the next one');
   assert.ok(deviceNow() - began < 1, 'at once, with no new transaction');
   assert.equal(idb.opened, opened, 'on the same connection');
+});
+
+// Review: two reads of a key made in the same tick both found nothing running
+// (each looked before it waited for the connection) and both began a 4 MB
+// transaction, the second queued behind the first for another full read.
+test('two reads of a key made in the same tick share one transaction', async () => {
+  const idb = createMemoryIndexedDB();
+  offlineStore.setOfflineStoreFactory(idb);
+  offlineStore.setOfflineTransactionTimeout(30 * SEC);
+  const key = 'credentialdomd-data:user_syntheticSameTick';
+  const text = 'synthetic '.repeat(150_000);
+  assert.equal(await offlineStore.offlineWrite(key, text), true);
+  offlineStore.setOfflineStoreFactory(idb); // a fresh connection: both reads wait on its open
+  idb.slowLargeValues = { minChars: 1_000_000, ms: 4 * SEC };
+  const began = deviceNow();
+  const done = [];
+  const reads = [offlineStore.offlineRead(key, { tag: 't' }), offlineStore.offlineRead(key, { tag: 't' })]
+    .map(p => p.then(v => { done.push(deviceNow() - began); return v; }));
+  assert.deepEqual(await Promise.all(reads), [text, text]);
+  assert.ok(Math.max(...done) < 4 + 2, `both answered by the one transaction (at ${done.map(t => t.toFixed(1))} s)`);
+});
+
+// Review: a read that landed late was held for every later read of the key,
+// with nothing to say another tab had not written it since. Taken by the
+// Assistant's re-read of the archives, it set this tab's memory back to the
+// older archives, and the next write put them over the conversation the other
+// tab had archived.
+const otherTabPut = (idb, key, value) => new Promise((res, rej) => {
+  const req = idb.open('credentialdomd-offline', 1);
+  req.onsuccess = () => {
+    const tx = req.result.transaction('kv', 'readwrite');
+    tx.objectStore('kv').put(value, key);
+    tx.oncomplete = res; tx.onerror = rej;
+  };
+  req.onerror = rej;
+});
+
+test('a late read is held only for a tagged read, and not past the bound', async () => {
+  const idb = createMemoryIndexedDB();
+  offlineStore.setOfflineStoreFactory(idb);
+  offlineStore.setOfflineTransactionTimeout(BASE_WAIT * SEC);
+  offlineStore.setOfflineTransactionBound(30 * SEC);
+  const key = 'credentialdomd-assistant-archives:user_syntheticHeldTagged';
+  const A = 'A'.repeat(1_200_000), B = 'B'.repeat(1_200_000);
+  assert.equal(await offlineStore.offlineWrite(key, A), true);
+  idb.slowLargeValues = { minChars: 1_000_000, ms: 10 * SEC };
+  // Untagged: the late read is not kept, and the next read sees another tab's write.
+  await assert.rejects(offlineStore.offlineRead(key), { name: 'OfflineStoreBusy' });
+  await sleep(6);
+  idb.slowLargeValues = null;
+  await otherTabPut(idb, key, B);
+  assert.equal((await offlineStore.offlineRead(key))?.[0], 'B', 'the newer write, not the held read');
+  // Tagged: it answers the reads that follow, until the bound.
+  await otherTabPut(idb, key, A);
+  idb.slowLargeValues = { minChars: 1_000_000, ms: 10 * SEC };
+  await assert.rejects(offlineStore.offlineRead(key, { tag: 't' }), { name: 'OfflineStoreBusy' });
+  await sleep(6);
+  idb.slowLargeValues = null;
+  assert.equal((await offlineStore.offlineRead(key, { tag: 't' }))?.[0], 'A', 'the held read answers the next read');
+  await otherTabPut(idb, key, B);
+  await sleep(31);
+  assert.equal((await offlineStore.offlineRead(key, { tag: 't' }))?.[0], 'B', 'and is dropped at the bound');
+  offlineStore.setOfflineTransactionBound(BOUND * SEC);
+});
+
+test("a late read of the archives is not taken over another tab's newer write", async () => {
+  const U = 'user_syntheticArchivesOtherTab';
+  const key = scope.scopedKey(scope.BASE_KEYS.archives, U);
+  const idb = createMemoryIndexedDB();
+  offlineStore.setOfflineStoreFactory(idb);
+  offlineStore.setOfflineTransactionTimeout(BASE_WAIT * SEC);
+  scope.setActiveUserId(U);
+  scope.adoptLocalFence(U);
+  const A = JSON.stringify([{ id: 'archive-a', notes: 'a'.repeat(1_200_000) }]);
+  const B = JSON.stringify([{ id: 'archive-b', notes: 'b'.repeat(1_200_000) }]);
+  assert.equal((await scope.writeOfflineText(key, A, () => true)).saved, true, 'precondition: stored');
+  idb.slowLargeValues = { minChars: 1_000_000, ms: 10 * SEC };
+  await assert.rejects(scope.readOfflineText(key), { name: 'OfflineStoreBusy' });
+  await sleep(6);
+  idb.slowLargeValues = null;
+  // Another tab of this build archives a conversation: its write moves the stamp.
+  await otherTabPut(idb, key, B);
+  ls.setItem(`${scope.OFFLINE_STORES_WRITTEN_BASE}:${U}`, `another-tab-${Math.random()}`);
+  assert.equal((await scope.readOfflineText(key))?.text, B, "the other tab's archive, not the held read");
+  scope.setActiveUserId(null);
 });

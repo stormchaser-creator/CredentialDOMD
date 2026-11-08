@@ -39,7 +39,8 @@ const RETRY_AFTER_MS = 30000;
 // and none of them could hang on localStorage before. "Not yet" is not a
 // failure. The transaction is left to run on the same connection, nothing is
 // locked out, and what it brings is kept: a read that lands later is held for
-// the next read of the key (the retry of a load that could not read it), and
+// the next reads of the key (the retry of a load that could not read it)
+// while the caller's tag says no writer has moved the key since, and
 // a write that lands is saved. The owner's iPhone took longer than this for
 // every transaction on his 4 MB file (2026-11, ticket b1071b82), and each
 // timeout was taken for a broken store: the copy was never read again that
@@ -236,8 +237,21 @@ const running = new Map();   // key -> { mode, tag, version, promise, patience, 
 const versions = new Map();  // key -> number
 const versionOf = (key) => versions.get(key) || 0;
 // A read that landed after every caller had stopped waiting for it, kept for
-// the next read of the key with the same version and tag.
+// the reads of the key with the same version and tag that follow (the
+// retry's probe and the load's two reads take the one answer), and dropped
+// once unclaimed for the bound: a 4 MB text is not kept for a session that
+// never reads the key again. Only a tagged read is kept: IndexedDB tells no
+// other tab about a write, so a version moves with this tab's writes alone,
+// and the tag (a marker every writer in every tab moves) is all that says
+// another tab has not written the key since. Kept untagged, it was taken over
+// another tab's newer write and then written back over it.
 const arrived = new Map();   // key -> { value, version, tag }
+function hold(key, value, version, tag) {
+  const done = { value, version, tag };
+  arrived.set(key, done);
+  const timer = setTimeout(() => { if (arrived.get(key) === done) arrived.delete(key); }, transactionBoundMs);
+  timer?.unref?.();
+}
 let lateListener = null;
 /**
  * `fn({ key, mode, ok, value, error })` when a transaction lands or fails
@@ -277,7 +291,7 @@ function begin(db, mode, body, key, tag) {
     clearTimeout(entry.patience.timer);
     if (running.get(key) === entry) running.delete(key);
     if (!entry.late) return;
-    if (ok && mode === "readonly" && entry.version === versionOf(key)) arrived.set(key, { value: valueOrError, version: entry.version, tag });
+    if (ok && mode === "readonly" && tag != null && entry.version === versionOf(key)) hold(key, valueOrError, entry.version, tag);
     try { lateListener?.({ key, mode, ok, value: ok ? valueOrError : undefined, error: ok ? null : valueOrError }); }
     catch { /* a listener never stops the store */ }
   };
@@ -298,7 +312,8 @@ function begin(db, mode, body, key, tag) {
  * transaction to settle, which is at most TRANSACTION_BOUND_MS
  * (OfflineStoreStuck). `tag`: a read joins, or takes the held answer of, a
  * read begun with the same tag only (the caller's account of what the key
- * may hold, such as another tab's write stamp). `guard` runs synchronously
+ * may hold, such as another tab's write stamp); an untagged read is never
+ * held for a later one. `guard` runs synchronously
  * immediately before each transaction is created; false cancels (resolves
  * { cancelled: true }). `retryOpen` gives an open that failed a second try at
  * once instead of waiting out RETRY_AFTER_MS.
@@ -310,26 +325,32 @@ async function transact(mode, body, { key = null, tag = null, guard, retryOpen =
       const done = mode === "readonly" && key ? arrived.get(key) : null;
       return done && done.version === versionOf(key) && done.tag === tag ? done : null;
     };
-    if (held()) return { result: held().value };
-    for (let before = key ? running.get(key) : null; before; before = running.get(key)) {
-      if (mode === "readonly" && before.mode === "readonly" && before.version === versionOf(key) && before.tag === tag) {
-        // Its answer is this read's answer. Waited for no longer than that
-        // read's own caller was: the second read of a load does not add a
-        // second wait to the first screen.
-        try { return { result: await within(before.promise, limit, before.patience) }; }
-        catch (error) { if (error instanceof OfflineStoreBusy) before.late = true; throw error; }
-      }
-      try { await within(before.promise, limit); }
-      catch (error) { if (error instanceof OfflineStoreBusy) { before.late = true; throw error; } }
-      if (held()) return { result: held().value };
-    }
     for (let attempt = 0; ; attempt += 1) {
+      let done = held();
+      if (done) return { result: done.value };
+      for (let before = key ? running.get(key) : null; before; before = running.get(key)) {
+        if (mode === "readonly" && before.mode === "readonly" && before.version === versionOf(key) && before.tag === tag) {
+          // Its answer is this read's answer. Waited for no longer than that
+          // read's own caller was: the second read of a load does not add a
+          // second wait to the first screen.
+          try { return { result: await within(before.promise, limit, before.patience) }; }
+          catch (error) { if (error instanceof OfflineStoreBusy) before.late = true; throw error; }
+        }
+        try { await within(before.promise, limit); }
+        catch (error) { if (error instanceof OfflineStoreBusy) { before.late = true; throw error; } }
+        done = held();
+        if (done) return { result: done.value };
+      }
       let db = await openDb();
       if (!db && retryOpen && attempt === 0 && offlineStoreSupported()) {
         unavailableUntil = 0;
         db = await openDb();
       }
       if (!db) throw new OfflineStoreUnavailable();
+      // Another transaction on the key began while this one waited for the
+      // connection (two reads made in the same tick): joined, or waited for,
+      // as above, never queued behind as a second 4 MB transaction.
+      if (key && running.has(key)) { attempt -= 1; continue; }
       if (guard && !guard()) return { cancelled: true };
       const entry = begin(db, mode, body, key, tag);
       try {
