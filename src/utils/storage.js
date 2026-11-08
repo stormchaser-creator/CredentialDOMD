@@ -129,8 +129,9 @@ export async function readCachedData(userId, receipt = null) {
         writeOwnLocalCopy(key, text);
       } else {
         // The stored copy itself, cleaned: written even while an earlier
-        // load's unread mark stands (readToken).
-        try { await writeOfflineText(key, text, current, { readToken: read.token }); } catch { /* unavailable */ }
+        // load's unread mark stands (readToken). Waited for no longer than a
+        // read (brief): the load is waiting on it.
+        try { await writeOfflineText(key, text, current, { readToken: read.token, brief: true }); } catch { /* unavailable */ }
       }
     }
     if (!current()) return stale();
@@ -299,7 +300,7 @@ export async function loadData(userId, receipt = null) {
           // Into IndexedDB only when the read above found nothing there
           // (readToken). When it could not look, the unread mark refuses it:
           // the native copy may be older than the one it could not read.
-          try { await writeOfflineText(key, text, localWriteGuard(userId, { adopted: false }), { readToken: read.token }); } catch { /* unavailable */ }
+          try { await writeOfflineText(key, text, localWriteGuard(userId, { adopted: false }), { readToken: read.token, brief: true }); } catch { /* unavailable */ }
           if (changed) {
             try { await window.storage.set(key, text); } catch { /* unavailable */ }
           }

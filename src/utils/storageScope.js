@@ -21,7 +21,7 @@ import { purgeRecovery } from "./syncRecovery.js";
 import { clearHealthRecordDraft } from "./healthRecordDraft.js";
 import { changesBetween } from "./heldChanges.js";
 import { rebaseLocalChanges } from "./loadRebase.js";
-import { offlineRead, offlineWrite, offlineUpdate, offlineRemove, offlineStoreSupported, isQuotaError, OfflineStoreUnavailable, offlineStoreState } from "./offlineStore.js";
+import { offlineRead, offlineWrite, offlineUpdate, offlineRemove, offlineStoreSupported, isQuotaError, OfflineStoreUnavailable, OfflineStoreBusy, OfflineStoreStuck, offlineStoreState, setOfflineLateListener, forgetOfflineRead, offlineRunning, offlineIdle } from "./offlineStore.js";
 
 export const BASE_KEYS = {
   data: STORAGE_KEY,                       // the whole file (mirror of the cloud)
@@ -1097,6 +1097,7 @@ async function purgeOfflineCopies(userId, { raw, mode }, mayHave = true) {
   const still = () => (lsGet(OFFLINE_PURGE_BASE, userId) ?? null) === raw;
   const fenced = localWriteGuard(userId);
   let done = true, empty = true;
+  for (const base of OFFLINE_STORE_BASES) forgetOfflineRead(scopedKey(base, userId));
   for (const base of OFFLINE_STORE_BASES) {
     const key = scopedKey(base, userId);
     if (mode === "trim" && base === BASE_KEYS.data) {
@@ -1106,13 +1107,15 @@ async function purgeOfflineCopies(userId, { raw, mode }, mayHave = true) {
           if (text == null) return undefined;
           left = deviceOnlyFile(text);
           return left === text ? undefined : left; // null removes the key
-        }, { guard: () => still() && fenced() });
+        }, { guard: () => still() && fenced(), brief: true });
         if (!ran) { done = false; left = left ?? "unknown"; }
       } catch { done = false; left = "unknown"; }
       if (left !== null) empty = false;
-      continue;
-    }
-    if (!await offlineRemove(key)) { done = false; empty = false; }
+    } else if (!await offlineRemove(key)) { done = false; empty = false; }
+    // Still busy with a transaction on a slow device: the keys after it would
+    // only queue behind it, each with a wait of its own. The purge stays owed
+    // and runs again once that transaction has settled (afterRunning).
+    if (!done && offlineRunning(key)) { empty = false; break; }
   }
   return { done, empty };
 }
@@ -1151,6 +1154,7 @@ export function settlePendingPurge(userId) {
     let result = { done: false, empty: false };
     try { result = await purgeOfflineCopies(userId, pending); } catch { /* still owed */ }
     if (result.done) clearOfflinePurge(userId, pending.raw, result.empty);
+    else afterRunning(userId);
   })().finally(() => { if (settling.get(userId) === entry) settling.delete(userId); })
     .then(() => {
       const now = pendingPurge(userId);
@@ -1161,6 +1165,21 @@ export function settlePendingPurge(userId) {
     });
   settling.set(userId, entry);
   return entry.promise;
+}
+
+// A purge that found a transaction on one of the keys still running (a slow
+// device's read of a 4 MB file) is not done, and stays owed: every read takes
+// the copies for gone meanwhile. It is made again once that transaction has
+// settled, so the copies are removed after it rather than at the next launch.
+const purgeAfter = new Set();
+function afterRunning(userId) {
+  const keys = OFFLINE_STORE_BASES.map((base) => scopedKey(base, userId)).filter(offlineRunning);
+  if (!keys.length || purgeAfter.has(userId)) return;
+  purgeAfter.add(userId);
+  Promise.all(keys.map(offlineIdle)).then(() => {
+    purgeAfter.delete(userId);
+    if (pendingPurge(userId)) settlePendingPurge(userId).catch(() => {});
+  });
 }
 
 /**
@@ -1248,9 +1267,16 @@ export function offlineCopySaved() {
 }
 
 export function reportStorageRefusal({ store, reason, chars = 0 }, now = Date.now()) {
+  const list = Array.isArray(reason) ? reason : String(reason || "").split(",");
+  // Refused while a transaction on the key is still running (a slow device):
+  // nothing has failed. Held as pending, never reported (offlineStore.js).
+  if (list.includes("indexeddb_pending")) return false;
   const event = storageRefusalKind(reason) === "full" ? "storage_full" : "storage_unavailable";
   if (storageReported.has(event) || !storageFullReporter) return false;
-  if (event === "storage_unavailable" && (heldLostSince === null || now - heldLostSince < LOST_CONNECTION_CONFIRM_MS)) {
+  // A transaction unsettled past the bound has already been given minutes:
+  // reported as it fails, not held for the retries.
+  const stuck = list.includes("indexeddb_stuck");
+  if (event === "storage_unavailable" && !stuck && (heldLostSince === null || now - heldLostSince < LOST_CONNECTION_CONFIRM_MS)) {
     heldLostSince ??= now;
     try { if (offlineStoreState().lost === true) heldWasLost = true; } catch { /* unknown */ }
     return false;
@@ -1286,6 +1312,46 @@ function lsText(key) {
   try { return localStorage.getItem(key); } catch { return null; }
 }
 
+// ─── A slow device is not a broken one ───────────────────────
+// A read still running past the wait (OfflineStoreBusy) leaves the copy
+// unread as before, so nothing is written over it, but that is no failure:
+// a save it refuses is held as pending (refused "indexeddb_pending") and not
+// reported. Only a read that failed (an IndexedDB error or abort, an open
+// that failed, or a transaction unsettled past the bound) puts its key here,
+// and only then is a save refused for the unread copy reported. A read of the
+// key that gets through takes it out.
+const failedReads = new Set();
+// Told when a read that landed after the load stopped waiting is held for
+// the next read (offlineStore.js): the app tries the load again at once
+// (AppContext) instead of at its next backoff step.
+const arrivalListeners = new Set();
+/** `listener(userId)` when a late read of `userId`'s offline file has landed; returns a function that removes it. */
+export function onOfflineCopyArrived(listener) {
+  arrivalListeners.add(listener);
+  return () => arrivalListeners.delete(listener);
+}
+setOfflineLateListener(({ key, mode, ok, error }) => {
+  if (!isOfflineStoreKey(key)) return;
+  if (ok) {
+    if (mode !== "readonly") return;
+    failedReads.delete(key);
+    const owner = keyOwner(key);
+    if (isDataKey(key)) for (const listener of arrivalListeners) { try { listener(owner); } catch { /* a listener never stops a read */ } }
+    return;
+  }
+  if (mode === "readonly") failedReads.add(key);
+  if (error instanceof OfflineStoreStuck) {
+    reportStorageRefusal({ store: key.slice(0, key.indexOf(":")), reason: mode === "readonly" ? "indexeddb_unread,indexeddb_stuck" : "indexeddb_stuck", chars: 0 });
+  }
+});
+// What a read of `key` is sure of: a purge since (in any tab) or, for the
+// file, another writer since moves it, and a read begun under another tag is
+// never joined or taken from (offlineStore.js transact).
+function readTag(key) {
+  const owner = keyOwner(key);
+  return `${offlineGeneration() ?? ""}|${owner && isDataKey(key) ? offlineWriteStamp(owner) ?? "" : ""}`;
+}
+
 /**
  * The IndexedDB copy of `key`, as the rules above make it: a purge still owed
  * is finished first, or applied to what is read when it cannot be. Resolves
@@ -1306,12 +1372,15 @@ export async function readOfflineCopy(key, { retryOpen = false } = {}) {
   // for two open timeouts).
   if (owner && owed == null && !mayHaveOfflineCopy(owner) && !hasLocalLargeCopy(owner)) return null;
   let text;
-  try { text = await offlineRead(key, { retryOpen }); }
-  catch {
+  try { text = await offlineRead(key, { retryOpen, tag: readTag(key) }); }
+  catch (error) {
     // A browser with no IndexedDB at all never stored anything there.
     if (!owner || !offlineStoreSupported() || !mayHaveOfflineCopy(owner)) return null;
+    // Still reading: "not yet", which the caller tells apart from a failure.
+    if (error instanceof OfflineStoreBusy) throw error;
     throw new OfflineStoreUnavailable();
   }
+  failedReads.delete(key);
   if (owed === "trim") return key.startsWith(`${BASE_KEYS.data}:`) && text != null ? deviceOnlyFile(text) : null;
   return text;
 }
@@ -1385,7 +1454,8 @@ export async function readOfflineFile(userId, receipt = null) {
     if (!current()) { markOfflineCopyUnread(userId, receipt); return null; }
     if (receipt && purgeEpoch(userId) === epoch) { receipt.read = true; receipt.token = { key, epoch }; receipt.stamp = stamp; }
     return found;
-  } catch {
+  } catch (error) {
+    if (!(error instanceof OfflineStoreBusy)) failedReads.add(key);
     // The mark belongs to the records on screen. Not set by a read whose load
     // has been overtaken (`receipt.current`): a newer load has put records on
     // screen, and a stale read failing afterwards refused every save of the
@@ -1581,11 +1651,13 @@ async function putOffline(key, text, guard, how = {}) {
         how.merged = true;
         if (!moving && (!latest || latest()) && supersedeLocalCopy(key, final)) how.localWritten = final;
         return final;
-      }, { guard: clear });
-    } else ran = await offlineWrite(key, text, { guard: clear });
+      }, { guard: clear, brief: !!how.brief });
+    } else ran = await offlineWrite(key, text, { guard: clear, brief: !!how.brief });
     if (ran) return "saved";
     return unmarked ? "indexeddb_unmarked" : "stopped";
   } catch (error) {
+    if (error instanceof OfflineStoreBusy) return "indexeddb_pending";
+    if (error instanceof OfflineStoreStuck) return "indexeddb_stuck";
     return isQuotaError(error) ? "indexeddb_quota" : error instanceof OfflineStoreUnavailable ? "indexeddb_unavailable" : "indexeddb_error";
   }
 }
@@ -1628,7 +1700,8 @@ export async function moveToOfflineStore(key, guard) {
     try { stored = await readOfflineCopy(key); } catch { return "kept"; }
     if (stored != null && stored !== raw) text = mergeUntrustedLocal(key, stored, raw);
   }
-  const how = { generation, moving: true };
+  // Run by the load before anything is shown: waits no longer than a read.
+  const how = { generation, moving: true, brief: true };
   const put = await putOffline(key, text, () => unchanged() && (!guard || guard()), how);
   if (put !== "saved") {
     if (put === "indexeddb_quota") reportStorageRefusal({ store: key.slice(0, key.indexOf(":")), reason: "indexeddb_quota_on_move", chars: raw.length });
@@ -1693,9 +1766,18 @@ async function writeOfflineTextOnce(key, text, guard, how) {
 async function writeOfflineTextNow(key, text, guard, seq, generation, how = {}) {
   const latest = () => writeSeq.get(key) === seq;
   const chars = text.length;
-  if (unreadKeys.has(key) && !readTokenValid(key, how.readToken)) return { saved: false, stopped: false, refused: ["indexeddb_unread"], chars };
-  const put_how = { generation, latest, merge: how.merge, knownStamp: how.knownStamp, mergeAlways: how.mergeAlways };
+  if (unreadKeys.has(key) && !readTokenValid(key, how.readToken)) {
+    // Unread because the read is still running, or landed and waits for the
+    // load to take it: pending, not a failure.
+    const pending = !failedReads.has(key) || offlineRunning(key);
+    return { saved: false, stopped: false, refused: pending ? ["indexeddb_unread", "indexeddb_pending"] : ["indexeddb_unread"], chars };
+  }
+  const put_how = { generation, latest, merge: how.merge, knownStamp: how.knownStamp, mergeAlways: how.mergeAlways, brief: !!how.brief };
   const put = await putOffline(key, text, guard, put_how);
+  // A brief write (a move, the stored copy rewritten by a load) still running
+  // past the wait: it lands or fails on its own, and nothing is put in
+  // localStorage in front of it.
+  if (put === "indexeddb_pending") return { saved: false, stopped: false, refused: [put], chars };
   if (put === "saved") {
     // Landed: any localStorage copy is older now, and the space it held is
     // freed. Only by the latest write, so an older fallback is never left

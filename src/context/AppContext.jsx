@@ -16,7 +16,7 @@ import { loadData, saveData, readCachedData, clearLocalData, onCacheFullChange, 
   adoptOfflineCopyRead, deviceOnlyForLoad, offlineCopyUnchangedSinceKnown, deviceOnlyUnsavedState, onDeviceOnlyUnsavedChange,
   setCacheWritePending, spillOfflineSave, offlineCopyMayBeBehind } from "../utils/storage";
 import { onPageLeave } from "../utils/pageLeave.js";
-import { setActiveUserId, getActiveUserId, setStorageFullReporter, purgeAfterSessionEnd, markDeliberateSignOut, clearDeliberateSignOut, adoptLegacyStorage, hasLegacyStorage, lsGet, lsGetJSON, lsSet, lsSetJSON, scopedKey, BASE_KEYS, WIPE_SEEN_KEY, LOCAL_FENCE_KEY, localFence, adoptLocalFence, localCopyCurrent, pendingOpCount, awaitingAccessOpCount, accessRefusedOpCount, deviceOnlyRecordCounts, retireContinuityRecovery, offlineCopyUnread, markOfflineCopyRead, probeOfflineFile } from "../utils/storageScope";
+import { setActiveUserId, getActiveUserId, setStorageFullReporter, purgeAfterSessionEnd, markDeliberateSignOut, clearDeliberateSignOut, adoptLegacyStorage, hasLegacyStorage, lsGet, lsGetJSON, lsSet, lsSetJSON, scopedKey, BASE_KEYS, WIPE_SEEN_KEY, LOCAL_FENCE_KEY, localFence, adoptLocalFence, localCopyCurrent, pendingOpCount, awaitingAccessOpCount, accessRefusedOpCount, deviceOnlyRecordCounts, retireContinuityRecovery, offlineCopyUnread, markOfflineCopyRead, probeOfflineFile, onOfflineCopyArrived } from "../utils/storageScope";
 import { repairStoredIds } from "../utils/idRepair.js";
 import { accountDataDeletedAt, honorAccountDataDeletion, sameDeletionStamp } from "../utils/dataDeletion.js";
 import { recordLastIdentity } from "../utils/offlineSession";
@@ -316,6 +316,11 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     };
     const onVisible = () => { if (typeof document === "undefined" || document.visibilityState === "visible") void retry(); };
     const onWake = () => { void retry(); };
+    // A slow device's read that landed after the load stopped waiting for it
+    // is held for the next read: tried now, not at the next backoff step.
+    // (Guarded: tests run this effect alone, without the module's imports.)
+    const stopArrived = typeof onOfflineCopyArrived === "function"
+      ? onOfflineCopyArrived((owner) => { if (owner === ownerId) void retry(); }) : () => {};
     document.addEventListener?.("visibilitychange", onVisible);
     window.addEventListener("online", onWake);
     window.addEventListener("focus", onWake);
@@ -324,6 +329,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     return () => {
       stopped = true;
       clearTimeout(timer);
+      stopArrived();
       document.removeEventListener?.("visibilitychange", onVisible);
       window.removeEventListener("online", onWake);
       window.removeEventListener("focus", onWake);

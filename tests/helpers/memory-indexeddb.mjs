@@ -10,7 +10,12 @@
 // and every transaction on a connection it opened, that has not run yet
 // never runs and reports nothing, as WebKit and Chromium drop an IndexedDB
 // write begun in pagehide; the next page's opens and transactions run as
-// usual).
+// usual), a device that is slow with large values (`slowLargeValues`:
+// { minChars, ms }, a transaction that reads or writes a string of at least
+// minChars characters answers ms later; later transactions wait behind it),
+// a store whose transactions never settle (`hangTransactions`: neither that
+// transaction nor any behind it ever answers) and one whose every transaction
+// aborts (`failTransactions`).
 // Synthetic data only.
 
 function quotaError() {
@@ -36,6 +41,9 @@ export function createMemoryIndexedDB({ quotaBytes = Infinity } = {}) {
     failWrites: false,
     quotaBytes,
     readHook: null,
+    slowLargeValues: null,
+    hangTransactions: false,
+    failTransactions: false,
     opened: 0,
     writes: [],
     pageEpoch: 0,
@@ -103,9 +111,9 @@ export function createMemoryIndexedDB({ quotaBytes = Infinity } = {}) {
         const ops = [];
         const tx = { error: null, oncomplete: null, onerror: null, onabort: null, mode,
           objectStore() {
-            const request = (fn) => { const r = { result: undefined, onsuccess: null }; ops.push({ r, fn }); return r; };
+            const request = (fn, key, value) => { const r = { result: undefined, onsuccess: null }; ops.push({ r, fn, key, value }); return r; };
             return {
-              get: key => request(store => (factory.readHook ? factory.readHook(key, store.get(key)) : store.get(key))),
+              get: key => request(store => (factory.readHook ? factory.readHook(key, store.get(key)) : store.get(key)), key),
               getAll: () => request(store => [...store.values()]),
               getAllKeys: () => request(store => [...store.keys()]),
               put: (value, key) => { if (mode !== 'readwrite') throw new Error('ReadOnlyError'); return request((store) => {
@@ -117,14 +125,28 @@ export function createMemoryIndexedDB({ quotaBytes = Infinity } = {}) {
                 store.set(key, value);
                 factory.writes.push(key);
                 return key;
-              }); },
+              }, key, value); },
               delete: key => { if (mode !== 'readwrite') throw new Error('ReadOnlyError'); return request(store => { store.delete(key); return undefined; }); },
             };
           },
         };
-        chain = chain.then(later).then(() => {
+        chain = chain.then(later).then(async () => {
           if (db.epoch !== factory.pageEpoch) return;
           const store = rec.stores.get(storeName);
+          if (factory.hangTransactions) await new Promise(() => {});
+          const slow = factory.slowLargeValues;
+          if (slow && ops.some(({ key, value }) => {
+            const v = value !== undefined ? value : (key !== undefined ? store.get(key) : undefined);
+            return typeof v === 'string' && v.length >= slow.minChars;
+          })) await new Promise(resolve => setTimeout(resolve, slow.ms));
+          if (factory.failTransactions) {
+            const error = new Error('The transaction was aborted.');
+            error.name = 'AbortError';
+            tx.error = error;
+            tx.onerror?.({ target: tx });
+            tx.onabort?.({ target: tx });
+            return;
+          }
           const snapshot = new Map(store);
           if (db.lost) {
             const error = new Error('Connection to Indexed Database server lost. Refresh the page to try again');
