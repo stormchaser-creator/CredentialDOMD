@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { transformSync } from 'esbuild';
 import vm from 'node:vm';
+import * as chunkRecovery from '../../src/utils/chunkRecovery.js';
 import { captureLaunchInvitation, redactLaunchInvitation } from '../../src/utils/launchInvitation.js';
 
 const token = 'synthetic_only_launch_token_A1b2c3d4e5f6g7h8j9k0';
@@ -27,6 +28,7 @@ function reporter({ href = url, dev = false, beacon = true } = {}) {
     require: name => {
       if (name === 'react') return { Component: class {}, createElement: (...args) => args };
       if (name === '../utils/launchInvitation.js') return { redactLaunchInvitation };
+      if (name === '../utils/chunkRecovery.js') return chunkRecovery;
       throw Error(`Unexpected reporting dependency: ${name}`);
     },
   });

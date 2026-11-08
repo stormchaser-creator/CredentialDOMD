@@ -9,6 +9,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { transformSync } from 'esbuild';
 import vm from 'node:vm';
+import * as chunkRecovery from '../src/utils/chunkRecovery.js';
 
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 const source = await read('src/lib/errorReport.js');
@@ -25,6 +26,7 @@ function page() {
     require: name => {
       if (name === 'react') return { Component: class {}, createElement: () => null };
       if (name === '../utils/launchInvitation.js') return { redactLaunchInvitation: s => s };
+      if (name === '../utils/chunkRecovery.js') return chunkRecovery;
       throw Error(`Unexpected dependency: ${name}`);
     },
   });

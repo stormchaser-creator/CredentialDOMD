@@ -16,6 +16,7 @@
 /* global __APP_BUILD_ID__ */
 import { Component, createElement } from "react";
 import { redactLaunchInvitation } from "../utils/launchInvitation.js";
+import { isChunkLoadFailure } from "../utils/chunkRecovery.js";
 
 // Outside Vite (a component rendered by a test bundle) there is no env: no
 // endpoint, and nothing is sent. The same guard as utils/limitedLaunchClient.js.
@@ -137,8 +138,63 @@ function watchLifecycle() {
   if (lifecycleWatched || typeof window === "undefined" || typeof window.addEventListener !== "function") return;
   lifecycleWatched = true;
   window.addEventListener("beforeunload", () => { leavingSince = Date.now(); });
-  window.addEventListener("pagehide", () => { pageHidden = true; pageHides += 1; });
+  window.addEventListener("pagehide", () => { pageHidden = true; pageHides += 1; sendHeldChunkFailures(); });
   window.addEventListener("pageshow", () => { pageHidden = false; leavingSince = null; });
+  if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") sendHeldChunkFailures(); });
+  }
+}
+
+// A script chunk lost on the connection (ticket 7bbd451d, 2026-10-31: an
+// iPhone on the sign-in screen, "Loading chunk 344 failed" in Clerk's
+// ensureMounted). The sign-in screen remounts its form 1.2 s later, which
+// fetches the chunk again (components/pages/AuthPage.jsx), but the report used
+// to go at once, so the owner was told "not fixed by itself" about a screen
+// that may have fixed itself. So it is held: resolveChunkFailure("fixed")
+// drops it and sends an info event instead, "failed" sends it. Nothing is
+// lost: a chunk failure nobody resolves (one outside the sign-in screen) goes
+// after CHUNK_HOLD_MS, and a page hidden or left sends it at once by
+// sendBeacon, which outlives the page (never through reportUnlessLeaving,
+// which drops reports after pagehide).
+const CHUNK_HOLD_MS = 15000;
+let heldChunkFailures = [];
+let heldChunkTimer = null;
+let chunkFailureOpen = false;
+
+function sendHeldChunkFailures() {
+  try {
+    clearTimeout(heldChunkTimer);
+    heldChunkTimer = null;
+    const held = heldChunkFailures;
+    heldChunkFailures = [];
+    for (const [err, kind, extra] of held) reportError(err, kind, extra);
+  } catch { /* reporting must never throw */ }
+}
+
+function holdChunkFailure(err, kind, extra) {
+  chunkFailureOpen = true;
+  heldChunkFailures.push([err, kind, extra]);
+  if (heldChunkTimer === null) heldChunkTimer = setTimeout(sendHeldChunkFailures, CHUNK_HOLD_MS);
+}
+
+/**
+ * What became of the chunk failures held since the last call: "fixed" (the
+ * screen came back by itself) drops them and records an info event; "failed"
+ * sends them now. A no-op when no chunk failure was seen.
+ */
+export function resolveChunkFailure(outcome) {
+  try {
+    if (!chunkFailureOpen) return;
+    chunkFailureOpen = false;
+    if (outcome === "fixed") {
+      clearTimeout(heldChunkTimer);
+      heldChunkTimer = null;
+      heldChunkFailures = [];
+      reportError("Fixed by itself: the sign-in form loaded after a piece of it was lost on the connection.", "info");
+    } else {
+      sendHeldChunkFailures();
+    }
+  } catch { /* reporting must never throw */ }
 }
 
 /** True while the page is being left: after pagehide, or within a moment of beforeunload. */
@@ -226,15 +282,19 @@ export function install() {
     // those are noise for this sink.
     if (!event.error && !event.message) return;
     const err = event.error || new Error(event.message);
-    reportError(err, "error", {
+    const extra = {
       source: event.filename ? clip(event.filename, 300) : undefined,
       line: event.lineno || undefined,
       col: event.colno || undefined,
-    });
+    };
+    if (isChunkLoadFailure(err)) holdChunkFailure(err, "error", extra);
+    else reportError(err, "error", extra);
   });
 
   window.addEventListener("unhandledrejection", (event) => {
-    reportError(event.reason ?? "Unhandled promise rejection", "unhandledrejection");
+    const reason = event.reason ?? "Unhandled promise rejection";
+    if (isChunkLoadFailure(reason)) holdChunkFailure(reason, "unhandledrejection");
+    else reportError(reason, "unhandledrejection");
   });
 }
 
@@ -318,4 +378,4 @@ export class ErrorBoundary extends Component {
   }
 }
 
-export default { install, reportError, reportUnlessLeaving, pageLeaving, setErrorUser, ErrorBoundary };
+export default { install, reportError, reportUnlessLeaving, resolveChunkFailure, pageLeaving, setErrorUser, ErrorBoundary };

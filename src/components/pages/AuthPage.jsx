@@ -7,6 +7,7 @@ import { SMS_SIGN_IN_ENABLED } from "../../utils/signInMethods";
 import { loadAuthOffer } from "../../utils/authOffer";
 import { sendAuthVisit } from "../../utils/visitBeacon";
 import { watchChunkFailures, chunkRecoveryStep, CHUNK_RETRY_DELAY_MS } from "../../utils/chunkRecovery.js";
+import { resolveChunkFailure } from "../../lib/errorReport.js";
 
 /**
  * Auth landing page — wraps Clerk's unified <SignIn withSignUp /> component
@@ -117,22 +118,35 @@ function AuthPage() {
   // one after the form is up, shows a way out instead (utils/chunkRecovery.js).
   const [chunkNotice, setChunkNotice] = useState(false);
   const chunkFailures = useRef(0);
+  // The error reporter holds the failure until this screen says how it ended
+  // (lib/errorReport.js): "fixed" once the remounted form shows a field (Clerk
+  // mounts it a moment later, so it is watched for), "failed" with the notice.
   useEffect(() => {
     let timer;
+    let watching = null;
+    const fieldShown = () => !!widgetRef.current?.querySelector?.("input, textarea, select");
+    const stopWatching = () => { watching?.disconnect(); watching = null; };
+    const showNotice = () => { stopWatching(); setChunkNotice(true); resolveChunkFailure("failed"); };
+    const watchForForm = () => {
+      const root = widgetRef.current;
+      if (!root || typeof MutationObserver !== "function") return;
+      stopWatching();
+      watching = new MutationObserver(() => { if (fieldShown()) { stopWatching(); resolveChunkFailure("fixed"); } });
+      watching.observe(root, { childList: true, subtree: true });
+    };
     const stop = watchChunkFailures(() => {
       chunkFailures.current += 1;
-      const formShown = !!widgetRef.current?.querySelector?.("input, textarea, select");
-      if (chunkRecoveryStep(chunkFailures.current, formShown) === "remount") {
+      if (chunkRecoveryStep(chunkFailures.current, fieldShown()) === "remount") {
         clearTimeout(timer);
         timer = setTimeout(() => {
           // The provider can finish loading while this delay is pending.
           // Keep a newly visible form and anything the visitor has entered.
-          if (widgetRef.current?.querySelector?.("input, textarea, select")) setChunkNotice(true);
-          else setEntry(previous => ({ ready: true, version: previous.version + 1 }));
+          if (fieldShown()) showNotice();
+          else { setEntry(previous => ({ ready: true, version: previous.version + 1 })); watchForForm(); }
         }, CHUNK_RETRY_DELAY_MS);
-      } else { clearTimeout(timer); setChunkNotice(true); }
+      } else { clearTimeout(timer); showNotice(); }
     });
-    return () => { clearTimeout(timer); stop(); };
+    return () => { clearTimeout(timer); stopWatching(); stop(); };
   }, []);
   const retryForm = () => { setChunkNotice(false); setEntry(previous => ({ ready: true, version: previous.version + 1 })); };
   useEffect(() => {
