@@ -66,9 +66,10 @@ thread (`target`), this ticket's saved case review (`saved_review`, with its
 `pending_follow_up` and remembered answers), questions answered on the customer's other
 tickets (`answered_on_other_tickets`), and those tickets as a summary (`related_tickets`:
 the newest in detail with the opening and the newest customer message, the rest as an
-index). The attachments are in the host facts. The whole history is in the case history
-file the host facts name: every ticket, every message and every saved review of this
-customer, one JSON record per line with its `kind` first, so a Grep hit carries the ids you
+index). The attachments are in the host facts. The history the host loaded is in the case
+history file the host facts name: this ticket and its whole thread first, then the
+customer's other tickets newest first, with their messages and saved reviews (when
+`history_complete` is false the bounds cut the oldest), one JSON record per line with its `kind` first, so a Grep hit carries the ids you
 may cite. Search it with Grep and Read only the lines you need (offset and limit); never Read
 the whole file, because every later turn re-reads what you read. Any ticket or message id in
 it may be cited, and the host checks every cited id against the whole history. What the

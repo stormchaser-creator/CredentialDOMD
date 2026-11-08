@@ -17,14 +17,18 @@ reply, status change, implementation or release for another ticket. The legacy
 runner retains its existing archived-target eligibility; the isolated runner retains
 its existing exclusion. Both run at most two targets, in separate model sessions.
 
-Ticket pages contain 25 records and message pages 50, ordered by `(created_at,id)`.
+The target ticket and its whole thread load first. The customer's other tickets then
+page 25 at a time newest first by `(created_at,id)` descending, and messages 50 at a time
+oldest first, so the bounds cut only the oldest tickets.
 The collector handles equal timestamps and includes the original report and old
 replies instead of just the last 20 messages. Limits are 100 tickets, 1,000 messages
 and 750 KB of source records per target. Individual ticket/message text is capped at
 24,000/12,000 characters with explicit truncation markers. Overflow sets
 `history_complete=false` and identifies what was omitted. It does not mean “no
-history”. Questions are withheld while coverage is incomplete; internal retrieval
-follow-through must be recorded. A changed target during collection is also marked.
+history”. Questions are withheld, and a result with nothing left open is refused, only
+while the target's own thread is incomplete (`target_complete=false`: not loaded, cut by
+a bound, or a truncated body or message); then internal retrieval follow-through must be
+recorded. Older tickets cut by the bounds only forbid absence claims about them. A changed target during collection is also marked.
 Each message page binds the captured customer and ticket in the same database
 statement as the message read. An explicit owner envelope distinguishes a genuinely
 empty thread from a ticket reassigned or deleted after history selection; the latter
