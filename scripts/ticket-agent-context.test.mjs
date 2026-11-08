@@ -30,6 +30,10 @@ function fixtureQuery(tickets, messages, { target = tickets[0], corrupt = null }
       return [{ context_ticket_id: id, context_owner_id: owner, messages: corrupt ? corrupt(page) : page }];
     }
     if (sql.includes('FROM support_tickets t WHERE t.id=')) return target ? [target] : [];
+    if (sql.includes('FROM support_tickets t WHERE t.user_id=') && / AND t\.id='([^']+)'::uuid/.test(sql)) {
+      const one = / AND t\.id='([^']+)'::uuid/.exec(sql)[1];
+      return tickets.filter(t => t.id === one);
+    }
     if (sql.includes('FROM support_tickets t WHERE t.user_id=')) {
       assert.ok(sql.includes(`t.user_id='${owner}'::uuid`));
       const after = /\(t.created_at,t.id\)>\([^]*,'([^']+)'::uuid\)/.exec(sql)?.[1];
@@ -522,4 +526,19 @@ test('the attention file names open tickets whose reply is held for the owner\'s
     assert.match(seen[0], new RegExp(uuid(2)), 'the closed one was asked about');
     assert.deepEqual(JSON.parse(await readFile(path.join(directory, 'attention.json'), 'utf8')).waiting_owner, [uuid(1)]);
   } finally { await rm(directory, { recursive: true, force: true }); }
+});
+
+test('the target ticket and its whole thread load first, even for a customer with more tickets than the history bound (owner, 111 tickets)', async () => {
+  // 120 tickets, oldest first; the target is the newest, with a follow-up.
+  const rows = Array.from({ length: 120 }, (_, i) => ticket(i + 1, { created_at: new Date(Date.UTC(2026, 0, 1) + i * 86400000).toISOString() }));
+  const target = rows[119];
+  const msgs = [message(1, target.id, { body: 'Synthetic follow-up: it still asks me to choose.' })];
+  const { query } = fixtureQuery(rows, msgs, { target });
+  const context = await loadContext(query, target.id);
+  const loaded = context.tickets.find(t => t.id === target.id);
+  assert.equal(loaded.thread_not_loaded, undefined, 'the thread is loaded');
+  assert.deepEqual(loaded.messages.map(m => m.body), ['Synthetic follow-up: it still asks me to choose.']);
+  assert.ok(!context.limitations.includes('target_thread_not_loaded'));
+  assert.ok(context.limitations.includes('ticket_limit'), 'the older history is what the bound cuts');
+  assert.equal(context.tickets.filter(t => t.id === target.id).length, 1, 'never loaded twice');
 });

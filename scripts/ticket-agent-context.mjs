@@ -149,6 +149,10 @@ export function historySQL(ownerId, cursor = null) {
   return readOnly(`SELECT ${FIELDS} FROM support_tickets t WHERE t.user_id='${id(ownerId)}'::uuid
     ${after} ORDER BY t.created_at,t.id LIMIT 25`);
 }
+// The target's own row, in the history's shape (loadContext reads it first).
+export function historyRowSQL(ownerId, ticketId) {
+  return readOnly(`SELECT ${FIELDS} FROM support_tickets t WHERE t.user_id='${id(ownerId)}'::uuid AND t.id='${id(ticketId)}'::uuid`);
+}
 export function messagesSQL(ticketId, ownerId, cursor = null) {
   const after = cursor ? `AND (m.created_at,m.id)>(${literal(cursor.created_at)}::timestamptz,'${id(cursor.id)}'::uuid)` : '';
   // Ownership and message contents are read in the same statement snapshot. The
@@ -204,40 +208,54 @@ export async function loadContext(query, ticketId, options = {}) {
   let bytes = 0, messageCount = 0;
   const note = reason => { context.history_complete = false; if (!context.limitations.includes(reason)) context.limitations.push(reason); };
   const collect = row => { bytes += Buffer.byteLength(JSON.stringify(row)); return bytes <= limits.bytes; };
+  // One ticket and its whole thread (messages paged 50 at a time). Returns
+  // false when a bound stopped it.
+  const loadTicket = async row => {
+    id(row.id);
+    if (row.user_id !== target.user_id) throw Error('Cross-customer history refused');
+    if (context.tickets.some(t => t.id === row.id)) throw Error('Repeated history page');
+    if (context.tickets.length >= limits.tickets) { note('ticket_limit'); return false; }
+    if (!collect(row)) { note('byte_limit'); return false; }
+    if (row.body_truncated) note('ticket_body_truncated');
+    const ticket = { ...row, context_only: row.id !== ticketId, messages: [] };
+    context.tickets.push(ticket); context.attachments.push(...attachments(row, row.id));
+    let messageCursor = null;
+    while (true) {
+      const envelopes = await query(messagesSQL(row.id, target.user_id, messageCursor));
+      if (envelopes.length !== 1 || envelopes[0].context_ticket_id !== row.id || envelopes[0].context_owner_id !== target.user_id) throw Error('Message-page ownership changed or unavailable');
+      const messages = envelopes[0].messages;
+      if (!Array.isArray(messages)) throw Error('Unusable message page');
+      if (messages.length > 50) throw Error('Unexpected message page');
+      for (const message of messages) {
+        id(message.id);
+        if (message.ticket_id !== row.id) throw Error('Cross-ticket message refused');
+        if (ticket.messages.some(m => m.id === message.id)) throw Error('Repeated message page');
+        if (messageCount >= limits.messages) { note('message_limit'); return false; }
+        if (!collect(message)) { note('byte_limit'); return false; }
+        if (message.body_truncated) note('message_body_truncated');
+        ticket.messages.push({ ...message, actor_label: actorLabel(message, target.user_id, { ownerIsAdmin: target.from_admin === true }) });
+        context.attachments.push(...attachments(message, row.id)); messageCount++;
+      }
+      if (messages.length < 50) break;
+      messageCursor = messages.at(-1);
+    }
+    return true;
+  };
+  // The target and its whole thread first, then the rest of the history up to
+  // the bounds. Oldest first, a customer with more than limits.tickets tickets
+  // (the owner had 111 on 2026-11-07) never had the newest, the open ones,
+  // loaded: every follow-up he wrote on an open ticket was invisible to the
+  // runs ("I archived a contract ... it still asks", 8acf7241).
+  const targetRow = (await query(historyRowSQL(target.user_id, ticketId))).find(r => r?.id === ticketId);
+  if (targetRow) await loadTicket(targetRow);
   let cursor = null;
   outer: while (true) {
     const page = await query(historySQL(target.user_id, cursor));
     if (page.length > 25) throw Error('Unexpected history page');
     for (const row of page) {
-      id(row.id);
-      if (row.user_id !== target.user_id) throw Error('Cross-customer history refused');
-      if (context.tickets.some(t => t.id === row.id)) throw Error('Repeated history page');
-      if (context.tickets.length >= limits.tickets) { note('ticket_limit'); break outer; }
-      if (!collect(row)) { note('byte_limit'); break outer; }
-      if (row.body_truncated) note('ticket_body_truncated');
-      const ticket = { ...row, context_only: row.id !== ticketId, messages: [] };
-      context.tickets.push(ticket); context.attachments.push(...attachments(row, row.id));
-      let messageCursor = null;
-      while (true) {
-        const envelopes = await query(messagesSQL(row.id, target.user_id, messageCursor));
-        if (envelopes.length !== 1 || envelopes[0].context_ticket_id !== row.id || envelopes[0].context_owner_id !== target.user_id) throw Error('Message-page ownership changed or unavailable');
-        const messages = envelopes[0].messages;
-        if (!Array.isArray(messages)) throw Error('Unusable message page');
-        if (messages.length > 50) throw Error('Unexpected message page');
-        for (const message of messages) {
-          id(message.id);
-          if (message.ticket_id !== row.id) throw Error('Cross-ticket message refused');
-          if (ticket.messages.some(m => m.id === message.id)) throw Error('Repeated message page');
-          if (messageCount >= limits.messages) { note('message_limit'); break outer; }
-          if (!collect(message)) { note('byte_limit'); break outer; }
-          if (message.body_truncated) note('message_body_truncated');
-          ticket.messages.push({ ...message, actor_label: actorLabel(message, target.user_id, { ownerIsAdmin: target.from_admin === true }) });
-          context.attachments.push(...attachments(message, row.id)); messageCount++;
-        }
-        if (messages.length < 50) break;
-        messageCursor = messages.at(-1);
-      }
       cursor = row;
+      if (row.id === ticketId && context.tickets.some(t => t.id === ticketId)) continue;
+      if (!await loadTicket(row)) break outer;
     }
     if (page.length < 25) break;
   }
