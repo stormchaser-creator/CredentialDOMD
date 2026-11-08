@@ -1391,6 +1391,10 @@ export async function readOfflineCopy(key, { retryOpen = false, wait = null } = 
     if (!owner || !offlineStoreSupported() || !mayHaveOfflineCopy(owner)) return null;
     // Still reading: "not yet", which the caller tells apart from a failure.
     if (error instanceof OfflineStoreBusy) throw error;
+    // A failure, for whichever key: a save the unread copy then refuses is
+    // reported (writeOfflineTextNow). Recorded for the file only, a transcript
+    // or archives read that errored left every save of them "pending" for good.
+    failedReads.add(key);
     throw new OfflineStoreUnavailable();
   }
   failedReads.delete(key);

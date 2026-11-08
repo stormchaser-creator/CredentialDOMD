@@ -378,3 +378,59 @@ test("a late read of the archives is not taken over another tab's newer write", 
   assert.equal((await scope.readOfflineText(key))?.text, B, "the other tab's archive, not the held read");
   scope.setActiveUserId(null);
 });
+
+// Review: the three minute bound began when a transaction was created, so
+// the time it spent queued behind the transactions before it on the store
+// counted. With a large transcript and archives besides the file, at 65
+// seconds a transaction, the file's read was taken for stuck at about 186
+// seconds while every transaction was still landing, and a slow device was
+// reported as broken.
+test('(a)(c) 65 seconds a transaction with a large transcript and archives: queued time is not stuck time', async () => {
+  await slowButWorking(65, { stores: { chat: 1_500_000, archives: 1_500_000 } });
+});
+
+// Review: a real IndexedDB error on a read of the transcript or the archives
+// (not the file) was never recorded as a failed read, so every later save of
+// that store was refused as "pending" and never reported, however long the
+// store stayed broken. Now any read that fails (not one still running) counts,
+// for whichever key, and a refused save of that store is reported once.
+test('a transcript read that errors is a failure: a refused save of it is reported once, and the file saves as usual', async () => {
+  const U = 'user_syntheticChatReadError';
+  const key = scope.scopedKey(scope.BASE_KEYS.data, U);
+  const chatKey = scope.scopedKey(scope.BASE_KEYS.chat, U);
+  const idb = createMemoryIndexedDB();
+  offlineStore.setOfflineStoreFactory(idb);
+  offlineStore.setOfflineTransactionTimeout(BASE_WAIT * SEC);
+  offlineStore.setOfflineTransactionBound(BOUND * SEC);
+  scope.setActiveUserId(U);
+  scope.adoptLocalFence(U);
+  assert.equal((await scope.writeOfflineText(key, JSON.stringify(deviceFile()), () => true)).saved, true, 'precondition: the file is stored');
+  await otherTabPut(idb, chatKey, JSON.stringify([{ id: 'chat-synthetic-1', text: 'synthetic' }]));
+  ({ scope, storage } = await newPage());
+  offlineStore.setOfflineStoreFactory(idb);
+  scope.resetStorageFullReport();
+  const reports = [];
+  scope.setStorageFullReporter((message, extra, kind = 'error') => reports.push({ message, extra, kind }));
+  idb.readHook = (k, v) => {
+    if (k === chatKey) throw Object.assign(new Error('Synthetic IndexedDB failure'), { name: 'UnknownError' });
+    return v;
+  };
+  scope.setActiveUserId(U);
+  await scope.hydrateOfflineStores(U);
+  // A save of the transcript the unread copy refuses, made again past the hold.
+  const T = Date.now();
+  for (const now of [T, T + 31_000, T + 62_000]) {
+    const result = await scope.writeOfflineText(chatKey, JSON.stringify([{ id: 'chat-synthetic-2', text: 'new' }]), () => true);
+    assert.equal(result.saved, false, 'refused while the stored transcript is unread');
+    assert.ok(!result.refused.includes('indexeddb_pending'), `a failed read is not "pending" (${result.refused})`);
+    scope.reportStorageRefusal({ store: chatKey.slice(0, chatKey.indexOf(':')), reason: result.refused.join(','), chars: result.chars }, now);
+  }
+  const failed = errors(reports);
+  assert.equal(failed.length, 1, `one report (${JSON.stringify(failed)})`);
+  assert.equal(failed[0].message, 'Offline copy not saved: storage_unavailable');
+  // The file's saves are unaffected.
+  assert.equal((await scope.writeOfflineText(key, JSON.stringify(deviceFile({ settings: { name: 'Dr. Synthetic Slowdevice', edits: 1 } })), () => true)).saved, true, 'the file saves');
+  assert.equal(stored(idb, key)?.settings?.edits, 1);
+  idb.readHook = null;
+  scope.setActiveUserId(null);
+});
