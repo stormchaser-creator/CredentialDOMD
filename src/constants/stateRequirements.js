@@ -252,22 +252,19 @@ export const STATE_REQS = {
     { topic: "Controlled Substances", hours: 3.0, note: "3 hrs controlled substance prescribing" },
   ], notes: "3 hrs controlled substance prescribing", rollover: "No", moc: "ABMS/AOA/RCPSC recert/MOC = entire requirement", source: "N.C. Admin. Code tit. 21, r. 32R.0101", verified: "2026-08", sourceUrl: "https://www.ncmedboard.org/resources-information/faqs/professional-faqs/cme" },
   ND: { total: 40, cycle: 2, cat1min: 40, cat1note: "All Cat 1", firstCycle: {
-    // A license issued inside the current 2-year cycle is on its first
-    // reporting period, counted from the issue date. Held under one year at
-    // that renewal: no CME (50-04-01-02(2); the NDBOM CME page: under 1 year,
-    // none). One year up to two: twenty hours (50-04-01-04(1)). Later cycles
-    // owe the 40 hours.
+    // A license issued inside the current 2-year cycle has not yet renewed for
+    // the first time since it was granted: no CME at that renewal, however
+    // long it was held (50-04-01-02(2)). The twenty hours of 50-04-01-04(1)
+    // bind only a physician "required to report", i.e. the reporting period
+    // after that first renewal; later cycles owe the 40 hours.
     mode: "tiered", basis: "monthsFromIssueToExpiry", windowFromIssue: true,
     tiers: [
-      { underMonths: 12, hours: 0,
+      { underMonths: 24, hours: 0,
         note: "50-04-01-02(2): not required to meet the requirements of this chapter: \"physicians who have not renewed their licenses for the first time since being granted a regular permanent license by the board.\"",
         source: "N.D. Admin. Code 50-04-01-02(2)" },
-      { underMonths: 24, hours: 20,
-        note: "50-04-01-04(1): \"Any physician who is required to report CME credits after having been licensed to practice medicine in North Dakota for more than one year but less than two full years will be required to demonstrate completion of twenty hours of board-approved CME credits during that physician's initial CME reporting period.\"",
-        source: "N.D. Admin. Code 50-04-01-04(1)" },
     ],
-    note: "50-04-01-02(2): not required to meet the requirements of this chapter: \"physicians who have not renewed their licenses for the first time since being granted a regular permanent license by the board.\" 50-04-01-04(1): \"Any physician who is required to report CME credits after having been licensed to practice medicine in North Dakota for more than one year but less than two full years will be required to demonstrate completion of twenty hours of board-approved CME credits during that physician's initial CME reporting period.\"",
-    source: "N.D. Admin. Code 50-04-01-02(2), 50-04-01-04(1)",
+    note: "50-04-01-02(2): not required to meet the requirements of this chapter: \"physicians who have not renewed their licenses for the first time since being granted a regular permanent license by the board.\"",
+    source: "N.D. Admin. Code 50-04-01-02(2)",
   }, topics: [], notes: "Not specified", rollover: "No", moc: "ABMS/AOA/RCPSC cert/MOC exempt from CME", source: "N.D. Admin. Code 50-04-01 (hours in 50-04-01-01, MOC exemption in 50-04-01-02)", verified: "2026-08", sourceUrl: "https://www.ndbom.org/practitioners/physicians/current/cme.asp" },
   NE: { total: 50, cycle: 2, cat1min: 50, cat1note: "All Cat 1", topics: [
     { topic: "Opioid Prescribing", hours: 3.0, note: "3 hrs opioid prescribing (incl. 0.5 hr PDMP) biennially (controlled substance prescribers)" },

@@ -148,7 +148,8 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   // A state whose first reporting period runs from licensure (`windowFromIssue`,
   // ND) never counts CME dated before the license was issued.
   const issueStart = firstCycleRule?.applied && entry.firstCycle.windowFromIssue ? licenseIssued : null;
-  const windowStart = startUsable ? requestedStart : (issueStart || defaultStart);
+  // Never before the license was issued, even with a hand-entered cycle start.
+  const windowStart = startUsable ? (issueStart && issueStart > requestedStart ? issueStart : requestedStart) : (issueStart || defaultStart);
   const windowSource = startUsable ? "custom" : issueStart ? "issue" : "cycle";
   const cycleStartIgnored = !!requestedStart && !startUsable;
 

@@ -3,9 +3,10 @@
 //   1. Colorado: a license issued inside the current cycle cannot be a renewed
 //      term, so the prorated first-cycle figure is the requirement
 //      (C.R.S. 12-240-130.5(3)(c), "the board shall adjust proportionately").
-//   2. North Dakota: a first renewal under one year licensed owes no CME
-//      (N.D. Admin. Code 50-04-01-02(2)); one year up to two owes twenty
-//      hours (50-04-01-04(1)); the window starts at licensure.
+//   2. North Dakota: a first renewal after the permanent license owes no CME,
+//      however long it was held (N.D. Admin. Code 50-04-01-02(2)); the twenty
+//      hours of 50-04-01-04(1) bind only a physician required to report, i.e.
+//      the period after that renewal. The window starts at licensure.
 //   3. MATE Act: a one-time DEA registration item (DEA letter to registrants,
 //      MATE_Training_Letter_Final.pdf), shown once, and met by the affirmation
 //      on any registration issued or renewed on or after 2023-06-27.
@@ -59,19 +60,25 @@ test("ND: a first renewal under one year licensed owes 0, counted from the issue
   assert.ok(note && note.includes("0 hours required") && note.includes("50-04-01-02(2)") && !note.includes("50-04-01-04(1)"), note);
 });
 
-test("ND: a first renewal one year up to two years licensed owes twenty hours, total and Category 1", () => {
+test("ND: a first renewal one year up to two years licensed still owes nothing (50-04-01-02(2))", () => {
   const entries = [course(3, "2025-06-01"), course(12, "2026-04-10")];
   // Issued 2025-11-01, expires 2027-09-30: 22 months licensed.
   const comp = computeCompliance(entries, "ND", "MD", { licenseExpiration: "2027-09-30", licenseIssued: "2025-11-01" });
   assert.equal(comp.firstCycleRule.applied, true);
   assert.equal(comp.firstCycleRule.months, 22);
-  assert.equal(comp.totalRequired, 20);
-  assert.equal(comp.cat1Required, 20);
+  assert.equal(comp.totalRequired, 0);
+  assert.equal(comp.cat1Required, 0);
   assert.equal(day(comp.windowStart), "2025-11-01");
   assert.equal(comp.totalEarned, 12, "CME dated before licensure is not counted");
-  assert.equal(comp.assessmentStatus, "needs-hours");
+  assert.notEqual(comp.assessmentStatus, "needs-hours");
   const note = windowNotes(comp).find(n => n.startsWith("ND first renewal"));
-  assert.ok(note && note.includes("20 hours required") && note.includes("50-04-01-04(1)") && !note.includes("50-04-01-02(2)"), note);
+  assert.ok(note && note.includes("50-04-01-02(2)") && !note.includes("50-04-01-04(1)"), note);
+});
+
+test("ND: a hand-entered cycle start before licensure never counts CME from before the license", () => {
+  const comp = computeCompliance([course(3, "2025-06-01"), course(5, "2026-12-01")], "ND", "MD", { licenseExpiration: "2027-09-30", licenseIssued: "2026-10-15", cycleStart: "2025-09-30" });
+  assert.equal(day(comp.windowStart), "2026-10-15");
+  assert.equal(comp.totalEarned, 5);
 });
 
 test("ND: a license issued before the cycle owes the 40 hours over the full two years", () => {
@@ -140,10 +147,9 @@ test("CO: an issue date with no expiration on file keeps the full 30; the tier i
   assert.notEqual(comp.assessmentStatus, "met");
 });
 
-test("ND: the first-cycle note quotes 50-04-01-02(2) and 50-04-01-04(1) as written", () => {
+test("ND: the first-cycle note quotes 50-04-01-02(2) as written", () => {
   const note = STATE_REQS.ND.firstCycle.note;
   assert.ok(note.includes("physicians who have not renewed their licenses for the first time since being granted a regular permanent license by the board."), note);
-  assert.ok(note.includes("for more than one year but less than two full years will be required to demonstrate completion of twenty hours of board-approved CME credits during that physician's initial CME reporting period."), note);
   assert.doesNotMatch(note, /after that|thereafter/i);
 });
 
