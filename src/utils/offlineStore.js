@@ -53,6 +53,22 @@ let transactionTimeoutMs = TRANSACTION_TIMEOUT_MS;
 const TRANSACTION_BOUND_MS = 3 * 60 * 1000;
 let transactionBoundMs = TRANSACTION_BOUND_MS;
 
+// One wait shared by several calls (`wait`, from offlineWait): the load reads
+// the transcript, the archives and the file, twice, and the first screen
+// waits on all of it. Each call with a wait of its own held it for one
+// TRANSACTION_TIMEOUT_MS per call (18 seconds with all three large, 12 for a
+// device just under the wait). Measured on the monotonic clock, as the
+// timers are.
+const clock = () => (typeof globalThis.performance?.now === "function" ? globalThis.performance.now() : Date.now());
+/** A wait of `ms` (TRANSACTION_TIMEOUT_MS when undefined) from now, for the brief calls given it. */
+export function offlineWait(ms) {
+  return { until: clock() + (Number(ms) >= 0 ? Number(ms) : transactionTimeoutMs) };
+}
+/** What is left of `wait` (ms, never below 0). */
+export function offlineWaitLeft(wait) {
+  return wait ? Math.max(0, wait.until - clock()) : transactionTimeoutMs;
+}
+
 let factoryOverride;
 let dbPromise = null;
 let openDbHandle = null;           // the connection dbPromise resolved to
@@ -310,7 +326,9 @@ function begin(db, mode, body, key, tag) {
  * waits TRANSACTION_TIMEOUT_MS at most, all told, and is then told
  * OfflineStoreBusy while the transaction runs on; otherwise it waits for the
  * transaction to settle, which is at most TRANSACTION_BOUND_MS
- * (OfflineStoreStuck). `tag`: a read joins, or takes the held answer of, a
+ * (OfflineStoreStuck). `wait` (offlineWait): a brief call waits no longer
+ * than what is left of it, so the calls given one wait share it; with none
+ * left, the transaction is still begun and runs on as above. `tag`: a read joins, or takes the held answer of, a
  * read begun with the same tag only (the caller's account of what the key
  * may hold, such as another tab's write stamp); an untagged read is never
  * held for a later one. `guard` runs synchronously
@@ -318,8 +336,8 @@ function begin(db, mode, body, key, tag) {
  * { cancelled: true }). `retryOpen` gives an open that failed a second try at
  * once instead of waiting out RETRY_AFTER_MS.
  */
-async function transact(mode, body, { key = null, tag = null, guard, retryOpen = false, brief = mode === "readonly" } = {}) {
-  const limit = waitLimit(brief ? transactionTimeoutMs : Infinity);
+async function transact(mode, body, { key = null, tag = null, guard, retryOpen = false, brief = mode === "readonly", wait = null } = {}) {
+  const limit = waitLimit(brief ? Math.min(transactionTimeoutMs, wait ? offlineWaitLeft(wait) : Infinity) : Infinity);
   try {
     const held = () => {
       const done = mode === "readonly" && key ? arrived.get(key) : null;
@@ -369,11 +387,11 @@ async function transact(mode, body, { key = null, tag = null, guard, retryOpen =
  * The text stored under `key`, or null when there is none. Throws
  * OfflineStoreUnavailable when IndexedDB cannot be opened, so a caller can
  * tell "nothing stored" from "could not look", and OfflineStoreBusy when the
- * read is still running past the wait. `retryOpen`, `tag`: see transact.
+ * read is still running past the wait. `retryOpen`, `tag`, `wait`: see transact.
  */
-export async function offlineRead(key, { retryOpen = false, tag = null } = {}) {
+export async function offlineRead(key, { retryOpen = false, tag = null, wait = null } = {}) {
   if (!key) return null;
-  const { result: value } = await transact("readonly", (store) => store.get(key), { key, tag, retryOpen });
+  const { result: value } = await transact("readonly", (store) => store.get(key), { key, tag, retryOpen, wait });
   return typeof value === "string" ? value : null;
 }
 
@@ -381,14 +399,14 @@ export async function offlineRead(key, { retryOpen = false, tag = null } = {}) {
  * Store `text` under `key`. `guard`, when given, runs synchronously just
  * before the write transaction is created; returning false cancels the write
  * (resolves false). Resolves true once the transaction has committed, however
- * long that takes, or with `brief` throws OfflineStoreBusy past the wait (the
- * write goes on). Throws OfflineStoreUnavailable (OfflineStoreStuck past the
+ * long that takes, or with `brief` throws OfflineStoreBusy past the wait, or
+ * past what is left of `wait` (the write goes on). Throws OfflineStoreUnavailable (OfflineStoreStuck past the
  * bound), or the transaction's error (QuotaExceededError when the device is
  * out of space).
  */
-export async function offlineWrite(key, text, { guard, brief = false } = {}) {
+export async function offlineWrite(key, text, { guard, brief = false, wait = null } = {}) {
   if (!key || typeof text !== "string") return false;
-  const { cancelled } = await transact("readwrite", (store) => store.put(text, key), { key, guard, brief });
+  const { cancelled } = await transact("readwrite", (store) => store.put(text, key), { key, guard, brief, wait });
   return !cancelled;
 }
 
@@ -400,7 +418,7 @@ export async function offlineWrite(key, text, { guard, brief = false } = {}) {
  * cancelled it. Throws like offlineWrite; a transaction that fails changes
  * nothing.
  */
-export async function offlineUpdate(key, update, { guard, brief = false } = {}) {
+export async function offlineUpdate(key, update, { guard, brief = false, wait = null } = {}) {
   if (!key || typeof update !== "function") return false;
   const { cancelled } = await transact("readwrite", (store) => {
     const req = store.get(key);
@@ -410,7 +428,7 @@ export async function offlineUpdate(key, update, { guard, brief = false } = {}) 
       else if (typeof next === "string") store.put(next, key);
     };
     return null;
-  }, { key, guard, brief });
+  }, { key, guard, brief, wait });
   return !cancelled;
 }
 

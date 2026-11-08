@@ -4,7 +4,7 @@ import { BASE_KEYS, scopedKey, purgeForSignOut, localCopyCurrent, hydrateOffline
   deviceOnlySectionsOf, sameDeviceOnlySections, rebaseDeviceOnlySections, holdDeviceOnlyChanges, heldDeviceOnlyChanges,
   withHeldDeviceOnlyChanges, releaseHeldDeviceOnlyChanges, setBeforeDeviceOnlyTrim, writeOwnLocalCopy, rewriteLocalCopy,
   saveStopGuard, holdsDeviceOnlyChangesHere, takeReleasedHoldHere, spillOfflineText, markOfflineCopyBehind,
-  clearOfflineCopyBehind, offlineCopyBehind } from "./storageScope";
+  clearOfflineCopyBehind, offlineCopyBehind, offlineWait, offlineWaitLeft } from "./storageScope";
 import { loadDeviceKeys, EXPORT_REDACT_FIELDS, sanitizeCachedBlob, stripDeviceFields } from "../lib/supabase";
 
 const ENV_API_KEY = import.meta.env.VITE_GEMINI_API_KEY || "";
@@ -75,9 +75,24 @@ function withDefaults(parsed) {
 // sections), by the read's token: what a save of that text rewritten
 // (readToken) is based on (saveText).
 const readCopies = new WeakMap();
+// One wait for the offline copy per load, not per read: what is left of it
+// after a read, by the load's `current` (AppContext gives the id repair's
+// read and the local read the same one). The first screen waits on both
+// reads, and on the transcript, the archives and the cleaned copy's rewrite
+// with them; each with a wait of its own held it for two or three waits on
+// a slow device (ticket b1071b82 review). A read past it is "not yet", and
+// the load goes on from the cloud as it always has.
+const loadWaits = new WeakMap();
 export async function readCachedData(userId, receipt = null) {
-  const key = scopedKey(BASE_KEYS.data, userId);
   const read = receipt && typeof receipt === "object" ? receipt : {};
+  const load = typeof read.current === "function" ? read.current : null;
+  const wait = offlineWait(load && loadWaits.has(load) ? loadWaits.get(load) : undefined);
+  try { return await readCachedDataWithin(userId, read, wait); }
+  finally { if (load) loadWaits.set(load, offlineWaitLeft(wait)); }
+}
+
+async function readCachedDataWithin(userId, read, wait) {
+  const key = scopedKey(BASE_KEYS.data, userId);
   read.read = false; read.token = null;
   if (!key) return null;
   // Finish synchronous preparation for a deletion an older build honored
@@ -91,15 +106,15 @@ export async function readCachedData(userId, receipt = null) {
   // A different account's purge also changes the shared generation. Its
   // cancellation cannot make this account's unread file appear empty: keep
   // the ordinary unread barrier until a later load reads and shows it.
-  try { await hydrateOfflineStores(userId); } catch { /* the stores stay where they are */ }
+  try { await hydrateOfflineStores(userId, { wait }); } catch { /* the stores stay where they are */ }
   if (!current()) return stale();
   try {
-    const found = await readOfflineFile(userId, read);
+    const found = await readOfflineFile(userId, read, { wait });
     if (!current()) return stale();
     // That read gives a failed IndexedDB open a second try. When it opened,
     // the transcript and archives the hydration above could not read are
     // read now, before anything renders (a no-op once they all were).
-    if (read.read) { try { await hydrateOfflineStores(userId); } catch { /* next call */ } }
+    if (read.read) { try { await hydrateOfflineStores(userId, { wait }); } catch { /* next call */ } }
     if (!current()) return stale();
     if (!found) {
       storedText.delete(key);
@@ -129,9 +144,9 @@ export async function readCachedData(userId, receipt = null) {
         writeOwnLocalCopy(key, text);
       } else {
         // The stored copy itself, cleaned: written even while an earlier
-        // load's unread mark stands (readToken). Waited for no longer than a
-        // read (brief): the load is waiting on it.
-        try { await writeOfflineText(key, text, current, { readToken: read.token, brief: true }); } catch { /* unavailable */ }
+        // load's unread mark stands (readToken). Waited for no longer than is
+        // left of the load's wait (brief): the load is waiting on it.
+        try { await writeOfflineText(key, text, current, { readToken: read.token, brief: true, wait }); } catch { /* unavailable */ }
       }
     }
     if (!current()) return stale();

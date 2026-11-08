@@ -40,13 +40,21 @@ globalThis.window = globalThis.window || {};
 const cacheDir = resolve(root, `node_modules/.cache/credentialdomd-slow-device-${process.pid}`);
 mkdirSync(cacheDir, { recursive: true });
 const srcUrl = rel => pathToFileURL(resolve(root, 'src/utils', rel)).href;
-writeFileSync(join(cacheDir, 'storage.mjs'), readFileSync(resolve(root, 'src/utils/storage.js'), 'utf8')
+const storageSource = readFileSync(resolve(root, 'src/utils/storage.js'), 'utf8')
   .replace('import.meta.env.VITE_GEMINI_API_KEY || ""', '""')
   .replace('from "../constants/defaults"', `from ${JSON.stringify(srcUrl('../constants/defaults.js'))}`)
-  .replace('from "./storageScope"', `from ${JSON.stringify(srcUrl('./storageScope.js'))}`)
-  .replace('from "../lib/supabase"', `from ${JSON.stringify(srcUrl('../lib/supabase.js'))}`));
-const storage = await import(pathToFileURL(join(cacheDir, 'storage.mjs')).href);
-const scope = await import('../../src/utils/storageScope.js');
+  .replace('from "../lib/supabase"', `from ${JSON.stringify(srcUrl('../lib/supabase.js'))}`);
+// A page load: storage.js and storageScope.js as a new page has them, with
+// nothing in memory (no hydration done, no reads held by the page).
+let pages = 0;
+async function newPage() {
+  const page = pages += 1;
+  const scopeUrl = `${srcUrl('./storageScope.js')}?page=${page}`;
+  const file = join(cacheDir, `storage-${page}.mjs`);
+  writeFileSync(file, storageSource.replace('from "./storageScope"', `from ${JSON.stringify(scopeUrl)}`));
+  return { scope: await import(scopeUrl), storage: await import(pathToFileURL(file).href) };
+}
+let { scope, storage } = await newPage();
 const offlineStore = await import('../../src/utils/offlineStore.js');
 
 const BASE_WAIT = 6;     // device seconds: the wait the first screen has today
@@ -62,13 +70,23 @@ const deviceFile = (extra = {}) => ({
   ...extra,
 });
 
+const otherTabPut = (idb, key, value) => new Promise((res, rej) => {
+  const req = idb.open('credentialdomd-offline', 1);
+  req.onsuccess = () => {
+    const tx = req.result.transaction('kv', 'readwrite');
+    tx.objectStore('kv').put(value, key);
+    tx.oncomplete = res; tx.onerror = rej;
+  };
+  req.onerror = rej;
+});
+
 let accounts = 0;
 /**
  * A launch on a device whose transactions on the large file take `deviceSeconds`
  * (null: as fast as the fake), or that is `broken` ("hang": no transaction
  * settles; "error": every transaction aborts). Returns what happened.
  */
-async function launch({ deviceSeconds = null, broken = null, runFor = 400, signOutAt = null }) {
+async function launch({ deviceSeconds = null, broken = null, runFor = 400, signOutAt = null, stores = null }) {
   const U = `user_syntheticSlowDevice${accounts += 1}`;
   const key = scope.scopedKey(scope.BASE_KEYS.data, U);
   // The offline copy's database. Other databases of the origin (the invoice
@@ -84,11 +102,20 @@ async function launch({ deviceSeconds = null, broken = null, runFor = 400, signO
   scope.adoptLocalFence(U);
   // The copy an earlier session saved, on a device that answered then.
   assert.equal((await scope.writeOfflineText(key, JSON.stringify(deviceFile()), () => true)).saved, true, 'precondition: the copy is stored');
-  // This session: a fresh connection, and the device as it is now.
+  // The Assistant's transcript and archives an earlier session stored too.
+  for (const [base, chars] of Object.entries(stores || {})) {
+    await otherTabPut(idb, scope.scopedKey(scope.BASE_KEYS[base], U), JSON.stringify([{ id: `${base}-synthetic-1`, text: 's'.repeat(chars) }]));
+  }
+  // This session: a new page, a fresh connection, and the device as it is now.
+  ({ scope, storage } = await newPage());
   offlineStore.setOfflineStoreFactory(idb);
+  offlineStore.setOfflineTransactionTimeout(BASE_WAIT * SEC);
+  scope.resetStorageFullReport();
   if (deviceSeconds != null) idb.slowLargeValues = { minChars: 1_000_000, ms: deviceSeconds * SEC };
   if (broken === 'hang') idb.hangTransactions = true;
   if (broken === 'error') idb.failTransactions = true;
+  // Signed in: the stores are hydrated from here on (setActiveUserId).
+  scope.setActiveUserId(U);
   const T0 = deviceNow();
   const at = () => deviceNow() - T0;
   scope.setStorageFullReporter((message, extra, kind = 'error') => reports.push({ message, extra, kind, at: at() }));
@@ -169,8 +196,8 @@ async function launch({ deviceSeconds = null, broken = null, runFor = 400, signO
 const errors = (reports) => reports.filter(r => r.kind === 'error');
 const stored = (idb, key) => { const v = idb.dump().get(key); return typeof v === 'string' ? JSON.parse(v) : null; };
 
-async function slowButWorking(deviceSeconds) {
-  const run = await launch({ deviceSeconds, runFor: 400 });
+async function slowButWorking(deviceSeconds, { stores = null } = {}) {
+  const run = await launch({ deviceSeconds, runFor: 400, stores });
   await Promise.all(run.saves);
   assert.equal(scope.offlineCopyUnread(run.U), false, 'the copy was read this session');
   assert.deepEqual(run.screen().identityVault, IDENTITY, 'Protected Identity came from the device copy');
@@ -179,6 +206,9 @@ async function slowButWorking(deviceSeconds) {
   assert.equal(copy?.settings?.edits, run.edits(), 'the latest change is saved');
   assert.deepEqual(copy.identityVault, IDENTITY, 'and the saves kept Protected Identity');
   assert.deepEqual(errors(run.reports), [], 'a slow device is not reported as broken');
+  for (const base of Object.keys(stores || {})) {
+    assert.equal(JSON.parse(run.idb.dump().get(scope.scopedKey(scope.BASE_KEYS[base], run.U)))?.[0]?.id, `${base}-synthetic-1`, `the stored ${base} is kept`);
+  }
   for (const wait of run.launchWaits) assert.ok(wait <= BASE_WAIT + 1, `the first screen waited ${wait.toFixed(1)} s for the copy (budget ${BASE_WAIT} s)`);
   assert.ok(run.launchWaits.reduce((a, b) => a + b, 0) <= BASE_WAIT + 1, 'the two reads of the first load share one wait');
 }
@@ -189,6 +219,28 @@ test('(a)(e) 20 seconds a transaction: the copy loads, saves land, nothing is re
 
 test('(b)(e) 60 seconds a transaction: the same', async () => {
   await slowButWorking(60);
+});
+
+// Review: the load's two reads each had a wait of their own, so a device
+// just under the wait (or a store that errors quickly) held the first screen
+// for two of them, about 12 seconds. One wait now covers the whole load.
+test('(e) 5 seconds a transaction, just under the wait: the two reads of the first load still share one wait', async () => {
+  await slowButWorking(5);
+});
+
+test('(d)(e) a store whose transactions error after 3 seconds: one report, and one wait for the first screen', async () => {
+  const run = await launch({ deviceSeconds: 3, broken: 'error', runFor: 200 });
+  assert.ok(run.launchWaits.reduce((a, b) => a + b, 0) <= BASE_WAIT + 1, `the first screen waited ${run.launchWaits.map(w => w.toFixed(1))} s for the copy`);
+  const failed = errors(run.reports);
+  assert.equal(failed.length, 1, `one report (${JSON.stringify(failed)})`);
+  assert.equal(failed[0].message, 'Offline copy not saved: storage_unavailable');
+});
+
+// Review: the transcript and the archives were each read with a wait of their
+// own before the file, so with all three large the first screen waited 18
+// seconds (12 on main, whose lockout answered the later reads at once).
+test('(a)(e) a large transcript and archives besides the file: the first screen still waits no longer than today', async () => {
+  await slowButWorking(20, { stores: { chat: 1_500_000, archives: 1_500_000 } });
 });
 
 test('(c)(e) a store whose transactions never settle is reported once, at the three minute bound, never earlier', async () => {
@@ -276,15 +328,6 @@ test('two reads of a key made in the same tick share one transaction', async () 
 // Assistant's re-read of the archives, it set this tab's memory back to the
 // older archives, and the next write put them over the conversation the other
 // tab had archived.
-const otherTabPut = (idb, key, value) => new Promise((res, rej) => {
-  const req = idb.open('credentialdomd-offline', 1);
-  req.onsuccess = () => {
-    const tx = req.result.transaction('kv', 'readwrite');
-    tx.objectStore('kv').put(value, key);
-    tx.oncomplete = res; tx.onerror = rej;
-  };
-  req.onerror = rej;
-});
 
 test('a late read is held only for a tagged read, and not past the bound', async () => {
   const idb = createMemoryIndexedDB();

@@ -21,7 +21,9 @@ import { purgeRecovery } from "./syncRecovery.js";
 import { clearHealthRecordDraft } from "./healthRecordDraft.js";
 import { changesBetween } from "./heldChanges.js";
 import { rebaseLocalChanges } from "./loadRebase.js";
-import { offlineRead, offlineWrite, offlineUpdate, offlineRemove, offlineStoreSupported, isQuotaError, OfflineStoreUnavailable, OfflineStoreBusy, OfflineStoreStuck, offlineStoreState, setOfflineLateListener, forgetOfflineRead, offlineRunning, offlineIdle } from "./offlineStore.js";
+import { offlineRead, offlineWrite, offlineUpdate, offlineRemove, offlineStoreSupported, isQuotaError, OfflineStoreUnavailable, OfflineStoreBusy, OfflineStoreStuck, offlineStoreState, setOfflineLateListener, forgetOfflineRead, offlineRunning, offlineIdle, offlineWait, offlineWaitLeft } from "./offlineStore.js";
+// The load's one wait for the offline copy (storage.js readCachedData).
+export { offlineWait, offlineWaitLeft };
 
 export const BASE_KEYS = {
   data: STORAGE_KEY,                       // the whole file (mirror of the cloud)
@@ -1368,9 +1370,10 @@ function readTag(key) {
  * the text, or null when there is none. Throws OfflineStoreUnavailable when
  * IndexedDB could not be read and may hold a copy of the account's (it was
  * written there before): "could not look" is never "nothing there".
- * `retryOpen` gives an open that failed a second try at once.
+ * `retryOpen` gives an open that failed a second try at once. `wait`
+ * (offlineStore.js offlineWait): the read waits no longer than is left of it.
  */
-export async function readOfflineCopy(key, { retryOpen = false } = {}) {
+export async function readOfflineCopy(key, { retryOpen = false, wait = null } = {}) {
   if (!key) return null;
   const owner = keyOwner(key);
   const owed = owner ? await settlePendingPurge(owner) : null;
@@ -1382,7 +1385,7 @@ export async function readOfflineCopy(key, { retryOpen = false } = {}) {
   // for two open timeouts).
   if (owner && owed == null && !mayHaveOfflineCopy(owner) && !hasLocalLargeCopy(owner)) return null;
   let text;
-  try { text = await offlineRead(key, { retryOpen, tag: readTag(key) }); }
+  try { text = await offlineRead(key, { retryOpen, tag: readTag(key), wait }); }
   catch (error) {
     // A browser with no IndexedDB at all never stored anything there.
     if (!owner || !offlineStoreSupported() || !mayHaveOfflineCopy(owner)) return null;
@@ -1401,7 +1404,7 @@ export async function readOfflineCopy(key, { retryOpen = false } = {}) {
  * localStorage first, by the rule above. Throws OfflineStoreUnavailable when
  * localStorage has none and IndexedDB could not be read (readOfflineCopy).
  */
-export async function readOfflineText(key, { retryOpen = false } = {}) {
+export async function readOfflineText(key, { retryOpen = false, wait = null } = {}) {
   if (!key) return null;
   // A purge still owed is finished whenever it can be, even when localStorage
   // answers this read: the copies it owes stay out of IndexedDB no longer
@@ -1415,12 +1418,12 @@ export async function readOfflineText(key, { retryOpen = false } = {}) {
     // IndexedDB holds. When IndexedDB cannot be read, this cannot be told,
     // and the read says it could not look.
     if (owner && !ownLocalCopy(key, local) && offlineStoreSupported() && mayHaveOfflineCopy(owner)) {
-      const stored = await readOfflineCopy(key, { retryOpen });
+      const stored = await readOfflineCopy(key, { retryOpen, wait });
       if (stored != null && stored !== local) return { text: mergeUntrustedLocal(key, stored, local), where: "local" };
     }
     return { text: local, where: "local" };
   }
-  const text = await readOfflineCopy(key, { retryOpen });
+  const text = await readOfflineCopy(key, { retryOpen, wait });
   return text != null ? { text, where: "offline" } : null;
 }
 
@@ -1441,9 +1444,9 @@ export async function readOfflineText(key, { retryOpen = false } = {}) {
  * only copy while that load waited on the cloud. `receipt` (an object) is
  * given `read` (whether this read got through) and, when it did, `token`,
  * which markOfflineCopyRead and a write of the text just read
- * (writeOfflineText `readToken`) accept.
+ * (writeOfflineText `readToken`) accept. `wait`: see readOfflineCopy.
  */
-export async function readOfflineFile(userId, receipt = null) {
+export async function readOfflineFile(userId, receipt = null, { wait = null } = {}) {
   const key = scopedKey(BASE_KEYS.data, userId);
   if (receipt) { receipt.read = false; receipt.token = null; receipt.stamp = null; }
   if (!key) return null;
@@ -1459,7 +1462,7 @@ export async function readOfflineFile(userId, receipt = null) {
   if (offlineWriteStamp(userId) == null && mayHaveOfflineCopy(userId)) bumpWriteStamp(userId);
   const stamp = offlineWriteStamp(userId);
   try {
-    const found = await readOfflineText(key, { retryOpen: true });
+    const found = await readOfflineText(key, { retryOpen: true, wait });
     // A purge while this read was pending must not return old bytes.
     if (!current()) { markOfflineCopyUnread(userId, receipt); return null; }
     if (receipt && purgeEpoch(userId) === epoch) { receipt.read = true; receipt.token = { key, epoch }; receipt.stamp = stamp; }
@@ -1661,8 +1664,8 @@ async function putOffline(key, text, guard, how = {}) {
         how.merged = true;
         if (!moving && (!latest || latest()) && supersedeLocalCopy(key, final)) how.localWritten = final;
         return final;
-      }, { guard: clear, brief: !!how.brief });
-    } else ran = await offlineWrite(key, text, { guard: clear, brief: !!how.brief });
+      }, { guard: clear, brief: !!how.brief, wait: how.wait });
+    } else ran = await offlineWrite(key, text, { guard: clear, brief: !!how.brief, wait: how.wait });
     if (ran) return "saved";
     return unmarked ? "indexeddb_unmarked" : "stopped";
   } catch (error) {
@@ -1693,7 +1696,7 @@ async function putOffline(key, text, guard, how = {}) {
  * step, it is removed and the record written in the room it freed. A record
  * that still does not fit puts the copy back.
  */
-export async function moveToOfflineStore(key, guard) {
+export async function moveToOfflineStore(key, guard, { wait = null } = {}) {
   const raw = lsText(key);
   if (raw == null) return "none";
   const owner = keyOwner(key);
@@ -1707,18 +1710,19 @@ export async function moveToOfflineStore(key, guard) {
   let text = raw;
   if (!ownLocalCopy(key, raw) && owner && offlineStoreSupported() && mayHaveOfflineCopy(owner)) {
     let stored;
-    try { stored = await readOfflineCopy(key); } catch { return "kept"; }
+    try { stored = await readOfflineCopy(key, { wait }); } catch { return "kept"; }
     if (stored != null && stored !== raw) text = mergeUntrustedLocal(key, stored, raw);
   }
-  // Run by the load before anything is shown: waits no longer than a read.
-  const how = { generation, moving: true, brief: true };
+  // Run by the load before anything is shown: waits no longer than a read,
+  // or than is left of the load's `wait`.
+  const how = { generation, moving: true, brief: true, wait };
   const put = await putOffline(key, text, () => unchanged() && (!guard || guard()), how);
   if (put !== "saved") {
     if (put === "indexeddb_quota") reportStorageRefusal({ store: key.slice(0, key.indexOf(":")), reason: "indexeddb_quota_on_move", chars: raw.length });
     return "kept";
   }
   let back;
-  try { back = await offlineRead(key); } catch { return "kept"; }
+  try { back = await offlineRead(key, { wait }); } catch { return "kept"; }
   if (back !== text) return "kept";
   // Overtaken since: the localStorage copy is not this move's to remove.
   // While it is there it still stands in for a missing home record.
@@ -1782,7 +1786,7 @@ async function writeOfflineTextNow(key, text, guard, seq, generation, how = {}) 
     const pending = !failedReads.has(key) || offlineRunning(key);
     return { saved: false, stopped: false, refused: pending ? ["indexeddb_unread", "indexeddb_pending"] : ["indexeddb_unread"], chars };
   }
-  const put_how = { generation, latest, merge: how.merge, knownStamp: how.knownStamp, mergeAlways: how.mergeAlways, brief: !!how.brief };
+  const put_how = { generation, latest, merge: how.merge, knownStamp: how.knownStamp, mergeAlways: how.mergeAlways, brief: !!how.brief, wait: how.wait };
   const put = await putOffline(key, text, guard, put_how);
   // A brief write (a move, the stored copy rewritten by a load) still running
   // past the wait: it lands or fails on its own, and nothing is put in
@@ -1977,6 +1981,9 @@ function storeMirrored(key, value, userId) {
   }, () => {});
 }
 
+// The wait each hydration's reads are given, by its promise (hydrateOfflineStores).
+const hydrateWaits = new WeakMap();
+
 /**
  * Prepare this account's large stores for the session: move each localStorage
  * copy into IndexedDB (the offline file, the transcript, the archives), and
@@ -1985,13 +1992,22 @@ function storeMirrored(key, value, userId) {
  * the Assistant never mounts over an empty transcript and writes it back. Once
  * per account per tab, when every store was read; a store that could not be
  * read is left out of memory (unreadKeys) and the next call tries it again. A
- * purge of the account resets it.
+ * purge of the account resets it. `wait` (offlineStore.js offlineWait): the
+ * load's, so the reads here share the one wait the first screen has with the
+ * read of the file after them. Given to a hydration already running (begun
+ * when the account became known, setActiveUserId), it holds for the reads
+ * that hydration has yet to begin.
  */
-export function hydrateOfflineStores(userId) {
+export function hydrateOfflineStores(userId, { wait = null } = {}) {
   if (!userId) return Promise.resolve();
   syncMemoryToFence(userId);
   const existing = hydrated.get(userId);
-  if (existing) return existing;
+  if (existing) {
+    const limits = hydrateWaits.get(existing);
+    if (limits && wait && (!limits.wait || wait.until < limits.wait.until)) limits.wait = wait;
+    return existing;
+  }
+  const limits = { wait };
   const epoch = purgeEpoch(userId);
   const fence = localFence(userId) ?? null;
   // Purged while this ran, here (the epoch) or in another tab by a deletion
@@ -2000,16 +2016,16 @@ export function hydrateOfflineStores(userId) {
   const run = (async () => {
     let complete = true;
     for (const base of [BASE_KEYS.data, BASE_KEYS.recordAcknowledgements]) {
-      await moveToOfflineStore(scopedKey(base, userId), localWriteGuard(userId, { adopted: false }));
+      await moveToOfflineStore(scopedKey(base, userId), localWriteGuard(userId, { adopted: false }), limits);
     }
     for (const base of MIRRORED_BASES) {
       const key = scopedKey(base, userId);
       if (mirror.has(key)) continue;
       // This session keeps its own copy apart from a stored one it began without.
       if (sessionOnly.has(key) && !unreadKeys.has(key)) continue;
-      await moveToOfflineStore(key, localWriteGuard(userId, { adopted: false }));
+      await moveToOfflineStore(key, localWriteGuard(userId, { adopted: false }), limits);
       let found;
-      try { found = await readOfflineText(key); }
+      try { found = await readOfflineText(key, { wait: limits.wait }); }
       catch {
         if (purged()) return false;
         unreadKeys.add(key);
@@ -2043,6 +2059,7 @@ export function hydrateOfflineStores(userId) {
     return complete;
   })();
   hydrated.set(userId, run);
+  hydrateWaits.set(run, limits);
   const retryNextTime = () => { if (hydrated.get(userId) === run) hydrated.delete(userId); };
   run.then((complete) => { if (!complete) retryNextTime(); }, retryNextTime);
   return run;
