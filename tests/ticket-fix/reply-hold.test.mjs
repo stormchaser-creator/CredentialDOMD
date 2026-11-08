@@ -833,6 +833,11 @@ test('"thanks" on a ticket already answered as done sends no second "done" reply
     const again = await finishRun(db.query, state.dir, context, result({ done: true }), { stage3: stage3(DONE), codeOutcome: 'none', requireStructured: true });
     assert.equal(again.kind, 'already_answered');
     assert.equal(db.statements.filter(x => x.startsWith('DO $ticket_broker$')).length, 1, 'one "done" reply');
+    // And the same "thanks" does not come back every hour.
+    assert.equal(record(state.dir).continuation.seen_input_at, context.input_watermark);
+    const queue = await collectQueue(db.query, state.dir, { now: Date.now() + HOUR });
+    assert.ok(!queue.items.some(i => i.id === T), 'the queue skips it until a newer message');
+    assert.ok(db.statements.some(x => x.includes(`AND NOT (t.id='${T}'::uuid AND NOT EXISTS`)));
   } finally { state.cleanup(); }
 });
 test('a leftover note is closed by hand with a one line note, merged across completions, and leaves the attention list', async () => {
@@ -846,5 +851,16 @@ test('a leftover note is closed by hand with a one line note, merged across comp
     assert.equal(closed.leftover_follow_ups, undefined);
     assert.ok(closed.closed_follow_ups.some(f => f.work === 'Synthetic: a bug next to the fix'));
     assert.deepEqual((await writeAttention(async () => [], state.dir, { parked: [], stuck: [], waiting_owner: [] })).leftover, []);
+  });
+});
+test('a run cannot tick the host\'s attachment work: an unread file still holds the reply', async () => {
+  await answeredTicket(async ({ db, state, due }) => {
+    const WORK = 'Retrieve and review attachment att-1 (tickets/x/shot.png)';
+    const unread = () => { const x = stage3(DONE); x.final.follow_up = [{ work: WORK, owner: 'support_worker', next_action: 'The next run downloads it again' }]; return x; };
+    await finishRun(db.query, state.dir, await due(), result({ done: true }), { stage3: unread(), codeOutcome: 'none', requireStructured: true });
+    const ticked = { ...result({ done: true }), assessment: { ...result({ done: true }).assessment, completed_follow_up: [{ work: WORK, verification: 'Synthetic: claims it read it.' }] } };
+    const status = await finishRun(db.query, state.dir, await due(), ticked, { stage3: unread(), codeOutcome: 'none', requireStructured: true });
+    assert.equal(status.kind, 'continuation_saved');
+    assert.equal(db.statements.filter(x => x.startsWith('DO $ticket_broker$')).length, 0, 'no "done" while the file is unread');
   });
 });

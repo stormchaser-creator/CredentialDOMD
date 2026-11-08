@@ -7,7 +7,7 @@ import { randomUUID, createHmac, timingSafeEqual } from 'node:crypto';
 import { checkFixedRules, customerReplyText, ReplyRuleError, ruleNames, sentences, questionReportsResult } from './ticket-fix/claims.mjs';
 import { prepareAgentReply, prepareRenderedReply, readVerificationKey, signPreparedReply, gitRunner, filesCitedIn, ensurePrivateDir, readOnly as readOnlySQL,
   MIGRATION, emailStatus, RUN_COMMITTER } from './ticket-fix/reply.mjs';
-import { checklistErrors, isSupportReply, isCustomerMessage, hostItemWork, replyHold, isCompletion, askItems, stillAsked, confirmsAsk, askedAt, readChecklist, RESOLUTION_KINDS, resolutionKind, DATA_FIX_FILE, AGENT_REPLY_MAX, REMAINING_MAX, OBSERVED_MAX, MAX_ITEMS } from './ticket-fix/checklist.mjs';
+import { checklistErrors, isSupportReply, isCustomerMessage, hostItemWork, replyHold, isCompletion, askItems, stillAsked, confirmsAsk, askedAt, readChecklist, RESOLUTION_KINDS, resolutionKind, isAttachmentWork, DATA_FIX_FILE, AGENT_REPLY_MAX, REMAINING_MAX, OBSERVED_MAX, MAX_ITEMS } from './ticket-fix/checklist.mjs';
 import { isMain } from './ticket-fix/is-main.mjs';
 
 export const APPROVED = '(public.is_admin(t.user_id) OR t.agent_approved_at IS NOT NULL)';
@@ -515,6 +515,9 @@ export async function collectQueue(query, directory, { includeArchived = false, 
   // while that work is live: a suppressed or closed case must not keep a
   // reopened ticket out of the queue for good, nor count toward the bound.
   const held = records.filter(r => r.continuation?.held && HELD_LIVE.includes(r.continuation.state)).map(r => ({ id: r.target_id, after: r.continuation.held.input_at ?? null }));
+  // A "thanks" on a ticket already answered as done (finishRun
+  // already_answered): out of the queue until a newer message arrives.
+  for (const r of records) if (r.continuation?.state === 'complete' && typeof r.continuation.seen_input_at === 'string') held.push({ id: r.target_id, after: r.continuation.seen_input_at });
   if (held.length > 500) throw Error('Held reply queue exceeds bound; operator review required');
   const incoming = await query(queueSQL(includeArchived, parked, failing, held));
   if (incoming.length > 2 || incoming.some(t => !UUID.test(t.id || '') || typeof t.from_admin !== 'boolean')) throw Error('Malformed approved queue');
@@ -880,7 +883,12 @@ function outstandingWork(previous, result, stage3) {
   // A run cannot tick off the host's own work for an item the host still
   // has open ("Finish AC-1: the host has not confirmed it done"): 53890221
   // closed all three that way and went quiet with every item partial.
-  const hostOpen = new Set((Array.isArray(stage3?.final?.items) ? stage3.final.items : []).filter(f => f.state !== 'done').flatMap(f => hostItemWork(f.id)).map(questionKey));
+  // Nor the host's attachment work it lists again on this run (the file is
+  // still unread): only the host no longer listing it, or closeFollowUp,
+  // removes it (a run ticking it bypassed the hold or looped: review of
+  // 2026-11-07).
+  const hostOpen = new Set([...(Array.isArray(stage3?.final?.items) ? stage3.final.items : []).filter(f => f.state !== 'done').flatMap(f => hostItemWork(f.id)),
+    ...(Array.isArray(stage3?.final?.follow_up) ? stage3.final.follow_up : []).map(f => f?.work).filter(isAttachmentWork)].map(questionKey));
   // closedByRun: what this run's completions really closed (the attempts
   // count resets only on that, or a run ticking host work loops for ever).
   let closedByRun = 0;
@@ -932,8 +940,9 @@ export async function saveReview(directory, context, given, sourceRevision, { no
   // Merged with any still open from an earlier completion (by work), never
   // replaced; --close-leftover closes one.
   const leftoverMap = new Map((Array.isArray(previous?.leftover_follow_ups) ? previous.leftover_follow_ups : []).map(f => [questionKey(f.work), f]));
-  if (completed) for (const f of outstanding.values()) if (f.work !== HELD_REPLY_WORK) leftoverMap.set(questionKey(f.work), f);
-  const leftovers = [...leftoverMap.values()].slice(0, 30);
+  if (completed) for (const f of outstanding.values()) if (f.work !== HELD_REPLY_WORK) { leftoverMap.delete(questionKey(f.work)); leftoverMap.set(questionKey(f.work), f); }
+  // The newest 30 (an unclosed pile never hides a new note).
+  const leftovers = [...leftoverMap.values()].slice(-30);
   if (completed) outstanding.clear();
   const pendingWork = [...outstanding.values()];
   const workerPending = pendingWork.some(f => f.owner === 'support_worker');
@@ -1129,6 +1138,12 @@ export async function finishRun(query, directory, context, result, { sourceRevis
     // second "done" reply (review of 2026-11-07).
     if (sameChecklist(previous?.completion)) {
       const record = await saveReview(directory, context, result, sourceRevision, { ...options, completed: { verification_id: previous.completion.verification_id } });
+      // Remember the message it saw, so the queue does not bring the same
+      // "thanks" back every hour (collectQueue).
+      if (typeof context.input_watermark === 'string') {
+        record.continuation.seen_input_at = context.input_watermark;
+        await writePrivate(path.join(directory, `${id(context.target_id)}.json`), JSON.stringify(record, null, 2));
+      }
       return { kind: 'already_answered', continuation_state: record.continuation.state };
     }
     return sendCompletion(prepared, 'reply');
