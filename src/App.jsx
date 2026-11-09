@@ -48,7 +48,7 @@ import OfflineUnavailable from "./components/shared/OfflineUnavailable.jsx";
 import AccountRecordsLoadError from "./components/shared/AccountRecordsLoadError.jsx";
 import LimitedLaunchMembership from "./components/pages/LimitedLaunchMembership.jsx";
 import { useSlowLoad, SLOW_LOAD_TEXT } from "./hooks/useSlowLoad.js";
-import { reportUnlessLeaving } from "./lib/errorReport.js";
+import { reportSlowLoad } from "./lib/errorReport.js";
 import { DataExport } from "./components/features";
 import { DocumentsSection } from "./components/features";
 import { HealthRecordsSection } from "./components/features";
@@ -320,7 +320,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   // default from the cases themselves (defaultCaseLogYear), below.
   const [caseLogYearPick, setCaseLogYear] = useState(null);
   const [caseDraft, setCaseDraft] = useState(null);
-  const { data, loaded, appRulesLaunchFailed, retryAppRules, recordsLoadIssue, theme: T, isDark, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, updateSettings, deleteItem, toggleFavorite, user, authChecked, offlineMode, signOut, isPro, plan, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, credentialReadOnly, manage, userIdRef } = useApp();
+  const { data, loaded, appRulesLaunchFailed, retryAppRules, recordsLoadIssue, identityWaiting, loadedFrom, theme: T, isDark, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, updateSettings, deleteItem, toggleFavorite, user, authChecked, offlineMode, signOut, isPro, plan, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, credentialReadOnly, manage, userIdRef } = useApp();
   const phoneContentRef = useRef(null);
   // Each section opens at its heading. Keep this scroller mounted so saves,
   // background refreshes and modal drafts retain their current position.
@@ -482,8 +482,12 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   }, [deepLink]);
   // "Loading..." that lasts: Reload is offered, and the wait is reported once
   // (hooks/useSlowLoad.js). Kept above the loading screens: hooks cannot be conditional.
+  // A wait reported slow counts as recovered only when the account loaded:
+  // AppContext also sets loaded on an error screen and on the read-only
+  // device copy it opens when the cloud read fails (ticket ebf25bf0).
+  const loadEndedBadly = !!(recordsLoadIssue || limitedLaunch?.initializationError || identityWaiting || (loadedFrom === "local" && !offlineMode));
   const loadSlow = useSlowLoad(!authChecked ? "sign-in" : !loaded ? "account" : null,
-    { report: (message, extra) => reportUnlessLeaving(message, "error", extra) });
+    { report: reportSlowLoad, failed: loadEndedBadly });
   const [shareItem, setShareItem] = useState(null);
   const [shareSection, setShareSection] = useState(null);
   const [searchQ, setSearchQ] = useState("");

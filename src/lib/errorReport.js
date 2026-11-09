@@ -138,10 +138,10 @@ function watchLifecycle() {
   if (lifecycleWatched || typeof window === "undefined" || typeof window.addEventListener !== "function") return;
   lifecycleWatched = true;
   window.addEventListener("beforeunload", () => { leavingSince = Date.now(); });
-  window.addEventListener("pagehide", () => { pageHidden = true; pageHides += 1; sendHeldChunkFailures(); });
+  window.addEventListener("pagehide", () => { pageHidden = true; pageHides += 1; sendHeldChunkFailures(); sendHeldSlowLoadReport(); });
   window.addEventListener("pageshow", () => { pageHidden = false; leavingSince = null; });
   if (typeof document !== "undefined" && typeof document.addEventListener === "function") {
-    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") sendHeldChunkFailures(); });
+    document.addEventListener("visibilitychange", () => { if (document.visibilityState === "hidden") { sendHeldChunkFailures(); sendHeldSlowLoadReport(); } });
   }
 }
 
@@ -195,6 +195,69 @@ export function resolveChunkFailure(outcome) {
       sendHeldChunkFailures();
     }
   } catch { /* reporting must never throw */ }
+}
+
+// AC-1 (ticket ebf25bf0, 2026-11-08): hooks/useSlowLoad.js reports a load
+// still waiting at its own 15 s mark, but the account load's own retries can
+// still be in flight that long (see that hook's AC-2 comment, up to 34 s).
+// Held the same way as a lost chunk above: holdSlowLoadReport
+// sends nothing yet; the hook's own recovery call (the wait it reported
+// ended) resolves it "fixed", which drops the held report and sends an info
+// event instead, so a load that was mid-retry is never filed as unfixed. A
+// wait that goes on past the hold, or a page left while it waits, is sent as
+// it was (sendBeacon outlives the page).
+// 45 s more: past the profile lookup's own budget, and the initializeProfile
+// pass and slow record reads before it, so a load still waiting a minute in
+// is the one reported.
+const SLOW_LOAD_HOLD_MS = 45000;
+let heldSlowLoadReport = null;
+let slowLoadTimer = null;
+
+function sendHeldSlowLoadReport() {
+  try {
+    clearTimeout(slowLoadTimer);
+    slowLoadTimer = null;
+    const held = heldSlowLoadReport;
+    heldSlowLoadReport = null;
+    if (held) reportError(held[0], held[1], held[2]);
+  } catch { /* reporting must never throw */ }
+}
+
+function holdSlowLoadReport(err, kind, extra) {
+  heldSlowLoadReport = [err, kind, extra];
+  clearTimeout(slowLoadTimer);
+  slowLoadTimer = setTimeout(sendHeldSlowLoadReport, SLOW_LOAD_HOLD_MS);
+}
+
+/**
+ * What became of the slow account load reported since the last call: "fixed"
+ * (the wait it reported ended) drops the held report and records an info
+ * event; "failed" sends it now. A no-op when nothing is held.
+ */
+export function resolveSlowLoadReport(outcome) {
+  try {
+    if (!heldSlowLoadReport) return;
+    if (outcome === "fixed") {
+      clearTimeout(slowLoadTimer);
+      slowLoadTimer = null;
+      heldSlowLoadReport = null;
+      reportError("Fixed by itself: the account load finished after being reported slow.", "info");
+    } else {
+      sendHeldSlowLoadReport();
+    }
+  } catch { /* reporting must never throw */ }
+}
+
+/**
+ * Wiring for hooks/useSlowLoad.js's `report` callback: a "load_slow" event
+ * is held (see above); "load_recovered" (the account loaded) resolves the
+ * hold as fixed; any other end ("load_failed": an error screen or a read-only
+ * device copy) sends it.
+ */
+export function reportSlowLoad(message, extra) {
+  const event = extra && extra.event;
+  if (event === "load_slow") holdSlowLoadReport(message, "error", extra);
+  else resolveSlowLoadReport(event === "load_recovered" ? "fixed" : "failed");
 }
 
 /** True while the page is being left: after pagehide, or within a moment of beforeunload. */
@@ -378,4 +441,4 @@ export class ErrorBoundary extends Component {
   }
 }
 
-export default { install, reportError, reportUnlessLeaving, resolveChunkFailure, pageLeaving, setErrorUser, ErrorBoundary };
+export default { install, reportError, reportUnlessLeaving, resolveChunkFailure, reportSlowLoad, resolveSlowLoadReport, pageLeaving, setErrorUser, ErrorBoundary };
