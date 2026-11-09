@@ -2763,6 +2763,23 @@ function lateLetterAsks(
   return again.asks.filter((a: { from?: string }) => a.from === "attachment").map((a: { quote: string }) => a.quote);
 }
 
+/**
+ * The files a rules delivery never read: not before the reading and not when
+ * filing scanned them either (the scan failed or ran out of time). Nobody
+ * knows what they ask, so the reply says so instead of letting a thin note
+ * stand as a plain delivery (ticket cc9830e4). Empty for a model reading.
+ */
+function stillUnread(files: Downloaded[], unreadBefore: Set<Downloaded>, opts: { prescanned?: Map<Downloaded, ScanOutcome>; reading?: Reading }): string[] {
+  if (opts.reading?.method !== "rules") return [];
+  return files.filter((f) => unreadBefore.has(f) && !opts.prescanned?.get(f)?.scan).map((f) => plainText(f.filename, 120) || "an attachment");
+}
+
+/** The filing reply's line for stillUnread. */
+function unreadNote(names: string[]): string {
+  const list = names.slice(0, 5).join(", ");
+  return `${list} could not be read, so whether ${names.length === 1 ? "it asks" : "they ask"} you for something is not known; open ${names.length === 1 ? "it" : "them"} to see.`;
+}
+
 /** The filing reply's line for lateLetterAsks: the physician reads the letter. */
 function lateAsksNote(asks: string[]): string {
   const list = asks.slice(0, 5).map((a) => `"${plainText(a, 120)}"`).join(", ");
@@ -2788,6 +2805,8 @@ async function deliverDocs(
   const notes: string[] = [...notKept];
   const asked = lateLetterAsks(files, unreadBefore, opts);
   if (asked.length) notes.push(lateAsksNote(asked));
+  const unread = stillUnread(files, unreadBefore, opts);
+  if (unread.length) notes.push(unreadNote(unread));
   if (skipped > 0) notes.push(`${skipped} attachment${skipped === 1 ? " was" : "s were"} skipped for size (10 MB per file, 20 MB per email) or count (10 per email).`);
   if (failed > 0) notes.push(`${failed} file${failed === 1 ? "" : "s"} could not be saved; forward the email again.`);
   const unverified = unverifiedNote(results, from);

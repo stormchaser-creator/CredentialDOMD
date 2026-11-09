@@ -557,10 +557,23 @@ test("an unread letter under a thin note is filed, and the reply names what it a
   assert.ok(!reply.text.includes(EM_DASH));
 });
 
+test("an unread letter under a thin note whose scan fails is filed, and the reply says it was not read", async () => {
+  harness.geminiReply = () => ({ status: 500, text: "unavailable" });
+  const r = await send({ subject: "Fwd: documentation", text: FYI_TEXT, attachments: [scanOne()] });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.intent, "delivery");
+  assert.equal(toOthers().length, 0, "nobody but the physician hears of it");
+  const [reply] = toPhysician();
+  assert.equal(toPhysician().length, 1);
+  assert.ok(reply.text.includes("scan001.pdf could not be read, so whether it asks you for something is not known"), reply.text);
+  assert.ok(!reply.text.includes(EM_DASH));
+});
+
 test("the same thin note over a credential says nothing of an ask", async () => {
   harness.geminiReply = () => PLAN_SCAN;
   const r = await send({ subject: "Fwd: documentation", text: FYI_TEXT, attachments: [scanOne()] });
   assert.equal(r.body.intent, "delivery");
   const [reply] = toPhysician();
   assert.ok(!reply.text.includes("may be asking you"), reply.text);
+  assert.ok(!reply.text.includes("could not be read"), reply.text);
 });
