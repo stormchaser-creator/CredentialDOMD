@@ -1436,7 +1436,9 @@ function mayFileFrom(auth: AuthEvidence, from: string): boolean {
  * is still scanned, and one that reads as a patient record is still removed,
  * but nothing is written to a record, a category or a document's link.
  * prescanned: results already in hand, by file (a "both" email reads an
- * attachment before deciding whether it is the physician's to file).
+ * attachment before deciding whether it is the physician's to file). A file
+ * scanned here for the first time is added to it, so the caller can read
+ * what a late scan found (deliverDocs, lateLetterAsks).
  */
 async function fileDocuments(
   profile: MatchedProfile, items: StoredItem[], ctx: ScanContext,
@@ -1445,6 +1447,7 @@ async function fileDocuments(
   const scans = await scanFiles(profile.id, items.map((it) => ({
     file: it.file, skip: it.existing?.linked_to ? "already filed" : "", done: prescanned?.get(it.file),
   })), ctx);
+  if (prescanned) items.forEach((it, i) => { if (scans[i]?.scan && !prescanned.has(it.file)) prescanned.set(it.file, scans[i]); });
   const results: FilingResult[] = [];
   for (let i = 0; i < items.length; i++) {
     const it = items[i];
@@ -2477,7 +2480,10 @@ https://credentialdomd.com`);
   }
   if (intent === "delivery") {
     return await deliverDocs(ledgerId, profile, from, files, skipped, [...refusedNotes, notKeptNote(listed)].filter(Boolean), replySubject, replyHeaders, mayFile,
-      { ctx, prescanned, roles, reading });
+      { ctx, prescanned, roles, reading, rulesInput: {
+        subject: requestSubject ?? "", body: parsed.body_text, attachmentNames: keepable.map((a) => safeFilename(a.filename, "")),
+        attachmentCount: keepable.length, forwarded: parsed.found,
+      } });
   }
 
   // "mixed": only what is plainly the physician's own is filed like a
@@ -2727,6 +2733,42 @@ https://credentialdomd.com`);
   });
 }
 
+type LateRulesInput = { subject: string; body: string; attachmentNames: string[]; attachmentCount: number; forwarded: boolean };
+
+/**
+ * The asks a rules delivery missed. When the model was not admitted (or a
+ * scan failed) the rules read the email before its attachments were read,
+ * so a thin note ("FYI") over a letter that asks for something read as a
+ * plain delivery. Filing reads those files afterwards; this reads the email
+ * again with their words, and returns the letter's asks when the rules,
+ * seeing them, would not have called it a delivery. A patient record adds
+ * no words. Empty for a model reading or when nothing new was read.
+ */
+function lateLetterAsks(
+  files: Downloaded[], unreadBefore: Set<Downloaded>,
+  opts: { prescanned?: Map<Downloaded, ScanOutcome>; reading?: Reading; rulesInput?: LateRulesInput },
+): string[] {
+  if (opts.reading?.method !== "rules" || !opts.rulesInput || !opts.prescanned) return [];
+  if (!files.some((f) => unreadBefore.has(f) && opts.prescanned!.get(f)?.scan)) return [];
+  const scanOf = (f: Downloaded) => {
+    const scan = opts.prescanned!.get(f)?.scan ?? null;
+    return scan && patientRecordScreen(f.filename, scan) ? null : scan;
+  };
+  const again = rulesUnderstanding({
+    ...opts.rulesInput,
+    attachmentWords: files.map((f) => attachmentText(scanOf(f))),
+    attachmentTypes: files.map((f) => String(scanOf(f)?.documentType ?? "unknown")),
+  });
+  if (again.intent === "delivery") return [];
+  return again.asks.filter((a: { from?: string }) => a.from === "attachment").map((a: { quote: string }) => a.quote);
+}
+
+/** The filing reply's line for lateLetterAsks: the physician reads the letter. */
+function lateAsksNote(asks: string[]): string {
+  const list = asks.slice(0, 5).map((a) => `"${plainText(a, 120)}"`).join(", ");
+  return `An attached letter may be asking you for something: ${list}. It was filed with your documents and no one was answered; open it to see what is needed.`;
+}
+
 /**
  * docs@ "delivery": a document forwarded to keep. Each attachment is stored,
  * read and filed (the reading's role for it narrows where, intakeFiling.mjs
@@ -2736,13 +2778,16 @@ https://credentialdomd.com`);
 async function deliverDocs(
   ledgerId: string, profile: MatchedProfile, from: string, files: Downloaded[], skipped: number, notKept: string[],
   replySubject: string, replyHeaders: Record<string, string>, mayFile: boolean,
-  opts: { ctx?: ScanContext; prescanned?: Map<Downloaded, ScanOutcome>; roles?: Map<Downloaded, string>; reading?: Reading } = {},
+  opts: { ctx?: ScanContext; prescanned?: Map<Downloaded, ScanOutcome>; roles?: Map<Downloaded, string>; reading?: Reading; rulesInput?: LateRulesInput } = {},
 ) {
   const { stored, duplicates, failed, items } = await storeAsDocuments(profile, files, EMAIL_DOC_TYPE);
+  const unreadBefore = new Set(files.filter((f) => !opts.prescanned?.has(f)));
   const results = items.length
     ? await fileDocuments(profile, items, opts.ctx ?? await scanContext(profile), { mayFile, prescanned: opts.prescanned, roles: opts.roles })
     : [];
   const notes: string[] = [...notKept];
+  const asked = lateLetterAsks(files, unreadBefore, opts);
+  if (asked.length) notes.push(lateAsksNote(asked));
   if (skipped > 0) notes.push(`${skipped} attachment${skipped === 1 ? " was" : "s were"} skipped for size (10 MB per file, 20 MB per email) or count (10 per email).`);
   if (failed > 0) notes.push(`${failed} file${failed === 1 ? "" : "s"} could not be saved; forward the email again.`);
   const unverified = unverifiedNote(results, from);

@@ -525,3 +525,42 @@ test("an office file that cannot be read cannot be screened, so it is not stored
   assert.equal(rows("documents").length, 1, "only the letter is stored");
   assert.match(toPhysician()[0].text, /Not kept: old\.doc could not be read here, so it could not be checked for patient information\. Save it as a PDF, \.docx or \.xlsx and forward it again\./);
 });
+
+// Ticket cc9830e4 (AC-2): a forward the rules read as a delivery because its
+// attachment had not been read yet ("FYI" over a scan, the model not
+// admitted) still files the attachment, and the filing reply tells the
+// physician when the letter, once read, asks for something.
+const FYI_TEXT = `FYI
+
+---------- Forwarded message ---------
+From: Medical Staff Office <mso@valleyhospital.example>
+Date: Mon, Sep 28, 2026 at 10:15 AM
+Subject: documentation
+`;
+const scanOne = () => ({ filename: "scan001.pdf", contentType: "application/pdf", bytes: pdf("letter from the medical staff office") });
+
+test("an unread letter under a thin note is filed, and the reply names what it asks once read", async () => {
+  harness.geminiReply = () => ({
+    documentType: "other", confidence: "high", extracted: {},
+    request_lead_in: "Please send the following to complete your file",
+    requested_items: ["Current DEA certificate"],
+  });
+  const r = await send({ subject: "Fwd: documentation", text: FYI_TEXT, attachments: [scanOne()] });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.intent, "delivery");
+  assert.equal(rows("document_requests").length, 0);
+  assert.equal(toOthers().length, 0, "nobody but the physician hears of it");
+  const [reply] = toPhysician();
+  assert.equal(toPhysician().length, 1);
+  assert.ok(reply.text.includes("An attached letter may be asking you for something"), reply.text);
+  assert.ok(reply.text.includes("Current DEA certificate"), reply.text);
+  assert.ok(!reply.text.includes(EM_DASH));
+});
+
+test("the same thin note over a credential says nothing of an ask", async () => {
+  harness.geminiReply = () => PLAN_SCAN;
+  const r = await send({ subject: "Fwd: documentation", text: FYI_TEXT, attachments: [scanOne()] });
+  assert.equal(r.body.intent, "delivery");
+  const [reply] = toPhysician();
+  assert.ok(!reply.text.includes("may be asking you"), reply.text);
+});
