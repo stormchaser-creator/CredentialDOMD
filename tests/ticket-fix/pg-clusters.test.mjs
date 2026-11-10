@@ -140,6 +140,9 @@ async function orphan(t, { alive = false } = {}) {
     }
     if (!caught) { try { process.kill(-c.proc.pid, 'SIGKILL'); } catch { /* gone */ } continue; }
     await until(() => !running(init), 5000);
+    // The reclaimer skips a semaphore set while its creator still runs, and the
+    // killed backend can outlive init by a moment.
+    await until(() => semaphores.every(s => !running(s.creator)), 5000);
     const left = segmentsOf(keys).filter(s => s.nattch === 0);
     // Whatever a failed assertion leaves, this test removes.
     t.after(() => { for (const s of left) if (segments().some(x => x.id === s.id && x.nattch === 0)) ipcrm(s.id); });
