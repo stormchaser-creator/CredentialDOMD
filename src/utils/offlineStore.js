@@ -219,6 +219,9 @@ function openDb({ fresh = false } = {}) {
     };
     const fail = (error, name) => {
       if (settled) return;
+      // An error is an answer, not a hang: it ends the streak (hungSince),
+      // and the next open has the whole bound again.
+      if (name !== "OpenTimeout" && epoch === openEpoch) hungSince = null;
       failure = { error, name, retryAfter: LOST_ERRORS.has(error?.name) ? LOST_RETRY_MS : RETRY_AFTER_MS };
       done(null);
     };
@@ -235,9 +238,12 @@ function openDb({ fresh = false } = {}) {
     };
     req.onsuccess = () => {
       const db = req.result;
-      if (settled || epoch !== openEpoch) { try { db.close(); } catch { /* closed */ } done(null); return; }
-      // Another open answered first: its connection is this one's answer.
-      if (openDbHandle) { try { db.close(); } catch { /* closed */ } done(openDbHandle); return; }
+      // Another open answered first, or this one belongs to another factory.
+      if (epoch !== openEpoch || openDbHandle) {
+        try { db.close(); } catch { /* closed */ }
+        done(epoch === openEpoch ? openDbHandle : null);
+        return;
+      }
       // Another tab upgrading the database: let it, and reopen next call.
       db.onversionchange = () => { try { db.close(); } catch { /* closed */ } forget(db); };
       // Closed by the browser (the IndexedDB process went away): the next
@@ -246,7 +252,15 @@ function openDb({ fresh = false } = {}) {
       health.lost = false;
       hungSince = null;
       openDbHandle = db;
-      dbPromise = attempt;
+      if (settled) {
+        // Answered after it was taken for failed (its bound, or the open
+        // timeout once a streak had expired) and no connection is held: the
+        // device is slow, not broken, so the connection is kept. Closed, a
+        // device whose opens take longer than the open timeout never
+        // recovered (final b1071b82 review).
+        dbPromise = Promise.resolve(db);
+        unavailableUntil = 0;
+      } else dbPromise = attempt;
       ready.resolve(db);
       done(db);
     };

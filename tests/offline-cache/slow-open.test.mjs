@@ -111,7 +111,7 @@ test('an open unanswered past the transaction bound has failed, and the store is
   assert.equal(offlineStore.offlineStoreState().lastError, 'OpenTimeout');
   assert.ok(notBusy(await write), 'a save waiting on it is then refused, and falls back');
   await assert.rejects(() => offlineStore.offlineRead(KEY), notBusy, 'past the bound: unavailable');
-  // The backoff over, an open is tried again, given the open timeout only, and answers.
+  // The load's retry opens again at once (inside the backoff), given the open timeout only, and answers.
   idb.hangOpens = false;
   assert.equal(await offlineStore.offlineRead(KEY, { retryOpen: true }), 'synthetic offline file text', 'and it recovers');
 });
@@ -172,4 +172,41 @@ test('a save waiting on a hung open opens afresh itself when nothing else calls'
   assert.ok(Date.now() - began < 500, 'well before the bound');
   assert.equal(idb.opened, opened + 2, 'one fresh open beside the hung one');
   assert.equal(await offlineStore.offlineRead(KEY), 'synthetic newer text');
+});
+
+// Final review: after a streak passed the bound, each open had the open
+// timeout only, and one answering after it was closed, so a device whose
+// opens take longer than that never recovered; and an open that errored
+// began a streak that idle time then expired.
+test('past an expired streak, an open slower than the open timeout is kept when it answers', async () => {
+  const idb = await storedDevice();
+  offlineStore.setOfflineOpenTimeout(30);
+  offlineStore.setOfflineTransactionTimeout(1000);
+  offlineStore.setOfflineTransactionBound(150);
+  idb.hangOpens = true;
+  await assert.rejects(() => offlineStore.offlineRead(KEY), OfflineStoreBusy);
+  await sleep(200);   // the streak passes the bound
+  idb.hangOpens = false;
+  idb.slowOpens = 70;  // slower than the open timeout
+  await assert.rejects(() => offlineStore.offlineRead(KEY, { retryOpen: true }), notBusy, 'an expired streak: failed, and reported');
+  await sleep(100);   // that open answers late
+  assert.equal(await offlineStore.offlineRead(KEY), 'synthetic offline file text', 'its late connection is kept and used');
+  assert.equal(await offlineStore.offlineWrite(KEY, 'synthetic newer text'), true);
+  idb.slowOpens = 0;
+});
+
+test('an open that errors begins no streak: after idle time a slow open still has the whole bound', async () => {
+  const idb = await storedDevice();
+  offlineStore.setOfflineOpenTimeout(30);
+  offlineStore.setOfflineTransactionTimeout(1000);
+  offlineStore.setOfflineTransactionBound(150);
+  idb.failOpen = true;
+  await assert.rejects(() => offlineStore.offlineRead(KEY), notBusy);
+  idb.failOpen = false;
+  await sleep(200);   // idle past the bound
+  idb.slowOpens = 70;
+  await assert.rejects(() => offlineStore.offlineRead(KEY, { retryOpen: true }), OfflineStoreBusy, '"not yet", not failed');
+  await sleep(100);
+  assert.equal(await offlineStore.offlineRead(KEY), 'synthetic offline file text');
+  idb.slowOpens = 0;
 });
