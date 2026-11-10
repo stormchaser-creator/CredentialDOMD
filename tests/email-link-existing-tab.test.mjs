@@ -63,6 +63,7 @@ test('a link arriving at an existing sign-in screen survives Clerk hash steps an
     '@clerk/clerk-react': { useAuth: () => ({ isLoaded: true, userId: null }) },
     './utils/offlineSession': { readLastIdentity: () => null },
     './utils/supportDeepLink.js': deepLinks,
+    './lib/errorReport.js': { setErrorScreen: () => {}, deferChunkFailure: () => {}, reportError: () => {} },
   };
   new Function('require', 'module', 'exports', 'window', 'setTimeout', 'clearTimeout', code)(name => modules[name] || { default: () => null }, mod, mod.exports, window, () => 1, () => {});
   mod.exports.default();

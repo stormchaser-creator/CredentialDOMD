@@ -31,7 +31,7 @@ const built = await build({
       offline: 'export const readLastIdentity = () => globalThis.__gate.identity;',
       link: 'export const takeAppDeepLink = () => null; export const stashAppDeepLink = () => {};',
       app: 'import React from "react"; export default () => React.createElement("div", { "data-app": "" });',
-      errors: 'export const deferChunkFailure = () => globalThis.__gateCalls.push("defer"); export const reportError = (message, kind) => globalThis.__gateCalls.push(["report", message, kind]);',
+      errors: 'export const setErrorScreen = () => {}; export const deferChunkFailure = () => globalThis.__gateCalls.push("defer"); export const reportError = (message, kind) => globalThis.__gateCalls.push(["report", message, kind]);',
     }[path], loader: 'jsx', resolveDir: root }));
   } }],
 });

@@ -55,6 +55,23 @@ export function setErrorUser(id) {
   currentUserId = typeof id === "string" && id ? id : null;
 }
 
+// Which screen was up (AuthGate's gateView: "sign-in", "wait" or "app"),
+// so a report says where it happened (ticket 7bbd451d: a lost Clerk chunk
+// could not be placed on the sign-in screen or the wait view). Taken when
+// the error happens, not when a held report is sent.
+let currentScreen = null;
+
+/** Set (or clear) the screen to attach to reports. Safe to call often. */
+export function setErrorScreen(name) {
+  currentScreen = typeof name === "string" && name ? name : null;
+}
+
+function withScreen(extra) {
+  if (!currentScreen) return extra;
+  if (extra && typeof extra === "object") return "screen" in extra ? extra : { ...extra, screen: currentScreen };
+  return extra === undefined || extra === null ? { screen: currentScreen } : extra;
+}
+
 function scrub(s) {
   return redactLaunchInvitation(s).replace(SECRET_RE, "[redacted]")
     .replace(LABELLED_ID_RE, "$1$2[redacted]").replace(SSN_RE, "[redacted]");
@@ -178,7 +195,7 @@ function sendHeldChunkFailures() {
 
 function holdChunkFailure(err, kind, extra) {
   chunkFailureOpen = true;
-  heldChunkFailures.push([err, kind, extra]);
+  heldChunkFailures.push([err, kind, withScreen(extra)]);
   if (heldChunkTimer === null) heldChunkTimer = setTimeout(sendHeldChunkFailures, CHUNK_HOLD_MS);
 }
 
@@ -347,7 +364,7 @@ export function reportError(err, kind = "error", extra = undefined) {
       user_agent: clip(typeof navigator !== "undefined" ? navigator.userAgent : "", 300),
       build: BUILD,
       auth_user_id: currentUserId,
-      extra: scrubExtra(extra),
+      extra: scrubExtra(withScreen(extra)),
     };
     if (ENV.DEV) {
       // Visible in dev, but do not spam the live table from localhost.

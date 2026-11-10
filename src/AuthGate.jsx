@@ -6,7 +6,7 @@ import { recoverStartupModule } from "./utils/startupModule.js";
 import { readLastIdentity } from "./utils/offlineSession";
 import { stashAppDeepLink, takeAppDeepLink } from "./utils/supportDeepLink.js";
 import { watchChunkFailures, CHUNK_RETRY_DELAY_MS } from "./utils/chunkRecovery.js";
-import { deferChunkFailure, reportError } from "./lib/errorReport.js";
+import { deferChunkFailure, reportError, setErrorScreen } from "./lib/errorReport.js";
 
 // The sign-in screen used to wait for the whole app: one 4.3 MB script (1.3 MB
 // compressed), then Clerk's own, before anything showed. On a slow phone
@@ -63,6 +63,7 @@ export default function AuthGate() {
   const signedOut = isLoaded && !userId;
   const [appWanted, setAppWanted] = useState(knownMember);
   const view = gateView({ isLoaded, userId, appWanted });
+  useEffect(() => { setErrorScreen(view); }, [view]);
   useEffect(() => { if (isLoaded && userId) setAppWanted(true); }, [isLoaded, userId]);
 
   useEffect(() => {
