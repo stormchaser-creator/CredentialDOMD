@@ -1,11 +1,14 @@
-// Ticket 7bbd451d (2026-10-31): an iPhone on the sign-in screen lost one of
-// Clerk's script chunks ("Loading chunk 344 failed"). The screen remounts its
-// form by itself 1.2 s later, but the error reporter had already sent the
-// error, so a ticket said the app had not fixed it. Now the report is held
-// until the screen says how it ended, and is never lost: a timeout or a page
-// that goes sends it. The real src/lib/errorReport.js runs with a fake window,
-// clock, timers and sendBeacon, and the real AuthPage with a stub Clerk; no
-// endpoint, account or provider is reached. All data is synthetic.
+// Ticket 7bbd451d (2026-10-31): an iPhone lost one of Clerk's script chunks
+// ("Loading chunk 344 failed"); the report carries no screen context, so
+// whether this was the sign-in screen's widget or AuthGate's wait view
+// before Clerk ever answered cannot be told apart from it alone. The
+// sign-in screen remounts its form by itself 1.2 s later, but the error
+// reporter had already sent the error, so a ticket said the app had not
+// fixed it. Now the report is held until a screen says how it ended (or is
+// deferred by a screen that reloads instead), and is never lost: a timeout
+// or a page that goes sends it. The real src/lib/errorReport.js runs with a
+// fake window, clock, timers and sendBeacon, and the real AuthPage with a
+// stub Clerk; no endpoint, account or provider is reached. All data is synthetic.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import React from 'react';
@@ -100,6 +103,26 @@ test('a page hidden or left while the report is held sends it at once', () => {
   q.doc.visibilityState = 'hidden';
   q.fire('visibilitychange');
   assert.equal(errors(q).length, 1, 'switching away on an iPhone sends it too');
+});
+
+test('a chunk failure a screen defers instead of resolving sends nothing, even on pagehide', () => {
+  const p = page();
+  p.lose();
+  p.api.deferChunkFailure();
+  p.fire('pagehide');
+  assert.deepEqual(p.sent, [], 'deferred, so the reload that follows this pagehide is not reported as unresolved');
+  p.advance(60000);
+  assert.deepEqual(p.sent, [], 'nothing arrives later either: deferring is not a delay, the hold is gone');
+});
+
+test('deferChunkFailure is a no-op once nothing is held', () => {
+  const p = page();
+  p.api.deferChunkFailure();
+  p.fire('pagehide');
+  assert.deepEqual(p.sent, []);
+  p.lose();
+  p.api.resolveChunkFailure('failed');
+  assert.equal(errors(p).length, 1, 'a later, real failure still reports normally');
 });
 
 test('other errors are still sent at once', () => {

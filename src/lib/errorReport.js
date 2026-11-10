@@ -146,16 +146,21 @@ function watchLifecycle() {
 }
 
 // A script chunk lost on the connection (ticket 7bbd451d, 2026-10-31: an
-// iPhone on the sign-in screen, "Loading chunk 344 failed" in Clerk's
-// ensureMounted). The sign-in screen remounts its form 1.2 s later, which
-// fetches the chunk again (components/pages/AuthPage.jsx), but the report used
-// to go at once, so the owner was told "not fixed by itself" about a screen
-// that may have fixed itself. So it is held: resolveChunkFailure("fixed")
-// drops it and sends an info event instead, "failed" sends it. Nothing is
-// lost: a chunk failure nobody resolves (one outside the sign-in screen) goes
-// after CHUNK_HOLD_MS, and a page hidden or left sends it at once by
-// sendBeacon, which outlives the page (never through reportUnlessLeaving,
-// which drops reports after pagehide).
+// iPhone, "Loading chunk 344 failed" on Clerk's own framework chunk). This
+// report carries no screen context, so whether it happened on the sign-in
+// screen's widget or on AuthGate's wait view, before Clerk ever answered
+// isLoaded, cannot be told apart here; both are covered now, each the same
+// way. The sign-in screen remounts its form 1.2 s later, which fetches the
+// chunk again (components/pages/AuthPage.jsx); the wait view reloads once
+// (AuthGate.jsx). Either way the report used to go at once, so the owner was
+// told "not fixed by itself" about a screen that may have fixed itself. So
+// it is held: resolveChunkFailure("fixed") drops it and sends an info event
+// instead, "failed" sends it, and deferChunkFailure drops it with no event
+// yet for a screen (the wait view) that reloads before it can know which.
+// Nothing is lost: a chunk failure nobody resolves or defers goes after
+// CHUNK_HOLD_MS, and a page hidden or left sends it at once by sendBeacon,
+// which outlives the page (never through reportUnlessLeaving, which drops
+// reports after pagehide).
 const CHUNK_HOLD_MS = 15000;
 let heldChunkFailures = [];
 let heldChunkTimer = null;
@@ -194,6 +199,25 @@ export function resolveChunkFailure(outcome) {
     } else {
       sendHeldChunkFailures();
     }
+  } catch { /* reporting must never throw */ }
+}
+
+/**
+ * Called by a screen that is about to leave itself (a reload) to try to fix
+ * a chunk failure no screen has resolved yet: drops the hold with no event
+ * at all, so pagehide does not send it as unresolved the moment this page
+ * goes. Unlike resolveChunkFailure, nothing is reported here either way,
+ * because the outcome is not known yet; the next load decides it (AuthGate.jsx
+ * reports "fixed" once Clerk answers, or leaves a persistent failure to be
+ * held and sent again by the usual timeout).
+ */
+export function deferChunkFailure() {
+  try {
+    if (!chunkFailureOpen) return;
+    chunkFailureOpen = false;
+    clearTimeout(heldChunkTimer);
+    heldChunkTimer = null;
+    heldChunkFailures = [];
   } catch { /* reporting must never throw */ }
 }
 
@@ -441,4 +465,4 @@ export class ErrorBoundary extends Component {
   }
 }
 
-export default { install, reportError, reportUnlessLeaving, resolveChunkFailure, reportSlowLoad, resolveSlowLoadReport, pageLeaving, setErrorUser, ErrorBoundary };
+export default { install, reportError, reportUnlessLeaving, resolveChunkFailure, deferChunkFailure, reportSlowLoad, resolveSlowLoadReport, pageLeaving, setErrorUser, ErrorBoundary };

@@ -5,6 +5,8 @@ import UpdatePrompt from "./components/shared/UpdatePrompt";
 import { recoverStartupModule } from "./utils/startupModule.js";
 import { readLastIdentity } from "./utils/offlineSession";
 import { stashAppDeepLink, takeAppDeepLink } from "./utils/supportDeepLink.js";
+import { watchChunkFailures, CHUNK_RETRY_DELAY_MS } from "./utils/chunkRecovery.js";
+import { deferChunkFailure, reportError } from "./lib/errorReport.js";
 
 // The sign-in screen used to wait for the whole app: one 4.3 MB script (1.3 MB
 // compressed), then Clerk's own, before anything showed. On a slow phone
@@ -35,6 +37,17 @@ const App = lazy(() => loadApp().catch(error => {
   throw error;
 }));
 export const APP_PREFETCH_DELAY_MS = 1500;
+// Clerk's own script can fail to load before isLoaded ever answers, while
+// this wait view is the only thing mounted: AuthPage's chunk-failure watcher
+// (utils/chunkRecovery.js) does not exist yet, since it only mounts once
+// Clerk says this visitor is signed out. The client error report holds no
+// screen context (src/lib/errorReport.js), so the 2026-10-31 report (ticket
+// 7bbd451d, "Loading chunk 344 failed" on Clerk's own framework chunk)
+// cannot be placed on this screen or the already-covered sign-in widget for
+// certain; this gap is real either way, since this view mounts first on
+// every cold start. Nothing is typed or shown here, so one reload is safe.
+const WAIT_CHUNK_RELOAD_KEY = "credentialdomd-wait-chunk-reload";
+const WAIT_CHUNK_FIXED_MESSAGE = "Fixed by itself: the sign-in library loaded after a piece of it was lost on the connection, following a reload.";
 
 const knownMember = () => { try { return !!readLastIdentity(); } catch { return false; } };
 
@@ -51,6 +64,43 @@ export default function AuthGate() {
   const [appWanted, setAppWanted] = useState(knownMember);
   const view = gateView({ isLoaded, userId, appWanted });
   useEffect(() => { if (isLoaded && userId) setAppWanted(true); }, [isLoaded, userId]);
+
+  useEffect(() => {
+    if (view !== "wait") return undefined;
+    let timer;
+    const stop = watchChunkFailures(() => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        // If the loop guard cannot be persisted, keep the existing manual
+        // reload rather than risk reloading forever.
+        try {
+          if (sessionStorage.getItem(WAIT_CHUNK_RELOAD_KEY) === import.meta.url) return;
+          sessionStorage.setItem(WAIT_CHUNK_RELOAD_KEY, import.meta.url);
+        } catch { return; }
+        // Deferred, not lost: this reload is the recovery attempt, so the
+        // failure the global listener is holding (lib/errorReport.js) must
+        // not go out as unresolved the moment reload fires pagehide. The
+        // outcome is settled below, once this reload answers.
+        deferChunkFailure();
+        window.location.reload();
+      }, CHUNK_RETRY_DELAY_MS);
+    });
+    return () => { clearTimeout(timer); stop(); };
+  }, [view]);
+
+  useEffect(() => {
+    // Clerk answering, either way, means the reload (if this is the page it
+    // led to) worked: lift the loop guard so a later, unrelated failure in
+    // this tab on this build still gets a reload, and tell the owner this
+    // one fixed itself instead of leaving it silently unresolved.
+    if (!isLoaded) return undefined;
+    try {
+      if (sessionStorage.getItem(WAIT_CHUNK_RELOAD_KEY) !== import.meta.url) return undefined;
+      sessionStorage.removeItem(WAIT_CHUNK_RELOAD_KEY);
+    } catch { return undefined; }
+    reportError(WAIT_CHUNK_FIXED_MESSAGE, "info");
+    return undefined;
+  }, [isLoaded]);
 
   useEffect(() => {
     if (!signedOut) return undefined;
