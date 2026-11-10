@@ -105,3 +105,21 @@ test('the file under its key base and as "cache" is one hold', () => {
   assert.equal(reports.length, 1);
   assert.equal(reports[0].extra.event, 'storage_recovered');
 });
+
+// Review: with the session's storage_unavailable spent on the transcript, a
+// file that was only held then saved and sent "Fixed by itself", which read
+// as the transcript's report healing.
+test('a store only held says nothing once another store\'s refusal was reported', () => {
+  const { reports } = freshSession();
+  const chat = scope.BASE_KEYS.chat;
+  const t0 = 6_000_000;
+  scope.reportStorageRefusal({ store: 'cache', reason: REASON, chars: 10 }, t0);
+  scope.reportStorageRefusal({ store: chat, reason: 'indexeddb_unread', chars: 10 }, t0);
+  assert.equal(scope.reportStorageRefusal({ store: chat, reason: 'indexeddb_unread', chars: 10 }, t0 + scope.LOST_CONNECTION_CONFIRM_MS), true);
+  scope.offlineCopySaved('cache');
+  assert.equal(reports.length, 1, 'the file saving is not called the fix');
+  scope.offlineCopySaved(chat);
+  assert.equal(reports.length, 2);
+  assert.equal(reports[1].extra.event, 'storage_recovered');
+  assert.equal(reports[1].extra.store, chat);
+});

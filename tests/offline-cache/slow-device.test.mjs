@@ -621,6 +621,34 @@ test('(a)(e) an open that takes 20 seconds and a transaction 20 more: the same',
   await slowButWorking(20, { openSeconds: 20 });
 });
 
+// Review: a save made while the open was slow was told "not yet" before any
+// transaction began, skipped the localStorage fallback, and was written nowhere.
+test('a transcript save made while the open is slow is saved, not held as pending with nothing running', async () => {
+  const U = 'user_syntheticSlowOpenSave';
+  const key = scope.scopedKey(scope.BASE_KEYS.data, U);
+  const chatKey = scope.scopedKey(scope.BASE_KEYS.chat, U);
+  const idb = createMemoryIndexedDB();
+  offlineStore.setOfflineStoreFactory(idb);
+  offlineStore.setOfflineTransactionTimeout(BASE_WAIT * SEC);
+  offlineStore.setOfflineTransactionBound(BOUND * SEC);
+  scope.setActiveUserId(U);
+  scope.adoptLocalFence(U);
+  assert.equal((await scope.writeOfflineText(key, JSON.stringify(deviceFile()), () => true)).saved, true, 'precondition: the file is stored');
+  ({ scope, storage } = await newPage());
+  offlineStore.setOfflineStoreFactory(idb);
+  offlineStore.setOfflineOpenTimeout(4 * SEC);
+  scope.resetStorageFullReport();
+  idb.slowOpens = 20 * SEC;
+  scope.setActiveUserId(U);
+  const result = await scope.writeOfflineText(chatKey, JSON.stringify([{ id: 'chat-synthetic-2', text: 'new' }]), () => true);
+  assert.equal(result.saved, true, `saved (${JSON.stringify(result)})`);
+  const where = idb.dump().get(chatKey) ?? localStorage.getItem(chatKey);
+  assert.equal(JSON.parse(where)[0].id, 'chat-synthetic-2', 'and it is on the device');
+  idb.slowOpens = 0;
+  offlineStore.setOfflineOpenTimeout(undefined);
+  scope.setActiveUserId(null);
+});
+
 test('a read that failed before a purge does not make a slow open after it a reported failure', async () => {
   const U = 'user_syntheticPurgedFailedRead';
   const key = scope.scopedKey(scope.BASE_KEYS.data, U);

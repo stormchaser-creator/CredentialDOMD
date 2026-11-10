@@ -27,14 +27,14 @@
 export const OFFLINE_DB_NAME = "credentialdomd-offline";
 export const OFFLINE_DB_STORE = "kv";
 const OFFLINE_DB_VERSION = 1;
-// How long a caller waits on an indexedDB.open before it is told "not yet"
-// (OfflineStoreBusy). The open itself is left to answer: a slow device is
-// not a broken one, and the connection it brings is handed to the calls
-// after it. Taken for a failure, a slow open left the copy unread and
-// reported "Offline copy not saved" while the device was working (b1071b82
-// review). Only an open that errors or throws, or has not answered in
-// TRANSACTION_BOUND_MS, has failed (iOS has shipped builds whose first open
-// never answers), and the next call then opens again.
+// How long a brief call (a read, the load's wait) waits on an
+// indexedDB.open: past it a read is told "not yet" (OfflineStoreBusy) and a
+// brief write "unavailable", so its fallback runs (openWaited). The open
+// itself is left to answer, and the connection it brings is the next call's;
+// a fresh open may begin beside it (openDb). Taken for a failure, a slow open
+// left the copy unread and reported "Offline copy not saved" while the
+// device was working (b1071b82 review). Only an open that errors or throws,
+// or has not answered in TRANSACTION_BOUND_MS, has failed.
 const OPEN_TIMEOUT_MS = 4000;
 let openTimeoutMs = OPEN_TIMEOUT_MS;
 // After an open that failed or never answered, calls within this window are
@@ -132,6 +132,8 @@ export function setOfflineOpenTimeout(ms) {
 /** Tests: use `idb` (an IDBFactory, or null for "unavailable"); undefined restores the global. */
 export function setOfflineStoreFactory(idb) {
   factoryOverride = idb;
+  openEpoch += 1;
+  ready = deferred();
   unavailableUntil = 0;
   health.lost = false; health.lastError = null;
   const pending = dbPromise;
@@ -163,30 +165,55 @@ export class OfflineStoreStuck extends OfflineStoreUnavailable {
   constructor() { super(); this.name = "OfflineStoreStuck"; this.message = "IndexedDB transaction never settled"; }
 }
 
-function openDb() {
-  if (dbPromise) return dbPromise;
+// The open the store waits on (dbPromise) may still be unanswered past its
+// patience (OPEN_TIMEOUT_MS): it is left to answer, and a fresh open may be
+// begun beside it (the load's `retryOpen` at once, any call once
+// RETRY_AFTER_MS has gone by), since iOS has shipped builds whose first open
+// never answers while a second one does. Whichever answers first is the
+// connection, handed to every caller still waiting on either (`ready`); one
+// that answers after it is closed. An open fails only when it errors, throws
+// or has not answered in TRANSACTION_BOUND_MS, and only the open the store
+// is waiting on speaks for it: one superseded, or begun for another factory
+// (openEpoch), says nothing.
+let openEpoch = 0;
+const openMeta = new WeakMap();   // open attempt -> { began, answered, stale, patience }
+function deferred() { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; }
+let ready = deferred();
+function openDb({ fresh = false } = {}) {
+  if (dbPromise) {
+    const meta = openMeta.get(dbPromise);
+    if (!meta || meta.answered || !meta.stale) return dbPromise;
+    if (!fresh && Date.now() - meta.began < RETRY_AFTER_MS) return dbPromise;
+  }
   const idb = factory();
   if (!idb || typeof idb.open !== "function") return Promise.resolve(null);
-  if (Date.now() < unavailableUntil) return Promise.resolve(null);
-  let retryAfter = RETRY_AFTER_MS;
-  let bound = null;
-  // The callers' patience with this open (openWaited): "not yet" past
-  // openTimeoutMs from its start, while it runs on.
-  const patience = waitLimit(openTimeoutMs);
-  const attempt = new Promise((resolve) => {
+  if (!dbPromise && Date.now() < unavailableUntil) return Promise.resolve(null);
+  const epoch = openEpoch;
+  const meta = { began: Date.now(), answered: false, stale: false, patience: waitLimit(openTimeoutMs) };
+  meta.patience.promise.catch(() => { meta.stale = true; });
+  let failure = null;   // { error, name, retryAfter }
+  let attempt = null;
+  attempt = new Promise((resolve) => {
     let settled = false;
+    let bound = null;
     const done = (db) => {
       if (settled) return;
       settled = true;
+      meta.answered = true;
       clearTimeout(bound);
-      clearTimeout(patience.timer);
+      clearTimeout(meta.patience.timer);
       resolve(db);
     };
-    bound = setTimeout(() => { if (!settled) noteFailure(null, "OpenTimeout"); done(null); }, transactionBoundMs);
+    const fail = (error, name) => {
+      if (settled) return;
+      failure = { error, name, retryAfter: LOST_ERRORS.has(error?.name) ? LOST_RETRY_MS : RETRY_AFTER_MS };
+      done(null);
+    };
+    bound = setTimeout(() => fail(null, "OpenTimeout"), transactionBoundMs);
     bound?.unref?.();
     let req;
     try { req = idb.open(OFFLINE_DB_NAME, OFFLINE_DB_VERSION); }
-    catch (error) { noteFailure(error, "OpenThrew"); if (LOST_ERRORS.has(error?.name)) retryAfter = LOST_RETRY_MS; done(null); return; }
+    catch (error) { fail(error, "OpenThrew"); return; }
     req.onupgradeneeded = () => {
       try {
         const db = req.result;
@@ -195,42 +222,54 @@ function openDb() {
     };
     req.onsuccess = () => {
       const db = req.result;
-      if (settled) { try { db.close(); } catch { /* closed */ } return; }
+      if (settled || epoch !== openEpoch) { try { db.close(); } catch { /* closed */ } done(null); return; }
+      // Another open answered first: its connection is this one's answer.
+      if (openDbHandle) { try { db.close(); } catch { /* closed */ } done(openDbHandle); return; }
       // Another tab upgrading the database: let it, and reopen next call.
       db.onversionchange = () => { try { db.close(); } catch { /* closed */ } forget(db); };
       // Closed by the browser (the IndexedDB process went away): the next
       // call opens again (LOST_RETRY_MS).
       db.onclose = () => { noteFailure(null, "close"); forget(db); };
       health.lost = false;
+      openDbHandle = db;
+      dbPromise = attempt;
+      ready.resolve(db);
       done(db);
     };
     req.onerror = () => {
       let error = null;
       try { error = req.error; } catch { /* none */ }
-      noteFailure(error, "OpenError");
-      if (LOST_ERRORS.has(error?.name)) retryAfter = LOST_RETRY_MS;
-      done(null);
+      fail(error, "OpenError");
     };
   });
-  openPatience.set(attempt, patience);
+  openMeta.set(attempt, meta);
   dbPromise = attempt;
   attempt.then((db) => {
-    if (db) { if (dbPromise === attempt) openDbHandle = db; return; }
-    unavailableUntil = Date.now() + retryAfter;
-    if (dbPromise === attempt) dbPromise = null;
+    if (db || !failure || epoch !== openEpoch || dbPromise !== attempt) return;
+    noteFailure(failure.error, failure.name);
+    unavailableUntil = Date.now() + failure.retryAfter;
+    dbPromise = null;
   });
   return attempt;
 }
-const openPatience = new WeakMap();   // open attempt -> its waitLimit
 /**
- * The connection, waited for no longer than `limit` nor than the open's own
- * patience (OPEN_TIMEOUT_MS from its start): past either, OfflineStoreBusy,
- * and the open runs on for the next call. Null when IndexedDB is unavailable.
+ * The connection (null when IndexedDB is unavailable), waited for no longer
+ * than `limit`, and by a `brief` call no longer than the open's patience
+ * (OPEN_TIMEOUT_MS from its start). A read waited for no longer is told "not
+ * yet" (OfflineStoreBusy) and the open runs on for the next call. A write is
+ * told "unavailable": no transaction of it has begun, so nothing would land
+ * later, and the caller's fallback (localStorage) must run. Told "not yet"
+ * here, a save was written nowhere (b1071b82 review).
  */
-function openWaited(limit) {
-  const attempt = openDb();
-  const patience = openPatience.get(attempt);
-  return patience ? within(attempt, limit, patience) : within(attempt, limit);
+async function openWaited(limit, { brief = true, mode = "readonly", fresh = false } = {}) {
+  const attempt = openDb({ fresh });
+  const meta = openMeta.get(attempt);
+  const limits = brief && meta && !meta.answered ? [limit, meta.patience] : [limit];
+  try { return await within(Promise.race([attempt, ready.promise]), ...limits); }
+  catch (error) {
+    if (error instanceof OfflineStoreBusy && mode !== "readonly") throw new OfflineStoreUnavailable();
+    throw error;
+  }
 }
 
 // A connection that is closing or lost is never handed out again: the next
@@ -238,7 +277,7 @@ function openWaited(limit) {
 // that was in the background ("Connection to Indexed Database server lost"),
 // and every transaction on it then fails while the database itself is fine.
 function forget(db) {
-  if (db && openDbHandle === db) { openDbHandle = null; dbPromise = null; }
+  if (db && openDbHandle === db) { openDbHandle = null; dbPromise = null; ready = deferred(); }
 }
 function dropConnection(db) {
   forget(db);
@@ -247,7 +286,7 @@ function dropConnection(db) {
 
 /** True when IndexedDB opens on this device now (false in some private modes and old browsers). */
 export async function offlineStoreAvailable() {
-  return !!(await openDb());
+  try { return !!(await openWaited(waitLimit(Infinity))); } catch { return false; }
 }
 
 function isQuota(error) {
@@ -448,10 +487,17 @@ async function transact(mode, body, { key = null, tag = null, guard, retryOpen =
       // (the owner's iPhone, 2026-10-31, ticket b1071b82: "indexeddb_unavailable"
       // with the abort as the last error on record).
       if (dropped) unavailableUntil = 0;
-      let db = await openWaited(limit);
+      let db;
+      try { db = await openWaited(limit, { brief, mode }); }
+      catch (error) {
+        // The load's first try, on an open unanswered past its patience: a
+        // fresh open beside it, as one that failed is tried again at once.
+        if (!(retryOpen && attempt === 0 && error instanceof OfflineStoreBusy)) throw error;
+        db = await openWaited(limit, { brief, mode, fresh: true });
+      }
       if (!db && retryOpen && attempt === 0 && offlineStoreSupported()) {
         unavailableUntil = 0;
-        db = await openWaited(limit);
+        db = await openWaited(limit, { brief, mode });
       }
       if (!db) throw new OfflineStoreUnavailable();
       // Another transaction on the key began while this one waited for the

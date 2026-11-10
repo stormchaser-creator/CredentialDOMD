@@ -1273,9 +1273,15 @@ const holdOf = (store) => (store === BASE_KEYS.data ? "cache" : String(store ?? 
 export function offlineCopySaved(store = "cache") {
   store = holdOf(store);
   if (!heldRefusals.has(store) && !awaitingRecovery.has(store)) return;
-  const wasLost = heldRefusals.has(store) ? heldRefusals.get(store).wasLost : awaitingRecovery.get(store);
+  const reported = awaitingRecovery.has(store);
+  const wasLost = reported ? awaitingRecovery.get(store) : heldRefusals.get(store).wasLost;
   heldRefusals.delete(store);
   awaitingRecovery.delete(store);
+  // Once another store's refusal has been reported this session, a store
+  // that was only held says nothing: "Fixed by itself" (once a session) is
+  // kept for the store whose report went out, and spent on this one it read
+  // as that report healing while that store was still refused.
+  if (!reported && storageReported.has("storage_unavailable")) return;
   if (storageReported.has("storage_recovered") || !storageFullReporter) return;
   storageReported.add("storage_recovered");
   const message = wasLost
