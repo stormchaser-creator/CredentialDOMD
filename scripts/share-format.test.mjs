@@ -311,8 +311,10 @@ test("the plain-text CV uses the phone-safe rule and no em dash", () => {
 // -- Alerts --
 test("the alert message lists items without an em dash", () => {
   // A local calendar date: expirations count local days (src/utils/dateDays.js),
-  // and a UTC date is a day ahead every evening in the US.
-  const soonDate = localToday(new Date(Date.now() + 10 * 86400000));
+  // and a UTC date is a day ahead every evening in the US. Ten calendar days,
+  // not 10 x 24 hours, which lands a day short across a clock change.
+  const now = new Date();
+  const soonDate = localToday(new Date(now.getFullYear(), now.getMonth(), now.getDate() + 10, 12));
   const msg = notifications.buildNotificationMessage({ settings: { name: "Synthetic Physician", degreeType: "DO", notifyFreqDays: 7 } }, {
     expired: [{ id: "a", type: "Medical License", state: "CA", expirationDate: "2026-01-01" }],
     soon: [{ id: "b", type: "DEA Registration", expirationDate: soonDate }],
