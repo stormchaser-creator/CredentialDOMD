@@ -77,3 +77,31 @@ test('a full device is still reported at once: no retry makes room', () => {
   assert.equal(scope.reportStorageRefusal({ store: 'cache', reason: 'indexeddb_quota', chars: 2_000_000 }, 3_000_000), true);
   assert.equal(reports[0].message, 'Offline copy not saved: storage_full');
 });
+
+// Review (2026-11-07): one hold for every store, so a save of the file
+// dropped a refusal of the transcript and called it fixed. Each store holds
+// its own refusal now.
+test('a save of one store neither drops nor fixes the refusal another store holds', () => {
+  const { reports } = freshSession();
+  const chat = scope.BASE_KEYS.chat;
+  const t0 = 4_000_000;
+  assert.equal(scope.reportStorageRefusal({ store: chat, reason: 'indexeddb_unread', chars: 10 }, t0), false, 'held');
+  scope.offlineCopySaved('cache');
+  scope.offlineCopySaved(scope.BASE_KEYS.archives);
+  assert.deepEqual(reports, [], 'the file and the archives saving say nothing of the transcript');
+  assert.equal(scope.reportStorageRefusal({ store: chat, reason: 'indexeddb_unread', chars: 10 }, t0 + scope.LOST_CONNECTION_CONFIRM_MS), true, 'the hold kept its start, so it is reported past it');
+  scope.offlineCopySaved('cache');
+  assert.equal(reports.length, 1, 'still nothing called fixed');
+  scope.offlineCopySaved(chat);
+  assert.equal(reports.length, 2);
+  assert.equal(reports[1].extra.event, 'storage_recovered');
+  assert.equal(reports[1].extra.store, chat);
+});
+
+test('the file under its key base and as "cache" is one hold', () => {
+  const { reports } = freshSession();
+  assert.equal(scope.reportStorageRefusal({ store: scope.BASE_KEYS.data, reason: REASON, chars: 10 }, 5_000_000), false);
+  scope.offlineCopySaved('cache');
+  assert.equal(reports.length, 1);
+  assert.equal(reports[0].extra.event, 'storage_recovered');
+});

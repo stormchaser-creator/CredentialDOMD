@@ -1247,32 +1247,36 @@ export function storageRefusalKind(refused) {
 // reported as soon as they happened, before any retry ran. Only a full device
 // is reported at once: no retry makes room.
 export const LOST_CONNECTION_CONFIRM_MS = 30000;
-let heldLostSince = null;
-let heldWasLost = false;
-// Set once reportStorageRefusal actually sends a "storage_unavailable" report
-// (not just holds it for retries), so offlineCopySaved() can still tell a
-// write that lands AFTER that report was sent apart from one that landed
-// before anything was ever reported. reportStorageRefusal clears heldLostSince
-// the moment it reports, so that alone can't carry this past the report.
-let awaitingRecoveryReport = false;
-let awaitingRecoveryWasLost = false;
+// Held per store (the file "cache", the transcript, the archives): a save of
+// one store says nothing of another. One hold for all of them let a save of
+// the file or the archives drop a refusal of an unread transcript and call
+// it fixed, every turn, so the transcript's report came late or never
+// (2026-11-07 review). store -> { since, wasLost }.
+const heldRefusals = new Map();
+// The stores whose "storage_unavailable" report was actually sent (not just
+// held), so a save of that store that lands AFTER the report is told apart
+// from one that landed before anything was reported. store -> wasLost.
+const awaitingRecovery = new Map();
+// The file is "cache" to storage.js and its key base to the late-read
+// listener: one store, one hold.
+const holdOf = (store) => (store === BASE_KEYS.data ? "cache" : String(store ?? ""));
 /**
- * A write of the offline copy landed: a refusal held for the report was only
- * that, and is reported as fixed (once a session).
+ * A write of `store` landed: a refusal of that store held for the report was
+ * only that, and is reported as fixed (once a session). A hold another store
+ * started is left alone.
  */
-export function offlineCopySaved() {
-  if (heldLostSince === null && !awaitingRecoveryReport) return;
-  const wasLost = heldLostSince !== null ? heldWasLost : awaitingRecoveryWasLost;
-  heldLostSince = null;
-  heldWasLost = false;
-  awaitingRecoveryReport = false;
-  awaitingRecoveryWasLost = false;
+export function offlineCopySaved(store = "cache") {
+  store = holdOf(store);
+  if (!heldRefusals.has(store) && !awaitingRecovery.has(store)) return;
+  const wasLost = heldRefusals.has(store) ? heldRefusals.get(store).wasLost : awaitingRecovery.get(store);
+  heldRefusals.delete(store);
+  awaitingRecovery.delete(store);
   if (storageReported.has("storage_recovered") || !storageFullReporter) return;
   storageReported.add("storage_recovered");
   const message = wasLost
     ? "Fixed by itself: the offline copy saved again after iOS closed the phone's storage."
     : "Fixed by itself: the offline copy saved again after the phone's storage refused a write.";
-  try { storageFullReporter(message, { event: "storage_recovered" }, "info"); }
+  try { storageFullReporter(message, { event: "storage_recovered", store }, "info"); }
   catch { /* reporting never blocks */ }
 }
 
@@ -1286,17 +1290,16 @@ export function reportStorageRefusal({ store, reason, chars = 0 }, now = Date.no
   // A transaction unsettled past the bound has already been given minutes:
   // reported as it fails, not held for the retries.
   const stuck = list.includes("indexeddb_stuck");
-  if (event === "storage_unavailable" && !stuck && (heldLostSince === null || now - heldLostSince < LOST_CONNECTION_CONFIRM_MS)) {
-    heldLostSince ??= now;
-    try { if (offlineStoreState().lost === true) heldWasLost = true; } catch { /* unknown */ }
+  const hold = holdOf(store);
+  const held = heldRefusals.get(hold);
+  if (event === "storage_unavailable" && !stuck && (!held || now - held.since < LOST_CONNECTION_CONFIRM_MS)) {
+    const next = held || { since: now, wasLost: false };
+    try { if (offlineStoreState().lost === true) next.wasLost = true; } catch { /* unknown */ }
+    heldRefusals.set(hold, next);
     return false;
   }
-  if (event === "storage_unavailable") {
-    awaitingRecoveryReport = true;
-    awaitingRecoveryWasLost = heldWasLost;
-  }
-  heldLostSince = null;
-  heldWasLost = false;
+  if (event === "storage_unavailable") awaitingRecovery.set(hold, !!held?.wasLost);
+  heldRefusals.delete(hold);
   storageReported.add(event);
   const approxBytes = Math.round((Math.max(0, Number(chars) || 0) * 2) / 100000) * 100000;
   // What fills localStorage (key bases and sizes, never a value or an account
@@ -1312,10 +1315,8 @@ export function reportStorageRefusal({ store, reason, chars = 0 }, now = Date.no
 /** Tests only: a new session. */
 export function resetStorageFullReport() {
   storageReported.clear();
-  heldLostSince = null;
-  heldWasLost = false;
-  awaitingRecoveryReport = false;
-  awaitingRecoveryWasLost = false;
+  heldRefusals.clear();
+  awaitingRecovery.clear();
 }
 
 function lsText(key) {
@@ -1978,7 +1979,7 @@ export function refusedForSpace(refused) {
 function storeMirrored(key, value, userId) {
   writeOfflineText(key, value, localWriteGuard(userId)).then((result) => {
     if (result.stopped) return;
-    if (result.saved && !result.refused.length) offlineCopySaved();
+    if (result.saved && !result.refused.length) offlineCopySaved(key.slice(0, key.indexOf(":")));
     if (!result.saved || result.refused.includes("indexeddb_quota")) {
       reportStorageRefusal({ store: key.slice(0, key.indexOf(":")), reason: result.refused.join(","), chars: result.chars });
     }

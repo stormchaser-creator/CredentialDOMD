@@ -543,7 +543,7 @@ async function saveTextNow(key, userId, payload, guard, how, seq, stopSnapshot, 
     reportStorageRefusal({ store: "cache", reason: result.refused.join(","), chars: result.chars });
   }
   if (result.saved) {
-    if (!result.refused.length) offlineCopySaved();
+    if (!result.refused.length) offlineCopySaved("cache");
     const final = mergedSections && result.text !== json ? mergedSections : mine;
     storedText.set(key, { text: result.text ?? json, current: localWriteGuard(userId, { adopted: false }) });
     // The copy just written. From the records in memory (saveData): they are

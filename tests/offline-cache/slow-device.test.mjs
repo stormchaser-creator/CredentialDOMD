@@ -86,7 +86,7 @@ let accounts = 0;
  * (null: as fast as the fake), or that is `broken` ("hang": no transaction
  * settles; "error": every transaction aborts). Returns what happened.
  */
-async function launch({ deviceSeconds = null, broken = null, runFor = 400, signOutAt = null, stores = null }) {
+async function launch({ deviceSeconds = null, broken = null, runFor = 400, signOutAt = null, stores = null, readHook = null, assistantEvery = null }) {
   const U = `user_syntheticSlowDevice${accounts += 1}`;
   const key = scope.scopedKey(scope.BASE_KEYS.data, U);
   // The offline copy's database. Other databases of the origin (the invoice
@@ -114,6 +114,7 @@ async function launch({ deviceSeconds = null, broken = null, runFor = 400, signO
   if (deviceSeconds != null) idb.slowLargeValues = { minChars: 1_000_000, ms: deviceSeconds * SEC };
   if (broken === 'hang') idb.hangTransactions = true;
   if (broken === 'error') idb.failTransactions = true;
+  if (readHook) idb.readHook = readHook(U);
   // Signed in: the stores are hydrated from here on (setActiveUserId).
   scope.setActiveUserId(U);
   const T0 = deviceNow();
@@ -169,6 +170,8 @@ async function launch({ deviceSeconds = null, broken = null, runFor = 400, signO
   let signedOut = null;
   const end = T0 + runFor;
   let nextEdit = T0 + 30;
+  let nextTurn = assistantEvery != null ? T0 + assistantEvery : Infinity;
+  let turns = 0;
   while (deviceNow() < end) {
     await sleep(1);
     if (signOutAt != null && !signedOut && at() >= signOutAt) {
@@ -185,12 +188,20 @@ async function launch({ deviceSeconds = null, broken = null, runFor = 400, signO
       saves.push(storage.saveData(screen, U).catch(() => false));
       nextEdit += 40;
     }
+    if (deviceNow() >= nextTurn) {
+      // A turn with the Assistant: the transcript, and the archives with it.
+      turns += 1;
+      scope.largeSetJSON(scope.BASE_KEYS.chat, [{ id: `chat-synthetic-turn-${turns}`, text: 'new' }], U);
+      scope.largeSetJSON(scope.BASE_KEYS.archives, [{ id: `archives-synthetic-turn-${turns}`, text: 'new' }], U);
+      nextTurn += assistantEvery;
+    }
   }
   active = false;
+  idb.readHook = null;
   clearTimeout(timer);
   stopArrived();
   await firstLoad;
-  return { U, key, idb, reports, launchWaits, saves, signedOut, at, screen: () => screen, edits: () => edits };
+  return { U, key, idb, reports, launchWaits, saves, signedOut, at, screen: () => screen, edits: () => edits, turns: () => turns };
 }
 
 const errors = (reports) => reports.filter(r => r.kind === 'error');
@@ -504,6 +515,40 @@ test('the Assistant writing a transcript whose read is only slow: nothing is rep
   assert.deepEqual(errors(reports), [], 'a read still running is "not yet"');
   idb.slowLargeValues = null;
   scope.setActiveUserId(null);
+});
+
+// Review (2026-11-07): one hold for every store. A transcript whose read
+// errored held its refusal, and the next save of the file or the archives
+// (offlineCopySaved) dropped that hold and announced "Fixed by itself" while
+// the transcript was still unread; with a save every turn the real report
+// never came. Each store now holds its own refusal, and a save resolves only
+// the hold its own store started.
+test('the full app timeline with a transcript whose read errors: one report for the transcript, no "fixed" while it is unread', async () => {
+  const run = await launch({
+    runFor: 300,
+    stores: { chat: 200, archives: 200 },
+    readHook: (U) => {
+      const chatKey = scope.scopedKey(scope.BASE_KEYS.chat, U);
+      return (k, v) => {
+        if (k === chatKey) throw Object.assign(new Error('Synthetic IndexedDB failure'), { name: 'UnknownError' });
+        return v;
+      };
+    },
+    assistantEvery: 31,
+  });
+  await Promise.all(run.saves);
+  assert.ok(run.edits() >= 5 && run.turns() >= 5, 'precondition: edits and Assistant turns ran');
+  assert.equal(stored(run.idb, run.key)?.settings?.edits, run.edits(), 'the file saves as usual');
+  const archives = JSON.parse(run.idb.dump().get(scope.scopedKey(scope.BASE_KEYS.archives, run.U)));
+  assert.equal(archives[0].id, `archives-synthetic-turn-${run.turns()}`, 'the archives save as usual');
+  const failed = errors(run.reports);
+  assert.equal(failed.length, 1, `one error report (${JSON.stringify(failed)})`);
+  assert.equal(failed[0].message, 'Offline copy not saved: storage_unavailable');
+  assert.equal(failed[0].extra.store, scope.BASE_KEYS.chat);
+  assert.ok(failed[0].at <= 31 * 3 + 5, `reported past the hold, not late (at ${failed[0].at.toFixed(1)} s)`);
+  const recovered = run.reports.filter(r => r.extra?.event === 'storage_recovered');
+  assert.deepEqual(recovered, [], 'nothing is called fixed while the transcript is unread');
+  assert.equal(JSON.parse(run.idb.dump().get(scope.scopedKey(scope.BASE_KEYS.chat, run.U)))[0].id, 'chat-synthetic-1', 'the stored transcript is not written over');
 });
 
 // Review: the bound was per connection only, so one transaction that never
