@@ -86,7 +86,7 @@ let accounts = 0;
  * (null: as fast as the fake), or that is `broken` ("hang": no transaction
  * settles; "error": every transaction aborts). Returns what happened.
  */
-async function launch({ deviceSeconds = null, broken = null, runFor = 400, signOutAt = null, stores = null, readHook = null, assistantEvery = null }) {
+async function launch({ deviceSeconds = null, broken = null, runFor = 400, signOutAt = null, stores = null, readHook = null, assistantEvery = null, openSeconds = null }) {
   const U = `user_syntheticSlowDevice${accounts += 1}`;
   const key = scope.scopedKey(scope.BASE_KEYS.data, U);
   // The offline copy's database. Other databases of the origin (the invoice
@@ -115,6 +115,9 @@ async function launch({ deviceSeconds = null, broken = null, runFor = 400, signO
   if (broken === 'hang') idb.hangTransactions = true;
   if (broken === 'error') idb.failTransactions = true;
   if (readHook) idb.readHook = readHook(U);
+  // The open timeout on the scaled clock (4 device seconds).
+  offlineStore.setOfflineOpenTimeout(4 * SEC);
+  if (openSeconds != null) idb.slowOpens = openSeconds * SEC;
   // Signed in: the stores are hydrated from here on (setActiveUserId).
   scope.setActiveUserId(U);
   const T0 = deviceNow();
@@ -198,6 +201,8 @@ async function launch({ deviceSeconds = null, broken = null, runFor = 400, signO
   }
   active = false;
   idb.readHook = null;
+  idb.slowOpens = 0;
+  offlineStore.setOfflineOpenTimeout(undefined);
   clearTimeout(timer);
   stopArrived();
   await firstLoad;
@@ -207,8 +212,8 @@ async function launch({ deviceSeconds = null, broken = null, runFor = 400, signO
 const errors = (reports) => reports.filter(r => r.kind === 'error');
 const stored = (idb, key) => { const v = idb.dump().get(key); return typeof v === 'string' ? JSON.parse(v) : null; };
 
-async function slowButWorking(deviceSeconds, { stores = null } = {}) {
-  const run = await launch({ deviceSeconds, runFor: 400, stores });
+async function slowButWorking(deviceSeconds, { stores = null, openSeconds = null } = {}) {
+  const run = await launch({ deviceSeconds, runFor: 400, stores, openSeconds });
   await Promise.all(run.saves);
   assert.equal(scope.offlineCopyUnread(run.U), false, 'the copy was read this session');
   assert.deepEqual(run.screen().identityVault, IDENTITY, 'Protected Identity came from the device copy');
@@ -601,6 +606,58 @@ test('a hung file read while the Assistant keeps writing: it fails about three m
   assert.ok(since <= turn + BOUND + 15, `about three minutes from its turn (at ${since.toFixed(1)} s, turn ${turn.toFixed(1)} s)`);
   idb.hangKeys = null;
   idb.slowLargeValues = null;
+  scope.setActiveUserId(null);
+});
+
+// Review (pre-existing): an open slower than the open timeout was taken for
+// a failure, so the copy was left unread and "Offline copy not saved" was
+// reported while the device was working. It is "not yet" now: the open runs
+// on and its connection is the next call's.
+test('(a)(e) an open that takes 20 seconds: the copy loads, saves land, nothing is reported', async () => {
+  await slowButWorking(null, { openSeconds: 20 });
+});
+
+test('(a)(e) an open that takes 20 seconds and a transaction 20 more: the same', async () => {
+  await slowButWorking(20, { openSeconds: 20 });
+});
+
+test('a read that failed before a purge does not make a slow open after it a reported failure', async () => {
+  const U = 'user_syntheticPurgedFailedRead';
+  const key = scope.scopedKey(scope.BASE_KEYS.data, U);
+  const idb = createMemoryIndexedDB();
+  offlineStore.setOfflineStoreFactory(idb);
+  offlineStore.setOfflineTransactionTimeout(BASE_WAIT * SEC);
+  offlineStore.setOfflineTransactionBound(BOUND * SEC);
+  scope.setActiveUserId(U);
+  scope.adoptLocalFence(U);
+  assert.equal((await scope.writeOfflineText(key, JSON.stringify(deviceFile()), () => true)).saved, true, 'precondition: the file is stored');
+  ({ scope, storage } = await newPage());
+  offlineStore.setOfflineStoreFactory(idb);
+  offlineStore.setOfflineOpenTimeout(4 * SEC);
+  scope.resetStorageFullReport();
+  const reports = [];
+  scope.setStorageFullReporter((message, extra, kind = 'error') => reports.push({ message, extra, kind }));
+  scope.setActiveUserId(U);
+  // A read of the file that errors: a failure, recorded.
+  idb.readHook = (k, v) => { if (k === key) throw Object.assign(new Error('Synthetic IndexedDB failure'), { name: 'UnknownError' }); return v; };
+  await storage.readCachedData(U, { current: () => true });
+  idb.readHook = null;
+  assert.equal(scope.offlineCopyUnread(U), true, 'precondition: the failed read left the copy unread');
+  // Delete All My Data: the copy goes, and the account starts again.
+  await storage.clearLocalData(U);
+  scope.setActiveUserId(U);
+  scope.adoptLocalFence(U);
+  assert.equal((await scope.writeOfflineText(key, JSON.stringify(deviceFile()), () => true)).saved, true, 'precondition: a new copy is stored');
+  // A fresh connection whose open is slow: the next read is "not yet".
+  offlineStore.setOfflineStoreFactory(idb);
+  idb.slowOpens = 20 * SEC;
+  await storage.readCachedData(U, { current: () => true });
+  assert.equal(scope.offlineCopyUnread(U), true, 'precondition: the slow open left the copy unread');
+  const result = await scope.writeOfflineText(key, JSON.stringify(deviceFile({ settings: { edits: 1 } })), () => true);
+  assert.equal(result.saved, false);
+  assert.ok(result.refused.includes('indexeddb_pending'), `refused as pending, not as a failed read (${result.refused})`);
+  idb.slowOpens = 0;
+  offlineStore.setOfflineOpenTimeout(undefined);
   scope.setActiveUserId(null);
 });
 

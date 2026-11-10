@@ -27,8 +27,14 @@
 export const OFFLINE_DB_NAME = "credentialdomd-offline";
 export const OFFLINE_DB_STORE = "kv";
 const OFFLINE_DB_VERSION = 1;
-// iOS has shipped builds whose first indexedDB.open never answers. Past this
-// the store counts as unavailable for the call and the next call tries again.
+// How long a caller waits on an indexedDB.open before it is told "not yet"
+// (OfflineStoreBusy). The open itself is left to answer: a slow device is
+// not a broken one, and the connection it brings is handed to the calls
+// after it. Taken for a failure, a slow open left the copy unread and
+// reported "Offline copy not saved" while the device was working (b1071b82
+// review). Only an open that errors or throws, or has not answered in
+// TRANSACTION_BOUND_MS, has failed (iOS has shipped builds whose first open
+// never answers), and the next call then opens again.
 const OPEN_TIMEOUT_MS = 4000;
 let openTimeoutMs = OPEN_TIMEOUT_MS;
 // After an open that failed or never answered, calls within this window are
@@ -163,13 +169,24 @@ function openDb() {
   if (!idb || typeof idb.open !== "function") return Promise.resolve(null);
   if (Date.now() < unavailableUntil) return Promise.resolve(null);
   let retryAfter = RETRY_AFTER_MS;
+  let bound = null;
+  // The callers' patience with this open (openWaited): "not yet" past
+  // openTimeoutMs from its start, while it runs on.
+  const patience = waitLimit(openTimeoutMs);
   const attempt = new Promise((resolve) => {
     let settled = false;
-    const done = (db) => { if (!settled) { settled = true; resolve(db); } };
-    const timer = setTimeout(() => { if (!settled) noteFailure(null, "OpenTimeout"); done(null); }, openTimeoutMs);
+    const done = (db) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(bound);
+      clearTimeout(patience.timer);
+      resolve(db);
+    };
+    bound = setTimeout(() => { if (!settled) noteFailure(null, "OpenTimeout"); done(null); }, transactionBoundMs);
+    bound?.unref?.();
     let req;
     try { req = idb.open(OFFLINE_DB_NAME, OFFLINE_DB_VERSION); }
-    catch (error) { clearTimeout(timer); noteFailure(error, "OpenThrew"); if (LOST_ERRORS.has(error?.name)) retryAfter = LOST_RETRY_MS; done(null); return; }
+    catch (error) { noteFailure(error, "OpenThrew"); if (LOST_ERRORS.has(error?.name)) retryAfter = LOST_RETRY_MS; done(null); return; }
     req.onupgradeneeded = () => {
       try {
         const db = req.result;
@@ -177,7 +194,6 @@ function openDb() {
       } catch { /* the open then fails and reports unavailable */ }
     };
     req.onsuccess = () => {
-      clearTimeout(timer);
       const db = req.result;
       if (settled) { try { db.close(); } catch { /* closed */ } return; }
       // Another tab upgrading the database: let it, and reopen next call.
@@ -189,7 +205,6 @@ function openDb() {
       done(db);
     };
     req.onerror = () => {
-      clearTimeout(timer);
       let error = null;
       try { error = req.error; } catch { /* none */ }
       noteFailure(error, "OpenError");
@@ -197,6 +212,7 @@ function openDb() {
       done(null);
     };
   });
+  openPatience.set(attempt, patience);
   dbPromise = attempt;
   attempt.then((db) => {
     if (db) { if (dbPromise === attempt) openDbHandle = db; return; }
@@ -204,6 +220,17 @@ function openDb() {
     if (dbPromise === attempt) dbPromise = null;
   });
   return attempt;
+}
+const openPatience = new WeakMap();   // open attempt -> its waitLimit
+/**
+ * The connection, waited for no longer than `limit` nor than the open's own
+ * patience (OPEN_TIMEOUT_MS from its start): past either, OfflineStoreBusy,
+ * and the open runs on for the next call. Null when IndexedDB is unavailable.
+ */
+function openWaited(limit) {
+  const attempt = openDb();
+  const patience = openPatience.get(attempt);
+  return patience ? within(attempt, limit, patience) : within(attempt, limit);
 }
 
 // A connection that is closing or lost is never handed out again: the next
@@ -408,10 +435,12 @@ async function transact(mode, body, { key = null, tag = null, guard, retryOpen =
         done = held();
         if (done) return { result: done.value };
       }
-      // An open that never answers is waited for no longer than the call
-      // (a brief one: the load's wait), and is then "not yet": it runs on
-      // to its own timeout. Waited for in full, it held the first screen
-      // for the open timeout, twice with `retryOpen` (8 to 12 seconds).
+      // An open still unanswered is waited for no longer than the call (a
+      // brief one: the load's wait) nor than OPEN_TIMEOUT_MS, and is then
+      // "not yet" (OfflineStoreBusy): it runs on, and the connection it
+      // brings is the next call's. Waited for in full, it held the first
+      // screen for the open timeout, twice with `retryOpen`; taken for a
+      // failure, it left the copy unread on a device that was only slow.
       // The retry after a connection this call dropped opens again even
       // inside the backoff of an open that failed meanwhile (another
       // transaction's retry on the same connection): handed null untried,
@@ -419,10 +448,10 @@ async function transact(mode, body, { key = null, tag = null, guard, retryOpen =
       // (the owner's iPhone, 2026-10-31, ticket b1071b82: "indexeddb_unavailable"
       // with the abort as the last error on record).
       if (dropped) unavailableUntil = 0;
-      let db = await within(openDb(), limit);
+      let db = await openWaited(limit);
       if (!db && retryOpen && attempt === 0 && offlineStoreSupported()) {
         unavailableUntil = 0;
-        db = await within(openDb(), limit);
+        db = await openWaited(limit);
       }
       if (!db) throw new OfflineStoreUnavailable();
       // Another transaction on the key began while this one waited for the

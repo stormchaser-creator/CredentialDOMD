@@ -439,6 +439,8 @@ function forgetLargeStoreMemory(userId) {
     mirror.delete(key);
     sessionOnly.delete(key);
     unreadKeys.delete(key);
+    // A read that failed said nothing of what the account holds now.
+    failedReads.delete(key);
   }
 }
 
@@ -1107,7 +1109,10 @@ async function purgeOfflineCopies(userId, { raw, mode }, mayHave = true) {
   const still = () => (lsGet(OFFLINE_PURGE_BASE, userId) ?? null) === raw;
   const fenced = localWriteGuard(userId);
   let done = true, empty = true;
-  for (const base of OFFLINE_STORE_BASES) forgetOfflineRead(scopedKey(base, userId));
+  // What was held of the keys, and a read of them that failed, belong to the
+  // copy this purge removes: a failed read left standing made a slow read of
+  // the next copy (an open still unanswered) a reported failure.
+  for (const base of OFFLINE_STORE_BASES) { const key = scopedKey(base, userId); forgetOfflineRead(key); failedReads.delete(key); }
   for (const base of OFFLINE_STORE_BASES) {
     const key = scopedKey(base, userId);
     if (mode === "trim" && base === BASE_KEYS.data) {

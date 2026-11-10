@@ -17,10 +17,11 @@
 // transaction nor any behind it ever answers) and one whose every transaction
 // aborts (`failTransactions`), a transaction on one key that never settles
 // while the others on the store run on (`hangKeys`: a Set of keys; WebKit
-// runs read-only transactions side by side), and an open that never answers
-// (`hangOpens`), and a transaction on one of some keys that aborts with no
-// error attached, as WebKit's plain aborts do (`abortPlainKeys`: a Set of keys,
-// each aborting once).
+// runs read-only transactions side by side), an open that never answers
+// (`hangOpens`) and one that answers late (`slowOpens`: ms), and a
+// transaction on one of some keys that aborts with no error attached, as
+// WebKit's plain aborts do (`abortPlainKeys`: a Set of keys, each aborting
+// once).
 // Synthetic data only.
 
 function quotaError() {
@@ -50,6 +51,7 @@ export function createMemoryIndexedDB({ quotaBytes = Infinity } = {}) {
     hangTransactions: false,
     hangKeys: null,
     hangOpens: false,
+    slowOpens: 0,
     failTransactions: false,
     abortPlainKeys: null,
     opened: 0,
@@ -78,7 +80,8 @@ export function createMemoryIndexedDB({ quotaBytes = Infinity } = {}) {
       factory.opened += 1;
       const openEpoch = factory.pageEpoch;
       if (factory.hangOpens) return req;
-      setImmediate(() => {
+      const answer = factory.slowOpens > 0 ? (fn) => setTimeout(fn, factory.slowOpens) : setImmediate;
+      answer(() => {
         if (openEpoch !== factory.pageEpoch) return;
         if (factory.failOpens > 0) {
           factory.failOpens -= 1;
