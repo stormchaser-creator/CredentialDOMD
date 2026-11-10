@@ -210,3 +210,25 @@ test('an open that errors begins no streak: after idle time a slow open still ha
   assert.equal(await offlineStore.offlineRead(KEY), 'synthetic offline file text');
   idb.slowOpens = 0;
 });
+
+// Review of the commit above: an error from an open already superseded ended
+// the streak, so opens that each errored after the open timeout, superseded
+// by the load's retry before they did, never reached the bound.
+test('opens that each error late while the load keeps retrying: still failed at the bound', async () => {
+  const idb = await storedDevice();
+  offlineStore.setOfflineOpenTimeout(30);
+  offlineStore.setOfflineTransactionTimeout(1000);
+  offlineStore.setOfflineTransactionBound(150);
+  idb.slowOpens = 80;
+  idb.failOpen = true;
+  const began = Date.now();
+  let failedAt = null;
+  while (Date.now() - began < 1200 && failedAt == null) {
+    try { await offlineStore.offlineRead(KEY, { retryOpen: true }); }
+    catch (error) { if (notBusy(error)) failedAt = Date.now() - began; }
+    await sleep(10);
+  }
+  assert.ok(failedAt != null && failedAt <= 400, `reported unavailable about the bound from the first open (${failedAt} ms)`);
+  idb.failOpen = false;
+  idb.slowOpens = 0;
+});

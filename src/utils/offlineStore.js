@@ -219,9 +219,6 @@ function openDb({ fresh = false } = {}) {
     };
     const fail = (error, name) => {
       if (settled) return;
-      // An error is an answer, not a hang: it ends the streak (hungSince),
-      // and the next open has the whole bound again.
-      if (name !== "OpenTimeout" && epoch === openEpoch) hungSince = null;
       failure = { error, name, retryAfter: LOST_ERRORS.has(error?.name) ? LOST_RETRY_MS : RETRY_AFTER_MS };
       done(null);
     };
@@ -274,6 +271,12 @@ function openDb({ fresh = false } = {}) {
   dbPromise = attempt;
   attempt.then((db) => {
     if (db || !failure || epoch !== openEpoch || dbPromise !== attempt) return;
+    // An error of the open the store waits on is an answer, not a hang: it
+    // ends the streak (hungSince), and the next open has the whole bound
+    // again. One from an open already superseded says nothing, or opens
+    // that each error after the open timeout, superseded before they do,
+    // never reached the bound.
+    if (failure.name !== "OpenTimeout") hungSince = null;
     noteFailure(failure.error, failure.name);
     unavailableUntil = Date.now() + failure.retryAfter;
     dbPromise = null;
