@@ -133,6 +133,7 @@ export function setOfflineOpenTimeout(ms) {
 export function setOfflineStoreFactory(idb) {
   factoryOverride = idb;
   openEpoch += 1;
+  hungSince = null;
   ready = deferred();
   unavailableUntil = 0;
   health.lost = false; health.lastError = null;
@@ -176,6 +177,15 @@ export class OfflineStoreStuck extends OfflineStoreUnavailable {
 // is waiting on speaks for it: one superseded, or begun for another factory
 // (openEpoch), says nothing.
 let openEpoch = 0;
+// When the first open still unanswered began, with no open answering since:
+// every open in the streak fails at TRANSACTION_BOUND_MS from it. Timed per
+// open, each fresh one started the bound again, and with calls coming every
+// few seconds no open ever failed, so an IndexedDB that never opens was
+// never reported (second b1071b82 review). Once a streak has gone past the
+// bound, the IndexedDB has had its minutes: each open after it, until one
+// answers, has OPEN_TIMEOUT_MS to answer and is waited for that long (no
+// "not yet"), as every open was before ticket b1071b82.
+let hungSince = null;
 const openMeta = new WeakMap();   // open attempt -> { began, answered, stale, patience }
 function deferred() { let resolve; const promise = new Promise((r) => { resolve = r; }); return { promise, resolve }; }
 let ready = deferred();
@@ -189,7 +199,10 @@ function openDb({ fresh = false } = {}) {
   if (!idb || typeof idb.open !== "function") return Promise.resolve(null);
   if (!dbPromise && Date.now() < unavailableUntil) return Promise.resolve(null);
   const epoch = openEpoch;
-  const meta = { began: Date.now(), answered: false, stale: false, patience: waitLimit(openTimeoutMs) };
+  hungSince ??= Date.now();
+  const expired = Date.now() >= hungSince + transactionBoundMs;
+  const deadline = expired ? Date.now() + openTimeoutMs : hungSince + transactionBoundMs;
+  const meta = { began: Date.now(), answered: false, stale: false, expired, patience: waitLimit(expired ? Infinity : openTimeoutMs) };
   meta.patience.promise.catch(() => { meta.stale = true; });
   let failure = null;   // { error, name, retryAfter }
   let attempt = null;
@@ -209,7 +222,7 @@ function openDb({ fresh = false } = {}) {
       failure = { error, name, retryAfter: LOST_ERRORS.has(error?.name) ? LOST_RETRY_MS : RETRY_AFTER_MS };
       done(null);
     };
-    bound = setTimeout(() => fail(null, "OpenTimeout"), transactionBoundMs);
+    bound = setTimeout(() => fail(null, "OpenTimeout"), Math.max(0, deadline - Date.now()));
     bound?.unref?.();
     let req;
     try { req = idb.open(OFFLINE_DB_NAME, OFFLINE_DB_VERSION); }
@@ -231,6 +244,7 @@ function openDb({ fresh = false } = {}) {
       // call opens again (LOST_RETRY_MS).
       db.onclose = () => { noteFailure(null, "close"); forget(db); };
       health.lost = false;
+      hungSince = null;
       openDbHandle = db;
       dbPromise = attempt;
       ready.resolve(db);
@@ -265,6 +279,10 @@ async function openWaited(limit, { brief = true, mode = "readonly", fresh = fals
   const attempt = openDb({ fresh });
   const meta = openMeta.get(attempt);
   const limits = brief && meta && !meta.answered ? [limit, meta.patience] : [limit];
+  // A save waiting it out starts a fresh open beside one past its patience,
+  // as the load's retry does: left to the next call, a save on a hung open
+  // waited the whole bound when nothing else called.
+  if (!brief && meta && !meta.answered) meta.patience.promise.catch(() => { if (!meta.answered) openDb({ fresh: true }); });
   try { return await within(Promise.race([attempt, ready.promise]), ...limits); }
   catch (error) {
     if (error instanceof OfflineStoreBusy && mode !== "readonly") throw new OfflineStoreUnavailable();

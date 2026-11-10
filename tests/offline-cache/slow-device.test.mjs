@@ -642,8 +642,7 @@ test('a transcript save made while the open is slow is saved, not held as pendin
   scope.setActiveUserId(U);
   const result = await scope.writeOfflineText(chatKey, JSON.stringify([{ id: 'chat-synthetic-2', text: 'new' }]), () => true);
   assert.equal(result.saved, true, `saved (${JSON.stringify(result)})`);
-  const where = idb.dump().get(chatKey) ?? localStorage.getItem(chatKey);
-  assert.equal(JSON.parse(where)[0].id, 'chat-synthetic-2', 'and it is on the device');
+  assert.equal(JSON.parse(idb.dump().get(chatKey))[0].id, 'chat-synthetic-2', 'it waited for the open and is in IndexedDB');
   idb.slowOpens = 0;
   offlineStore.setOfflineOpenTimeout(undefined);
   scope.setActiveUserId(null);

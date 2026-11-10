@@ -48,7 +48,7 @@ test('an open slower than the open timeout: a read is "not yet", a save waits fo
   assert.ok(Date.now() - began >= 60, 'precondition: it waited on the slow open');
   assert.equal(offlineStore.offlineStoreState().lastError, null, 'no failure recorded');
   assert.equal(await offlineStore.offlineRead(KEY), 'synthetic newer text', 'the late connection is used');
-  assert.equal(idb.opened, opened + 1, 'one open, kept pending, never abandoned for another');
+  assert.ok(idb.opened <= opened + 2, `the slow open kept pending, at most one fresh one beside it (${idb.opened - opened})`);
 });
 
 test('a brief save past the open\'s patience is "unavailable", never "not yet": no transaction of it is running', async () => {
@@ -111,7 +111,9 @@ test('an open unanswered past the transaction bound has failed, and the store is
   assert.equal(offlineStore.offlineStoreState().lastError, 'OpenTimeout');
   assert.ok(notBusy(await write), 'a save waiting on it is then refused, and falls back');
   await assert.rejects(() => offlineStore.offlineRead(KEY), notBusy, 'past the bound: unavailable');
+  // The backoff over, an open is tried again, given the open timeout only, and answers.
   idb.hangOpens = false;
+  assert.equal(await offlineStore.offlineRead(KEY, { retryOpen: true }), 'synthetic offline file text', 'and it recovers');
 });
 
 test('an open begun for an earlier factory says nothing of the next one', async () => {
@@ -133,4 +135,41 @@ test('an open that errors is still a failure at once', async () => {
   idb.failOpen = true;
   await assert.rejects(() => offlineStore.offlineRead(KEY), notBusy);
   idb.failOpen = false;
+});
+
+// Second review: each fresh open began the bound again, so with calls coming
+// more often than the bound no open ever failed and nothing was reported.
+test('every open hanging while the load keeps retrying: it fails at the bound from the first open', async () => {
+  const idb = await storedDevice();
+  offlineStore.setOfflineOpenTimeout(30);
+  offlineStore.setOfflineTransactionTimeout(1000);
+  offlineStore.setOfflineTransactionBound(300);
+  idb.hangOpens = true;
+  const began = Date.now();
+  let failedAt = null;
+  while (Date.now() - began < 900 && failedAt == null) {
+    try { await offlineStore.offlineRead(KEY, { retryOpen: true }); }
+    catch (error) { if (notBusy(error)) failedAt = Date.now() - began; }
+    await sleep(40);
+  }
+  assert.ok(failedAt != null, 'reported unavailable at last');
+  assert.ok(failedAt >= 280 && failedAt <= 450, `about the bound from the first open (${failedAt} ms)`);
+  assert.equal(offlineStore.offlineStoreState().lastError, 'OpenTimeout');
+  idb.hangOpens = false;
+});
+
+test('a save waiting on a hung open opens afresh itself when nothing else calls', async () => {
+  const idb = await storedDevice();
+  offlineStore.setOfflineOpenTimeout(30);
+  offlineStore.setOfflineTransactionBound(2000);
+  idb.hangOpens = true;
+  const opened = idb.opened;
+  const began = Date.now();
+  const write = offlineStore.offlineWrite(KEY, 'synthetic newer text');
+  await sleep(10);
+  idb.hangOpens = false;   // an open made now answers
+  assert.equal(await write, true, 'it lands');
+  assert.ok(Date.now() - began < 500, 'well before the bound');
+  assert.equal(idb.opened, opened + 2, 'one fresh open beside the hung one');
+  assert.equal(await offlineStore.offlineRead(KEY), 'synthetic newer text');
 });
