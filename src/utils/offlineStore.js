@@ -391,6 +391,7 @@ async function transact(mode, body, { key = null, tag = null, guard, retryOpen =
       const done = mode === "readonly" && key ? arrived.get(key) : null;
       return done && done.version === versionOf(key) && done.tag === tag ? done : null;
     };
+    let dropped = false;
     for (let attempt = 0; ; attempt += 1) {
       let done = held();
       if (done) return { result: done.value };
@@ -411,6 +412,13 @@ async function transact(mode, body, { key = null, tag = null, guard, retryOpen =
       // (a brief one: the load's wait), and is then "not yet": it runs on
       // to its own timeout. Waited for in full, it held the first screen
       // for the open timeout, twice with `retryOpen` (8 to 12 seconds).
+      // The retry after a connection this call dropped opens again even
+      // inside the backoff of an open that failed meanwhile (another
+      // transaction's retry on the same connection): handed null untried,
+      // the write was refused as unavailable while IndexedDB would open
+      // (the owner's iPhone, 2026-10-31, ticket b1071b82: "indexeddb_unavailable"
+      // with the abort as the last error on record).
+      if (dropped) unavailableUntil = 0;
       let db = await within(openDb(), limit);
       if (!db && retryOpen && attempt === 0 && offlineStoreSupported()) {
         unavailableUntil = 0;
@@ -430,6 +438,7 @@ async function transact(mode, body, { key = null, tag = null, guard, retryOpen =
         // A transaction that never settled is not tried again at once.
         if (isQuota(error) || error instanceof OfflineStoreUnavailable || attempt > 0) throw error;
         dropConnection(db);
+        dropped = true;
       }
     }
   } finally { clearTimeout(limit.timer); }

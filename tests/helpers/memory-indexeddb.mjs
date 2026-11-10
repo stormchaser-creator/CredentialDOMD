@@ -18,7 +18,9 @@
 // aborts (`failTransactions`), a transaction on one key that never settles
 // while the others on the store run on (`hangKeys`: a Set of keys; WebKit
 // runs read-only transactions side by side), and an open that never answers
-// (`hangOpens`).
+// (`hangOpens`), and a transaction on one of some keys that aborts with no
+// error attached, as WebKit's plain aborts do (`abortPlainKeys`: a Set of keys,
+// each aborting once).
 // Synthetic data only.
 
 function quotaError() {
@@ -49,6 +51,7 @@ export function createMemoryIndexedDB({ quotaBytes = Infinity } = {}) {
     hangKeys: null,
     hangOpens: false,
     failTransactions: false,
+    abortPlainKeys: null,
     opened: 0,
     writes: [],
     pageEpoch: 0,
@@ -147,6 +150,12 @@ export function createMemoryIndexedDB({ quotaBytes = Infinity } = {}) {
             const v = value !== undefined ? value : (key !== undefined ? store.get(key) : undefined);
             return typeof v === 'string' && v.length >= slow.minChars;
           })) await new Promise(resolve => setTimeout(resolve, slow.ms));
+          const plain = factory.abortPlainKeys && ops.find(({ key }) => factory.abortPlainKeys.has(key));
+          if (plain) {
+            factory.abortPlainKeys.delete(plain.key);
+            tx.onabort?.({ target: tx });
+            return;
+          }
           if (factory.failTransactions) {
             const error = new Error('The transaction was aborted.');
             error.name = 'AbortError';
