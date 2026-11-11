@@ -58,6 +58,10 @@ let { scope, storage } = await newPage();
 const offlineStore = await import('../../src/utils/offlineStore.js');
 
 const BASE_WAIT = 6;     // device seconds: the wait the first screen has today
+// Device seconds of scheduling slack on a wait. At 25 ms a device second, one
+// second was too little under the gate's six parallel test files (7.2 s
+// measured, 3 gate runs, 11-08 to 11-10); two still tells one wait (6) from two (12).
+const SLACK = 2;
 const BOUND = 180;       // device seconds: a transaction unsettled this long has failed
 
 const IDENTITY = [{ id: 'identity-synthetic-slow', label: 'Synthetic application', ssn: 'enc1:SYNTHETIC' }];
@@ -225,8 +229,8 @@ async function slowButWorking(deviceSeconds, { stores = null, openSeconds = null
   for (const base of Object.keys(stores || {})) {
     assert.equal(JSON.parse(run.idb.dump().get(scope.scopedKey(scope.BASE_KEYS[base], run.U)))?.[0]?.id, `${base}-synthetic-1`, `the stored ${base} is kept`);
   }
-  for (const wait of run.launchWaits) assert.ok(wait <= BASE_WAIT + 1, `the first screen waited ${wait.toFixed(1)} s for the copy (budget ${BASE_WAIT} s)`);
-  assert.ok(run.launchWaits.reduce((a, b) => a + b, 0) <= BASE_WAIT + 1, 'the two reads of the first load share one wait');
+  for (const wait of run.launchWaits) assert.ok(wait <= BASE_WAIT + SLACK, `the first screen waited ${wait.toFixed(1)} s for the copy (budget ${BASE_WAIT} s)`);
+  assert.ok(run.launchWaits.reduce((a, b) => a + b, 0) <= BASE_WAIT + SLACK, 'the two reads of the first load share one wait');
 }
 
 test('(a)(e) 20 seconds a transaction: the copy loads, saves land, nothing is reported, the first screen waits no longer than today', async () => {
@@ -246,7 +250,7 @@ test('(e) 5 seconds a transaction, just under the wait: the two reads of the fir
 
 test('(d)(e) a store whose transactions error after 3 seconds: one report, and one wait for the first screen', async () => {
   const run = await launch({ deviceSeconds: 3, broken: 'error', runFor: 200 });
-  assert.ok(run.launchWaits.reduce((a, b) => a + b, 0) <= BASE_WAIT + 1, `the first screen waited ${run.launchWaits.map(w => w.toFixed(1))} s for the copy`);
+  assert.ok(run.launchWaits.reduce((a, b) => a + b, 0) <= BASE_WAIT + SLACK, `the first screen waited ${run.launchWaits.map(w => w.toFixed(1))} s for the copy`);
   const failed = errors(run.reports);
   assert.equal(failed.length, 1, `one report (${JSON.stringify(failed)})`);
   assert.equal(failed[0].message, 'Offline copy not saved: storage_unavailable');
@@ -261,7 +265,7 @@ test('(a)(e) a large transcript and archives besides the file: the first screen 
 
 test('(c)(e) a store whose transactions never settle is reported once, at the three minute bound, never earlier', async () => {
   const run = await launch({ broken: 'hang', runFor: 320 });
-  for (const wait of run.launchWaits) assert.ok(wait <= BASE_WAIT + 1, `the first screen waited ${wait.toFixed(1)} s`);
+  for (const wait of run.launchWaits) assert.ok(wait <= BASE_WAIT + SLACK, `the first screen waited ${wait.toFixed(1)} s`);
   const failed = errors(run.reports);
   assert.equal(failed.length, 1, `one report (${JSON.stringify(failed)})`);
   assert.equal(failed[0].message, 'Offline copy not saved: storage_unavailable');
@@ -272,7 +276,7 @@ test('(c)(e) a store whose transactions never settle is reported once, at the th
 
 test('(d)(e) a store whose transactions error is reported once', async () => {
   const run = await launch({ broken: 'error', runFor: 200 });
-  for (const wait of run.launchWaits) assert.ok(wait <= BASE_WAIT + 1, `the first screen waited ${wait.toFixed(1)} s`);
+  for (const wait of run.launchWaits) assert.ok(wait <= BASE_WAIT + SLACK, `the first screen waited ${wait.toFixed(1)} s`);
   const failed = errors(run.reports);
   assert.equal(failed.length, 1, `one report (${JSON.stringify(failed)})`);
   assert.equal(failed[0].message, 'Offline copy not saved: storage_unavailable');
@@ -589,7 +593,7 @@ test('a hung file read while the Assistant keeps writing: it fails about three m
   const turn = deviceNow() - start + 59;
   const began = deviceNow();
   await storage.readCachedData(U, { current: () => true });
-  assert.ok(deviceNow() - began <= BASE_WAIT + 1, 'the first screen waits no longer than the base wait');
+  assert.ok(deviceNow() - began <= BASE_WAIT + SLACK, 'the first screen waits no longer than the base wait');
   // The Assistant keeps writing: something on the connection settles every 60 seconds.
   let n = 1;
   while (deviceNow() - start < turn + BOUND + 40) {
@@ -715,8 +719,8 @@ test('an open that never answers: the first screen keeps the base wait', async (
     await storage.readCachedData(U, { current });
     waits.push(deviceNow() - began);
   }
-  assert.ok(waits[0] <= BASE_WAIT + 1, `the first read waited ${waits[0].toFixed(1)} s`);
-  assert.ok(waits[0] + waits[1] <= BASE_WAIT + 1, `the load waited ${waits.map(w => w.toFixed(1))} s in all`);
+  assert.ok(waits[0] <= BASE_WAIT + SLACK, `the first read waited ${waits[0].toFixed(1)} s`);
+  assert.ok(waits[0] + waits[1] <= BASE_WAIT + SLACK, `the load waited ${waits.map(w => w.toFixed(1))} s in all`);
   idb.hangOpens = false;
   offlineStore.setOfflineOpenTimeout(undefined);
   scope.setActiveUserId(null);
