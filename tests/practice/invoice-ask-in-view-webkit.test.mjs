@@ -169,6 +169,9 @@ test('real WebKit at 390x844: the preview question comes into view with Yes and 
   await withPhone(async (page) => {
     await page.evaluate(() => window.__run.preview());
     await page.evaluate(() => window.__preview.setAsk({ number: 'INV-20261002-21' }));
+    // setAsk is a state update, not flushed: wait for React to draw the
+    // question before measuring it (it was missing in 4 gate runs, 11-01 to 11-08).
+    await page.waitForFunction(() => [...document.querySelectorAll('button')].some(b => b.textContent === 'No, it did not go out'), null, { polling: 50, timeout: 5000 });
     // Where No would sit with nothing scrolled: below the fold. This is the case.
     const before = await page.evaluate(() => {
       const body = document.querySelector('[data-modal-body]');
