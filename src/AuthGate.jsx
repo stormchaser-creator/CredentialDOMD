@@ -22,6 +22,10 @@ import { deferChunkFailure, reportError, setErrorScreen } from "./lib/errorRepor
 // One more try after a moment: a chunk lost to a dropped connection (or a
 // deploy that replaced it while this page sat open) is fetched again before
 // the error screen.
+// Shared with App.jsx's mount effect (utils/startupModule.js
+// clearStartupModuleGuard): each module's own import.meta.url differs
+// between the two files, so a build id keyed on that would never match.
+const STARTUP_BUILD_ID = typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "dev";
 export const loadApp = () => import("./App.jsx").catch(() => new Promise(resolve => setTimeout(resolve, 1000)).then(() => import("./App.jsx")));
 const App = lazy(() => loadApp().catch(error => {
   // Prefetch failures never reload a visitor who is entering their email.
@@ -29,7 +33,7 @@ const App = lazy(() => loadApp().catch(error => {
   const recovering = recoverStartupModule(error, {
     storage: { getItem: key => sessionStorage.getItem(key), setItem: (key, value) => sessionStorage.setItem(key, value) },
     reload: () => window.location.reload(), online: navigator.onLine,
-    build: import.meta.url,
+    build: STARTUP_BUILD_ID,
   });
   // Keep Suspense while navigation starts. If a host refuses the reload,
   // fall back to the existing error screen instead of waiting forever.

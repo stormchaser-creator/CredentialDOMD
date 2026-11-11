@@ -11,6 +11,7 @@ import EmptyState from "./components/shared/EmptyState";
 import GetStartedCard from "./components/features/GetStartedCard";
 import ProfessionPicker, { chooseProfessionThen } from "./components/features/ProfessionPicker";
 import { alertWriteRefused } from "./utils/limitedLaunchAccess.js";
+import { clearStartupModuleGuard } from "./utils/startupModule.js";
 import CustomCategorySection, { NewCategoryPanel } from "./components/features/CustomCategorySection";
 import { liveCategories, unsortedRecords, categoryLabelFor } from "./utils/customCategories";
 import SideNav from "./components/shared/SideNav";
@@ -166,6 +167,14 @@ const openingScreen = () => (pageScreen ??= LINK_SCREENS[openedOnLink()]
   : (!openedOnLink() && lastScreen()) || { tab: "home", subPage: null });
 
 export default function App() {
+  // Reaching this render means the root app chunk loaded and mounted, so the
+  // startup-module reload guard (AuthGate.jsx, via recoverStartupModule) can
+  // be lifted: a later, unrelated chunk-load failure in this tab/build/session
+  // still gets its own retry instead of going straight to the error screen.
+  useEffect(() => {
+    const build = typeof __APP_BUILD_ID__ !== "undefined" ? __APP_BUILD_ID__ : "dev";
+    clearStartupModuleGuard({ getItem: key => sessionStorage.getItem(key), setItem: (key, value) => sessionStorage.setItem(key, value) }, build);
+  }, []);
   const [tab, setTab] = useState(() => openingScreen().tab);
   const [subPage, setSubPage] = useState(() => openingScreen().subPage);
   useEffect(() => {
