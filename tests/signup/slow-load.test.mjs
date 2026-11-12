@@ -107,3 +107,22 @@ test('both loading screens carry the Reload, and it reloads keeping the link', a
   assert.match(app, /const slowLoadReload = loadSlow && <>[\s\S]*?onClick=\{reloadKeepingLink\}[\s\S]*?>Reload<\/button>/);
   assert.match(app, /useSlowLoad\(!authChecked \? "sign-in" : !loaded \? "account" : null/);
 });
+
+// AC-1 (ticket ebf25bf0, 2026-11-08): the account-load recovery reporting
+// pinned in tests/signup/slow-load-resolve.test.mjs and
+// tests/funnel/slow-load-recovers-itself.test.mjs only shows the hook and
+// errorReport.js work together correctly; it does not show App.jsx actually
+// calls them that way. This pins that the live call wires the real
+// reportSlowLoad function (imported from lib/errorReport.js, not a stub)
+// and the real loadEndedBadly flag into useSlowLoad's `report`/`failed`
+// options, so a wait that recovers on its own reaches the operator as
+// recovered rather than as an unfixed error.
+test('App.jsx wires the real reportSlowLoad function and the real loadEndedBadly flag into useSlowLoad', async () => {
+  const app = await readFile(new URL('../../src/App.jsx', import.meta.url), 'utf8');
+  assert.match(app, /import \{ reportSlowLoad \} from "\.\/lib\/errorReport\.js";/);
+  assert.match(app, /const loadEndedBadly = !!\(/);
+  assert.match(
+    app,
+    /useSlowLoad\(!authChecked \? "sign-in" : !loaded \? "account" : null,\s*\{ report: reportSlowLoad, failed: loadEndedBadly \}\)/
+  );
+});
