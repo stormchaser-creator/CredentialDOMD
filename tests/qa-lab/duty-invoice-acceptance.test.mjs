@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { recoveryCopyCount, RECOVERY_PREFIX } from '../../qa-lab/e2e/support/recovery-acceptance.mjs';
 
 const source = readFileSync(process.env.QA_DUTY_SPEC_FILE || new URL('../../qa-lab/e2e/practice-days.spec.mjs', import.meta.url), 'utf8');
 const start = source.indexOf('    const billed = ');
@@ -71,14 +72,18 @@ test('read failure remains a failed check after the bounded wait', async () => {
 test('persistent incomplete links time out and fail the original assertion', async () => {
   await assert.rejects(run([linked.map(row => ({ ...row, invoice_id: null }))]), /each duty day now carries the invoice id/);
 });
+const recoveryStub = shown => ({ recoveryCopyCount, page: { async evaluate(fn, arg) {
+  const stored = shown ? [`${RECOVERY_PREFIX}user_synthetic:${'a'.repeat(64)}`] : ['credentialdomd-other'];
+  return vm.runInNewContext(`(${fn.toString()})`, { localStorage: { get length() { return stored.length; }, key: i => stored[i] ?? null } })(arg);
+} } });
 for (const prefix of ['before reloading, saved', 'after reloading, unchanged']) for (const shown of [false, true]) {
-  test(`${prefix} duty data ${shown ? 'rejects' : 'passes without'} recovery notice`, async () => {
-    const assertion = source.split('\n').find(line => line.includes(`qa.check('${prefix} duty days do not need recovery review'`));
-    assert.ok(assertion, 'The real journey must check recovery visibility');
+  test(`${prefix} duty data ${shown ? 'rejects' : 'passes without'} a recovery copy`, async () => {
+    const assertion = source.split('\n').find(line => line.includes(`qa.check('${prefix} duty days keep no recovery copy'`));
+    assert.ok(assertion, 'The real journey must check for recovery copies');
     const check = vm.runInNewContext(`(async () => { ${assertion} })()`, {
-      page: { getByText(text, options) { assert.equal(text, 'Saved copies need your review'); assert.equal(options.exact, true); return { count: async () => Number(shown) }; } },
+      ...recoveryStub(shown),
       qa: { check(name, ok) { assert.equal(Boolean(ok), true, name); } },
     });
-    if (shown) await assert.rejects(check, /duty days do not need recovery review/); else await check;
+    if (shown) await assert.rejects(check, /duty days keep no recovery copy/); else await check;
   });
 }

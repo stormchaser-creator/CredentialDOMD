@@ -7,10 +7,10 @@ import { classifyWriteError, describeWriteError } from '../src/utils/syncRules.j
 // SYNC-001: a record the cloud refused must not look saved. The notice names
 // each one, says why in plain words, and opens it. Synthetic records only.
 
-// These controls belong to the write-status portion. Recovery has its own
-// account-switch/download tests in sync-recovery-ui.test.mjs; the wrapper now
-// renders both components, so expose this portion for direct click handlers.
-const { SyncIssuesNotice } = await loadScreens('export { SavedWriteIssuesNotice as SyncIssuesNotice } from "./src/components/shared/SyncIssuesNotice.jsx";', {
+// The wrapper renders only this write-status portion now: earlier versions
+// kept on this device live under Data & Backup (sync-recovery-ui.test.mjs).
+// Expose it for direct click handlers.
+const { SyncIssuesNotice, reportUnsentChangeFailure, preserveRecovery } = await loadScreens('export { SavedWriteIssuesNotice as SyncIssuesNotice } from "./src/components/shared/SyncIssuesNotice.jsx"; export { reportUnsentChangeFailure, preserveRecovery } from "./src/utils/syncRecovery.js";', {
   expose: { 'src/components/shared/SyncIssuesNotice.jsx': ['SavedWriteIssuesNotice'] },
 });
 
@@ -151,4 +151,19 @@ test('SYNC-017: a Protected Identity or Answer Bank change in no copy of the off
   assert.doesNotMatch(html, /\u2014|—/, 'no em dashes in the copy');
   Object.assign(globalThis.__screen.app, { deviceOnlyUnsaved: null, offlineCopyStale: null });
   assert.equal(m.html(), '');
+});
+
+test('a new change this device could not keep is named with its next step; an earlier version kept aside is not', async () => {
+  const quiet = show({ data: {} });
+  globalThis.__screen.app.user = { id: 'user_syntheticKept' };
+  await preserveRecovery({ accountId: 'user_syntheticKept', fence: null, collectionKey: 'licenses',
+    local: { id: 'l1', notes: 'Device note' }, cloud: { id: 'l1', notes: 'Account note' } }).catch(() => {});
+  assert.equal(quiet.m.html(), '', 'an earlier version kept aside says nothing on the everyday screens');
+  const m = show({ data: {} }).m;
+  globalThis.__screen.app.user = { id: 'user_syntheticUnkept' };
+  reportUnsentChangeFailure('user_syntheticUnkept', 'This device could not keep a new unsent change. Existing queued changes were preserved. Keep this tab open and export your records before reloading or signing out.');
+  const html = m.html();
+  assert.match(html, /could not keep a new unsent change/);
+  assert.match(html, /data-sync-unkept/);
+  assert.doesNotMatch(html, /review/i);
 });

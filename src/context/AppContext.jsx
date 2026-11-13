@@ -3,7 +3,7 @@ import { useUser, useClerk } from "@clerk/clerk-react";
 import { accessAuthority, accessVerifying, alertWriteRefused, dataChangeStatus, holdForAccess, reportWriteAccess, scopesForWrite, setWriteAccessReporter, settleWriteAccess, writeRefusalReason } from "../utils/limitedLaunchAccess.js";
 import { applyHeldQueue, changesBetween, revertChanges } from "../utils/heldChanges.js";
 import { prepareRecordAcknowledgements, isAcknowledgedRecordCopy } from "../utils/recordAcknowledgements.js";
-import { preserveRecovery, readRecovery, purgeRecovery } from "../utils/syncRecovery.js";
+import { preserveRecovery, readRecovery, purgeRecovery, setRecoveryReporter } from "../utils/syncRecovery.js";
 import { localChangesSince, rebaseLocalChanges } from "../utils/loadRebase.js";
 import { beginLoadOwes, firstAnswerPlan, layWithheldSaves, readAfterReplay, replayLeftUnsent } from "../utils/loadOwes.js";
 import { needsAppRules, preloadAppRules, loadAppRules, rememberAppRulesOnDevice, withoutAppRuleNeeds } from "../utils/appRules.js";
@@ -341,6 +341,9 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // localStorage both, or either one) reaches client_errors once per session:
   // the store, the reason and the size rounded to 100 KB, never contents.
   useEffect(() => { setStorageFullReporter((message, extra, kind = "error") => reportError(message, kind, extra)); }, []);
+  // An earlier version this device could not keep aside is an event, not
+  // something to tell the member (utils/syncRecovery.js).
+  useEffect(() => { setRecoveryReporter((message, extra) => reportError(message, "info", extra)); }, []);
   // Refused saves, and saves kept on this device for want of a membership
   // answer, reach client_errors too (event, reason code and section only). A
   // refusal the page being left can cause (writes stopped by a load that a
@@ -1607,7 +1610,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
     let recoveryCount;
     try { recoveryCount = readRecovery(ownerId).length; }
     catch (error) { window.alert(error.message); return; }
-    if (recoveryCount > 0 && !window.confirm(`Signing out erases ${recoveryCount} saved recovery ${recoveryCount === 1 ? "copy" : "copies"} kept only on this device. Download them from the recovery notice first. Sign out anyway?`)) return;
+    if (recoveryCount > 0 && !window.confirm(`Signing out erases ${recoveryCount} earlier ${recoveryCount === 1 ? "version" : "versions"} of your records kept only on this device. Your account versions stay. To keep ${recoveryCount === 1 ? "it" : "them"}, download from More, Data & Backup first. Sign out anyway?`)) return;
     // A running Work timer is kept only on this device (WorkLog.jsx, under
     // BASE_KEYS.timer), and the purge removes it with its start time, so the
     // time it has run is lost unless Stop & Log saves it as an entry first.

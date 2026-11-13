@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createSyncRecovery, RECOVERY_BASE, RECOVERY_GENERATION, recoveryFailureFor } from '../src/utils/syncRecovery.js';
+import { createSyncRecovery, RECOVERY_BASE, RECOVERY_GENERATION, unsentChangeFailureFor, setRecoveryReporter } from '../src/utils/syncRecovery.js';
 import { fixture, deferred, tick } from './limited-launch/persistence-fixture.mjs';
 import { BASE_KEYS, setActiveUserId, adoptLocalFence, purgeAfterSessionEnd, purgeForSignOut } from '../src/utils/storageScope.js';
 const A = 'user_syntheticA', B = 'user_syntheticB';
@@ -35,7 +35,9 @@ test('capture failure, account switch, generation purge and exact null-fence mis
   const full = store(); full.storage.setItem = () => { throw Error('Synthetic quota refusal'); };
   await assert.rejects(full.save(), error => error.code === 'sync_recovery_unavailable');
   assert.equal(full.storage.values.size, 0);
-  assert.match(recoveryFailureFor(A), /could not safely/);
+  // The account version is in use either way: a copy that could not be kept
+  // aside is reported once as an info event and never shown to the member.
+  assert.equal(unsentChangeFailureFor(A), null);
   for (const change of [f => { f.actor = B; }, f => { f.fence = 'purged'; }, f => f.api.purgeRecovery(A)]) {
     const wait = deferred(), f = store({ digest: () => wait.promise });
     const saving = f.save(); change(f); wait.resolve('a'.repeat(64));
@@ -159,7 +161,7 @@ test('501 distinct queued operations remain; malformed queue is never silently o
   f.values.set(`ops:${A}`, '{broken queue');
   await f.api.updateItem(null, 'licenses', desired);
   assert.equal(f.values.get(`ops:${A}`), '{broken queue');
-  assert.match(recoveryFailureFor(A), /could not keep/);
+  assert.match(unsentChangeFailureFor(A), /could not keep/);
 });
 
 test('a causal sequence of offline edits keeps the first verified base and latest desired row', async () => {
@@ -255,7 +257,7 @@ test('queue quota refusal preserves the entire previous queue and explains that 
   f.values.set = (key, value) => { if (key === `ops:${A}`) throw Object.assign(Error('Synthetic quota'), { name: 'QuotaExceededError' }); return originalSet(key, value); };
   await f.api.updateItem(null, 'licenses', { ...desired, id: 'second-unsent' });
   assert.equal(f.values.get(`ops:${A}`), before);
-  assert.match(recoveryFailureFor(A), /export your records before reloading/);
+  assert.match(unsentChangeFailureFor(A), /export your records before reloading/);
 });
 
 test('recovery readback refusal and an insert collision with no visible owner row both retain the source queue', async () => {
@@ -348,4 +350,19 @@ test('a narrow later online save never clears an earlier unsent field unless the
       assert.equal(f.queue().length, 0);
     }
   }
+});
+
+test('a recovery copy that cannot be stored is one info report, never a member-facing failure', async () => {
+  const reports = []; setRecoveryReporter((message, extra) => reports.push([message, extra]));
+  try {
+    const member = 'user_syntheticReporter';
+    for (let i = 0; i < 3; i++) {
+      const full = store(); full.actor = member; full.storage.setItem = () => { throw Error('Synthetic quota refusal'); };
+      await assert.rejects(full.api.preserveRecovery({ accountId: member, fence: null, collectionKey: 'licenses', local: desired, cloud: base }),
+        error => error.code === 'sync_recovery_unavailable');
+      assert.equal(full.storage.values.size, 0);
+    }
+    assert.deepEqual(reports, [['Earlier version not kept on this device', { event: 'sync_recovery_unavailable', collectionKey: 'licenses' }]]);
+    assert.equal(unsentChangeFailureFor(member), null);
+  } finally { setRecoveryReporter(null); }
 });

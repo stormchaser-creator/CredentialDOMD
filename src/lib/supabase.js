@@ -7,7 +7,7 @@ import { createClient } from "@supabase/supabase-js";
 import { STORAGE_KEY, LOCAL_ONLY_SETTINGS } from "../constants/defaults.js";
 import { BASE_KEYS, DEVICE_KEYS_BASE, getActiveUserId, localWriteGuard, adoptedLocalFence, localCopyCurrent, localFence, setItemMakingRoom } from "../utils/storageScope.js";
 import { captureRecordWrite, acknowledgeRecordWrite, expectedRecordVersion } from "../utils/recordAcknowledgements.js";
-import { preserveRecovery, stableJson, reportRecoveryFailure } from "../utils/syncRecovery.js";
+import { preserveRecovery, stableJson, reportUnsentChangeFailure } from "../utils/syncRecovery.js";
 import { foundingFromProfile } from "../utils/founding.js";
 import { createLimitedLaunchClient } from "../utils/limitedLaunchClient.js";
 import { createContinuityBinding, recoverContinuity, continuitySourceSubject, PRODUCTION_CLERK_ISSUER } from "../utils/continuityRecovery.js";
@@ -1197,7 +1197,7 @@ function queuePendingOp(op, collectionKey, payload, owner, meta = {}) {
     setItemMakingRoom(key, JSON.stringify(arr));
   } catch (err) {
     queueId = null;
-    reportRecoveryFailure(owner.accountId, "This device could not keep a new unsent change. Existing queued changes were preserved. Keep this tab open and export your records before reloading or signing out.");
+    reportUnsentChangeFailure(owner.accountId, "This device could not keep a new unsent change. Existing queued changes were preserved. Keep this tab open and export your records before reloading or signing out.");
     // Storage full (a queued document carries its file): the write could not
     // be kept for another try. Said, never silent.
     if ((err?.name === "QuotaExceededError" || err?.code === 22) && op !== "settings") {

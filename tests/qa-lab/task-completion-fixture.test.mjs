@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
+import { recoveryCopyCount, RECOVERY_PREFIX } from '../../qa-lab/e2e/support/recovery-acceptance.mjs';
 
 const source = readFileSync(process.env.QA_TASK_SPEC_FILE || new URL('../../qa-lab/e2e/practice-todo-invoices.spec.mjs', import.meta.url), 'utf8');
 const start = source.indexOf('    const done = ');
@@ -63,17 +64,19 @@ test('the cloud read is scoped to both the exact task and profile', () => {
 });
 
 // This additional acceptance check covers the separate scalar-default product
-// fix. A completed task wait must never hide the user-visible recovery banner.
-for (const shown of [false, true]) test(`ordinary reloaded data ${shown ? 'refuses' : 'passes without'} a recovery notice`, async () => {
-  const assertion = source.split('\n').find(line => line.includes("qa.check('after a reload, unchanged saved data does not need recovery review'"));
+// fix. A completed task wait must never hide a recovery copy kept on the
+// device (the everyday screens no longer show one, so it reads the store).
+const recoveryStub = shown => ({ recoveryCopyCount, page: { async evaluate(fn, arg) {
+  const stored = shown ? [`${RECOVERY_PREFIX}user_synthetic:${'a'.repeat(64)}`] : ['credentialdomd-other'];
+  return vm.runInNewContext(`(${fn.toString()})`, { localStorage: { get length() { return stored.length; }, key: i => stored[i] ?? null } })(arg);
+} } });
+for (const shown of [false, true]) test(`ordinary reloaded data ${shown ? 'refuses' : 'passes without'} a recovery copy`, async () => {
+  const assertion = source.split('\n').find(line => line.includes("qa.check('after a reload, unchanged saved data keeps no recovery copy'"));
   assert.ok(assertion);
   const check = vm.runInNewContext(`(async () => { ${assertion} })()`, {
-    page: { getByText(text, options) {
-      assert.equal(text, 'Saved copies need your review'); assert.equal(options.exact, true);
-      return { count: async () => shown ? 1 : 0 };
-    } },
+    ...recoveryStub(shown),
     qa: { check(name, ok) { assert.equal(Boolean(ok), true, name); } },
   });
-  if (shown) await assert.rejects(check, /unchanged saved data does not need recovery review/);
+  if (shown) await assert.rejects(check, /unchanged saved data keeps no recovery copy/);
   else await check;
 });

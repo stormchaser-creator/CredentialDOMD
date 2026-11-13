@@ -228,10 +228,10 @@ test('nothing device-only in memory or on disk: Sign out still asks nothing', as
 });
 
 
-test('saved recovery copies are named before signout; cancellation and failed purge retain the signed-in data', async () => {
+test('earlier versions kept on this device are named before signout; cancellation and failed purge retain the signed-in data', async () => {
   const cancelled = fixture({ recovery: [{ entryId: 'synthetic' }], confirm: () => false });
   await cancelled.run();
-  assert.match(cancelled.calls.find(call => call[0] === 'confirm')[1], /1 saved recovery copy/);
+  assert.match(cancelled.calls.find(call => call[0] === 'confirm')[1], /1 earlier version of your records kept only on this device.*More, Data & Backup/);
   assert.deepEqual(cancelled.calls.map(call => call[0]), ['ai-reset', 'confirm']);
   assert.equal(cancelled.dataOwnerRef.current, 'user_syntheticA');
   const blocked = fixture({ recovery: [{ entryId: 'synthetic' }], confirm: () => true, failRecovery: true });

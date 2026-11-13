@@ -6,7 +6,22 @@ import { getActiveUserId, localFence, localCopyCurrent } from "./storageScope.js
 export const RECOVERY_BASE = "credentialdomd-sync-recovery-v1";
 export const RECOVERY_GENERATION = "credentialdomd-sync-recovery-generation";
 const listeners = new Set();
+// A new unsent change this device could not keep (lib/supabase.js queueOp):
+// a real lost save, which SyncIssuesNotice names with its next step.
 const failures = new Map();
+// A recovery copy that could not be stored is not: the account version is
+// shown and used either way, so the member is never told. It goes once per
+// account to the client error reporter as an info event (AppContext wires
+// it), so a device that keeps refusing is still seen.
+let copyReporter = null;
+const copyReported = new Set();
+export function setRecoveryReporter(fn) { copyReporter = typeof fn === "function" ? fn : null; }
+const reportCopyNotKept = (accountId, collectionKey) => {
+  if (copyReported.has(accountId) || !copyReporter) return;
+  copyReported.add(accountId);
+  try { copyReporter("Earlier version not kept on this device", { event: "sync_recovery_unavailable", collectionKey: collectionKey || null }); }
+  catch { /* reporting never blocks */ }
+};
 export const stableJson = value => JSON.stringify(value, (_key, item) => item && typeof item === "object" && !Array.isArray(item)
   ? Object.fromEntries(Object.keys(item).sort().map(key => [key, item[key]])) : item);
 const sha256 = async text => Array.from(new Uint8Array(await crypto.subtle.digest("SHA-256", new TextEncoder().encode(text))), x => x.toString(16).padStart(2, "0")).join("");
@@ -15,8 +30,8 @@ const failure = () => Object.assign(new Error("This device could not safely save
 const changed = () => Object.assign(new Error("The account or local copy changed."), { code: "membership_account_changed" });
 const notify = id => { for (const fn of listeners) { try { fn(id); } catch { /* observer only */ } } };
 export const onRecoveryChange = fn => { listeners.add(fn); return () => listeners.delete(fn); };
-export const recoveryFailureFor = id => failures.get(id) || null;
-export function reportRecoveryFailure(id, message) { failures.set(id, message); notify(id); }
+export const unsentChangeFailureFor = id => failures.get(id) || null;
+export function reportUnsentChangeFailure(id, message) { failures.set(id, message); notify(id); }
 
 export function createSyncRecovery({ storage = () => globalThis.localStorage, activeAccount = getActiveUserId,
   fenceFor = localFence, copyCurrent = localCopyCurrent, digest = sha256 } = {}) {
@@ -67,11 +82,11 @@ export function createSyncRecovery({ storage = () => globalThis.localStorage, ac
       if (storage().getItem(key) !== entry) throw failure();
       guard(scope);
       if (storage().getItem(RECOVERY_GENERATION) !== generation) throw changed();
-      failures.delete(accountId); notify(accountId);
+      notify(accountId);
       return entryId;
     } catch (err) {
       if (err.code === "membership_account_changed") throw err;
-      failures.set(accountId, failure().message); notify(accountId); throw failure();
+      reportCopyNotKept(accountId, collectionKey); throw failure();
     }
   }
   function discard(accountId, entryId) {
@@ -102,5 +117,5 @@ export const { preserveRecovery, readRecovery, discardRecovery, purgeRecovery } 
 export function recoveryDownload(accountId, entryId) {
   const entries = readRecovery(accountId).filter(item => !entryId || item.entryId === entryId);
   return { type: "CredentialDOMD recovery copies", schemaVersion: 1,
-    note: "Saved versions for review. This is not an automatic restore file.", entries };
+    note: "Earlier versions this device kept. Your account version is the one in use. This is not an automatic restore file.", entries };
 }

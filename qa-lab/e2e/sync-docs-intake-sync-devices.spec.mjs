@@ -15,6 +15,7 @@ import {
   chooseFiles, field, goTab, landing, newMember, openCredentials, openMore, profileOf, pendingOps, row, rows, signIn, sleep, syntheticPdf, tableRow, waitFor, waitForMemberApp,
 } from './support/lab.mjs';
 import { addLicense, pageText } from './support/sync-docs-intake-helpers.mjs';
+import { recoveryCopyCount } from './support/recovery-acceptance.mjs';
 
 test('a backup with 1,050 case logs imports and all of them come back, here and on another browser', { tag: ['@SYNC-007'] }, async ({ page, qa, secondBrowser }) => {
   const { user, profile } = await newMember(page, { firstName: 'Casey', lastName: 'Caselog' });
@@ -247,20 +248,24 @@ test('two devices edit the same license: conflicts preserve both copies and ackn
     return /QA note from B/.test(t) ? 'B' : /QA note from A/.test(t) ? 'A' : 'none';
   };
 
+  // The differing draft is kept on the device as an earlier version: nothing
+  // on the everyday screens, and Data & Backup offers it as a download.
   const checkRecovery = async (p, localNote, cloudNote) => {
-    const notice = p.locator('[data-sync-recovery]');
-    await notice.waitFor({ state: 'visible', timeout: 30000 });
-    const details = notice.locator('details').filter({ hasText: localNote }).first();
-    await details.locator('summary').click();
-    const compared = await details.innerText();
-    qa.check('recovery compares the local draft with the observed account copy', compared.includes(localNote) && compared.includes(cloudNote), compared.slice(0, 700));
-    const [download] = await Promise.all([
-      p.waitForEvent('download', { timeout: 15000 }),
-      details.getByRole('button', { name: 'Download both copies', exact: true }).click(),
-    ]);
+    await waitFor('the differing draft is kept on this device', async () => await recoveryCopyCount(p) > 0, { timeoutMs: 30000 });
+    qa.check('the everyday screens say nothing about the kept copy',
+      await p.locator('[data-sync-recovery], [data-earlier-versions]').count() === 0 && await p.getByText(/need your review/i).count() === 0);
+    await openMore(p, 'Data & Backup');
+    const kept = p.locator('[data-earlier-versions]');
+    await kept.waitFor({ state: 'visible', timeout: 30000 });
+    await kept.locator('summary').click();
+    const listed = await kept.innerText();
+    qa.check('Data & Backup lists the earlier version by the record name, without review wording', listed.includes('QA Concurrent License') && !/review/i.test(listed), listed.slice(0, 700));
+    const all = kept.getByRole('button', { name: 'Download all', exact: true });
+    const target = await all.count() ? all : kept.getByRole('button', { name: 'Download', exact: true }).first();
+    const [download] = await Promise.all([p.waitForEvent('download', { timeout: 15000 }), target.click()]);
     const exported = JSON.parse(readFileSync(await download.path(), 'utf8'));
-    qa.check('the recovery download preserves both complete versions of this record', exported.type === 'CredentialDOMD recovery copies' && exported.entries.some(e => e.collectionKey === 'licenses' && e.recordId === lic.id && e.local.notes === localNote && e.cloud.notes === cloudNote));
-    await qa.shot(`deliberate recovery ${localNote}`, p);
+    qa.check('the download preserves both complete versions of this record', exported.type === 'CredentialDOMD recovery copies' && exported.entries.some(e => e.collectionKey === 'licenses' && e.recordId === lic.id && e.local.notes === localNote && e.cloud.notes === cloudNote));
+    await qa.shot(`earlier version kept ${localNote}`, p);
   };
 
   await qa.feature('SYNC-016', 'Two stale forms edit the same field: the first accepted edit stays saved and the other draft is recoverable', async () => {
@@ -277,7 +282,7 @@ test('two devices edit the same license: conflicts preserve both copies and ackn
     await page.reload(); await waitForMemberApp(page);
     await b.page.reload(); await waitForMemberApp(b.page);
     qa.check('both devices show the accepted A version after reload', await notesShown(page) === 'A' && await notesShown(b.page) === 'A');
-    qa.check('the saved recovery remains after reload', await b.page.locator('[data-sync-recovery]').isVisible());
+    qa.check('the kept earlier version remains on the device after reload', await recoveryCopyCount(b.page) > 0);
   });
 
   await qa.feature('SYNC-016', 'The first device runs ten minutes fast, reloads its normalized saved copy, then accepts the later edit', async () => {
@@ -336,7 +341,7 @@ test('two devices edit the same license: conflicts preserve both copies and ackn
     await checkRecovery(page, 'QA offline draft from A', 'QA newer accepted note from B');
     qa.check('replaying the offline draft preserves the newer account record', row(`select notes from public.licenses where id = '${lic.id}'`).notes === 'QA newer accepted note from B');
     await page.reload(); await waitForMemberApp(page);
-    qa.check('the recovery survives reload without replaying its draft again', await page.locator('[data-sync-recovery]').isVisible() && row(`select notes from public.licenses where id = '${lic.id}'`).notes === 'QA newer accepted note from B');
+    qa.check('the kept earlier version survives reload without replaying its draft again', await recoveryCopyCount(page) > 0 && row(`select notes from public.licenses where id = '${lic.id}'`).notes === 'QA newer accepted note from B');
   });
 
 });

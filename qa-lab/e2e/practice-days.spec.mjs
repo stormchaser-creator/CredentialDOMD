@@ -8,6 +8,7 @@
 import path from 'node:path';
 import { copyAndReadSynthetic } from './support/clipboard-paste.mjs';
 import { test } from './support/fixtures.mjs';
+import { recoveryCopyCount } from './support/recovery-acceptance.mjs';
 import {
   SHOT_DIR,
   base64Marker, chooseFiles, field, goTab, lab, newMember, row, rows, scriptAi, sleep, stamp, syntheticPdf, tokenFor, tombstones, waitFor, waitForMemberApp,
@@ -160,13 +161,13 @@ test('practice day-rate agreement: filed from a scan, its schedule, days and cal
     await sleep(1500);
     qa.check('the delete asks "Delete this day?"', qa.report.dialogs.some((x) => /Delete this day\?/.test(x)));
     qa.check('the deleted day is gone and tombstoned', !!d4 && !row(`select id from public.duty_days where id = '${d4.id}'`) && tombstones(profile.id).some((t) => t.item_id === d4.id));
-    qa.check('before reloading, saved duty days do not need recovery review', await page.getByText('Saved copies need your review', { exact: true }).count() === 0);
+    qa.check('before reloading, saved duty days keep no recovery copy', await recoveryCopyCount(page) === 0);
     await page.reload();
     await waitForMemberApp(page);
     await goTab(page, 'Practice');
     await subTab(page, 'Work');
     await loggingAgainst(page).selectOption(contract.id);
-    qa.check('after reloading, unchanged duty days do not need recovery review', await page.getByText('Saved copies need your review', { exact: true }).count() === 0);
+    qa.check('after reloading, unchanged duty days keep no recovery copy', await recoveryCopyCount(page) === 0);
     const list = await bodyText(page);
     await qa.shot('duty days after reload');
     qa.check('after a reload: the three days with their amounts', list.includes(listDay(day1)) && list.includes(listDay(day2)) && list.includes(listDay(day3)) && !list.includes(listDay(day4)) && /\$2,750\.00/.test(list) && /\$400\.00/.test(list), list.match(/Days & call[\s\S]{0,900}/)?.[0]);

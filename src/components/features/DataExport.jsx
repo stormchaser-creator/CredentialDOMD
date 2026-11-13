@@ -7,6 +7,7 @@ import { planRestore, isBackupFile, restoreRefusal, restoreRefusedMessage, keepD
 import { recordCounts, totalOf } from "../../utils/dataCounts.js";
 import { mergeIdentityRestore, SECTION as IDENTITY_SECTION } from "../../utils/protectedIdentity";
 import BackupPanel from "./BackupPanel";
+import EarlierVersions from "./EarlierVersions";
 import { plainLabel, isCurrentJob } from "../../utils/helpers";
 import { lifecycleSummary } from "../../utils/lifecycle";
 import { addressGroups } from "../../utils/addressHistory";
@@ -458,6 +459,10 @@ function DataExport() {
         {importStatus === "invalid" && <div style={{ marginTop: 10, fontSize: 14, fontWeight: 600, color: T.danger }}>Invalid file format. Please select a CredentialDOMD backup.</div>}
         {importStatus === "error" && <div style={{ marginTop: 10, fontSize: 14, fontWeight: 600, color: T.danger }}>Error reading file. Please try again.</div>}
       </div>
+
+      {/* This device's earlier versions of records whose account copy won:
+          a quiet safety net, nothing on the everyday screens. */}
+      <EarlierVersions />
     </div>
   );
 }

@@ -7,6 +7,7 @@
 import { randomUUID } from 'node:crypto';
 import { copyAndReadSynthetic } from './support/clipboard-paste.mjs';
 import { test } from './support/fixtures.mjs';
+import { recoveryCopyCount } from './support/recovery-acceptance.mjs';
 import {
   base64Marker, goTab, newMember, restAs, row, rows, scriptAi, sleep, syntheticPdf, tombstones, waitFor, waitForMemberApp,
 } from './support/lab.mjs';
@@ -147,7 +148,7 @@ test('practice to do: capture, edit, time and finish a task into the Work tab, b
     await qa.shot('finished tasks');
     qa.check('after a reload, finished tasks list the billed one and the one closed without billing', /QA call back ICU consult re: drain[\s\S]*· billed/.test(list) && /QA sign discharge summary[\s\S]*closed, not billed/.test(list), list.slice(list.indexOf('Hide finished'), list.indexOf('Hide finished') + 600));
     qa.check('the deleted note stays gone', !/QA note to delete/.test(list));
-    qa.check('after a reload, unchanged saved data does not need recovery review', await page.getByText('Saved copies need your review', { exact: true }).count() === 0);
+    qa.check('after a reload, unchanged saved data keeps no recovery copy', await recoveryCopyCount(page) === 0);
   }, { soft: true });
 });
 
