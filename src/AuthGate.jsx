@@ -2,7 +2,7 @@ import { lazy, Suspense, useEffect, useState } from "react";
 import { useAuth } from "@clerk/clerk-react";
 import AuthPage from "./components/pages/AuthPage.jsx";
 import UpdatePrompt from "./components/shared/UpdatePrompt";
-import { recoverStartupModule } from "./utils/startupModule.js";
+import { recoverStartupModule, waitForStartupReload } from "./utils/startupModule.js";
 import { readLastIdentity } from "./utils/offlineSession";
 import { stashAppDeepLink, takeAppDeepLink } from "./utils/supportDeepLink.js";
 import { watchChunkFailures, CHUNK_RETRY_DELAY_MS } from "./utils/chunkRecovery.js";
@@ -35,9 +35,9 @@ const App = lazy(() => loadApp().catch(error => {
     reload: () => window.location.reload(), online: navigator.onLine,
     build: STARTUP_BUILD_ID,
   });
-  // Keep Suspense while navigation starts. If a host refuses the reload,
+  // Keep Suspense while the reload loads. If a host refuses the reload,
   // fall back to the existing error screen instead of waiting forever.
-  if (recovering) return new Promise((_, reject) => setTimeout(() => reject(error), 5000));
+  if (recovering) return waitForStartupReload(error);
   throw error;
 }));
 export const APP_PREFETCH_DELAY_MS = 1500;
