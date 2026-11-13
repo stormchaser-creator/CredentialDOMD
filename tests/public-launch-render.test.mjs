@@ -77,9 +77,9 @@ test('paid home and locums expose static navigation and cannot submit a disguise
 
 test('home shows founding policy before sign-in and its offer buttons lead to public pricing', async () => {
   const output = renderPublicLaunch(await read('landing/index.html'), 'home');
-  const hero = output.slice(output.indexOf('<section class="hero"'), output.indexOf('<!-- ============ PROBLEM'));
-  const nav = output.slice(output.indexOf('<nav>'), output.indexOf('</nav>'));
-  for (const html of [hero, nav]) {
+  const hero = output.slice(output.indexOf('<section class="hero"'), output.indexOf('<!-- ============ HOW IT WORKS'));
+  // The navigation is the shared header (scripts/site-chrome.mjs, tests/site-chrome.test.mjs).
+  for (const html of [hero]) {
     assert.match(html, /href="#planned-pricing"[^>]*><span data-membership-review-action>/);
     assert.doesNotMatch(html, /Review membership offers|Check membership offers/);
   }
@@ -372,7 +372,7 @@ test('both legal modes retain factual device-storage and AI-provider disclosures
 test('home: the signup button and its guarantee sit right under the hero offer; other pages unchanged', async () => {
   const source = await read('landing/index.html');
   const output = renderPublicLaunch(source, 'home');
-  const hero = output.slice(output.indexOf('<section class="hero"'), output.indexOf('<!-- ============ PROBLEM'));
+  const hero = output.slice(output.indexOf('<section class="hero"'), output.indexOf('<!-- ============ HOW IT WORKS'));
   const box = hero.indexOf('data-membership-hero-note');
   const signup = hero.indexOf('<div data-hero-signup');
   assert.ok(box > 0 && signup > box, 'after the offer box');
@@ -387,7 +387,7 @@ test('home: the signup button and its guarantee sit right under the hero offer; 
 
 test('home: the sticky bar follows the hero signup button when there is one, else the whole hero', async () => {
   const source = await read('landing/index.html');
-  const script = source.slice(source.indexOf('// Sticky mobile CTA bar'), source.indexOf('// Nav scroll effect'));
+  const script = source.slice(source.indexOf('// Sticky mobile CTA bar'), source.indexOf('</script>', source.indexOf('// Sticky mobile CTA bar')));
   const run = (withButton) => {
     const observed = [];
     const button = { id: 'hero-signup' }, hero = { id: 'hero' };

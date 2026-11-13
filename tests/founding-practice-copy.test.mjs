@@ -24,7 +24,7 @@ const between = (html, start, end) => html.slice(html.indexOf(start), html.index
 
 test('the landing hero and the $99 card say Practice is included while a member', async () => {
   const output = renderPublicLaunch(await read('landing/index.html'), 'home');
-  const hero = output.slice(output.indexOf('<section class="hero"'), output.indexOf('<!-- ============ PROBLEM'));
+  const hero = output.slice(output.indexOf('<section class="hero"'), output.indexOf('<!-- ============ HOW IT WORKS'));
   assert.ok(hero.includes(`data-membership-hero-headline style="font-size:23px;font-weight:750;line-height:1.3;margin:0 0 8px;">${HEADLINE}</p>`));
   const card = output.slice(output.indexOf('<h3 class="feature-title">Credential</h3>'), output.indexOf('<h3 class="feature-title">Credential + Practice</h3>'));
   assert.ok(card.includes(HEADLINE), 'the $99 card');
@@ -72,11 +72,10 @@ test('the /locums membership card leads with the $99 founding offer, then the pa
   assert.ok(between(output, '<div class="beta-card', '</div>').includes('<span data-membership-rate>'));
 });
 
-test('the competitor grid no longer says "No free trial" against the Practice trial', async () => {
+test('the home page no longer says "No free trial" against the Practice trial', async () => {
+  // The redesigned home page has no competitor grid; the plans cards carry the offer.
   const source = await read('landing/index.html');
-  assert.doesNotMatch(source, /No free trial/);
-  const cell = source.match(/<td class="us">(\$99 a year[^<]*)<\/td>/)[1];
-  assert.equal(cell, '$99 a year for the first 100 paid founding members, Practice included while you are a member. Then $149, then $199, each with a 30 day Practice trial. You pay up front, and you can ask for that year back in full at any time.');
+  assert.doesNotMatch(source, /No free trial|<td class="us">/);
 });
 
 test('the Practice paragraph is the same on /locums, /help and /terms, and the terms date moved', async () => {
@@ -104,8 +103,7 @@ test('the public offer module paints the same headline, and refuses a reply that
 });
 
 test('no hyphen or dash in the public copy written for this change', async () => {
-  const cell = (await read('landing/index.html')).match(/<td class="us">(\$99 a year[^<]*)<\/td>/)[1];
-  for (const text of [view.foundingOffer, view.foundingRate, view.fullPackage, view.practiceTrial, cell, offerPresentation({ schemaVersion: 1, phase: 'founding', annualCents: 9900, checkoutEnabled: true, availability: 'available' }).heroHeadline]) {
+  for (const text of [view.foundingOffer, view.foundingRate, view.fullPackage, view.practiceTrial, offerPresentation({ schemaVersion: 1, phase: 'founding', annualCents: 9900, checkoutEnabled: true, availability: 'available' }).heroHeadline]) {
     assert.doesNotMatch(text, /[-–—]/, text);
   }
 });

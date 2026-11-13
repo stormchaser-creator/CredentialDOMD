@@ -13,16 +13,24 @@ import { renderCme } from "../scripts/build-cme.mjs";
 import { renderLegalPages } from "../scripts/generate-legal-pages.mjs";
 import { loadVideoCatalog, WATCH_PAGES } from "../scripts/help-videos.mjs";
 import { HTTPS_REDIRECT_SCRIPT, httpsRedirectProblem } from "../scripts/https-redirect.mjs";
+import { applySiteChrome } from "../scripts/site-chrome.mjs";
 
 const sourceRoot = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 // Baseline fixtures test byte-preserving packaging, independent of live launch mode.
 const BASELINE_LAUNCH_MODE = Object.freeze({ enabled: false, signupHref: null });
-const pages = ["index", "locums", "security", "privacy", "terms", "help", "cme", "credential-access"];
+const pages = ["index", "locums", "security", "privacy", "terms", "help", "cme", "credential-access", "pricing", "credits"];
+// Every page but the private access page is packaged with the shared header and footer.
+const currentNav = { index: "home", pricing: "pricing" };
+const branded = (page, html, mode) => page === "credential-access" ? html : applySiteChrome(html, { current: currentNav[page], mode });
 const read = path => readFile(path, "utf8");
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
 // Include default images and responsive candidates advertised by the real
 // homepage, independently of the packager's asset allowlist.
-const homepageImagePaths = html => [...new Set(html.match(/\/images\/[a-zA-Z0-9._-]+\.webp/g) || [])];
+const homepageImagePaths = html => [...new Set(html.match(/\/images\/[a-zA-Z0-9._-]+\.(?:webp|png)/g) || [])];
+// Published for the redesign or kept so earlier image URLs still resolve; not all are on the home page.
+const reviewedImages = ["physician-life-v3-600.webp", "physician-life-v3-1200.webp", "physician-colleagues-v3-600.webp", "physician-colleagues-v3-1200.webp", "physician-learning-v3-600.webp", "eric-whitney-120.webp", "eric-whitney-400.webp",
+  "hero-two-doctors-640.webp", "hero-two-doctors-1200.webp", "doctor-white-coat-640.webp", "doctor-white-coat-1200.webp", "doctor-blue-scrubs-640.webp", "doctor-blue-scrubs-1200.webp", "senior-physician-640.webp", "senior-physician-1200.webp",
+  "physicians-imaging-640.webp", "physicians-imaging-1200.webp", "logo-64.png", "logo-192.png"];
 
 async function siteFixture(t) {
   const root = await mkdtemp(resolve(tmpdir(), "credentialdo-packaging-"));
@@ -40,11 +48,12 @@ async function siteFixture(t) {
   await writeFile(resolve(root, "landing/states/example.html"), `<!doctype html><meta charset="utf-8">${HTTPS_REDIRECT_SCRIPT}<title>Synthetic state guide</title>`);
   await Promise.all([
     ...pages.map(page => cp(resolve(sourceRoot, `landing/${page}.html`), resolve(root, `landing/${page}.html`))),
-    ...["robots.txt", "sitemap.xml", "organization-logo.svg", "support-nav.css", "support-nav.js", "waitlist-signup.js", "membership-offer.js", "credential-access", "knowledge", "cme-assets"].map(path => cp(resolve(sourceRoot, "public", path), resolve(root, "public", path), { recursive: true })),
+    ...["robots.txt", "sitemap.xml", "organization-logo.svg", "support-nav.css", "support-nav.js", "waitlist-signup.js", "membership-offer.js", "site-chrome.css", "site-chrome.js", "site.css", "credential-access", "knowledge", "cme-assets"].map(path => cp(resolve(sourceRoot, "public", path), resolve(root, "public", path), { recursive: true })),
     ...["root-sw-retirement.js", "build-credential-portal.mjs"].map(path => cp(resolve(sourceRoot, "scripts", path), resolve(root, "scripts", path))),
     cp(resolve(sourceRoot, "package.json"), resolve(root, "package.json")),
     cp(resolve(sourceRoot, "landing/states/states-data.json"), resolve(root, "landing/states/states-data.json")),
     cp(resolve(sourceRoot, "landing/images"), resolve(root, "landing/images"), { recursive: true }),
+    cp(resolve(sourceRoot, "landing/fonts"), resolve(root, "landing/fonts"), { recursive: true }),
   ]);
   await writeFile(resolve(root, "landing/images/unreviewed.webp"), "not a reviewed runtime image");
   await writeFile(resolve(root, "landing/images/source-original.png"), "source originals must not ship");
@@ -86,7 +95,7 @@ test("site package keeps public help/CME, private routes, declared assets and di
   // describe the active paid release even in this baseline fixture.
   const baselineLegal = renderLegalPages(BASELINE_LAUNCH_MODE);
   for (const page of pages) {
-    const expected = baselineLegal[`${page}.html`] || await read(resolve(root, `landing/${page}.html`));
+    const expected = branded(page, baselineLegal[`${page}.html`] || await read(resolve(root, `landing/${page}.html`)), BASELINE_LAUNCH_MODE);
     assert.equal(await read(resolve(output, `${page}.html`)), expected);
     if (page !== "index") assert.equal(await read(resolve(output, page, "index.html")), expected);
   }
@@ -103,22 +112,27 @@ test("site package keeps public help/CME, private routes, declared assets and di
   assert.match(await read(resolve(output, "sitemap.xml")), /<loc>https:\/\/credentialdomd\.com\/cme\/<\/loc>/);
   assert.match(await read(resolve(output, "sitemap.xml")), /<loc>https:\/\/credentialdomd\.com\/help<\/loc>/);
   assert.equal(await read(resolve(output, "organization-logo.svg")), await read(resolve(root, "public/organization-logo.svg")));
-  for (const file of ["support-nav.css", "support-nav.js", "waitlist-signup.js", "membership-offer.js"]) {
+  for (const file of ["support-nav.css", "support-nav.js", "waitlist-signup.js", "membership-offer.js", "site-chrome.css", "site-chrome.js", "site.css"]) {
     assert.equal(await read(resolve(output, file)), await read(resolve(root, "public", file)));
   }
+  assert.deepEqual(await readdir(resolve(output, "fonts")), ["figtree.woff"]);
+  assert.deepEqual(await readFile(resolve(output, "fonts/figtree.woff")), await readFile(resolve(sourceRoot, "landing/fonts/figtree.woff")));
   for (const page of ["index.html", "locums.html"]) {
     const html = await read(resolve(output, page));
     assert.equal((html.match(/<script type="module" src="\/waitlist-signup\.js"><\/script>/g) || []).length, 1);
     assert.doesNotMatch(html, /var postSignup =|postSignup\('\/api\/waitlist'/);
   }
   const imagePaths = homepageImagePaths(await read(resolve(output, "index.html")));
-  assert.equal(imagePaths.length, 7, "all reviewed responsive homepage images must be advertised");
-  assert.deepEqual((await readdir(resolve(output, "images"))).sort(), imagePaths.map(path => path.slice("/images/".length)).sort(),
-    "package only referenced runtime images, excluding unreviewed files and source originals");
-  for (const path of imagePaths) {
+  assert.equal(imagePaths.length, 9, "the home page advertises its photographs, the founder portrait and the logo");
+  for (const path of imagePaths) assert.ok(reviewedImages.includes(path.slice("/images/".length)), `home page image is published: ${path}`);
+  assert.deepEqual((await readdir(resolve(output, "images"))).sort(), [...reviewedImages].sort(),
+    "package only reviewed runtime images, excluding unreviewed files and source originals");
+  for (const path of reviewedImages.map(name => `/images/${name}`)) {
     const source = await readFile(resolve(root, "landing", path.slice(1)));
-    assert.equal(source.subarray(0, 4).toString(), "RIFF");
-    assert.equal(source.subarray(8, 12).toString(), "WEBP");
+    if (path.endsWith(".webp")) {
+      assert.equal(source.subarray(0, 4).toString(), "RIFF");
+      assert.equal(source.subarray(8, 12).toString(), "WEBP");
+    } else assert.equal(source.subarray(1, 4).toString(), "PNG");
     assert.deepEqual(await readFile(resolve(output, path.slice(1))), source, `preserve exact reviewed image bytes: ${path}`);
   }
   for (const { id } of WATCH_PAGES) {

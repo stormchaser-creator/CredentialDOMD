@@ -1,0 +1,80 @@
+/* Shared public-site chrome: brand tokens, header and footer for every
+   marketing page, plus the light theme for pages that keep their own layout
+   (locums, state guides, CME, help, legal). scripts/site-chrome.mjs adds this
+   stylesheet and the header/footer markup when the site is packaged.
+   Header and footer avoid nav/header/footer/ul/h3 elements and use the cdm-
+   prefix so the older per-page styles never reach them. */
+@font-face{font-family:Figtree;src:url(/fonts/figtree.woff) format("woff");font-weight:300 900;font-display:swap}
+:root{--cdm-navy:#0f2a4a;--cdm-navy-2:#16375d;--cdm-ink:#1b2a3a;--cdm-muted:#4f5f71;--cdm-emerald:#10b981;--cdm-emerald-d:#047857;--cdm-mint:#ecfdf5;--cdm-sky:#f4f8fb;--cdm-line:#e3e9ef;--cdm-font:Figtree,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+
+.cdm-wrap{max-width:1120px;margin:0 auto;padding:0 20px;box-sizing:border-box}
+.cdm-header{position:sticky;top:0;z-index:1000;background:rgba(255,255,255,.96);-webkit-backdrop-filter:saturate(1.4) blur(8px);backdrop-filter:saturate(1.4) blur(8px);border-bottom:1px solid var(--cdm-line);font-family:var(--cdm-font);font-size:16px;line-height:1.4;text-align:left}
+.cdm-header *,.cdm-footer *{box-sizing:border-box}
+.cdm-nav{display:flex;align-items:center;justify-content:space-between;gap:16px;min-height:68px;position:relative}
+.cdm-header .cdm-brand,.cdm-footer .cdm-brand{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--cdm-navy);font-weight:800;font-size:19px;letter-spacing:-.01em;padding:0;margin:0;background:none;border:0}
+.cdm-brand img{width:40px;height:40px;border-radius:10px;display:block;margin:0}
+.cdm-header .cdm-brand b{color:var(--cdm-emerald-d);font-weight:800}
+.cdm-links{display:flex;align-items:center;gap:6px;margin:0;padding:0}
+.cdm-header .cdm-links a{display:block;padding:10px 12px;margin:0;border-radius:10px;text-decoration:none;color:var(--cdm-ink);font-weight:600;font-size:16px;line-height:1.4;background:none;border:0;white-space:nowrap}
+.cdm-header .cdm-links a:hover,.cdm-header .cdm-links a[aria-current=page]{background:var(--cdm-sky);color:var(--cdm-navy)}
+.cdm-header .cdm-links a.cdm-cta,.cdm-header .cdm-links a.cdm-cta:hover{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:8px 18px;border-radius:999px;background:var(--cdm-emerald-d);color:#fff;font-weight:700}
+.cdm-header .cdm-links a.cdm-cta:hover{background:#065f46}
+.cdm-header .cdm-menu-btn{display:none;background:none;border:1px solid var(--cdm-line);border-radius:10px;padding:8px 12px;margin:0;font:700 16px/1.4 var(--cdm-font);color:var(--cdm-navy);cursor:pointer;width:auto;min-height:0}
+.cdm-header a:focus-visible,.cdm-header button:focus-visible,.cdm-footer a:focus-visible{outline:3px solid var(--cdm-emerald);outline-offset:3px;border-radius:6px}
+@media (max-width:900px){
+ .cdm-header .cdm-menu-btn{display:block}
+ .cdm-links{display:none;position:absolute;left:0;right:0;top:100%;background:#fff;flex-direction:column;align-items:stretch;padding:12px 20px 20px;border-bottom:1px solid var(--cdm-line);box-shadow:0 12px 24px rgba(15,42,74,.08)}
+ .cdm-links.cdm-open{display:flex}
+ .cdm-header .cdm-links a{padding:14px 12px;font-size:17.5px}
+ .cdm-header .cdm-links a.cdm-cta{margin-top:8px}
+}
+
+.cdm-footer{background:#0b2038;color:#b9c7d6;padding:48px 0 32px;margin:0;font-family:var(--cdm-font);font-size:16px;line-height:1.65;text-align:left;border:0;display:block}
+.cdm-footer a{color:#e3ecf5;text-decoration:underline;text-underline-offset:3px;font-weight:400;padding:0;margin:0;display:inline}
+.cdm-footer a:hover{color:#fff}
+.cdm-footer .cdm-brand{color:#fff;text-decoration:none;display:flex}
+.cdm-footer .cdm-brand b{color:#34d399;font-weight:800}
+.cdm-foot-grid{display:grid;gap:28px}
+@media (min-width:760px){.cdm-foot-grid{grid-template-columns:1.4fr 1fr 1fr}}
+.cdm-footer p{margin:14px 0 0;padding:0;color:#b9c7d6;font-size:16px;line-height:1.65;max-width:none}
+.cdm-footer .cdm-foot-h{color:#fff;font-weight:700;margin:0 0 12px}
+.cdm-foot-list{display:flex;flex-direction:column;gap:8px;align-items:flex-start}
+.cdm-footer .cdm-foot-note,.cdm-footer .cdm-credit{margin-top:28px;font-size:13.6px;color:#8ea3b8}
+.cdm-footer .cdm-foot-note+.cdm-credit{margin-top:12px}
+.cdm-footer .cdm-foot-note a,.cdm-footer .cdm-credit a{color:#c5d3e2}
+@media (prefers-reduced-motion:reduce){.cdm-header *{transition:none!important}}
+@media print{.cdm-header,.cdm-footer{display:none}}
+
+/* ---- Light theme for pages that keep their own layout ------------------ */
+html[data-site-chrome=legacy]{color-scheme:light;
+ --bg:#fff;--bg-elevated:#f4f8fb;--bg-card:#fff;--bg-card-hover:#f4f8fb;--surface:#eef3f8;--border:#d5dfe8;--border-subtle:#e3e9ef;
+ --emerald:#047857;--emerald-light:#047857;--emerald-dim:#ecfdf5;--emerald-glow:#ecfdf5;--emerald-border:rgba(4,120,87,.3);
+ --red:#b91c1c;--red-dim:#fef2f2;--amber:#b45309;--amber-dim:#fffbeb;--blue:#1d4ed8;
+ --text:#1b2a3a;--text-secondary:#4f5f71;--text-muted:#5b6b7d;
+ --font:Figtree,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+ --shadow-sm:0 1px 3px rgba(15,42,74,.08);--shadow-md:0 6px 18px rgba(15,42,74,.08);--shadow-lg:0 18px 40px rgba(15,42,74,.12);--shadow-xl:0 24px 60px rgba(15,42,74,.16);
+ --card:#fff;--muted:#4f5f71;--line:#d5dfe8;--accent:#047857;--ink:#1b2a3a;--mint:#047857;--soft:#0f2a4a}
+html[data-site-chrome=legacy] body{background:#fff;color:#1b2a3a;font-family:Figtree,system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+html[data-site-chrome=legacy] :is(h1,h2,h3,h4){color:#0f2a4a}
+html[data-site-chrome=legacy] :is(button,input,select,textarea){font-family:inherit}
+/* Buttons and badges that sat on bright emerald with near-black text. */
+html[data-site-chrome=legacy] :is(.btn-primary,.nav-cta,.cta-button,.button,.guide-form button,.section-number,.filters button[aria-pressed="true"],a[style*="background:var(--emerald)"]),
+html[data-site-chrome=legacy] :is(.btn-primary,.cta-button,.button):hover{color:#fff!important}
+html[data-site-chrome=legacy] :is(.btn-primary,.cta-button,.button,.guide-form button):hover{background:#065f46}
+html[data-site-chrome=legacy] a:hover{color:#0f2a4a}
+html[data-site-chrome=legacy] .btn-secondary:hover{background:#f4f8fb}
+html[data-site-chrome=legacy] :is(.status-expiring,.tag-annual){color:#b45309}
+html[data-site-chrome=legacy] .status-expired{color:#b91c1c}
+html[data-site-chrome=legacy] .tag-biennial{color:#047857}
+html[data-site-chrome=legacy] .tag-triennial{color:#1d4ed8}
+html[data-site-chrome=legacy] .guide-bar{box-shadow:0 -4px 20px rgba(15,42,74,.14)}
+/* CME resource center (public/cme-assets/cme.css) */
+html[data-site-chrome=legacy] .wrap button{color:#fff}
+html[data-site-chrome=legacy] .wrap .filters button:not([aria-pressed="true"]){color:#1b2a3a}
+html[data-site-chrome=legacy] .hero-note{background:#f4f8fb}
+html[data-site-chrome=legacy] :is(.vera-panel,.next-step){background:#ecfdf5;border-color:#b7e4cf}
+html[data-site-chrome=legacy] .guide-prompts a{background:#fff;border-color:#b7e4cf}
+html[data-site-chrome=legacy] .guide-results li{border-top-color:#b7e4cf}
+html[data-site-chrome=legacy] .resource-card .cost{background:#f4f8fb;color:#0f2a4a}
+html[data-site-chrome=legacy] .button.secondary,html[data-site-chrome=legacy] .button.secondary:hover{color:#0f2a4a!important;background:#fff;border-color:#0f2a4a}
+html[data-site-chrome=legacy] .button.secondary:hover{background:#f4f8fb}

@@ -91,9 +91,9 @@ test('sitemap adds actual watch pages once and keeps source dates unchanged', as
 
 test('homepage uses saved-record status and illustrative generic CME examples', async () => {
   const html = await read('landing/index.html');
-  assert.match(html, /80&ndash;100: On track/);
-  assert.match(html, /does not confirm board approval/);
-  assert.match(html, /Illustrative demos of app workflows/);
+  // The redesigned home page has no score or demo panels; its one example is labelled as one.
+  assert.match(html, /Example: state license renewal in 45 days/);
+  assert.match(html, /does not perform primary-source verification or file CME with your board/);
   assert.doesNotMatch(html, /Colorado's 30-hour|Substance Use: 0\/2h|Fully Compliant|Not concept art|30 hrs to go/);
   assert.match(html, /id="join"/);
   assert.equal(WATCH_PAGES.length, 3);

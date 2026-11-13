@@ -1,0 +1,52 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<script id="https-redirect">if(location.protocol==="http:"&&location.hostname==="credentialdomd.com")location.replace(location.href.replace(/^http:/,"https:"))</script>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Photo credits | CredentialDOMD</title>
+<meta name="description" content="Credits for the photographs used on the CredentialDOMD website.">
+<link rel="canonical" href="https://credentialdomd.com/credits">
+<meta name="robots" content="noindex">
+<meta property="og:title" content="Photo credits | CredentialDOMD">
+<meta property="og:description" content="Credits for the photographs used on the CredentialDOMD website.">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="CredentialDOMD">
+<meta property="og:url" content="https://credentialdomd.com/credits">
+<meta property="og:image" content="https://credentialdomd.com/og-image.png">
+<meta property="og:image:width" content="1200">
+<meta property="og:image:height" content="630">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Photo credits | CredentialDOMD">
+<meta name="twitter:description" content="Credits for the photographs used on the CredentialDOMD website.">
+<meta name="twitter:image" content="https://credentialdomd.com/og-image.png">
+
+<!-- First-party visit beacon: POST /api/pv relays to the track_pv RPC. Path + referrer only, no cookies, no PII. The LinkedIn app sends no referrer, so a link tagged ?src=li with none is credited to linkedin.com; the query string itself is never sent. Plain http on credentialdomd.com sends nothing: that page is already switching to https, and the https page counts the visit once, reading the site's own http address as no referrer. -->
+<script>if(!(location.protocol==="http:"&&location.hostname==="credentialdomd.com"))navigator.sendBeacon&&navigator.sendBeacon('/api/pv',JSON.stringify({p:location.pathname.replace(/\.html$/,'').replace(/\/index$/,'/')||'/',r:(/^http:\/\/credentialdomd\.com\//.test(document.referrer)?'':document.referrer)||(/[?&]src=li(&|$)/.test(location.search)?'https://www.linkedin.com/':'')}))</script>
+
+<link rel="stylesheet" href="/site.css">
+</head>
+<body><!--email_off-->
+<a class="skip" href="#main">Skip to content</a>
+<!-- site-chrome:header -->
+<main id="main">
+<section class="hero hero-short"><div class="wrap">
+ <span class="eyebrow">Credits</span>
+ <h1>Photo credits</h1>
+ <p class="lead">The photographs on this site come from Unsplash and are used under the <a href="https://unsplash.com/license" rel="noopener">Unsplash License</a>. These are stock photographs; the people shown are not CredentialDOMD members.</p>
+ <table class="credits-table">
+  <thead><tr><th scope="col">Photo</th><th scope="col">Photographer</th><th scope="col">Source</th></tr></thead>
+  <tbody>
+  <tr><td>Two physicians reviewing a tablet</td><td><a href="https://unsplash.com/@silverkblack" rel="noopener">Vitaly Gariev</a></td><td><a href="https://unsplash.com/photos/two-doctors-looking-at-a-tablet-together-2kopEHjST-g" rel="noopener">Unsplash</a></td></tr>
+  <tr><td>Physician in a white coat with a stethoscope</td><td><a href="https://unsplash.com/@ato_aikins" rel="noopener">Ato Aikins</a></td><td><a href="https://unsplash.com/photos/a-woman-wearing-a-white-coat-and-a-stethoscope-TPT4pevJEmQ" rel="noopener">Unsplash</a></td></tr>
+  <tr><td>Physician in blue scrubs</td><td><a href="https://unsplash.com/@naosouogagliasso" rel="noopener">Bruno Rodrigues</a></td><td><a href="https://unsplash.com/photos/man-in-blue-medical-scrubs-279xIHymPYY" rel="noopener">Unsplash</a></td></tr>
+  <tr><td>Senior physician at a desk</td><td><a href="https://unsplash.com/@silverkblack" rel="noopener">Vitaly Gariev</a></td><td><a href="https://unsplash.com/photos/elderly-doctor-in-white-coat-with-stethoscope-at-desk-6yR14fO4Oqc" rel="noopener">Unsplash</a></td></tr>
+  <tr><td>Clinicians reviewing imaging</td><td><a href="https://unsplash.com/@accuray" rel="noopener">Accuray</a></td><td><a href="https://unsplash.com/photos/medical-professionals-reviewing-digital-imaging-MFSEP2g4YS0" rel="noopener">Unsplash</a></td></tr>
+  </tbody>
+ </table>
+ <p class="fine">The typeface is Figtree, used under the SIL Open Font License.</p>
+</div></section>
+</main>
+<!-- site-chrome:footer -->
+<!--/email_off--></body>
+</html>

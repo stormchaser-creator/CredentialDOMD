@@ -2,7 +2,7 @@
 <urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
   <url>
     <loc>https://credentialdomd.com/</loc>
-    <lastmod>2026-09-19</lastmod>
+    <lastmod>2026-11-13</lastmod>
     <changefreq>weekly</changefreq>
     <priority>1.0</priority>
   </url>
@@ -320,6 +320,12 @@
   </url>
   <url><loc>https://credentialdomd.com/privacy</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>
   <url><loc>https://credentialdomd.com/terms</loc><changefreq>monthly</changefreq><priority>0.3</priority></url>
+  <url>
+    <loc>https://credentialdomd.com/pricing</loc>
+    <lastmod>2026-11-13</lastmod>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
   <url>
     <loc>https://credentialdomd.com/locums</loc>
     <lastmod>2026-09-18</lastmod>

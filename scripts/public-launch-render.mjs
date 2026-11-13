@@ -85,6 +85,8 @@ const minimumSlots = {
   'state-index': { cta: 4, 'early-release': 1, participation: 1 },
   'watch-pages': { cta: 1, 'early-release': 1, participation: 1 },
   'legal-navigation': { cta: 1 },
+  // /pricing shows the same membership cards as the home page's #planned-pricing.
+  pricing: { cta: 2, 'founding-headline': 1, availability: 1, 'founding-price': 1, 'founding-rate': 1, 'rate-comparison': 1, 'full-price': 1, 'full-package': 1, 'practice-trial': 1, 'refund-guarantee': 1, 'early-release': 1 },
 };
 
 /** Only explicit marketing slots change. Off mode is byte-for-byte unchanged. */

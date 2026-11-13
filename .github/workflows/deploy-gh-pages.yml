@@ -28,6 +28,7 @@ on:
       - 'scripts/https-redirect.mjs'
       - 'scripts/visit-beacon.mjs'
       - 'scripts/public-launch-render.mjs'
+      - 'scripts/site-chrome.mjs'
       - 'scripts/watch-pages.mjs'
       # Server modules the app bundle imports from src/. Every file outside
       # src/ that the app or its build imports must be listed here, or a fix

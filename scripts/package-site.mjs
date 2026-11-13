@@ -11,15 +11,23 @@ import { PUBLIC_LAUNCH_MODE, assertPublicLaunchReady } from '../src/content/publ
 import { renderPublicLaunch, publicLaunchHelp, publicMembershipEndpoint } from './public-launch-render.mjs';
 import { renderLegalPages } from './generate-legal-pages.mjs';
 import { HTTPS_REDIRECT_SCRIPT, assertHttpsRedirect } from './https-redirect.mjs';
+import { applySiteChrome, SITE_CHROME_ASSETS, SITE_FONTS } from './site-chrome.mjs';
 
-const publicPages = ['index', 'locums', 'security', 'privacy', 'terms', 'help', 'cme', 'credential-access'];
+const publicPages = ['index', 'locums', 'security', 'privacy', 'terms', 'help', 'cme', 'credential-access', 'pricing', 'credits'];
+// The private access page keeps its own minimal shell, policy and headers.
+const unbrandedPages = new Set(['credential-access']);
+const currentNav = { index: 'home', pricing: 'pricing' };
 const cmeAssets = ['cme.css', 'cme.mjs'];
-const publicSiteAssets = ['support-nav.css', 'support-nav.js', 'waitlist-signup.js', 'membership-offer.js'];
+const publicSiteAssets = ['support-nav.css', 'support-nav.js', 'waitlist-signup.js', 'membership-offer.js', ...SITE_CHROME_ASSETS];
 // Reviewed runtime images only; source originals and provenance stay out of the site.
 const landingImages = [
   'physician-life-v3-600.webp', 'physician-life-v3-1200.webp',
   'physician-colleagues-v3-600.webp', 'physician-colleagues-v3-1200.webp',
   'physician-learning-v3-600.webp', 'eric-whitney-120.webp', 'eric-whitney-400.webp',
+  // Redesign photographs (Unsplash License; credited on /credits) and the logo.
+  'hero-two-doctors-640.webp', 'hero-two-doctors-1200.webp', 'doctor-white-coat-640.webp', 'doctor-white-coat-1200.webp',
+  'doctor-blue-scrubs-640.webp', 'doctor-blue-scrubs-1200.webp', 'senior-physician-640.webp', 'senior-physician-1200.webp',
+  'physicians-imaging-640.webp', 'physicians-imaging-1200.webp', 'logo-64.png', 'logo-192.png',
 ];
 
 // The recipient page ships disabled in source (tests pin that). The deploy
@@ -47,6 +55,7 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
     await access(resolve(root, `landing/${page}.html`));
   }
   for (const name of landingImages) await access(resolve(root, 'landing/images', name));
+  for (const name of SITE_FONTS) await access(resolve(root, 'landing/fonts', name));
   await access(resolve(root, 'scripts/root-sw-retirement.js'));
   const videoCatalog = await loadVideoCatalog(root);
   const help = JSON.parse(await readFile(resolve(root, 'public/knowledge/credentialdo-help.json'), 'utf8'));
@@ -61,7 +70,10 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
   for (const name of publicSiteAssets) await access(resolve(root, 'public', name));
   // Validate every marketing surface before replacing the previous artifact.
   // Static HTML has real signup links even without JavaScript in paid mode.
-  const surfaces = { index: 'home', locums: 'locums', help: 'help', cme: 'cme', security: 'legal-navigation', privacy: 'legal-navigation', terms: 'legal-navigation' };
+  const surfaces = { index: 'home', locums: 'locums', help: 'help', cme: 'cme', security: 'legal-navigation', privacy: 'legal-navigation', terms: 'legal-navigation', pricing: 'pricing' };
+  // Every marketing page gets the shared header, footer, font and brand
+  // after its launch slots are rendered.
+  const chrome = (html, current = null) => applySiteChrome(html, { current, mode: launchMode });
   const legalSource = renderLegalPages();
   const legalOutput = renderLegalPages(launchMode);
   const pageOutput = new Map();
@@ -69,11 +81,12 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
     const source = await readFile(resolve(root, `landing/${page}.html`), 'utf8');
     if (legalSource[`${page}.html`] && source !== legalSource[`${page}.html`]) throw Error('Legal page is stale; run node scripts/generate-legal-pages.mjs');
     const html = legalOutput[`${page}.html`] || (page === 'help' && launchMode.enabled ? renderHelp(publishedHelp, videoCatalog) : source);
-    pageOutput.set(page, surfaces[page] ? renderPublicLaunch(html, surfaces[page], launchMode, liveOffer) : html);
+    const rendered = surfaces[page] ? renderPublicLaunch(html, surfaces[page], launchMode, liveOffer) : html;
+    pageOutput.set(page, unbrandedPages.has(page) ? rendered : chrome(rendered, currentNav[page]));
   }
   const stateOutput = new Map();
   for (const name of await readdir(resolve(root, 'landing/states'))) {
-    if (name.endsWith('.html')) stateOutput.set(name, renderPublicLaunch(await readFile(resolve(root, 'landing/states', name), 'utf8'), name === 'index.html' ? 'state-index' : 'state-guides', launchMode, liveOffer));
+    if (name.endsWith('.html')) stateOutput.set(name, chrome(renderPublicLaunch(await readFile(resolve(root, 'landing/states', name), 'utf8'), name === 'index.html' ? 'state-index' : 'state-guides', launchMode, liveOffer), 'states'));
   }
   if (launchMode.enabled) {
     const expected = ['index.html', ...states.states.map(state => `${state.slug}.html`)];
@@ -81,11 +94,11 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
       throw Error('Paid launch requires the state index and all 51 state guides');
     }
   }
-  const watchOutput = watchPages.map(page => ({ ...page, html: renderPublicLaunch(page.html, 'watch-pages', launchMode, liveOffer) }));
+  const watchOutput = watchPages.map(page => ({ ...page, html: chrome(renderPublicLaunch(page.html, 'watch-pages', launchMode, liveOffer)) }));
   // Plain http://credentialdomd.com/app/ loaded and every signup call from it
   // was refused. Every page must switch itself to https before anything else.
   assertHttpsRedirect(entryHtml, 'dist/index.html');
-  const notFound = `<!doctype html><html lang="en"><meta charset="utf-8">${HTTPS_REDIRECT_SCRIPT}<title>Page not found</title><h1>Page not found</h1><p><a href="/">CredentialDOMD home</a></p></html>\n`;
+  const notFound = chrome(`<!doctype html>\n<html lang="en">\n<head>\n<meta charset="utf-8">\n${HTTPS_REDIRECT_SCRIPT}\n<meta name="viewport" content="width=device-width, initial-scale=1">\n<title>Page not found | CredentialDOMD</title>\n<meta name="robots" content="noindex">\n<link rel="stylesheet" href="/site.css">\n</head>\n<body>\n<a class="skip" href="#main">Skip to content</a>\n<!-- site-chrome:header -->\n<main id="main">\n<section class="hero"><div class="wrap center"><h1>Page not found</h1><p class="lead">That page does not exist, or it has moved.</p>\n<div class="actions center-actions"><a class="btn btn-primary" href="/">CredentialDOMD home</a><a class="btn btn-ghost" href="/states/">State guides</a></div></div></section>\n</main>\n<!-- site-chrome:footer -->\n</body>\n</html>\n`);
   for (const [page, html] of pageOutput) assertHttpsRedirect(html, `landing/${page}.html`);
   for (const [name, html] of stateOutput) assertHttpsRedirect(html, `landing/states/${name}`);
   for (const page of watchOutput) assertHttpsRedirect(page.html, `help/${page.id}/index.html`);
@@ -119,6 +132,8 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
   for (const name of publicSiteAssets) await cp(resolve(root, 'public', name), resolve(output, name));
   await mkdir(resolve(output, 'images'), { recursive: true });
   for (const name of landingImages) await cp(resolve(root, 'landing/images', name), resolve(output, 'images', name));
+  await mkdir(resolve(output, 'fonts'), { recursive: true });
+  for (const name of SITE_FONTS) await cp(resolve(root, 'landing/fonts', name), resolve(output, 'fonts', name));
   // Never publish the vendor .gitignore ("*"): the deploy's git add -A would
   // then drop every PDF.js file from gh-pages and previews fall back to Download.
   await cp(resolve(root, 'public/credential-access'), resolve(output, 'credential-access'), { recursive: true, filter: source => basename(source) !== '.gitignore' });
