@@ -380,9 +380,18 @@ function verifiedLabel(state) {
 }
 
 // Items a recheck could not confirm from an official source. The page names
-// the item and why it is open; it never restates the unconfirmed value.
+// the item and says, in a physician's words, what is being confirmed
+// (publicNote). It never shows the audit record (note) or the unconfirmed
+// value (liveValue). An item without a publicNote stops the build, so a new
+// merge of corrections cannot publish audit wording.
 function unverifiedItems(state) {
-  return (state.unverified || []).filter(u => u && u.field && u.note);
+  const items = (state.unverified || []).filter(u => u && u.field);
+  const missing = items.find(u => !u.publicNote);
+  if (missing) {
+    console.error(`ERROR: "${state.slug}" unverified item "${missing.field}" has no publicNote in states-data.json. Write one in plain language (for example "We're confirming this with the board."); the audit note is never published.`);
+    process.exit(1);
+  }
+  return items;
 }
 
 // Hero and meta description: the date, and plainly that some items are open.
@@ -441,7 +450,7 @@ function trainingAuditsBlock(state) {
   <h3 style="margin:24px 0 8px;">Still being confirmed with the board</h3>
   <p>We could not confirm these items from an official source on ${escapeHtml(verifiedLabel(state))}. Check them with the board before you rely on them.</p>
   <ul style="color:var(--text-secondary);margin:0 0 16px 20px;">
-${open.map(u => `    <li><strong>${escapeHtml(unverifiedFieldLabel(u.field))}:</strong> ${escapeHtml(u.note)}</li>`).join('\n')}
+${open.map(u => `    <li><strong>${escapeHtml(unverifiedFieldLabel(u.field))}:</strong> ${escapeHtml(u.publicNote)}</li>`).join('\n')}
   </ul>` : '';
   return `<section class="container content-section">
   <h2>

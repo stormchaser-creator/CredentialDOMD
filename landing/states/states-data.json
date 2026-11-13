@@ -84,7 +84,7 @@
         },
         {
           "url": "https://www.albme.gov/",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13",
@@ -155,7 +155,8 @@
           "field": "ethics_topic",
           "liveValue": "Required topics: Ethics",
           "note": "No ethics CME requirement found on ALBME CME page; remove unless the board confirms",
-          "source": "https://www.albme.gov/resources/licensees/continuing-medical-education/licensure-cme-requirement"
+          "source": "https://www.albme.gov/resources/licensees/continuing-medical-education/licensure-cme-requirement",
+          "publicNote": "We did not find an ethics CME requirement on the board's CME page, so it is not listed above. We're confirming this with the board."
         }
       ],
       "firstRenewal": {
@@ -313,7 +314,8 @@
           "field": "board_link",
           "liveValue": "https://www.commerce.alaska.gov/web/cbpl/professionallicensing/statemedicalboard.aspx",
           "note": "Official board site (site blocked automated check: HTTP 403)",
-          "source": "https://www.commerce.alaska.gov/web/cbpl/professionallicensing/statemedicalboard.aspx"
+          "source": "https://www.commerce.alaska.gov/web/cbpl/professionallicensing/statemedicalboard.aspx",
+          "publicNote": "We could not open the board's website when we last checked this guide. We're confirming its details with the board."
         }
       ],
       "audit": {
@@ -449,13 +451,15 @@
           "field": "board_link",
           "liveValue": "https://azmd.gov",
           "note": "Official board site; DO board https://azdo.gov (site blocked automated check: HTTP 403)",
-          "source": "https://azmd.gov"
+          "source": "https://azmd.gov",
+          "publicNote": "We could not open the board's website when we last checked this guide. We're confirming its details with the board."
         },
         {
           "field": "do_requirements",
           "liveValue": "DO 40 hrs incl 24 Cat 1-A, 3 hrs opioid; $636",
           "note": "azdo.gov returned 403 to our checker on 2026-11-13; could not re-confirm",
-          "source": "https://azdo.gov"
+          "source": "https://azdo.gov",
+          "publicNote": "We're confirming the osteopathic (DO) CME hours and fee with the DO board."
         }
       ],
       "mateAct": {
@@ -597,7 +601,8 @@
           "field": "opioid_cs_topics",
           "liveValue": "1 hr opioid + 3 hrs controlled substances",
           "note": "Not confirmed on ASMB pages fetched; cited to ASMB Rules 17 and 2",
-          "source": "https://www.armedicalboard.org/professionals/pdf/mpa.pdf"
+          "source": "https://www.armedicalboard.org/professionals/pdf/mpa.pdf",
+          "publicNote": "We're confirming the opioid and controlled substance CME hours with the board."
         }
       ],
       "audit": {
@@ -694,7 +699,7 @@
         },
         {
           "url": "https://www.mbc.ca.gov/",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13",
@@ -921,7 +926,8 @@
           "field": "renewal_fee",
           "liveValue": "not shown",
           "note": "Fee not published on pages checked; confirm on DPO renewal notice",
-          "source": "https://dpo.colorado.gov/Medical"
+          "source": "https://dpo.colorado.gov/Medical",
+          "publicNote": "The board does not publish the renewal fee on the pages we checked. Your renewal notice shows the amount, and we're confirming it with the board."
         }
       ],
       "mateAct": {
@@ -1013,7 +1019,7 @@
         },
         {
           "url": "https://portal.ct.gov/DPH/Practitioner-Licensing--Investigations/Physician",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13",
@@ -1224,7 +1230,8 @@
           "field": "controlled_substances",
           "liveValue": "2 hours controlled substances",
           "note": "Not shown on DPR CME/audit page checked; cited in 24 DE Admin Code UCSA Reg 3.1, not re-confirmed",
-          "source": "https://dpr.delaware.gov/boards/medicalpractice/continuing-education-and-audit-information/"
+          "source": "https://dpr.delaware.gov/boards/medicalpractice/continuing-education-and-audit-information/",
+          "publicNote": "We're confirming the controlled substance CME hours with the board."
         }
       ],
       "firstRenewal": {
@@ -1371,13 +1378,15 @@
           "field": "renewal_fee",
           "liveValue": "$500",
           "note": "Fee page says fees are on the application; $500 not visible on pages checked",
-          "source": "https://dchealth.dc.gov/service/medicine-fee-schedule"
+          "source": "https://dchealth.dc.gov/service/medicine-fee-schedule",
+          "publicNote": "The board's fee page refers to the renewal application for the amount. We're confirming the renewal fee with the board."
         },
         {
           "field": "category_1",
           "liveValue": "at least 50 Category 1",
           "note": "Board page states 50 hours CE; Category 1 share not stated on page checked",
-          "source": "https://dchealth.dc.gov/bomed"
+          "source": "https://dchealth.dc.gov/bomed",
+          "publicNote": "We're confirming how many of the required hours must be Category 1."
         }
       ],
       "mateAct": {
@@ -1470,7 +1479,7 @@
         },
         {
           "url": "https://flboardofmedicine.gov/",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13",
@@ -1650,7 +1659,7 @@
         },
         {
           "url": "https://medicalboard.georgia.gov/",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13",
@@ -1851,7 +1860,8 @@
           "field": "cme_total",
           "liveValue": "40 hrs Cat 1 per 2 yrs",
           "note": "Board page only cites \"Subchapter 5 of the Board rules\"; 40-hour figure not re-confirmed on pages fetched",
-          "source": "https://cca.hawaii.gov/pvl/boards/medical/physician-podiatrist-and-emt-continuing-education-requirements/"
+          "source": "https://cca.hawaii.gov/pvl/boards/medical/physician-podiatrist-and-emt-continuing-education-requirements/",
+          "publicNote": "The board's page points to its rules for the CME total. We're confirming the hour requirement with the board."
         }
       ],
       "audit": {
@@ -1991,7 +2001,8 @@
           "field": "cme_total",
           "liveValue": "40 hrs Cat 1 per 2 yrs (biennial from April 1, 2026)",
           "note": "Not stated on pages fetched (dopl.idaho.gov/bom); confirm in IDAPA 24.33.01",
-          "source": "https://dopl.idaho.gov/bom/"
+          "source": "https://dopl.idaho.gov/bom/",
+          "publicNote": "We're confirming the CME hour requirement under the new two-year cycle with the board."
         }
       ],
       "mateAct": {
@@ -2084,7 +2095,7 @@
         },
         {
           "url": "https://www.ilga.gov/commission/jcar/admincode/068/068012850A01100R.html",
-          "what": "Rechecked 2026-11-13: cme total"
+          "what": "CME requirement, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13 (partial)",
@@ -2173,7 +2184,8 @@
           "field": "opioid",
           "liveValue": "1 hour opioid prescribing",
           "note": "Not on IDFPR CE page fetched; secondary sources conflict (1 hr every 6 yrs for license vs 3 hrs per CSR cycle for controlled-substance licensees). Confirm IDFPR Safe Opioid Prescribing FAQ",
-          "source": "https://idfpr.illinois.gov/dpr/continuing-education.html"
+          "source": "https://idfpr.illinois.gov/dpr/continuing-education.html",
+          "publicNote": "Sources differ on how many opioid prescribing hours are required and how often. We're confirming this with the board."
         }
       ],
       "firstRenewal": {
@@ -2313,7 +2325,8 @@
           "field": "cme_total",
           "liveValue": "No general CME requirement",
           "note": "Indiana PLA pages fetched do not state a CME hour rule; no-general-CME status not contradicted. Indiana opioid-prescribing CME for CSR holders (IC 25-1-9-?): unverified",
-          "source": "https://www.in.gov/pla/professions/physicians-home/"
+          "source": "https://www.in.gov/pla/professions/physicians-home/",
+          "publicNote": "The board's pages do not state a general CME hour requirement. We're confirming this, and any opioid prescribing CME for controlled substance registrants, with the board."
         }
       ],
       "mateAct": {
@@ -2611,13 +2624,15 @@
           "field": "board_link",
           "liveValue": "https://www.ksbha.ks.gov/",
           "note": "Official board site (site blocked automated check: HTTP 403)",
-          "source": "https://www.ksbha.ks.gov/"
+          "source": "https://www.ksbha.ks.gov/",
+          "publicNote": "We could not open the board's website when we last checked this guide. We're confirming its details with the board."
         },
         {
           "field": "renewal_fee",
           "liveValue": "$360 online",
           "note": "ksbha.ks.gov blocked our checker (403) on 2026-11-13",
-          "source": "https://www.ksbha.ks.gov/departments/licensing/license-fees"
+          "source": "https://www.ksbha.ks.gov/departments/licensing/license-fees",
+          "publicNote": "We're confirming the current renewal fee with the board."
         }
       ],
       "mateAct": {
@@ -2710,7 +2725,7 @@
         },
         {
           "url": "https://kbml.ky.gov/Pages/index.aspx",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13",
@@ -2867,7 +2882,7 @@
         },
         {
           "url": "https://www.lsbme.la.gov/",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13 (partial)",
@@ -2920,13 +2935,15 @@
           "field": "nutrition_sickle_cell",
           "liveValue": "1 hr nutrition/metabolic health; 1 hr sickle cell (EM)",
           "note": "Not shown on LSBME pages fetched 2026-11-13",
-          "source": "https://www.lsbme.la.gov/content/board-orientations-online-courses"
+          "source": "https://www.lsbme.la.gov/content/board-orientations-online-courses",
+          "publicNote": "We're confirming the nutrition and sickle cell CME topics with the board."
         },
         {
           "field": "renewal_fee",
           "liveValue": "$332",
           "note": "$332 not found on pages fetched (initial licensure $382 shown)",
-          "source": "https://www.lsbme.la.gov/content/application-instructions-initial-licensure-physicians"
+          "source": "https://www.lsbme.la.gov/content/application-instructions-initial-licensure-physicians",
+          "publicNote": "We're confirming the current renewal fee with the board."
         }
       ],
       "firstRenewal": {
@@ -3023,7 +3040,7 @@
         },
         {
           "url": "https://www.maine.gov/md/home",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13 (partial)",
@@ -3082,7 +3099,8 @@
           "field": "do_requirements",
           "liveValue": "DO 100 hrs/2 yr incl 3 opioid; $525",
           "note": "Maine Board of Osteopathic Licensure pages not fetched/confirmed 2026-11-13",
-          "source": "https://www.maine.gov/osteo/"
+          "source": "https://www.maine.gov/osteo/",
+          "publicNote": "We're confirming the osteopathic (DO) CME hours and fee with the DO board."
         }
       ],
       "audit": {
@@ -3180,7 +3198,7 @@
         },
         {
           "url": "https://www.mbp.state.md.us/",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13 (partial)",
@@ -3263,7 +3281,8 @@
           "field": "controlled_substances",
           "liveValue": "2 hours controlled substances",
           "note": "Not shown on MBP renewal pages fetched",
-          "source": "https://www.mbp.state.md.us/licensure_phyrenewals.aspx"
+          "source": "https://www.mbp.state.md.us/licensure_phyrenewals.aspx",
+          "publicNote": "We're confirming the controlled substance CME hours with the board."
         }
       ],
       "firstRenewal": {
@@ -3395,19 +3414,22 @@
           "field": "board_link",
           "liveValue": "https://www.mass.gov/orgs/board-of-registration-in-medicine",
           "note": "Official board site (site blocked automated check: HTTP 403)",
-          "source": "https://www.mass.gov/orgs/board-of-registration-in-medicine"
+          "source": "https://www.mass.gov/orgs/board-of-registration-in-medicine",
+          "publicNote": "We could not open the board's website when we last checked this guide. We're confirming its details with the board."
         },
         {
           "field": "cme_and_topics",
           "liveValue": "50 hrs/2 yr; opioid 3, risk mgmt 10, EOL 2, EHR 3, child abuse, DV",
           "note": "mass.gov blocked automated checks (403) on 2026-11-13; could not re-confirm",
-          "source": "https://www.mass.gov/orgs/board-of-registration-in-medicine"
+          "source": "https://www.mass.gov/orgs/board-of-registration-in-medicine",
+          "publicNote": "We're confirming the CME hours and required topics with the board."
         },
         {
           "field": "renewal_fee",
           "liveValue": "$600",
           "note": "mass.gov fee page blocked (403)",
-          "source": "https://www.mass.gov/service-details/board-of-registration-in-medicine-schedule-of-fees"
+          "source": "https://www.mass.gov/service-details/board-of-registration-in-medicine-schedule-of-fees",
+          "publicNote": "We're confirming the current renewal fee with the board."
         }
       ],
       "mateAct": {
@@ -3500,11 +3522,11 @@
         },
         {
           "url": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/medical",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         },
         {
           "url": "https://www.michigan.gov/lara/-/media/Project/Websites/lara/bpl/Osteopathic-Medicine/Licensing-Info-and-Forms/DO-Licensing-Guide-FAQ-12626.pdf",
-          "what": "Rechecked 2026-11-13: cme total do"
+          "what": "CME requirement (DO), rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13",
@@ -3708,13 +3730,15 @@
           "field": "board_link",
           "liveValue": "https://mn.gov/boards/medical-practice/",
           "note": "Official board site (site blocked automated check: HTTP 500)",
-          "source": "https://mn.gov/boards/medical-practice/"
+          "source": "https://mn.gov/boards/medical-practice/",
+          "publicNote": "We could not open the board's website when we last checked this guide. We're confirming its details with the board."
         },
         {
           "field": "cme_total",
           "liveValue": "75 hrs/3 yr Cat 1",
           "note": "mn.gov board site returned HTTP 500/403 to all checks on 2026-11-13",
-          "source": "https://mn.gov/boards/medical-practice/"
+          "source": "https://mn.gov/boards/medical-practice/",
+          "publicNote": "We're confirming the CME hour requirement with the board."
         }
       ],
       "mateAct": {
@@ -3803,7 +3827,7 @@
         },
         {
           "url": "https://www.msbml.ms.gov/",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13",
@@ -4002,13 +4026,15 @@
           "field": "board_link",
           "liveValue": "https://pr.mo.gov/healingarts.asp",
           "note": "Official board site (site blocked automated check: HTTP 000)",
-          "source": "https://pr.mo.gov/healingarts.asp"
+          "source": "https://pr.mo.gov/healingarts.asp",
+          "publicNote": "We could not open the board's website when we last checked this guide. We're confirming its details with the board."
         },
         {
           "field": "category_1",
           "liveValue": "at least 50 Category 1",
           "note": "Category 1 share not re-confirmed in rule text fetched",
-          "source": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2150-2.pdf"
+          "source": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2150-2.pdf",
+          "publicNote": "We're confirming how many of the required hours must be Category 1."
         }
       ],
       "mateAct": {
@@ -4144,7 +4170,8 @@
           "field": "cme_total",
           "liveValue": "No general CME requirement",
           "note": "Not stated on board pages fetched",
-          "source": "https://boards.bsd.dli.mt.gov/medical-examiners/"
+          "source": "https://boards.bsd.dli.mt.gov/medical-examiners/",
+          "publicNote": "The board's pages do not state a general CME hour requirement. We're confirming this with the board."
         }
       ],
       "mateAct": {
@@ -4286,7 +4313,8 @@
           "field": "opioid",
           "liveValue": "3 hours opioid prescribing",
           "note": "Board page lists an \"Opioids (PDMP)\" topic; hours not confirmed on pages fetched",
-          "source": "https://dhhs.ne.gov/licensure/pages/medicine-and-surgery.aspx"
+          "source": "https://dhhs.ne.gov/licensure/pages/medicine-and-surgery.aspx",
+          "publicNote": "The board lists an opioid and prescription monitoring topic. We're confirming the number of hours."
         }
       ],
       "mateAct": {
@@ -4458,7 +4486,8 @@
           "field": "do_requirements",
           "liveValue": "DO 35 hrs/yr...",
           "note": "NV osteopathic board pages not fetched/confirmed",
-          "source": "https://www.leg.state.nv.us/NRS/NRS-633.html"
+          "source": "https://www.leg.state.nv.us/NRS/NRS-633.html",
+          "publicNote": "We're confirming the osteopathic (DO) CME hours and fee with the DO board."
         }
       ],
       "mateAct": {
@@ -4588,13 +4617,15 @@
           "field": "board_link",
           "liveValue": "https://www.oplc.nh.gov/board-medicine",
           "note": "Official board site (site blocked automated check: HTTP 403)",
-          "source": "https://www.oplc.nh.gov/board-medicine"
+          "source": "https://www.oplc.nh.gov/board-medicine",
+          "publicNote": "We could not open the board's website when we last checked this guide. We're confirming its details with the board."
         },
         {
           "field": "renewal_fee",
           "liveValue": "$413.00",
           "note": "oplc.nh.gov blocked (403)",
-          "source": "https://www.oplc.nh.gov/board-medicine-license-fees"
+          "source": "https://www.oplc.nh.gov/board-medicine-license-fees",
+          "publicNote": "We're confirming the current renewal fee with the board."
         }
       ],
       "mateAct": {
@@ -4760,16 +4791,17 @@
           "field": "cme_total",
           "liveValue": "100 hours",
           "note": "Hour total not found on official pages fetched",
-          "source": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-35-6-15"
+          "source": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-35-6-15",
+          "publicNote": "We're confirming the total CME hour requirement with the board. The Category 1 portion is confirmed."
         }
       ],
       "firstRenewal": {
-        "text": "Licensed within 12 months before renewal: exempt from CME for that renewal; random audits",
+        "text": "Licensed within the 12 months before renewal: exempt from CME for that renewal",
         "source": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-35-6-15",
         "verifiedOn": "2026-11-13"
       },
       "audit": {
-        "text": "Licensed within 12 months before renewal: exempt from CME for that renewal; random audits",
+        "text": "The board audits CME at random",
         "source": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-35-6-15",
         "verifiedOn": "2026-11-13"
       },
@@ -4867,7 +4899,7 @@
         },
         {
           "url": "https://www.nmmb.state.nm.us/",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13",
@@ -5048,13 +5080,15 @@
           "field": "board_link",
           "liveValue": "https://www.op.nysed.gov/professions/physicians",
           "note": "Official board site (site blocked automated check: HTTP 000)",
-          "source": "https://www.op.nysed.gov/professions/physicians"
+          "source": "https://www.op.nysed.gov/professions/physicians",
+          "publicNote": "We could not open the board's website when we last checked this guide. We're confirming its details with the board."
         },
         {
           "field": "renewal_fee",
           "liveValue": "$600",
           "note": "op.nysed.gov fee chart could not be fetched by our checker",
-          "source": "https://www.op.nysed.gov/sites/op/files/documents/opfeechart.pdf"
+          "source": "https://www.op.nysed.gov/sites/op/files/documents/opfeechart.pdf",
+          "publicNote": "We're confirming the current renewal fee with the board."
         }
       ],
       "mateAct": {
@@ -5150,7 +5184,7 @@
         },
         {
           "url": "https://www.ncmedboard.org/",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13",
@@ -5293,7 +5327,7 @@
         },
         {
           "url": "https://www.ndbom.org/",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13",
@@ -5440,7 +5474,7 @@
         },
         {
           "url": "https://med.ohio.gov",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website"
         }
       ],
       "verified": "2026-11-13 (partial)",
@@ -5486,8 +5520,9 @@
         {
           "field": "renewal_fee",
           "liveValue": "$305",
-          "note": "Not found on pages fetched (med.ohio.gov returned 404 at the guide link)",
-          "source": "https://med.ohio.gov"
+          "note": "Not found on pages fetched",
+          "source": "https://med.ohio.gov",
+          "publicNote": "We're confirming the current renewal fee with the board."
         }
       ],
       "mateAct": {
@@ -5580,11 +5615,11 @@
         },
         {
           "url": "https://www.okmedicalboard.org/",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         },
         {
           "url": "https://oklahoma.gov/osboe.html",
-          "what": "Rechecked 2026-11-13: cme do"
+          "what": "CME requirement (DO), rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13",
@@ -5734,7 +5769,7 @@
         },
         {
           "url": "https://www.oregon.gov/omb/pages/default.aspx",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13 (partial)",
@@ -5781,7 +5816,8 @@
           "field": "cme_and_topics",
           "liveValue": "60 hrs/2 yr; 1 hr pain; 2 hrs cultural competency",
           "note": "OAR pages did not render for our checker; board renew page confirms random CME audit only",
-          "source": "https://www.oregon.gov/omb/licensing/pages/renew.aspx"
+          "source": "https://www.oregon.gov/omb/licensing/pages/renew.aspx",
+          "publicNote": "We're confirming the CME hours and the pain management and cultural competency topics with the board."
         }
       ],
       "mateAct": {
@@ -5873,7 +5909,7 @@
         },
         {
           "url": "https://www.pa.gov/agencies/dos/department-and-offices/bpoa/boards-commissions/medicine",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13 (partial)",
@@ -5926,7 +5962,8 @@
           "field": "pain_organ_donation",
           "liveValue": "2 hrs pain management; 2 hrs organ and tissue donation",
           "note": "Not in 49 Pa. Code 16.19 text fetched",
-          "source": "https://www.pacodeandbulletin.gov/Display/pacode?file=/secure/pacode/data/049/chapter16/s16.19.html"
+          "source": "https://www.pacodeandbulletin.gov/Display/pacode?file=/secure/pacode/data/049/chapter16/s16.19.html",
+          "publicNote": "We're confirming the pain management and organ donation CME hours with the board."
         }
       ],
       "firstRenewal": {
@@ -6170,7 +6207,7 @@
         },
         {
           "url": "https://llr.sc.gov/med/",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13",
@@ -6326,7 +6363,7 @@
         },
         {
           "url": "https://www.sdbmoe.gov/",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13 (partial)",
@@ -6367,13 +6404,15 @@
           "field": "cme_total",
           "liveValue": "No general CME requirement",
           "note": "Not confirmed on board pages fetched",
-          "source": "https://www.sdbmoe.gov/"
+          "source": "https://www.sdbmoe.gov/",
+          "publicNote": "The board's pages do not state a general CME hour requirement. We're confirming this with the board."
         },
         {
           "field": "renewal_fee",
           "liveValue": "$400",
           "note": "Amount not found on official pages fetched",
-          "source": "https://www.sdbmoe.gov/"
+          "source": "https://www.sdbmoe.gov/",
+          "publicNote": "We're confirming the current renewal fee with the board."
         }
       ],
       "mateAct": {
@@ -6508,7 +6547,8 @@
           "field": "board_link",
           "liveValue": "https://www.tn.gov/health/licensure/me.html",
           "note": "Official board site; DO board https://www.tn.gov/health/licensure/ost.html (site blocked automated check: HTTP 000)",
-          "source": "https://www.tn.gov/health/licensure/me.html"
+          "source": "https://www.tn.gov/health/licensure/me.html",
+          "publicNote": "We could not open the board's website when we last checked this guide. We're confirming its details with the board."
         }
       ],
       "mateAct": {
@@ -6601,7 +6641,7 @@
         },
         {
           "url": "https://www.tmb.texas.gov/",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13",
@@ -6687,7 +6727,7 @@
       ],
       "unverified": [],
       "firstRenewal": {
-        "text": "1 hour in first renewal period, then every third renewal (every 6 years), direct patient care",
+        "text": "1 hour of human trafficking training in the first renewal period, then every third renewal (every 6 years), for physicians in direct patient care",
         "source": "https://www.tmb.texas.gov/apply-renew/physician/continuing-education-requirements-for-physicians",
         "verifiedOn": "2026-11-13"
       },
@@ -6781,7 +6821,7 @@
         },
         {
           "url": "https://dopl.utah.gov/physician-and-surgeon/",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13 (partial)",
@@ -6828,7 +6868,8 @@
           "field": "renewal_fee",
           "liveValue": "$193",
           "note": "Not shown on DOPL pages fetched",
-          "source": "https://dopl.utah.gov/osteopathic-physician-and-surgeon/renew-a-license/"
+          "source": "https://dopl.utah.gov/osteopathic-physician-and-surgeon/renew-a-license/",
+          "publicNote": "We're confirming the current renewal fee with the board."
         }
       ],
       "mateAct": {
@@ -6963,7 +7004,8 @@
           "field": "cme_and_topics",
           "liveValue": "MD 30 hrs incl 1 pain, 2 CS; DO 30",
           "note": "Vermont board pages fetched did not state hours",
-          "source": "https://healthvermont.gov/systems/medical-practice-board/statutes-rules-policies-and-newsletters"
+          "source": "https://healthvermont.gov/systems/medical-practice-board/statutes-rules-policies-and-newsletters",
+          "publicNote": "We're confirming the CME hours for MDs and DOs with the board."
         }
       ],
       "mateAct": {
@@ -7055,7 +7097,7 @@
         },
         {
           "url": "https://www.dhp.virginia.gov/Boards/Medicine/",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13",
@@ -7205,7 +7247,7 @@
         },
         {
           "url": "https://wmc.wa.gov/",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13 (partial)",
@@ -7270,7 +7312,8 @@
           "field": "cultural_competency_do",
           "liveValue": "2 hrs cultural competency; DO 150/3 yr",
           "note": "Not re-confirmed on pages fetched",
-          "source": "https://doh.wa.gov/licenses-permits-and-certificates/professions-new-renew-or-update/osteopathic-physician-and-surgeon"
+          "source": "https://doh.wa.gov/licenses-permits-and-certificates/professions-new-renew-or-update/osteopathic-physician-and-surgeon",
+          "publicNote": "We're confirming the cultural competency hours and the osteopathic (DO) CME requirement with the board."
         }
       ],
       "mateAct": {
@@ -7362,7 +7405,7 @@
         },
         {
           "url": "https://wvbom.wv.gov/",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13",
@@ -7510,7 +7553,7 @@
         },
         {
           "url": "https://dsps.wi.gov/a-z-boards-and-councils-list/meb/",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13",
@@ -7649,7 +7692,7 @@
         },
         {
           "url": "https://wyomedboard.wyo.gov/",
-          "what": "Rechecked 2026-11-13: board link"
+          "what": "Board website, rechecked November 13, 2026"
         }
       ],
       "verified": "2026-11-13 (partial)",
@@ -7702,7 +7745,8 @@
           "field": "cs_and_fee",
           "liveValue": "1 hr controlled substances; $155",
           "note": "Not confirmed on pages fetched",
-          "source": "https://www.law.cornell.edu/regulations/wyoming/052-3-Wyo-Code-R-SS-3-7"
+          "source": "https://www.law.cornell.edu/regulations/wyoming/052-3-Wyo-Code-R-SS-3-7",
+          "publicNote": "We're confirming the controlled substance CME hours and the renewal fee with the board."
         }
       ],
       "audit": {

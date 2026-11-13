@@ -40,14 +40,29 @@ test('an unconfirmed item is named with its note and never with its unconfirmed 
     if (!state.unverified.length) { assert.equal(pending, '', `${state.slug}: no empty list`); continue; }
     open += 1;
     assert.equal((pending.match(/<li>/g) || []).length, state.unverified.length, state.slug);
-    for (const item of state.unverified) assert.ok(text(pending).includes(item.note), `${state.slug}: ${item.field}`);
+    for (const item of state.unverified) {
+      assert.ok(text(pending).includes(item.publicNote), `${state.slug}: ${item.field}`);
+      // Plain words for a physician: no audit wording, no figure of any kind.
+      assert.doesNotMatch(item.publicNote.replace(/Category 1/g, ''), /HTTP|\b40[34]\b|checker|automated|blocked|fetched|returned|\$|\d/i, `${state.slug}: ${item.field}`);
+      assert.match(item.publicNote, /confirming/, `${state.slug}: ${item.field}`);
+    }
+    assert.doesNotMatch(text(html), /HTTP \d{3}|our checker|automated check|returned 404|pages fetched/i, `${state.slug}: no audit wording anywhere on the page`);
     assert.match(text(html), /still being confirmed with the board; see "Required training and audits" below\./, state.slug);
     assert.match(html, new RegExp(`${state.lastVerifiedLabel} \\(some items still being confirmed\\)`), `${state.slug}: hero and description say so`);
   }
   assert.equal(open, 33);
-  // The list is built from the field and the note only.
+  // The list is built from the field and the public note only.
   const generator = await read('landing/states/generate.js');
-  assert.doesNotMatch(generator, /liveValue/);
+  assert.doesNotMatch(generator, /u\.liveValue|u\.note\b/);
+});
+
+test('Texas names its first-renewal topic and New Jersey says two different things', async () => {
+  const state = abbreviation => data.states.find(s => s.abbreviation === abbreviation);
+  assert.match(state('TX').firstRenewal.text, /^1 hour of human trafficking training in the first renewal period/);
+  assert.notEqual(state('NJ').firstRenewal.text, state('NJ').audit.text);
+  assert.doesNotMatch(state('NJ').firstRenewal.text, /audit/i);
+  assert.doesNotMatch(JSON.stringify(state('OH').unverified), /404/);
+  assert.equal(state('OH').boardUrl, 'https://med.ohio.gov');
 });
 
 test('the /states hub cards are written from the guide data', async () => {
