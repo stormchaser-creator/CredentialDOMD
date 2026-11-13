@@ -143,11 +143,13 @@ function getCmeDisplay(state) {
 // and the meta description ("48 hours of CME", "no CME hours required"),
 // so zero-CME states never render "No CME hours required CME".
 function cmeTitlePhrase(state) {
+  if (state.seo && state.seo.cmeTitlePhrase) return state.seo.cmeTitlePhrase;
   if (state.cmeHours === 0) return 'no CME required';
   if (state.cmeHours == null) return 'CME per board';
   return `${state.cmeHours} hours CME`;
 }
 function cmeMetaPhrase(state) {
+  if (state.seo && state.seo.cmeMetaPhrase) return state.seo.cmeMetaPhrase;
   if (state.cmeHours === 0) return 'no CME hours required';
   if (state.cmeHours == null) return 'CME set by the board';
   return `${state.cmeHours} hours of CME`;
@@ -366,19 +368,155 @@ ${items}
 </section>`;
 }
 
+// ─── Last verified date, required training, still-unconfirmed items ──
+// The date a person reads ("November 13, 2026") comes from the data, set when
+// the facts were last rechecked. It is never derived or guessed here.
+function verifiedLabel(state) {
+  if (!state.lastVerifiedLabel) {
+    console.error(`ERROR: "${state.slug}" has no lastVerifiedLabel in states-data.json. Add the date the facts were last checked; never guess one.`);
+    process.exit(1);
+  }
+  return state.lastVerifiedLabel;
+}
+
+// Items a recheck could not confirm from an official source. The page names
+// the item and why it is open; it never restates the unconfirmed value.
+function unverifiedItems(state) {
+  return (state.unverified || []).filter(u => u && u.field && u.note);
+}
+
+// Hero and meta description: the date, and plainly that some items are open.
+function verifiedPhrase(state) {
+  return verifiedLabel(state) + (unverifiedItems(state).length ? ' (some items still being confirmed)' : '');
+}
+
+const UNVERIFIED_FIELD_LABELS = {
+  board_link: 'Board website',
+  renewal_fee: 'Renewal fee',
+  cme_total: 'CME hour total',
+  cme_and_topics: 'CME hours and required topics',
+  category_1: 'Category 1 share',
+  do_requirements: 'DO requirements',
+  ethics_topic: 'Ethics topic',
+  opioid: 'Opioid prescribing hours',
+  opioid_cs_topics: 'Opioid and controlled substance topics',
+  controlled_substances: 'Controlled substance hours',
+  nutrition_sickle_cell: 'Nutrition and sickle cell topics',
+  pain_organ_donation: 'Pain management and organ donation hours',
+  cultural_competency_do: 'Cultural competency hours and DO requirements',
+  cs_and_fee: 'Controlled substance hours and renewal fee',
+};
+function unverifiedFieldLabel(field) {
+  if (UNVERIFIED_FIELD_LABELS[field]) return UNVERIFIED_FIELD_LABELS[field];
+  const text = String(field).replace(/_/g, ' ').replace(/\bcme\b/gi, 'CME').replace(/\bdo\b/gi, 'DO');
+  return text.replace(/^\w/, c => c.toUpperCase());
+}
+
+function lastVerifiedNote(state) {
+  const open = unverifiedItems(state).length;
+  const more = open
+    ? ` ${open === 1 ? 'One item is' : `${open} items are`} still being confirmed with the board; see &ldquo;Required training and audits&rdquo; below.`
+    : '';
+  return `<p class="last-verified" style="margin:16px 0 0;font-size:14px;color:var(--text-secondary);"><strong>Last verified:</strong> ${escapeHtml(verifiedLabel(state))}.${more}</p>`;
+}
+
+const MATE_ACT_LINE = 'Federal: one-time 8 hours on opioid/substance use disorder treatment for all DEA registrants (MATE Act), attested on the first DEA registration or renewal on or after June 27, 2023';
+
+function sourceLink(url) {
+  return url ? ` <a href="${escapeHtml(url)}" target="_blank" rel="noopener">Source</a>` : '';
+}
+
+function trainingAuditsBlock(state) {
+  const rows = [];
+  if (state.firstRenewal && state.firstRenewal.text) rows.push(['First renewal', state.firstRenewal.text.replace(/^First renewal:\s*/i, ''), state.firstRenewal.source]);
+  if (state.audit && state.audit.text) rows.push(['CME audits', state.audit.text, state.audit.source]);
+  if (state.mateAct) rows.push(['Federal DEA training', MATE_ACT_LINE, state.mateAct.source]);
+  const open = unverifiedItems(state);
+  if (!rows.length && !open.length) return '';
+  const items = rows.map(([k, v, url]) => `      <div style="padding:14px 0;border-bottom:1px solid var(--border-subtle);">
+        <div style="font-size:13px;font-weight:700;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;margin-bottom:4px;">${escapeHtml(k)}</div>
+        <div style="color:var(--text-secondary);">${escapeHtml(v.replace(/\.$/, ''))}.${sourceLink(url)}</div>
+      </div>`).join('\n');
+  const pending = open.length ? `
+  <h3 style="margin:24px 0 8px;">Still being confirmed with the board</h3>
+  <p>We could not confirm these items from an official source on ${escapeHtml(verifiedLabel(state))}. Check them with the board before you rely on them.</p>
+  <ul style="color:var(--text-secondary);margin:0 0 16px 20px;">
+${open.map(u => `    <li><strong>${escapeHtml(unverifiedFieldLabel(u.field))}:</strong> ${escapeHtml(u.note)}</li>`).join('\n')}
+  </ul>` : '';
+  return `<section class="container content-section">
+  <h2>
+    <span class="section-number">3</span>
+    Required training and audits
+  </h2>${rows.length ? `
+  <div class="quick-facts" style="margin-top:8px;">
+${items}
+  </div>` : ''}${pending}
+</section>`;
+}
+
 function sourcesBlock(state) {
-  const verified = state.verified === '2026-08' ? 'Double-checked against a second official source' : 'From the board\'s own pages';
   const links = (state.sources || []).map(x => `      <li style="margin-bottom:6px;"><a href="${escapeHtml(x.url)}" target="_blank" rel="noopener">${escapeHtml(x.what || x.url)}</a></li>`).join('\n');
   const cme = state.cmeSourceUrl ? `      <li style="margin-bottom:6px;"><a href="${escapeHtml(state.cmeSourceUrl)}" target="_blank" rel="noopener">CME requirement: ${escapeHtml(state.cmeSource || 'state rule')}</a></li>` : '';
+  const disclaimer = state.disclaimer ? `\n  <p style="font-size:13px;color:var(--text-muted);">${escapeHtml(state.disclaimer)}</p>` : '';
   return `<section class="container content-section">
   <h2><span class="section-number">&#10003;</span> Where this comes from</h2>
-  <p>${verified}, ${escapeHtml(state.verified && state.verified.startsWith('2026-08') ? 'August 2026' : 'recently')}. These are the primary sources we read:</p>
+  <p>Last verified against official sources on ${escapeHtml(verifiedLabel(state))}. These are the primary sources we read:</p>
   <ul style="list-style:none;padding:0;">
 ${links}
 ${cme}
   </ul>
-  <p style="font-size:13px;color:var(--text-muted);">Boards change fees and rules; always confirm on the board page before you pay. Report anything out of date to support@credentialdomd.com.</p>
+  <p style="font-size:13px;color:var(--text-muted);">Boards change fees and rules; always confirm on the board page before you pay. Report anything out of date to support@credentialdomd.com.</p>${disclaimer}
 </section>`;
+}
+
+// ─── /states hub cards ───────────────────────────────────────────
+// The cards on landing/states/index.html are written from the same data as
+// the guides, so a card can no longer disagree with its guide.
+const HUB_FEE_SLUGS = new Set(['alabama', 'california', 'florida', 'new-york', 'pennsylvania', 'texas']);
+const HUB_NO_CME_LABEL = { 'new-york': 'No fixed CME' };
+
+function hubCard(state) {
+  const cycle = (String(state.renewalCycle || '').match(/^(Annual|Biennial|Triennial)\b/) || [])[1];
+  if (!cycle) {
+    console.error(`ERROR: cannot read the renewal cycle for "${state.slug}" hub card from renewalCycle.`);
+    process.exit(1);
+  }
+  const cme = state.cmeHours === 0 ? (HUB_NO_CME_LABEL[state.slug] || 'No general CME')
+    : state.cmeHours == null ? 'CME per board' : `${state.cmeHours} CME hrs`;
+  const fee = HUB_FEE_SLUGS.has(state.slug) && feeShort(state) ? feeShort(state).replace(/\.\d\d$/, '') : null;
+  const search = state.slug === 'district-of-columbia' ? 'district of columbia dc washington' : `${state.name} ${state.abbreviation}`.toLowerCase();
+  return `    <a href="/states/${state.slug}" class="state-card" data-state="${escapeHtml(search)}">
+      <span class="state-abbr">${state.abbreviation}</span>
+      <div class="state-info">
+        <span class="state-name">${escapeHtml(state.name)}</span>
+        <div class="state-meta">
+          <span class="state-tag tag-${cycle.toLowerCase()}">${cycle}</span>
+          <span>${escapeHtml(cme)}</span>${fee ? `\n          <span>${escapeHtml(fee)}</span>` : ''}
+        </div>
+      </div>
+    </a>`;
+}
+
+function writeHubCards(allStates, dryRun) {
+  const hubPath = path.join(OUTPUT_DIR, 'index.html');
+  const html = fs.readFileSync(hubPath, 'utf-8');
+  const open = '<div class="state-grid" id="stateGrid">\n';
+  const close = '\n  </div>\n\n  <div class="no-results" id="noResults">';
+  const start = html.indexOf(open);
+  const end = html.indexOf(close, start);
+  if (start < 0 || end < 0) {
+    console.error('ERROR: could not find the state grid in landing/states/index.html.');
+    process.exit(1);
+  }
+  const order = [...html.slice(start, end).matchAll(/<a href="\/states\/([a-z-]+)" class="state-card"/g)].map(m => m[1]);
+  const bySlug = new Map(allStates.map(s => [s.slug, s]));
+  if (order.length !== allStates.length || order.some(slug => !bySlug.has(slug))) {
+    console.error('ERROR: the hub cards and states-data.json do not list the same states.');
+    process.exit(1);
+  }
+  const next = html.slice(0, start + open.length) + '\n' + order.map(slug => hubCard(bySlug.get(slug))).join('\n\n') + '\n' + html.slice(end);
+  if (next !== html && !dryRun) fs.writeFileSync(hubPath, next, 'utf-8');
+  console.log(`  Hub cards: ${next === html ? 'unchanged' : dryRun ? 'would change' : 'updated'} (index.html)`);
 }
 
 // ─── Generate a Single State Page ────────────────────────────────
@@ -412,7 +550,7 @@ function generateStatePage(state, allStates, template) {
     // NOTE: {{DEADLINE_SENTENCE}} is intentionally NOT in this map. It is
     // filled in the fragment pass below; listing it here with '' deleted the
     // placeholder before that pass ran, leaving the hero sentence empty.
-    '{{VERIFIED_DATE}}': (state.verified && state.verified.startsWith('2026-08')) ? 'August 2026' : 'recently',
+    '{{VERIFIED_DATE}}': verifiedPhrase(state),
     '{{YEAR}}': String(YEAR),
     '{{FEE_SHORT}}': feeShort(state) || 'see board',
   };
@@ -424,6 +562,8 @@ function generateStatePage(state, allStates, template) {
   html = html.split('{{LATE_FEE_FACT}}').join(state.lateFee ? factItem('Late fee', state.lateFee.split('(')[0].trim()) : '');
   html = html.split('{{RENEWAL_DETAIL_BLOCK}}').join(renewalDetailBlock(state));
   html = html.split('{{SOURCES_BLOCK}}').join(sourcesBlock(state));
+  html = html.split('{{LAST_VERIFIED_NOTE}}').join(lastVerifiedNote(state));
+  html = html.split('{{TRAINING_AUDITS_BLOCK}}').join(trainingAuditsBlock(state));
   html = html.replace('{{STEPS_HTML}}', buildStepsHTML(state.steps || []));
   html = html.replace('{{PITFALLS_HTML}}', buildPitfallsHTML(state.pitfalls || []));
   html = html.replace('{{FAQ_HTML}}', buildFaqHTML(state.faqs || []));
@@ -479,6 +619,8 @@ function main() {
     }
     generated++;
   }
+
+  if (!singleState) writeHubCards(allStates, dryRun);
 
   console.log(`\nDone. ${generated} pages generated.${skipped > 0 ? ` ${skipped} skipped.` : ''}`);
   if (!dryRun) {

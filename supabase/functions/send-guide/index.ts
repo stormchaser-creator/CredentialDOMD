@@ -66,9 +66,10 @@ const MATE_NOTE =
   "One federal requirement applies wherever you practice: since June 2023 every DEA registration renewal asks you to attest that you have completed 8 hours of training on treating and managing patients with opioid or other substance use disorders. You complete those hours once, not every cycle, and they can be spread across more than one course; past ACGME residency training or board certification in addiction medicine can satisfy the requirement.";
 
 const MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
-// "2026-08" reads "August 2026": the guide's verified month as a person writes it.
+// "2026-08" and "2026-11-13 (partial)" read "August 2026" and "November 2026":
+// the guide's verified month as a person writes it.
 const verifiedText = (v?: string) => {
-  v = v?.replace(/\s*\(single-source\)/g, "");
+  v = v?.replace(/\s*\((?:single-source|partial)\)/g, "");
   const m = String(v || "").match(/^(\d{4})-(\d{2})(?:-\d{2})?$/);
   return m && Number(m[2]) >= 1 && Number(m[2]) <= 12 ? `${MONTHS[Number(m[2]) - 1]} ${m[1]}` : String(v || "");
 };
