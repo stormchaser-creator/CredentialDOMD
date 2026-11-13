@@ -9,6 +9,7 @@ import { prepareAgentReply, prepareRenderedReply, readVerificationKey, signPrepa
   MIGRATION, emailStatus, RUN_COMMITTER } from './ticket-fix/reply.mjs';
 import { checklistErrors, isSupportReply, isCustomerMessage, hostItemWork, replyHold, isCompletion, askItems, stillAsked, confirmsAsk, askedAt, readChecklist, RESOLUTION_KINDS, resolutionKind, isAttachmentWork, DATA_FIX_FILE, AGENT_REPLY_MAX, REMAINING_MAX, OBSERVED_MAX, MAX_ITEMS } from './ticket-fix/checklist.mjs';
 import { isMain } from './ticket-fix/is-main.mjs';
+import { MAX_BASES, readLedger, routedTickets, recordAttempt, recordStall, validateBasis, acceptBasis, rejectApproach, routeTicket, coordinationView, actor as checkActor } from './ticket-fix/coordination.mjs';
 
 export const APPROVED = '(public.is_admin(t.user_id) OR t.agent_approved_at IS NOT NULL)';
 // A refund ticket the refund ledger opened by itself (20260930071000,
@@ -56,7 +57,7 @@ export function queueSQL(includeArchived = false, parked = [], failing = [], hel
 }
 export const PARK_AFTER = 3;
 // The shell's circuit breaker writes <state>/failed/<ticket>.count; a count of
-// PARK_AFTER or more parks the ticket (reviveParked brings it back).
+// PARK_AFTER or more parks the ticket (only retryCase brings it back).
 // A count file left from an old failure no longer sends its ticket to the
 // back of the queue (FAILING_FOR_MS; collectQueue).
 export const FAILING_FOR_MS = 7 * 24 * 60 * 60 * 1000;
@@ -79,14 +80,13 @@ export async function failCounts(directory) {
 export async function parkedTargets(directory) {
   return [...(await failCounts(directory))].filter(([, n]) => n >= PARK_AFTER).map(([t]) => t).sort();
 }
-// Parked and stalled work used to wait for a person forever (11-02 to 11-05:
-// seven open tickets, every run "idle"). Each comes back by itself once a
-// day has passed, at most REVIVE_MAX times per ticket: the code it failed on
-// has usually moved by then, and a bounded retry costs less than a ticket
-// nobody works. A device park (<ticket>.device) never comes back by itself:
-// no run can test it.
-export const REVIVE_AFTER_MS = 24 * 60 * 60 * 1000;
-export const REVIVE_MAX = 2;
+// Parked and stalled work used to come back by itself a day later, at most
+// twice, whatever had changed (11-07 to 11-13: cc9830e4, de954247 and
+// c39ed1e5 each retried on the footing that had already failed). Nothing
+// comes back by time any more: only on a basis the host validated
+// (retryCase, ticket-fix/coordination.mjs), at most MAX_BASES per ticket.
+// A device park (<ticket>.device) is recorded with --resolve-item confirmed.
+export const REVIVE_MAX = MAX_BASES;
 const mtimeOf = file => { try { return statSync(file).mtimeMs; } catch (error) { if (error.code === 'ENOENT') return null; throw error; } };
 // A device park: its marker at least as new as the count (an older marker
 // is from a park someone already cleared).
@@ -94,28 +94,6 @@ function devicePark(directory, ticketId) {
   const device = mtimeOf(path.join(directory, 'failed', `${ticketId}.device`));
   const count = mtimeOf(path.join(directory, 'failed', `${ticketId}.count`));
   return device !== null && count !== null && device >= count - 1000;
-}
-async function revivals(directory, ticketId) {
-  try {
-    const raw = (await fs.readFile(path.join(directory, 'failed', `${ticketId}.revived`), 'utf8')).trim();
-    return /^\d+$/.test(raw) ? Number(raw) : REVIVE_MAX;
-  } catch (error) { if (error.code === 'ENOENT') return 0; throw error; }
-}
-export async function reviveParked(directory, { now = Date.now() } = {}) {
-  const revived = [];
-  for (const ticketId of await parkedTargets(directory)) {
-    const failed = path.join(directory, 'failed');
-    const count = path.join(failed, `${ticketId}.count`);
-    if (devicePark(directory, ticketId)) continue;
-    const changed = mtimeOf(count);
-    if (changed === null || now - changed < REVIVE_AFTER_MS) continue;
-    const times = await revivals(directory, ticketId);
-    if (times >= REVIVE_MAX) continue;
-    await writePrivate(path.join(failed, `${ticketId}.revived`), `${times + 1}\n`);
-    await fs.rename(count, `${count}.revived-${times + 1}`);
-    revived.push(ticketId);
-  }
-  return revived;
 }
 // Replies are stored only with a verification row (20260928150000); without
 // the table and key the runner would reach the model and then fail to store.
@@ -531,9 +509,12 @@ async function readCase(directory, ticketId) {
 }
 export async function collectQueue(query, directory, { includeArchived = false, now = Date.now() } = {}) {
   await ensureState(directory);
-  const revived = await reviveParked(directory, { now });
   const counts = await failCounts(directory);
   const parked = [...counts].filter(([, n]) => n >= PARK_AFTER).map(([t]) => t).sort();
+  // Routed away from the worker (coordination.mjs): an operator's, the
+  // owner's or a device's step comes next, so no run takes it, not even on a
+  // new message (that is evidence for whoever owns it, never a retry).
+  const routed = await routedTickets(directory);
   const failing = [...counts.keys()].filter(t => !parked.includes(t) && now - (mtimeOf(path.join(directory, 'failed', `${t}.count`)) ?? 0) < FAILING_FOR_MS).sort();
   const names = (await fs.readdir(directory)).filter(n => UUID.test(n.slice(0, -5)) && n.endsWith('.json'));
   if (names.length > 5000) throw Error('Case queue exceeds bound; operator review required');
@@ -548,25 +529,26 @@ export async function collectQueue(query, directory, { includeArchived = false, 
   // already_answered): out of the queue until a newer message arrives.
   for (const r of records) if (r.continuation?.state === 'complete' && typeof r.continuation.seen_input_at === 'string') held.push({ id: r.target_id, after: r.continuation.seen_input_at });
   if (held.length > 500) throw Error('Held reply queue exceeds bound; operator review required');
-  const incoming = await query(queueSQL(includeArchived, parked, failing, held));
-  if (incoming.length > 2 || incoming.some(t => !UUID.test(t.id || '') || typeof t.from_admin !== 'boolean')) throw Error('Malformed approved queue');
-  // stuck: stalled work that has used its revivals (the supervisor's).
+  // Stalled work used its attempts: a new message no longer sends it back to
+  // a run by itself (the ops supervisor sees it in attention.json).
+  const stalled = records.filter(r => r.continuation?.state === 'stalled').map(r => r.target_id);
+  const excluded = [...new Set([...parked, ...Object.keys(routed), ...stalled])].sort();
+  if (excluded.length > 500) throw Error('Excluded queue exceeds bound; operator review required');
+  const rows = await query(queueSQL(includeArchived, excluded, failing.filter(t => !excluded.includes(t)), held));
+  if (rows.length > 2 || rows.some(t => !UUID.test(t.id || '') || typeof t.from_admin !== 'boolean')) throw Error('Malformed approved queue');
+  // The query leaves them out; checked again here so no path queues them.
+  const incoming = rows.filter(t => !excluded.includes(t.id));
+  // stuck: stalled work (the supervisor's; only a validated basis retries it).
   const due = [], attention = [], stuck = [], owner = [];
   for (const record of records) {
     const queue = record.continuation;
     if (!queue || incoming.some(t => t.id === record.target_id) || parked.includes(record.target_id)) continue;
     if (queue.state === 'stalled') {
-      const revivedTimes = Number.isInteger(queue.revived) ? queue.revived : 0;
-      const since = Date.parse(queue.last_attempt_at ?? record.recorded_at);
-      if (revivedTimes >= REVIVE_MAX) { attention.push(record.target_id); stuck.push(record.target_id); continue; }
-      if (!(now - since >= REVIVE_AFTER_MS)) { attention.push(record.target_id); continue; }
-      record.continuation = { ...queue, state: 'pending', attempts: 0, due_at: new Date(now).toISOString(), revived: revivedTimes + 1 };
-      delete record.continuation.reason;
-      await writePrivate(path.join(directory, `${record.target_id}.json`), JSON.stringify(record, null, 2));
-      revived.push(record.target_id);
-      due.push(record);
-      continue;
+      // The stall is what a retry must answer (coordination.mjs recordStall).
+      await recordStall(directory, record.target_id, { at: queue.last_attempt_at ?? record.recorded_at, runId: queue.reservation?.run_id ?? null });
+      attention.push(record.target_id); stuck.push(record.target_id); continue;
     }
+    if (routed[record.target_id]) continue;
     // Work waiting on the owner (a decision, a data change, a reporter's
     // answer to record): named on every queue run, and in attention.json.
     // A case the supervisor noted for the owner leaves the list until it is saved again.
@@ -581,8 +563,8 @@ export async function collectQueue(query, directory, { includeArchived = false, 
     // Keep a slot for due work even when the new-message queue remains busy.
     if (continuations.length >= (incoming.length ? 1 : 2)) break;
     if (record.continuation.attempts >= MAX_CONTINUATIONS) {
-      record.continuation.state = 'stalled'; attention.push(record.target_id);
-      if ((Number.isInteger(record.continuation.revived) ? record.continuation.revived : 0) >= REVIVE_MAX) stuck.push(record.target_id);
+      record.continuation.state = 'stalled'; attention.push(record.target_id); stuck.push(record.target_id);
+      await recordStall(directory, record.target_id, { at: record.continuation.last_attempt_at ?? new Date(now).toISOString(), runId: record.continuation.reservation?.run_id ?? null });
       await writePrivate(path.join(directory, `${record.target_id}.json`), JSON.stringify(record, null, 2));
       continue;
     }
@@ -601,8 +583,12 @@ export async function collectQueue(query, directory, { includeArchived = false, 
     // publish once the work is done (loadContext: run_mode reply).
     continuations.push({ id: record.target_id, mode: rows[0].awaiting_reply && !record.continuation.held ? 'reply' : 'continuation' });
   }
+  const routes = {};
+  for (const [t, who] of Object.entries(routed)) (routes[who] ??= []).push(t);
+  for (const list of Object.values(routes)) list.sort();
   return { items: [...incoming.slice(0, 2 - continuations.length).map(t => ({ id: t.id, mode: 'reply' })), ...continuations], attention, parked,
-    ...(revived.length ? { revived } : {}), ...(stuck.length ? { stuck: stuck.sort() } : {}), ...(owner.length ? { waiting_owner: owner.sort() } : {}) };
+    ...(stuck.length ? { stuck: [...new Set(stuck)].sort() } : {}), ...(owner.length ? { waiting_owner: owner.sort() } : {}),
+    ...(Object.keys(routes).length ? { routed: routes } : {}) };
 }
 export async function loadQueuedContext(query, item, directory, options = {}) {
   if (!['reply', 'continuation'].includes(item.mode)) throw Error('Invalid trusted run mode');
@@ -630,6 +616,10 @@ export async function loadQueuedContext(query, item, directory, options = {}) {
     await writePrivate(path.join(directory, `${item.id}.json`), JSON.stringify(pending, null, 2));
   }
   await markRunnerReplies(context, directory);
+  // The last failure and the rejected approaches, from the host's own
+  // records (coordination.mjs): the worker's session starts with no memory.
+  const coordination = coordinationView(await readLedger(directory, item.id));
+  if (coordination) context.coordination = coordination;
   return attachPriorReviews(context, directory);
 }
 // The runner's own stored replies: a message whose verification this runner's
@@ -846,23 +836,41 @@ export async function closeLeftover(directory, ticketId, key, { note = '', now =
     return record;
   });
 }
-// Puts a case back in the queue with fresh attempts: a stalled or waiting
-// case the host knows a run can now finish (the runner changed under it, or
-// its blocker is gone). Same lock as the other host commands; never one
-// whose completion reply was stored.
-export async function wakeCase(directory, ticketId, { now = Date.now(), lock = null } = {}) {
+// Puts a stalled, parked or routed case back to the worker with fresh
+// attempts, only on a retry basis the host validates against the database or
+// git (ticket-fix/coordination.mjs validateBasis): a reporter's message, a
+// commit on main or an approved revised plan, each saying how it addresses
+// the last failed run. Replaced --wake (11-07: cases woken with nothing new
+// failed the same way again). Same lock as the other host commands; never a
+// case whose completion reply was stored.
+export async function retryCase(directory, ticketId, { kind, ref, addresses, by, query = null, repo = REPO, mainRef = 'origin/main', now = Date.now(), lock = null } = {}) {
   await ensureState(directory);
+  id(ticketId);
+  const who = checkActor(by);
+  // The database and git are read before the lock is taken, and the basis
+  // checked again inside it against the record as it is then.
+  const before = await readLedger(directory, ticketId);
+  await validateBasis(directory, ticketId, before, { kind, ref, addresses, by: who, query, repo, mainRef });
   return withAgentLock(lock, async () => {
-    const record = await readCase(directory, id(ticketId));
-    // Closed by its completion on the checklist it has now: a new message
-    // (a grown checklist) reopens it, and then it may be woken.
-    if (record.continuation?.state === 'complete' && record.completion && record.completion.checklist_sha256 === (record.checklist_sha256 ?? null)) {
+    const ledger = await readLedger(directory, ticketId);
+    if (JSON.stringify(ledger) !== JSON.stringify(before)) throw Error('The coordination record changed meanwhile; check again');
+    let record = null;
+    try { record = await readCase(directory, ticketId); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (record?.continuation?.state === 'complete' && record.completion && record.completion.checklist_sha256 === (record.checklist_sha256 ?? null)) {
       throw Error('That case was answered as complete; a new message reopens it');
     }
-    wake(record, now);
-    record.continuation.attempts = 0;
-    await writePrivate(path.join(directory, `${id(ticketId)}.json`), JSON.stringify(record, null, 2));
-    return record;
+    const validated = await validateBasis(directory, ticketId, ledger, { kind, ref, addresses, by: who, query, repo, mainRef });
+    const basis = await acceptBasis(directory, ticketId, ledger, { kind, ref, addresses, by: who, validated, now });
+    // The park and the stall it lifts are kept as history, never deleted.
+    const count = path.join(directory, 'failed', `${ticketId}.count`);
+    try { await fs.rename(count, `${count}.${basis.id}`); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    if (record?.continuation && record.continuation.state !== 'suppressed') {
+      wake(record, now);
+      record.continuation.attempts = 0;
+      record.continuation.retry_basis = basis.id;
+      await writePrivate(path.join(directory, `${ticketId}.json`), JSON.stringify(record, null, 2));
+    }
+    return { basis, case_state: record?.continuation?.state ?? null };
   });
 }
 // A case waiting on the owner that nothing here can resolve (no checklist
@@ -991,10 +999,9 @@ export async function saveReview(directory, context, given, sourceRevision, { no
     target_version: context.target_version, recorded_at: new Date(now).toISOString(), source_revision: sourceRevision,
     approval: context.approval, pending_follow_up: pendingWork,
     continuation: { state, attempts, due_at: new Date(now + COOLDOWN_MS).toISOString(),
-      // How often collectQueue has revived it (REVIVE_MAX bounds it): kept
-      // across runs, or a ticket that stalls again would be revived forever.
+      // An old count of time-based revivals (before 2026-11-13), kept as history.
       ...(Number.isInteger(previous?.continuation?.revived) ? { revived: previous.continuation.revived } : {}),
-      ...(state === 'stalled' ? { reason: 'Three continuation attempts; revived by itself after a day, at most twice, then operational review' } : {}),
+      ...(state === 'stalled' ? { reason: 'Three continuation attempts; it runs again only on a validated retry basis (--retry), else operational review' } : {}),
       ...(held ? { held: { at: new Date(now).toISOString(), input_at: inputAt, reasons: held.reasons } } : {}) },
     ...(completed ? { completion: { at: new Date(now).toISOString(), checklist_sha256: stage3?.checklist?.items_sha256 ?? null, verification_id: completed.verification_id } }
       : previous?.completion ? { completion: previous.completion } : {}),
@@ -1269,7 +1276,7 @@ export async function readRunnerContext(filename, key) {
 // The log line for a held reply: ids and states only.
 export function heldLine(ticketId, status, at = new Date()) {
   const next = status.continuation_state === 'pending' ? 'continuing' : status.continuation_state === 'waiting_owner' ? 'waiting on the owner\'s decision'
-    : status.continuation_state === 'stalled' ? 'stalled after its attempts; revived by itself after a day' : status.continuation_state;
+    : status.continuation_state === 'stalled' ? 'stalled after its attempts; it runs again only on a validated retry basis' : status.continuation_state;
   return `${at.toISOString().slice(0, 19).replace('T', ' ')} REPLY HELD — ${id(ticketId).slice(0, 8)}: not complete (${status.reasons.join(', ')}); ${next}`;
 }
 // Logs get rule names and fixed message heads, never reply text.
@@ -1290,22 +1297,17 @@ export const refusalHead = error => (error?.violations ? ruleNames(error.violati
   : Array.isArray(error?.problems) ? [...new Set(error.problems.map(problemHead))].join('; ').slice(0, 400)
     : String(error?.message ?? error).split(':')[0].slice(0, 160));
 // What the ops supervisor reads (scripts/ops-supervisor.sh): the open
-// tickets no run will work by itself, stalled past their revivals or parked.
+// tickets no run will work by itself: stalled, parked or routed away from the worker.
 // A log line alone reached nobody (11-02 to 11-05).
-// Parked tickets reviveParked will bring back, and device parks (the owner
-// was told), are left out: only what needs the supervisor.
+// Device parks (the owner was told) are left out: only what needs the
+// supervisor. Every other parked ticket waits for a validated basis.
 export async function writeAttention(query, directory, queue, { now = Date.now() } = {}) {
-  const stuckParked = [];
-  for (const ticketId of queue.parked) {
-    if (devicePark(directory, ticketId)) continue;
-    if (await revivals(directory, ticketId) < REVIVE_MAX) continue;
-    stuckParked.push(ticketId);
-  }
+  const stuckParked = queue.parked.filter(t => !devicePark(directory, t));
   const stalled = queue.stuck ?? [];
   // failing: a run failed on it in the last day, not yet parked. Many such
   // fixes are out of the worker's reach (the edge functions, scripts/, a
   // deploy): cc9830e4, 11-05, needed supabase/functions/_shared. The
-  // supervisor looks within the hour instead of after two revivals.
+  // supervisor looks within the hour.
   const failing = [];
   for (const [ticketId, n] of await failCounts(directory)) {
     if (n >= PARK_AFTER) continue;
@@ -1315,7 +1317,8 @@ export async function writeAttention(query, directory, queue, { now = Date.now()
   // waiting_owner: a held reply waiting on the owner's decision (collectQueue).
   // No run works it until someone decides, so the supervisor sees it.
   const owner = queue.waiting_owner ?? [];
-  const ids = [...new Set([...stalled, ...stuckParked, ...failing, ...owner])];
+  const routedIds = Object.values(queue.routed ?? {}).flat();
+  const ids = [...new Set([...stalled, ...stuckParked, ...failing, ...owner, ...routedIds])];
   const open = ids.length ? await query(readOnly(`SELECT t.id,(SELECT max(m.created_at) FROM support_messages m WHERE m.ticket_id=t.id AND m.author_id=t.user_id AND ${NEW_INPUT}) AS last_input_at
     FROM support_tickets t WHERE t.id IN (${ids.map(p => `'${id(p)}'::uuid`).join(',')})
     AND t.status IN ('open', 'in_progress') AND t.archived_at IS NULL ORDER BY t.id`)) : [];
@@ -1333,6 +1336,23 @@ export async function writeAttention(query, directory, queue, { now = Date.now()
     if (!Number.isFinite(saved) || Date.parse(row.last_input_at) > saved) answered.push(row.id);
   }
   record.waiting_owner_answered = answered.sort();
+  // routed: whose step comes next for each open ticket no run takes
+  // (coordination.mjs); new_input: of the tickets no run takes, those whose
+  // reporter wrote after the last failed run. Evidence for their owner to
+  // validate (--retry message), never a retry by itself.
+  record.routed = {};
+  for (const [who, list] of Object.entries(queue.routed ?? {})) {
+    const open = list.filter(t => isOpen.has(t)).sort();
+    if (open.length) record.routed[who] = open;
+  }
+  record.new_input = [];
+  const blocked = new Set([...record.stalled, ...record.parked_open, ...Object.values(record.routed).flat()]);
+  for (const row of open.filter(r => blocked.has(r.id) && Number.isFinite(Date.parse(r.last_input_at)))) {
+    let failed = null;
+    try { failed = Date.parse((await readLedger(directory, row.id)).last_failure?.at ?? ''); } catch { failed = null; }
+    if (Number.isFinite(failed) && Date.parse(row.last_input_at) > failed) record.new_input.push(row.id);
+  }
+  record.new_input.sort();
   // leftover: notes a finished ticket's run left open (saveReview keeps them
   // when the completion closes the case) that nobody has closed yet
   // (--close-leftover): real work the supervisor takes up, never a reason to
@@ -1363,6 +1383,19 @@ export async function databaseQuery(query) {
   if (!Array.isArray(rows)) throw Error('Unusable database response');
   return rows;
 }
+// A finished run's host records: run.json (readRun checks it is the run's
+// own, owner-only) and its gates.json when the gates ran.
+async function runFiles(work, runName) {
+  const { readRun, runDirectory } = await import('./ticket-fix/merge.mjs');
+  const run = await readRun(work, runName);
+  let gates = null;
+  try {
+    const file = path.join(runDirectory(work, runName), 'gates.json');
+    const stat = lstatSync(file);
+    if (stat.isFile() && !stat.isSymbolicLink() && stat.uid === process.getuid() && stat.size < 4 * 1024 * 1024) gates = JSON.parse(readFileSync(file, 'utf8'));
+  } catch { gates = null; }
+  return { run, gates };
+}
 async function main(args) {
   const [mode, ticketId, filename, stateDirectory, runMode = 'reply'] = args;
   if (mode === '--schema' && args.length === 1) { console.log(JSON.stringify(RESULT_SCHEMA)); return; }
@@ -1370,7 +1403,7 @@ async function main(args) {
     await assertReplyVerificationInstalled(databaseQuery);
     const queue = await collectQueue(databaseQuery, filename, { includeArchived: true });
     await writePrivate(ticketId, JSON.stringify(queue));
-    if (queue.revived?.length) console.error(`REVIVED: parked or stalled work back in the queue: ${queue.revived.join(', ')}`);
+    for (const [who, list] of Object.entries(queue.routed ?? {})) console.error(`ROUTED to ${who}: no run takes these until a validated basis returns them: ${list.join(', ')}`);
     if (queue.attention.length) console.error(`ATTENTION: stalled internal work requires operational review: ${queue.attention.join(', ')}`);
     if (queue.waiting_owner?.length) console.error(`WAITING OWNER: replies held until the owner decides: ${queue.waiting_owner.join(', ')}`);
     await writeAttention(databaseQuery, filename, queue).catch(error => console.error(`WARN: attention.json not written (${String(error.message).slice(0, 160)})`));
@@ -1416,11 +1449,68 @@ async function main(args) {
     console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} CLOSED — ${target.slice(0, 8)} leftover note; ${(record.leftover_follow_ups ?? []).length} left`);
     return;
   }
-  if (mode === '--wake' && args.length === 3) {
-    // --wake TICKET PRIVATE_STATE
+  if (mode === '--wake') throw Error('--wake is gone: a case runs again only on a validated basis. Use --retry TICKET message|commit|plan REF PRIVATE_STATE');
+  const stamp = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
+  const lock = process.env.TICKET_AGENT_LOCK || AGENT_LOCK;
+  if (mode === '--record-attempt' && args.length === 6) {
+    // --record-attempt TICKET PRIVATE_STATE WORK_STATE RUN_NAME EXIT: the
+    // runner records the run it just finished (inside its own lock).
+    const [, target, directory, work, runName, exit] = args;
+    await ensureState(directory);
+    const record = await recordAttempt(directory, id(target), { ...(await runFiles(work, runName)), exit, repo: REPO });
+    if (record) console.log(`${stamp()} COORDINATION — ${target.slice(0, 8)} run ${runName.slice(9)} exit ${exit}; owner ${record.owner}${record.last_failure?.run === runName ? `, failed (${record.basis_attempts} on this basis)` : ''}`);
+    return;
+  }
+  if (mode === '--backfill' && args.length === 4) {
+    // --backfill TICKET PRIVATE_STATE WORK_STATE: builds the record from the
+    // ticket's kept run records, oldest first (the runs before 2026-11-13).
+    const [, target, directory, work] = args;
+    await ensureState(directory);
+    const names = (await fs.readdir(path.join(work, 'runs'))).filter(n => n.startsWith(`${id(target).slice(0, 8)}-`) && /^[0-9a-f]{8}-[0-9a-f]{16}$/.test(n));
+    const runs = [];
+    for (const name of names) { try { runs.push(await runFiles(work, name)); } catch { /* an unreadable run is skipped */ } }
+    runs.sort((x, y) => String(x.run.started_at).localeCompare(String(y.run.started_at)));
+    const record = await withAgentLock(lock, async () => {
+      let last = null;
+      for (const r of runs) {
+        const st = r.run.status;
+        if (['paused', 'killed'].includes(st) || !st) continue;
+        const exit = ['refused', 'merged', 'released', 'no_code', 'held'].includes(st) ? '0' : st === 'needs_device' ? '9' : st === 'model_failed' ? '3' : 'host';
+        last = await recordAttempt(directory, target, { ...r, exit, repo: REPO, now: Date.parse(r.run.finished_at ?? r.run.started_at) || Date.now() }) ?? last;
+      }
+      return last;
+    });
+    console.log(`${stamp()} BACKFILLED — ${target.slice(0, 8)} ${runs.length} runs; owner ${record?.owner ?? 'worker'}`);
+    return;
+  }
+  if (mode === '--retry' && args.length === 5) {
+    // --retry TICKET message|commit|plan REF PRIVATE_STATE; TICKET_ACTOR,
+    // TICKET_RETRY_ADDRESSES (one line naming the failed run), and for a
+    // message TICKET_DATABASE_TOKEN.
+    const [, target, kind, ref, directory] = args;
+    const out = await retryCase(directory, id(target), { kind, ref, addresses: process.env.TICKET_RETRY_ADDRESSES ?? '', by: process.env.TICKET_ACTOR,
+      query: process.env.TICKET_DATABASE_TOKEN ? databaseQuery : null, lock });
+    console.log(`${stamp()} RETRY — ${target.slice(0, 8)} ${out.basis.id} (${kind}) accepted; back to the worker with fresh attempts; case ${out.case_state ?? 'none'}`);
+    return;
+  }
+  if (mode === '--route' && args.length === 4) {
+    // --route TICKET operator|eric|device PRIVATE_STATE; TICKET_ACTOR, TICKET_ROUTE_NOTE.
+    const [, target, owner, directory] = args;
+    await ensureState(directory);
+    const record = await withAgentLock(lock, () => routeTicket(directory, id(target), owner, { reason: process.env.TICKET_ROUTE_NOTE ?? '', by: process.env.TICKET_ACTOR }));
+    console.log(`${stamp()} ROUTED — ${target.slice(0, 8)} to ${record.owner}`);
+    return;
+  }
+  if (mode === '--reject-approach' && args.length === 3) {
+    // --reject-approach TICKET PRIVATE_STATE; TICKET_ACTOR, TICKET_APPROACH, TICKET_APPROACH_SOURCE.
     const [, target, directory] = args;
-    const record = await wakeCase(directory, id(target), { lock: process.env.TICKET_AGENT_LOCK || AGENT_LOCK });
-    console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} WOKEN — ${target.slice(0, 8)}; case ${record.continuation.state}`);
+    await ensureState(directory);
+    const record = await withAgentLock(lock, () => rejectApproach(directory, id(target), { summary: process.env.TICKET_APPROACH ?? '', source: process.env.TICKET_APPROACH_SOURCE ?? '', by: process.env.TICKET_ACTOR }));
+    console.log(`${stamp()} REJECTED APPROACH — ${target.slice(0, 8)} ${record.rejected_approaches.at(-1).id}`);
+    return;
+  }
+  if (mode === '--coordination' && args.length === 3) {
+    console.log(JSON.stringify(await readLedger(filename, id(ticketId)), null, 2));
     return;
   }
   if (mode === '--note-owner' && args.length === 3) {
@@ -1465,6 +1555,6 @@ async function main(args) {
     if (status.completion) console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} COMPLETION REPLY — ${context.target_id.slice(0, 8)}: every item done; stored from a ${status.run_mode} run, case closed`);
     console.log(JSON.stringify(status)); return;
   }
-  throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --release-attempt TICKET_ID PRIVATE_STATE | --resolve-item TICKET_ID AC-n decision|data_fix|confirmed PRIVATE_STATE | --note-owner TICKET_ID PRIVATE_STATE | --close-follow-up TICKET_ID INDEX|WORK PRIVATE_STATE | --wake TICKET_ID PRIVATE_STATE | --close-leftover TICKET_ID INDEX|WORK PRIVATE_STATE | --validate CONTEXT MODEL_OUTPUT | --session MODEL_OUTPUT | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');
+  throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --release-attempt TICKET_ID PRIVATE_STATE | --resolve-item TICKET_ID AC-n decision|data_fix|confirmed PRIVATE_STATE | --note-owner TICKET_ID PRIVATE_STATE | --close-follow-up TICKET_ID INDEX|WORK PRIVATE_STATE | --retry TICKET_ID message|commit|plan REF PRIVATE_STATE | --route TICKET_ID operator|eric|device PRIVATE_STATE | --reject-approach TICKET_ID PRIVATE_STATE | --coordination TICKET_ID PRIVATE_STATE | --record-attempt TICKET_ID PRIVATE_STATE WORK_STATE RUN EXIT | --backfill TICKET_ID PRIVATE_STATE WORK_STATE | --close-leftover TICKET_ID INDEX|WORK PRIVATE_STATE | --validate CONTEXT MODEL_OUTPUT | --session MODEL_OUTPUT | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');
 }
 if (isMain(import.meta.url)) main(process.argv.slice(2)).catch(error => { console.error(`ERROR: ${logSafe(error)}`); process.exitCode = 1; });

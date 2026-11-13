@@ -189,10 +189,11 @@ follow-up is added if none is left) and `continuation.held` records the newest m
 the run had seen. Because the ticket is still awaiting a reply, the new-message queue
 would otherwise rerun it as a fresh reply every hour; instead the queue leaves a held
 ticket out until a newer message arrives, and its work runs as a continuation: one
-attempt reserved per run, a one-hour cooldown, `stalled` after three, revived by itself
-after a day at most twice, then operational review. The run loads in reply mode (the
+attempt reserved per run, a one-hour cooldown, `stalled` after three, then a run again
+only on a validated retry basis (see Coordination below). The run loads in reply mode (the
 ticket is unanswered), so once the host decides every item done the reply goes out and
-reports what was done. New input from the reporter starts afresh. A change the gates
+reports what was done. New input from the reporter starts afresh while the case is
+pending; on stalled or parked work it is evidence for a retry, not a run. A change the gates
 or the review refused still counts toward the breaker.
 
 A continuation sends no status either, but once the host decides every item done, no
@@ -630,3 +631,60 @@ abandoned before removal; the hourly lock alone is not proof. The new prefix is
 outside the old `credentialdomd-attachments.*` sweep, so a still-running older
 hourly installation cannot erase a new run's files. This source change does not
 update that installation or remove any existing temporary files by itself.
+
+## Coordination: one owner, the last failure, retries only on evidence (2026-11-13)
+
+Owner request: stop redundant, unproductive retries. Until 11-13 parked and stalled
+work came back by itself a day later, twice, whatever had changed, and the worker's
+session (a fresh config, no memory) never saw why earlier runs failed: cc9830e4 was
+retried on an approach the operator had rejected on 11-09 and 11-12, its tests needing
+`supabase/` edits no worker may make; de954247 kept hitting the billing protections;
+c39ed1e5's review kept catching the same never-settling Loading screen.
+
+`scripts/ticket-fix/coordination.mjs` keeps one record per ticket in
+`<state>/coordination/<ticket>.json` (owner-only):
+
+- `owner`: `worker`, `operator`, `eric` or `device`. Only `worker` is queued; a routed
+  ticket is left out of the new-message queue too (`collectQueue`, and again in code).
+- `last_failure`, from the host's own `run.json` and `gates.json` (never model output):
+  cause, failed gates, review reasons and missed paths, product and test files,
+  protected billing or security hits, and `out_of_scope` files (a failing new test that
+  imports code outside `src/ tests/ public/ landing/`, or a scope violation). A stall
+  (three attempts without finishing) is recorded as a failure too (`recordStall`).
+- `rejected_approaches` (RA-n): the host adds one per refused change; a person adds the
+  ones decided elsewhere (`--reject-approach`, with a source).
+- `bases` (RB-n): each accepted retry basis; `basis_attempts`: failed runs since.
+
+The runner records every counted run (`--record-attempt`, from `ticket-agent.sh`). The
+host only routes away from the worker: device for `needs_device`, eric for a protected
+stop, operator for out-of-scope files, a failed release, or every basis used and failed.
+
+Nothing comes back by time. `--retry TICKET message|commit|plan REF STATE` is the only
+way back to the worker, under the agent lock, at most `MAX_BASES` (2) per ticket and one
+plan. `TICKET_RETRY_ADDRESSES` must name the failed run and say how the basis answers it;
+the host then checks the basis itself: a `message` must be the reporter's on this ticket
+and newer than the failure (worker-owned tickets only); a `commit` must be on
+`origin/main`, newer than the failure, not the ticket agent's own, and touch a file the
+failure names (one of the `out_of_scope` files when it names any; never for an `eric`
+stop); a `plan` (`coordination/plans/<ticket8>-<name>.md`, owner-only) is approved by the
+operator or the owner, never the supervisor, and must have an `Approach:` line, the
+failed run's id and every RA-n, plus an `Owner decision:` line for an `eric` stop. The
+accepted basis lifts the park (the count is kept as `failed/<id>.count.RB-n`) and gives
+the case fresh attempts. `--wake` is gone.
+
+`--route TICKET operator|eric|device STATE` and `--reject-approach` only restrict;
+`--coordination TICKET STATE` prints the record; `--backfill TICKET STATE WORK` builds it
+from the kept run records. `TICKET_ACTOR` (`operator`, `supervisor`, `owner`) says who
+acted; `ops-supervisor.sh` sets `supervisor`. It is declared, not authenticated: on this
+single-user machine a process could claim another actor, so the record keeps it as
+provenance and the supervisor's prompt forbids plans.
+
+The worker and the reproduction session see `coordination` in their evidence (bounded at
+5 KB: owner, the rule, the last failure, the newest twelve rejections, the basis) and
+in the case history file; their prompts say never to repeat a rejected approach and to
+stop with a `support_owner` follow-up when the only fix is out of scope or protected.
+`attention.json` gains `routed` (by owner) and `new_input` (the reporter wrote after the
+last failure on a ticket no run takes); the supervisor's HEALTH names both. Gates,
+sandbox, approvals, tests, independent review, the protected billing and security rules
+and the lock are unchanged: a retried run goes through all of them again.
+

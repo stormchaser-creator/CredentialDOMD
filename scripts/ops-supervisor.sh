@@ -133,6 +133,17 @@ print(" ".join(sorted({str(t)[:8] for t in json.load(open(sys.argv[1])).get("wai
 import json, sys
 print(" ".join(sorted({str(t)[:8] for t in json.load(open(sys.argv[1])).get("leftover", [])})))' "$attention" 2>/dev/null) || leftover=""
   [[ -n $leftover ]] && health+=("answered tickets with notes their run left open (leftover_follow_ups in the case file): $leftover")
+  # Routed away from the worker (ticket-fix/coordination.mjs): whose step
+  # comes next. No run takes these until a validated basis returns them.
+  routed=$(python3 -c '
+import json, sys
+r = json.load(open(sys.argv[1])).get("routed", {}) or {}
+print("; ".join(f"{k}: " + " ".join(sorted(str(t)[:8] for t in v)) for k, v in sorted(r.items()) if v))' "$attention" 2>/dev/null) || routed=""
+  [[ -n $routed ]] && health+=("open tickets routed away from the worker (owner of the next step): $routed")
+  fresh=$(python3 -c '
+import json, sys
+print(" ".join(sorted({str(t)[:8] for t in json.load(open(sys.argv[1])).get("new_input", [])})))' "$attention" 2>/dev/null) || fresh=""
+  [[ -n $fresh ]] && health+=("of the tickets no run takes, the reporter wrote after the last failed run: $fresh")
 fi
 
 sweep=queue
@@ -194,6 +205,10 @@ cd "$work" || exit 1
 # The session writes this pid into the ticket agent's lock when it takes it
 # (the prompt says how), so a session killed below never leaves it held.
 export OPS_SUPERVISOR_PID=$$
+# Who the ticket host commands record as acting (coordination.mjs): the
+# supervisor may record rejections, routes and validated message or commit
+# bases, never approve a revised plan.
+export TICKET_ACTOR=supervisor
 "$CLAUDE" -p "$input" --append-system-prompt "$(cat "$PROMPT")" \
   --model claude-opus-5-5 --dangerously-skip-permissions --max-budget-usd $BUDGET_USD \
   --disallowedTools 'Bash(*osascript*)' 'Bash(*security *)' 'Bash(*supabase *)' 'Bash(*notify-owner.sh *)' \

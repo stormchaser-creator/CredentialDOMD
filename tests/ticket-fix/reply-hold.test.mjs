@@ -9,7 +9,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdirSync, symlinkSync } from 'node:fs';
 import path from 'node:path';
-import { closeLeftover, wakeCase, checkDataFixes, finishRun, collectQueue, loadQueuedContext, queueSQL, heldLine, saveReview, resolveItem, noteOwner, closeFollowUp, withAgentLock, writeAttention, targetSQL, HELD_REPLY_WORK } from '../../scripts/ticket-agent-context.mjs';
+import { closeLeftover, retryCase, checkDataFixes, finishRun, collectQueue, loadQueuedContext, queueSQL, heldLine, saveReview, resolveItem, noteOwner, closeFollowUp, withAgentLock, writeAttention, targetSQL, HELD_REPLY_WORK } from '../../scripts/ticket-agent-context.mjs';
+import { readLedger } from '../../scripts/ticket-fix/coordination.mjs';
 import { spawn } from 'node:child_process';
 import { prepareRenderedReply } from '../../scripts/ticket-fix/reply.mjs';
 import { DATA_FIX_FILE, replyHold, itemsDigest, itemFollowUpWork, resolveFollowUpWork, finalStates, validResolutions, writeChecklist, renderAgentReply, stillAsked } from '../../scripts/ticket-fix/checklist.mjs';
@@ -155,15 +156,27 @@ test('a held reply is retried as a bounded continuation, not a fresh reply every
     }
     assert.equal(record(state.dir).continuation.state, 'stalled', 'three held attempts stall it');
     const stalled = await collectQueue(db.query, state.dir, { now: start + 5 * HOUR });
-    assert.deepEqual(stalled.items, [], 'stalled: no more runs until the revival');
+    assert.deepEqual(stalled.items, [], 'stalled: no more runs until a validated retry');
     assert.deepEqual(stalled.attention, [T]);
     assert.deepEqual(db.writes(), [], 'four held runs sent nothing');
-    // The reporter writes again: a fresh reply run, attempts start afresh.
-    db.messages.push({ id: M2, ticket_id: T, author_id: OWNER, is_admin_reply: false, body: 'Synthetic second follow-up.', created_at: W2 });
+    // The stall is recorded as what a retry must answer.
+    const stall = (await readLedger(state.dir, T)).last_failure;
+    assert.equal(stall.status, 'stalled');
+    // The reporter writes again: no run by itself (2026-11-13) ...
+    // Written after the stall (this test's clock), in the database's format.
+    const LATER = new Date(start + 5 * HOUR).toISOString().replace('Z', '000+00:00');
+    db.messages.push({ id: M2, ticket_id: T, author_id: OWNER, is_admin_reply: false, body: 'Synthetic second follow-up.', created_at: LATER });
+    assert.deepEqual((await collectQueue(db.query, state.dir, { now: start + 6 * HOUR })).items, [], 'a new message alone does not retry stalled work');
+    // ... until a retry on that message is validated: a fresh reply run, attempts start afresh.
+    const withMessage = async sql => (sql.includes('JOIN support_tickets t ON t.id=m.ticket_id') && sql.includes(M2)
+      ? [{ id: M2, ticket_id: T, author_id: OWNER, body: 'Synthetic second follow-up.', is_admin_reply: false, created_at: LATER, owner_id: OWNER, from_admin: true }] : db.query(sql));
+    const lock = path.join(state.dir, 'agent.lock');
+    await assert.rejects(retryCase(state.dir, T, { kind: 'message', ref: M2, addresses: 'the reporter wrote again', by: 'supervisor', query: withMessage, lock }), /Name the failed run/);
+    await retryCase(state.dir, T, { kind: 'message', ref: M2, addresses: `the reporter's new detail answers stall ${stall.run.slice(9)}`, by: 'supervisor', query: withMessage, lock });
     const fresh = await collectQueue(db.query, state.dir, { now: start + 6 * HOUR });
     assert.deepEqual(fresh.items, [{ id: T, mode: 'reply' }]);
     const context = await loadQueuedContext(db.query, fresh.items[0], state.dir, { now: start + 6 * HOUR });
-    assert.equal(context.input_watermark, W2);
+    assert.equal(context.input_watermark, LATER);
     assert.equal((await finishRun(db.query, state.dir, context, result(), { stage3: stage3(OPEN), codeOutcome: 'none', requireStructured: true })).attempts, 0);
     // The next run finishes every item: the reply goes out and reports it.
     const now = start + 8 * HOUR;
@@ -773,22 +786,7 @@ test('a case with an item open and nothing listed is never "complete": it goes b
     assert.equal(record(state.dir).continuation.state, 'pending', 'open items: never "complete"');
   } finally { state.cleanup(); }
 });
-test('--wake puts a stalled case back with fresh attempts, never one already answered', async () => {
-  const state = privateDir('ticket-reply-wake-');
-  try {
-    const lock = path.join(state.dir, 'agent.lock');
-    writeFileSync(path.join(state.dir, `${T}.json`), JSON.stringify({ version: 1, target_id: T, owner_id: OWNER, pending_follow_up: [],
-      continuation: { state: 'stalled', attempts: 3, due_at: new Date().toISOString(), reason: 'Synthetic.' } }), { mode: 0o600 });
-    const woken = await wakeCase(state.dir, T, { lock });
-    assert.deepEqual([woken.continuation.state, woken.continuation.attempts, woken.continuation.reason], ['pending', 0, undefined]);
-    const SHA = 'a'.repeat(64);
-    writeFileSync(path.join(state.dir, `${T}.json`), JSON.stringify({ ...woken, checklist_sha256: SHA, continuation: { ...woken.continuation, state: 'complete' }, completion: { at: new Date().toISOString(), checklist_sha256: SHA, verification_id: uuid(7300) } }), { mode: 0o600 });
-    await assert.rejects(wakeCase(state.dir, T, { lock }), /answered as complete/);
-    // A new message grew the checklist and the new work stalled: it may be woken.
-    writeFileSync(path.join(state.dir, `${T}.json`), JSON.stringify({ ...woken, checklist_sha256: 'b'.repeat(64), continuation: { ...woken.continuation, state: 'stalled' }, completion: { at: new Date().toISOString(), checklist_sha256: SHA, verification_id: uuid(7300) } }), { mode: 0o600 });
-    assert.equal((await wakeCase(state.dir, T, { lock })).continuation.state, 'pending');
-  } finally { state.cleanup(); }
-});
+// --wake is gone (2026-11-13): retryCase replaces it; tests/ticket-fix/coordination.test.mjs.
 test('the notes a finished ticket left open reach the supervisor (attention leftover)', async () => {
   await answeredTicket(async ({ db, state, due }) => {
     const s3 = stage3(DONE); s3.final.follow_up = [{ work: 'Synthetic: a bug next to the fix', owner: 'support_worker', next_action: 'Synthetic.' }];

@@ -181,8 +181,9 @@ cd "$REPO" || exit 1
 # Every failed run counts toward the circuit breaker, whatever failed: a
 # result the host refused, a model session that failed or timed out, a run
 # that changed the host's code or files outside its scope. Three in a row
-# park the ticket and alert the owner. A parked ticket comes back by itself
-# a day later, at most twice (ticket-agent-context.mjs reviveParked). Without this, one unrecordable ticket
+# park the ticket and alert the owner. A parked ticket runs again only on a
+# retry basis the host validated (ticket-agent-context.mjs --retry); nothing
+# comes back by time (2026-11-13). Without this, one unrecordable ticket
 # burned 71 consecutive model runs (2026-09-20/21) with no alert, and a
 # ticket that always timed out would never have parked. The one exception is
 # the subscription's session or usage limit (run.mjs exit 8): it says nothing
@@ -194,7 +195,18 @@ cd "$REPO" || exit 1
 # gets past the limit ends the pause (alert.mjs resumed), and so do 2 h with
 # no limited run: an idle queue or a WAITING, PARKED or failed step never
 # reaches run.mjs, so the next limit starts a new pause (alert.mjs).
+# Each counted run goes into the ticket's coordination record (last failure,
+# rejected approach, who owns the next step: ticket-fix/coordination.mjs),
+# from the host's own run record. Never blocks the run.
+record_attempt() {
+  local NAME
+  NAME=$(run_field run) || return 0
+  [ -n "$NAME" ] || return 0
+  node "$HOST/ticket-agent-context.mjs" --record-attempt "$TICKET_ID" "$CASE_STATE" "$WORK_STATE" "$NAME" "$1" >> "$LOG" 2>&1 ||
+    echo "$(date '+%F %T') WARN — coordination record for $TICKET_ID not written" >> "$LOG"
+}
 reject() {
+  record_attempt "${ATTEMPT_EXIT:-$WORK_RC}"
   KEPT="$FAIL_DIR/$TICKET_ID-$(date '+%Y%m%dT%H%M%S').json"
   if [ -s "$OUTPUT" ] && /bin/cp "$OUTPUT" "$KEPT" 2>/dev/null; then
     /bin/chmod 600 "$KEPT"
@@ -307,6 +319,7 @@ for TARGET in ${(f)TARGETS}; do
     3) reject "model run failed or timed out"; RC=1; continue ;;
     5) reject "changed files outside its scope"; RC=1; continue ;;
     7) echo 3 > "$FAIL_COUNT"
+       record_attempt 7
        echo "$(date '+%F %T') REJECTED — $TICKET_ID checklist not extracted; parked" >> "$LOG"
        node "$ALERT" park --state "$CASE_STATE" --ticket "$TICKET_ID" --count 3 --why checklist --notify "$NOTIFY" >> "$LOG" 2>&1
        RC=1; continue ;;
@@ -327,8 +340,9 @@ for TARGET in ${(f)TARGETS}; do
     # test for it): no run could pass the gates, so working it hourly only
     # burns sessions. Parked at once, the owner told once (alert.mjs park
     # --why device). The .device marker keeps it parked: it never comes back
-    # by itself (ticket-agent-context.mjs reviveParked).
+    # by itself (the reporter's confirmation is recorded with --resolve-item).
     9) echo 3 > "$FAIL_COUNT"; : > "$FAIL_DIR/$TICKET_ID.device"
+       record_attempt 9
        echo "$(date '+%F %T') DEVICE — $TICKET_ID needs a device reproduction; parked, nothing else counted" >> "$LOG"
        node "$ALERT" park --state "$CASE_STATE" --ticket "$TICKET_ID" --count 3 --why device --notify "$NOTIFY" >> "$LOG" 2>&1
        /bin/rm -rf "$ATTACHMENTS"
@@ -373,6 +387,7 @@ for TARGET in ${(f)TARGETS}; do
   if TICKET_RUN_KEY="$RUN_KEY" TICKET_REPO="$RECORD_REPO" TICKET_PRE_HEAD="$BASE" TICKET_RUN_STARTED="$RUN_STARTED" TICKET_RUN_COMMITTER="$RUN_COMMITTER" \
     TICKET_RUN_ID="$RUN_ID" TICKET_RELEASE_FILE="$RELEASE_FILE" TICKET_CODE_OUTCOME="$CODE" TICKET_STAGE3_FILE="$STAGE3" TICKET_DATABASE_TOKEN="$TOKEN" node "$HOST/ticket-agent-context.mjs" \
     --record-and-reply "$CONTEXT" "$OUTPUT" "$CASE_STATE" >> "$LOG" 2>&1; then
+    record_attempt 0
     if [ "$CODE" = refused ]; then
       # The reply step held the reply (or, when it asks the reporter
       # something, recorded it), but a change the gates or the review refused
@@ -386,7 +401,7 @@ for TARGET in ${(f)TARGETS}; do
   else
     # The rejected review is kept privately so the rejection can be diagnosed;
     # the run directory is deleted on exit. Newest five per target are kept.
-    reject "review not recorded"
+    ATTEMPT_EXIT=record reject "review not recorded"
     RC=1; break
   fi
   node "$HOST/ticket-fix/run.mjs" finish --run-file "$RUN_FILE" --work "$WORK_STATE" --repo "$REPO" >> "$LOG" 2>&1

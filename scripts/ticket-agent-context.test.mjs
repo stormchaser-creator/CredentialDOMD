@@ -5,7 +5,8 @@ import os from 'node:os';
 import path from 'node:path';
 import { loadContext, historySQL, messagesSQL, targetSQL, actorLabel, validateAssessment,
   saveReview, attachPriorReviews, ensureState, collectQueue, loadQueuedContext, releaseAttempt, continuationSQL, finishRun, assertReplyMode,
-  queueSQL, reviveParked, parkedTargets, writeAttention, REVIVE_MAX } from './ticket-agent-context.mjs';
+  queueSQL, parkedTargets, writeAttention, retryCase } from './ticket-agent-context.mjs';
+import { writeLedger, emptyLedger } from './ticket-fix/coordination.mjs';
 
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
 const owner = uuid(9000), targetId = uuid(1);
@@ -279,10 +280,12 @@ test('crashes consume bounded continuation attempts and stalled work is surfaced
       // Simulate a crash: no output/result saved after reservation.
     }
     const exhausted = await collectQueue(makeQuery(), directory, { now: START + 4 * HOUR });
-    assert.deepEqual(exhausted, { items: [], attention: [targetId], parked: [] });
+    assert.deepEqual(exhausted, { items: [], attention: [targetId], parked: [], stuck: [targetId] });
     assert.equal((await current()).continuation.state, 'stalled');
+    // 2026-11-13: a new message on stalled work is evidence for whoever
+    // validates a retry, never a run by itself.
     const newMessage = await collectQueue(makeQuery([{ id: targetId, from_admin: false }]), directory, { now: START + 5 * HOUR });
-    assert.deepEqual(newMessage.items, [{ id: targetId, mode: 'reply' }]);
+    assert.deepEqual(newMessage.items, []);
   });
 });
 // A run the subscription's usage limit paused (run.mjs exit 8) gives back the
@@ -390,77 +393,50 @@ test('completed investigation resets stalled-attempt counting while remaining im
   });
 });
 
-// 11-02 to 11-05: seven open tickets sat stalled or parked, every run "idle".
-// Each now comes back by itself a day later, at most REVIVE_MAX times.
-test('stalled work comes back by itself a day later, at most twice, and the count survives later reviews', async () => {
-  await pendingFixture(async ({ directory, context, current, makeQuery }) => {
+// 11-02 to 11-05 seven tickets sat stalled; 11-07 to 11-13 time-based
+// revivals retried three of them on the footing that had already failed.
+// Stalled and parked work now waits for a validated basis (--retry), and a
+// new message on it is evidence for the supervisor, not a run.
+test('stalled work never comes back by time, and a new message does not send it to a run', async () => {
+  await pendingFixture(async ({ directory, context, current, makeQuery, queries }) => {
     await saveReview(directory, context, workerAssessment(context), null, { now: START });
-    // Crashed runs until the bounded attempts are used up.
-    const stall = async from => {
-      for (let hour = 1; hour <= 5; hour++) {
-        const queue = await collectQueue(makeQuery(), directory, { now: from + hour * HOUR });
-        if (!queue.items.length) return queue;
-        await loadQueuedContext(makeQuery(), queue.items[0], directory, { now: from + hour * HOUR });
-      }
-      throw Error('never stalled');
-    };
-    const first = await stall(START);
-    assert.deepEqual(first.attention, [targetId]);
-    assert.equal(first.stuck, undefined, 'it will come back by itself: not the supervisor\'s yet');
-    // The last attempt was at START + 3 h: a day from then, not from the review.
-    assert.deepEqual((await collectQueue(makeQuery(), directory, { now: START + 26 * HOUR })).attention, [targetId], 'not before a day after the last attempt');
-    let at = START + 27 * HOUR;
-    for (let time = 1; time <= REVIVE_MAX; time++) {
-      const back = await collectQueue(makeQuery(), directory, { now: at });
-      assert.deepEqual(back.items, [{ id: targetId, mode: 'continuation' }], `revival ${time}`);
-      assert.deepEqual(back.revived, [targetId]);
-      assert.equal((await current()).continuation.revived, time);
-      // A real run saves its review: the revival count must survive it.
-      const next = await loadQueuedContext(makeQuery(), back.items[0], directory, { now: at });
-      await finishRun(makeQuery(), directory, next, workerAssessment(next));
-      assert.equal((await current()).continuation.revived, time, 'saveReview keeps the count');
-      // finishRun stamps the wall clock; moved onto this test's clock.
-      const saved = await current();
-      await writeFile(path.join(directory, `${targetId}.json`), JSON.stringify({ ...saved, recorded_at: new Date(at).toISOString(), continuation: { ...saved.continuation, due_at: new Date(at).toISOString() } }), { mode: 0o600 });
-      await stall(at);
-      assert.equal((await current()).continuation.state, 'stalled');
-      at += 30 * HOUR;
+    let stalled;
+    for (let hour = 1; hour <= 5; hour++) {
+      const queue = await collectQueue(makeQuery(), directory, { now: START + hour * HOUR });
+      if (!queue.items.length) { stalled = queue; break; }
+      await loadQueuedContext(makeQuery(), queue.items[0], directory, { now: START + hour * HOUR });
     }
-    const done = await collectQueue(makeQuery(), directory, { now: at + 48 * HOUR });
-    assert.deepEqual(done.items, [], 'no third revival');
-    assert.deepEqual(done.attention, [targetId]);
-    assert.deepEqual(done.stuck, [targetId], 'left for the supervisor');
+    assert.ok(stalled, 'stalled after its attempts');
+    assert.equal((await current()).continuation.state, 'stalled');
+    assert.deepEqual(stalled.stuck, [targetId], 'the supervisor\'s at once');
+    assert.equal(stalled.revived, undefined);
+    for (const hours of [27, 60, 24 * 30]) {
+      queries.length = 0;
+      const later = await collectQueue(makeQuery(), directory, { now: START + hours * HOUR });
+      assert.deepEqual(later.items, [], `still not run ${hours} h later`);
+      assert.deepEqual(later.stuck, [targetId]);
+      const incoming = queries.find(q => q.includes('SELECT t.id,t.updated_at'));
+      assert.match(incoming, new RegExp(`t.id NOT IN \\([^)]*'${targetId}'::uuid`), 'a new message cannot queue it either');
+    }
+    assert.equal((await current()).continuation.state, 'stalled');
   });
 });
-test('a parked ticket comes back a day after its last failure, twice at most; a device park never does', async () => {
-  const directory = await mkdtemp(path.join(os.tmpdir(), 'support-park-test-'));
-  try {
-    await ensureState(directory);
-    const failed = path.join(directory, 'failed');
-    await mkdir(failed, { mode: 0o700 });
-    const park = async (ticketId, ageHours, device = false) => {
-      await writeFile(path.join(failed, `${ticketId}.count`), '3\n', { mode: 0o600 });
-      const when = (START - ageHours * HOUR) / 1000;
-      await utimes(path.join(failed, `${ticketId}.count`), when, when);
-      if (device) await writeFile(path.join(failed, `${ticketId}.device`), '', { mode: 0o600 });
-    };
-    await park(uuid(1), 30); await park(uuid(2), 2); await park(uuid(3), 30, true);
-    assert.deepEqual(await reviveParked(directory, { now: START }), [uuid(1)]);
-    assert.deepEqual(await parkedTargets(directory), [uuid(2), uuid(3)], 'recent and device parks stay');
-    assert.equal((await readFile(path.join(failed, `${uuid(1)}.revived`), 'utf8')).trim(), '1');
-    assert.ok((await readdir(failed)).includes(`${uuid(1)}.count.revived-1`), 'the old count is kept, renamed');
-    await park(uuid(1), 30);
-    assert.deepEqual(await reviveParked(directory, { now: START }), [uuid(1)]);
-    await park(uuid(1), 30);
-    assert.deepEqual(await reviveParked(directory, { now: START }), [], 'no third revival');
-    assert.deepEqual(await parkedTargets(directory), [uuid(1), uuid(2), uuid(3)]);
-    // A device marker older than the count is from a park someone cleared:
-    // the new park is an ordinary one and comes back.
-    await park(uuid(4), 30, true);
+test('a parked ticket stays parked by time; a routed one is out of every queue', async () => {
+  await pendingFixture(async ({ directory, makeQuery, queries }) => {
+    await mkdir(path.join(directory, 'failed'), { mode: 0o700 });
+    const count = path.join(directory, 'failed', `${uuid(2)}.count`);
+    await writeFile(count, '3\n', { mode: 0o600 });
     const old = (START - 90 * HOUR) / 1000;
-    await utimes(path.join(failed, `${uuid(4)}.device`), old, old);
-    assert.deepEqual(await reviveParked(directory, { now: START }), [uuid(4)]);
-  } finally { await rm(directory, { recursive: true, force: true }); }
+    await utimes(count, old, old);
+    await writeLedger(directory, { ...emptyLedger(uuid(3)), owner: 'operator' });
+    await writeLedger(directory, { ...emptyLedger(uuid(4)), owner: 'worker' });
+    const queue = await collectQueue(makeQuery(), directory, { now: START });
+    assert.deepEqual(await parkedTargets(directory), [uuid(2)], 'nothing renamed the count');
+    assert.deepEqual(queue.routed, { operator: [uuid(3)] });
+    const incoming = queries.find(q => q.includes('SELECT t.id,t.updated_at'));
+    for (const t of [uuid(2), uuid(3)]) assert.match(incoming, new RegExp(`'${t}'::uuid`));
+    assert.doesNotMatch(incoming, new RegExp(`'${uuid(4)}'::uuid`), 'a worker-owned ticket is queued as before');
+  });
 });
 test('tickets whose runs failed queue after fresh ones', () => {
   const sql = queueSQL(false, [uuid(3)], [uuid(1)]);
@@ -469,20 +445,27 @@ test('tickets whose runs failed queue after fresh ones', () => {
   assert.match(queueSQL(), /ORDER BY t.created_at,t.id LIMIT 2/, 'unchanged without failed runs');
   assert.throws(() => queueSQL(false, [], ["x' OR 1=1"]), /Invalid support ID/);
 });
-test('the attention file names stalled work and only the parked tickets still open', async () => {
+test('the attention file names stalled, parked and routed work still open, and new input since the last failure', async () => {
   const directory = await mkdtemp(path.join(os.tmpdir(), 'support-attention-test-'));
   try {
     const seen = [];
-    // uuid(2) and uuid(3) have used their revivals; uuid(4) has not (the
-    // runner will bring it back), uuid(6) is a device park. The database says
-    // uuid(2) and uuid(5) are open.
+    // uuid(6) is a device park. The database says uuid(2), uuid(4), uuid(5)
+    // and uuid(10) are open; uuid(10) is routed to the operator and its
+    // reporter wrote after its last failed run, uuid(4) before.
+    await ensureState(directory);
     await mkdir(path.join(directory, 'failed'), { mode: 0o700 });
-    for (const n of [2, 3]) await writeFile(path.join(directory, 'failed', `${uuid(n)}.revived`), `${REVIVE_MAX}\n`, { mode: 0o600 });
     await writeFile(path.join(directory, 'failed', `${uuid(6)}.device`), '', { mode: 0o600 });
-    const query = async sql => { seen.push(sql); assert.match(sql, /^begin read only;/); return [{ id: uuid(2) }, { id: uuid(5) }]; };
-    const record = await writeAttention(query, directory, { attention: [uuid(5), uuid(7), uuid(8)], stuck: [uuid(5), uuid(7)], parked: [uuid(2), uuid(3), uuid(4), uuid(6)] }, { now: START });
-    assert.deepEqual(record, { at: new Date(START).toISOString(), stalled: [uuid(5)], parked_open: [uuid(2)], failing: [], waiting_owner: [], waiting_owner_answered: [], leftover: [] }, 'closed (7, 3), revivable (4, 8) and device (6) tickets are left out');
-    assert.doesNotMatch(seen[0], new RegExp(uuid(4)));
+    await writeFile(path.join(directory, 'failed', `${uuid(6)}.count`), '3\n', { mode: 0o600 });
+    const failure = at => ({ run: 'aaaaaaaa-0123456789abcdef', at, ok: false });
+    await writeLedger(directory, { ...emptyLedger(uuid(10)), owner: 'operator', last_failure: failure('2026-09-20T00:00:00.000Z') });
+    await writeLedger(directory, { ...emptyLedger(uuid(4)), last_failure: failure('2026-09-22T00:00:00.000Z') });
+    const query = async sql => { seen.push(sql); assert.match(sql, /^begin read only;/);
+      return [{ id: uuid(2) }, { id: uuid(4), last_input_at: '2026-09-21T00:00:00Z' }, { id: uuid(5) }, { id: uuid(10), last_input_at: '2026-09-21T00:00:00Z' }]; };
+    const record = await writeAttention(query, directory, { attention: [uuid(5), uuid(7), uuid(8)], stuck: [uuid(5), uuid(7)], parked: [uuid(2), uuid(3), uuid(4), uuid(6)],
+      routed: { operator: [uuid(10), uuid(11)] } }, { now: START });
+    assert.deepEqual(record, { at: new Date(START).toISOString(), stalled: [uuid(5)], parked_open: [uuid(2), uuid(4)], failing: [], waiting_owner: [], waiting_owner_answered: [],
+      routed: { operator: [uuid(10)] }, new_input: [uuid(10)], leftover: [] }, 'closed (3, 7, 11) and device (6) tickets are left out; uuid(4)\'s input is older than its failure');
+    assert.doesNotMatch(seen[0], new RegExp(uuid(6)));
     assert.deepEqual(JSON.parse(await readFile(path.join(directory, 'attention.json'), 'utf8')), record);
     assert.equal(((await stat(path.join(directory, 'attention.json'))).mode & 0o777), 0o600);
     assert.match(seen[0], /t.status IN \('open', 'in_progress'\) AND t.archived_at IS NULL/);
@@ -574,4 +557,16 @@ test('older history loads newest first, so the bound cuts only the oldest ticket
   assert.ok(long.limitations.includes('target_body_truncated'));
   const other = await loadContext(fixtureQuery(rows, [message(1, rows[119].id, { body_truncated: true })], { target }).query, target.id);
   assert.equal(other.target_complete, true, 'a truncated message on another ticket is not');
+});
+test('a queued run carries the host\'s coordination record into its context', async () => {
+  await pendingFixture(async ({ directory, context, makeQuery }) => {
+    await saveReview(directory, context, workerAssessment(context), null, { now: START });
+    await writeLedger(directory, { ...emptyLedger(targetId), last_failure: { run: '00000000-0123456789abcdef', at: '2026-09-19T00:00:00Z', cause: 'gates failed', gate_failures: ['suite'],
+      review_reasons: [], missed_paths: [], product_files: [], failing_tests: [], protected_hits: [], out_of_scope: [] },
+      rejected_approaches: [{ id: 'RA-1', source: 'ops journal 2026-11-09', summary: 'Synthetic rejected approach' }] });
+    const queue = await collectQueue(makeQuery(), directory, { now: START + HOUR });
+    const next = await loadQueuedContext(makeQuery(), queue.items[0], directory, { now: START + HOUR });
+    assert.equal(next.coordination.last_failure.cause, 'gates failed');
+    assert.deepEqual(next.coordination.rejected_approaches.map(r => r.id), ['RA-1']);
+  });
 });

@@ -19,7 +19,10 @@ Nothing you do here reaches the customer or main.
    lines you need) and the code it concerns. Open every attachment on the ticket with
    the Read tool (its `local_path`): a screenshot shows which screen and which symptom.
    Work out, for each checklist item that is a bug or a change, what the product does now
-   and what it should do.
+   and what it should do. When the evidence has `coordination`, an earlier run failed: read
+   its `last_failure` and `rejected_approaches` (the host's record) and do not write again a
+   reproduction they show was rejected or could only pass after a change to the
+   `out_of_scope` files.
 2. Decide the kind:
    - `bug`: the product does something wrong that a test can show.
    - `change`: the customer asks for new or different behaviour that a test can pin.

@@ -86,16 +86,41 @@ what happened.
      - the runner was wrong: fix the runner (with a test) and record it for
        the owner, since you may not merge the automation's own files;
      - the bug is real and the agent cannot fix it: fix it yourself (step 4)
-       and then revive the ticket so its run replies and closes it;
-     - the fix is already live: revive it so its run verifies and replies.
-     The runner already revives each ticket by itself twice, a day apart;
-     these have used both. Revive one only after you have committed a fix for
-     the cause (or found the fix already live), once per fix, and write the
-     commit in the journal. To revive: rename `failed/<id>.count` to
-     `failed/<id>.count.ops-<commit>` (parked), or set its case file's
-     `continuation.state` to `pending`, `attempts` to 0 and `due_at` to now
-     (stalled). Never delete either file. Tickets parked for a device
-     (`failed/<id>.device`) are not listed: the owner was told.
+       and then retry the ticket on that commit (below) so its run replies;
+     - the fix is already live: retry it on that commit so its run verifies
+       and replies.
+     Nothing comes back by time: a ticket runs again only on a retry basis
+     the host validates, at most two per ticket. First read its coordination
+     record (`node scripts/ticket-agent-context.mjs --coordination <ticket id> "$HOME/Library/Application Support/CredentialDOMD/ticket-context"`):
+     `owner`, `last_failure` and `rejected_approaches`. Then (the command
+     takes the ticket agent's lock itself and fails while a run holds it):
+     `TICKET_RETRY_ADDRESSES='<one line: how this answers run <run id>>' node scripts/ticket-agent-context.mjs --retry <ticket id> commit <sha> "$HOME/Library/Application Support/CredentialDOMD/ticket-context"`
+     for a fix on `origin/main` that touches a file the failure names (and,
+     when it names `out_of_scope` files, one of those), or `message <message
+     id>` (with `TICKET_DATABASE_TOKEN=$(security find-generic-password -l "Supabase CLI" -w)`)
+     for a reporter's message that changes the evidence. The line must name
+     the failed run's id and say how it answers that failure; a commit or a
+     message by itself never qualifies, and you never retry on time alone. A
+     revised plan (`plan`) is approved only by the operator or the owner:
+     write it under `ticket-context/coordination/plans/<ticket8>-<name>.md`
+     with an `Approach:` line, the failed run's id and how it differs from
+     each `RA-n`, and note it for the owner instead of retrying. Never rename
+     `failed/` files or edit a case file's `continuation` by hand. Record an
+     approach the journal or a review rejected, once, so no run repeats it:
+     `TICKET_APPROACH='<one line>' TICKET_APPROACH_SOURCE='<journal date or review>' node scripts/ticket-agent-context.mjs --reject-approach <ticket id> "$HOME/Library/Application Support/CredentialDOMD/ticket-context"`.
+     Route a ticket whose next step is not the worker's:
+     `TICKET_ROUTE_NOTE='<one line>' node scripts/ticket-agent-context.mjs --route <ticket id> operator|eric|device "$HOME/Library/Application Support/CredentialDOMD/ticket-context"`
+     (`eric` for a protected billing, pricing, consent, legal, sign-in or
+     security decision; never back to the worker this way). Tickets parked
+     for a device (`failed/<id>.device`) are not listed: the owner was told.
+   - **Routed tickets** (HEALTH names "open tickets routed away from the
+     worker"). `operator`: the fix needs files the worker may not edit (the
+     record's `out_of_scope`) or its retry bases are used: fix it yourself
+     under step 4 when your rules allow, then `--retry … commit`; otherwise
+     note it for the owner. `eric`: a protected stop; note what he must decide
+     under `## For the owner`, once. `device`: the reporter's device check. A
+     reporter writing since ("the reporter wrote after the last failed run")
+     is evidence to read, not a reason to retry by itself.
    - **Failing tickets** (HEALTH names "open tickets a ticket run failed on
      in the last day"). Read the last failed run (`ticket-work/runs/<id8>-*`:
      gates-*.json, review-*.json, HELD.txt, and the agent log). If the fix

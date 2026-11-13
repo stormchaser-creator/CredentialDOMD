@@ -15,6 +15,8 @@
 //                the host's last state per checklist item
 //   answered_on_other_tickets  questions answered in the saved reviews of the
 //                customer's other tickets (never ask them again)
+//   coordination the host's record of the last failed run and the rejected
+//                approaches (ticket-fix/coordination.mjs), when there is one
 //   related      the other tickets, newest activity first: the newest in
 //                detail (subject, status, dates, the opening, the newest
 //                customer message), then an index (id, status, date, subject),
@@ -137,6 +139,16 @@ function savedReviewView(record, share) {
   return view;
 }
 
+// Bounded on its own (COORDINATION_SHARE): the oldest rejections go first,
+// then the failure's detail, never the rule.
+const COORDINATION_SHARE = 5 * 1024;
+function coordinationShare(c) {
+  const view = { ...c, rejected_approaches: [...(c.rejected_approaches ?? [])] };
+  while (size(view) > COORDINATION_SHARE && view.rejected_approaches.length > 1) view.rejected_approaches.shift();
+  if (size(view) > COORDINATION_SHARE && view.last_failure) view.last_failure = { run: view.last_failure.run, cause: clip(view.last_failure.cause, 300), out_of_scope: view.last_failure.out_of_scope };
+  if (size(view) > COORDINATION_SHARE) view.rejected_approaches = view.rejected_approaches.map(r => ({ ...r, summary: clip(r.summary, 200) }));
+  return view;
+}
 function answersElsewhere(reviews, targetId, share) {
   const seen = new Set();
   const out = [];
@@ -182,6 +194,9 @@ export function sessionEvidence(context, { limit = EVIDENCE_LIMIT } = {}) {
     history_complete: context.history_complete, limitations: context.limitations, interpretation: context.interpretation,
   };
   const view = { ...header, target: thread.view,
+    // The host's coordination record (ticket-fix/coordination.mjs): the last
+    // failed run and the approaches already rejected, never to be repeated.
+    ...(context.coordination ? { coordination: coordinationShare(context.coordination) } : {}),
     saved_review: savedReviewView(reviews.find(r => r?.target_id === context.target_id), REVIEW_SHARE),
     answered_on_other_tickets: [], related_tickets: { total: related.length, detailed: [], index: [], omitted: related.length } };
   const answers = answersElsewhere(reviews, context.target_id, ANSWERS_SHARE);
@@ -244,6 +259,7 @@ export function caseHistory(context) {
     for (const f of pending ?? []) add('pending_follow_up', about, f);
     add('saved_review', about, rest, assessment ? { assessment: assessed } : {});
   }
+  if (context.coordination) add('coordination', context.coordination);
   for (const attachment of context.attachments ?? []) add('attachment', attachment);
   return `${lines.join('\n')}\n`;
 }
