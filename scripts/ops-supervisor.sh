@@ -144,6 +144,10 @@ print("; ".join(f"{k}: " + " ".join(sorted(str(t)[:8] for t in v)) for k, v in s
 import json, sys
 print(" ".join(sorted({str(t)[:8] for t in json.load(open(sys.argv[1])).get("new_input", [])})))' "$attention" 2>/dev/null) || fresh=""
   [[ -n $fresh ]] && health+=("of the tickets no run takes, the reporter wrote after the last failed run: $fresh")
+  proposed=$(python3 -c '
+import json, sys
+print(" ".join(sorted({str(t)[:8] for t in json.load(open(sys.argv[1])).get("proposed", [])})))' "$attention" 2>/dev/null) || proposed=""
+  [[ -n $proposed ]] && health+=("retries proposed, waiting for the operator or the owner: $proposed")
 fi
 
 sweep=queue
@@ -206,8 +210,8 @@ cd "$work" || exit 1
 # (the prompt says how), so a session killed below never leaves it held.
 export OPS_SUPERVISOR_PID=$$
 # Who the ticket host commands record as acting (coordination.mjs): the
-# supervisor may record rejections, routes and validated message or commit
-# bases, never approve a revised plan.
+# supervisor records rejections and escalating routes and proposes retries;
+# it never accepts one (a person does).
 export TICKET_ACTOR=supervisor
 "$CLAUDE" -p "$input" --append-system-prompt "$(cat "$PROMPT")" \
   --model claude-opus-5-5 --dangerously-skip-permissions --max-budget-usd $BUDGET_USD \

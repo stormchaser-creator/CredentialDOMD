@@ -87,48 +87,51 @@ what happened.
        the owner, since you may not merge the automation's own files;
      - the bug is real and the agent cannot fix it: fix it yourself (step 4)
        and then retry the ticket on that commit (below) so its run replies;
-     - the fix is already live: retry it on that commit so its run verifies
-       and replies.
-     Nothing comes back by time: a ticket runs again only on a retry basis
-     the host validates, at most two per ticket. First read its coordination
-     record (`node scripts/ticket-agent-context.mjs --coordination <ticket id> "$HOME/Library/Application Support/CredentialDOMD/ticket-context"`):
-     `owner`, `last_failure` and `rejected_approaches`. Then (the command
-     takes the ticket agent's lock itself and fails while a run holds it):
-     `TICKET_RETRY_ADDRESSES='<one line: how this answers run <run id>>' node scripts/ticket-agent-context.mjs --retry <ticket id> commit <sha> "$HOME/Library/Application Support/CredentialDOMD/ticket-context"`
-     for a fix on `origin/main` (the commit that changed the file, not a
-     merge or a revert) that adds or changes a file the failure itself
-     implicates (its `missed_paths`, `failing_tests`, `out_of_scope` or
-     protected paths; one of the `out_of_scope` ones when it names any). The
-     line must name the failed run's id and say how it answers that failure;
-     you never retry on time alone. A reporter's message, or a failure that
-     implicates no file, is not yours to retry on: whether a message changes
-     the evidence, and a revised plan (`plan`), are the operator's or the
-     owner's call. Note the ticket for them under `## For the owner`. A plan:
-     write it under `ticket-context/coordination/plans/<ticket8>-<name>.md`
-     with an `Approach:` line, the failed run's id and how it differs from
-     each `RA-n`, and leave it for them to approve. A ticket parked before
-     2026-11-13 has its old runs read into the record once with
+     - the fix is already live: propose a retry on that commit (below).
+     Nothing comes back by time, and you never grant a retry: you propose
+     one, the host checks it, and the operator or the owner accepts it. First
+     read the ticket's coordination record (`node scripts/ticket-agent-context.mjs --coordination <ticket id> "$HOME/Library/Application Support/CredentialDOMD/ticket-context"`):
+     `owner`, `last_failure` and `rejected_approaches`. To propose a retry on
+     a fix (the command takes the ticket agent's lock itself and fails while
+     a run holds it):
+     `TICKET_RETRY_ADDRESSES='<one line: how this answers run <run id>>' node scripts/ticket-agent-context.mjs --retry <ticket id> commit <sha> "$HOME/Library/Application Support/CredentialDOMD/ticket-context"`.
+     The host refuses it unless the commit is on `origin/main`, newer than
+     the failure, the commit that changed the file (not a merge or a
+     revert), with a real (not whitespace) change to a file the failure
+     itself implicates (its `missed_paths` or `out_of_scope` files; one of
+     the `out_of_scope` ones when it names any), and the line names the
+     failed run's id. It prints PROPOSED; note the ticket and the proposal
+     under `## For the owner`. A protected stop (`eric`, or a failure with
+     protected hits) never takes a commit: the owner decides through a
+     plan. Reporter messages, resolutions, plans and device confirmations
+     are the operator's or the owner's call; note what you found for them.
+     A plan, when you draft one: `ticket-context/coordination/plans/<ticket8>-<name>.md`
+     (owner-only) with an `Approach:` line, the failed run's id and how it
+     differs from each `RA-n`. A ticket parked before 2026-11-13 has its old
+     runs read into the record once with
      `node scripts/ticket-agent-context.mjs --backfill <ticket id> "$HOME/Library/Application Support/CredentialDOMD/ticket-context" "$HOME/Library/Application Support/CredentialDOMD/ticket-work"`
-     (it takes the lock). A checked device confirmation (`--resolve-item …
-     confirmed`) returns a device-routed ticket to the worker by itself, and
-     a checked confirmation or applied data fix answers a stalled worker
-     ticket; an owner decision does not (it needs a plan). Never rename
-     `failed/` files or edit a case file's `continuation` by hand. Record an
-     approach the journal or a review rejected, once, so no run repeats it:
+     (it takes the lock). `--resolve-item` still records a resolution, but
+     never wakes a stalled, parked or routed case. Never rename `failed/`
+     files or edit a case file's `continuation` by hand. Record an approach
+     the journal or a review rejected, once, so no run repeats it:
      `TICKET_APPROACH='<one line>' TICKET_APPROACH_SOURCE='<journal date or review>' node scripts/ticket-agent-context.mjs --reject-approach <ticket id> "$HOME/Library/Application Support/CredentialDOMD/ticket-context"`.
-     Route a ticket whose next step is not the worker's:
-     `TICKET_ROUTE_NOTE='<one line>' node scripts/ticket-agent-context.mjs --route <ticket id> operator|eric|device "$HOME/Library/Application Support/CredentialDOMD/ticket-context"`
+     Route a ticket whose next step is not the worker's (you only escalate):
+     `TICKET_ROUTE_NOTE='<one line>' node scripts/ticket-agent-context.mjs --route <ticket id> operator|eric "$HOME/Library/Application Support/CredentialDOMD/ticket-context"`
      (`eric` for a protected billing, pricing, consent, legal, sign-in or
-     security decision; never back to the worker this way). Tickets parked
+     security decision; a ticket routed to `eric` leaves him only by his own
+     route; never back to the worker, never to a device). Tickets parked
      for a device (`failed/<id>.device`) are not listed: the owner was told.
    - **Routed tickets** (HEALTH names "open tickets routed away from the
      worker"). `operator`: the fix needs files the worker may not edit (the
      record's `out_of_scope`) or its retry bases are used: fix it yourself
-     under step 4 when your rules allow, then `--retry … commit`; otherwise
-     note it for the owner. `eric`: a protected stop; note what he must decide
-     under `## For the owner`, once. `device`: the reporter's device check. A
-     reporter writing since ("the reporter wrote after the last failed run")
-     is evidence to read and note for the owner, not a reason to retry.
+     under step 4 when your rules allow, then propose `--retry … commit`;
+     otherwise note it for the owner. `eric`: a protected stop; note what he
+     must decide under `## For the owner`, once. `device`: the reporter's
+     device check, which the operator or the owner records with
+     `--device-confirmed`. A reporter writing since ("the reporter wrote
+     after the last failed run") is evidence to read and note for them, not
+     a reason to retry. HEALTH "retries proposed" lists your proposals
+     waiting for them.
    - **Failing tickets** (HEALTH names "open tickets a ticket run failed on
      in the last day"). Read the last failed run (`ticket-work/runs/<id8>-*`:
      gates-*.json, review-*.json, HELD.txt, and the agent log). If the fix
@@ -138,10 +141,10 @@ what happened.
      yourself (step 4), deploy what it needs (`deploy-function.sh` for an
      edge function), and note the commit in the journal. Check the ticket's
      coordination record (`--coordination`): when it is routed to the
-     operator, parked or stalled, no run comes until you retry it on that
-     commit (`--retry … commit`, above); otherwise its next run finds the
-     fix live and replies. If the worker could have fixed it
-     and only made a mistake, leave it to the next run.
+     operator, parked or stalled, no run comes until a retry on that commit
+     is accepted (propose it, above); otherwise its next run finds the fix
+     live and replies. If the worker could have fixed it and only made a
+     mistake, leave it to the next run.
    - **Tickets waiting on the owner's decision** (HEALTH names "open tickets
      waiting on the owner's decision"). An item no run can finish waits on a
      recorded resolution: an `owner_decision`, a `data_fix` the owner runs,

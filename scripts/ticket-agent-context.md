@@ -659,48 +659,52 @@ The runner records every counted run (`--record-attempt`, from `ticket-agent.sh`
 host only routes away from the worker: device for `needs_device`, eric for a protected
 stop, operator for out-of-scope files, a failed release, or every basis used and failed.
 
-Nothing comes back by time. `--retry TICKET message|commit|plan REF STATE` returns a
-ticket to the worker, under the agent lock, at most `MAX_BASES` (2) counted bases per
-ticket and one plan. `TICKET_RETRY_ADDRESSES` must name the failed run and say how the
-basis answers it; the host then checks the basis itself:
+Nothing comes back by time. `--retry TICKET message|commit|resolution|plan REF STATE`
+returns a ticket to the worker, under the agent lock, at most `MAX_BASES` (2) counted
+bases per ticket and one plan. The host validates every basis; only the operator or the
+owner accepts one. From the supervisor (an unattended model session) the same command
+records a checked proposal (`proposals`, listed in `attention.json` `proposed`) and
+grants nothing. `TICKET_RETRY_ADDRESSES` must name the failed run. The checks:
 
-- `message`: the reporter's, on this ticket, newer than the failure; worker-owned
-  tickets only; accepted from the operator or the owner, never the supervisor (whether
-  a message changes the evidence is a judgement the host cannot check).
+- `message`: the reporter's, on this ticket, newer than the failure; worker-owned only.
 - `commit`: on `origin/main`, newer than the failure, not the ticket agent's own, not a
-  merge or a revert, and it adds or changes a file the failure itself implicates (its
-  missed paths, failing tests, protected or `out_of_scope` paths; one of the
-  `out_of_scope` ones when it names any). The files the refused run happened to edit do
-  not count. Never for an `eric` stop.
-- `plan` (`coordination/plans/<ticket8>-<name>.md`, owner-only): the operator's or the
-  owner's, never the supervisor's; an `Approach:` line, the failed run's id, every RA-n,
-  and an `Owner decision:` line for an `eric` stop.
+  merge or a revert, with a change beyond whitespace and blank lines to a file the
+  failure implicates (`missed_paths` or `out_of_scope`; one of the `out_of_scope` ones
+  when it names any). The refused run's own files and failing tests do not count.
+- `resolution`: an item the host recorded as resolved (a checked confirmation or an
+  applied data fix, not an owner decision) after the failure; worker-owned only.
+- `plan` (`coordination/plans/<ticket8>-<name>.md`, owner-only): an `Approach:` line,
+  the failed run's id and every RA-n.
 
-`--resolve-item` still records resolutions, but wakes a case only when it is not stalled,
-parked or routed. Two checked resolutions also act as a basis: a reporter's
-confirmation returns a `device` ticket to the worker (`device_confirmed`, not counted
-toward the bound), and a confirmation or an applied data fix answers a stalled or parked
-worker ticket (`resolution`, counted). An owner decision note never does; that takes a
-plan. `--close-follow-up` never wakes a blocked case. A stall, and a park with no failure
-on record, are recorded as failures (`recordStall`) that keep the previous failure's
-files. The accepted basis lifts the park (the count kept as `failed/<id>.count.RB-n`) and
-gives the case fresh attempts. `--wake` is gone. A recording failure on the host's side
-(`exit record`) routes to the operator and is never a rejected approach or a protected
-stop; a `support_owner` follow-up naming `supabase/`, `scripts/`, migrations or `.github/`
-files on a failed run routes to the operator.
+A protected stop (a failure routed to `eric`, a failure with protected hits, or the
+owner having held the ticket since the last basis) takes only a plan with an
+`Owner decision:` line, whoever owns the ticket now. `--device-confirmed TICKET MESSAGE
+STATE` (operator or owner) returns a ticket the host routed to a device when the
+reporter's message, checked against the thread, is newer than the device run; any item
+kind; at most two, not counted toward `MAX_BASES`. `--resolve-item` still records
+resolutions but wakes only an unblocked case; `--close-follow-up` likewise. A stall is
+recorded on the failure it came from (keeping its real cause) or, for held work, as its
+own failure keeping the previous files; a park with no failure on record gets a
+placeholder that `--backfill` then fills with the older runs' cause, files, rejections
+and route. A host recording failure (`exit record`) is logged and never counted, routed
+or rejected. A run that finished but left a `support_owner` follow-up naming files the
+worker may not edit is a `stopped` run, routed to the operator. Acceptance writes the
+case first and the ledger second, so an interrupted `--retry` can simply be run again.
+`--wake` is gone.
 
-`--route TICKET operator|eric|device STATE` and `--reject-approach` only restrict;
-`--coordination TICKET STATE` prints the record; `--backfill TICKET STATE WORK` builds it
-from the kept run records. `TICKET_ACTOR` (`operator`, `supervisor`, `owner`) says who
+`--route TICKET operator|eric STATE` and `--reject-approach` only restrict: never to the
+worker; to a device only by the host; away from `eric` only by the owner; the supervisor
+only escalates. `--coordination TICKET STATE` prints the record; `--backfill TICKET
+STATE WORK` builds it from the kept run records. `TICKET_ACTOR` (`operator`, `supervisor`, `owner`) says who
 acted; `ops-supervisor.sh` sets `supervisor`. It is declared, not authenticated: on this
 single-user machine a process could claim another actor, so the record keeps it as
-provenance and the supervisor's prompt forbids plans.
+provenance; the supervisor process can only propose unless it falsely declares another actor.
 
 The worker and the reproduction session see `coordination` in their evidence (bounded at
 5 KB: owner, the rule, the last failure, the newest twelve rejections, the basis) and
 in the case history file; their prompts say never to repeat a rejected approach and to
 stop with a `support_owner` follow-up when the only fix is out of scope or protected.
-`attention.json` gains `routed` (by owner) and `new_input` (the reporter wrote after the
+`attention.json` gains `routed` (by owner), `proposed` and `new_input` (the reporter wrote after the
 last failure on a ticket no run takes); the supervisor's HEALTH names both. Gates,
 sandbox, approvals, tests, independent review, the protected billing and security rules
 and the lock are unchanged: a retried run goes through all of them again.

@@ -464,7 +464,7 @@ test('the attention file names stalled, parked and routed work still open, and n
     const record = await writeAttention(query, directory, { attention: [uuid(5), uuid(7), uuid(8)], stuck: [uuid(5), uuid(7)], parked: [uuid(2), uuid(3), uuid(4), uuid(6)],
       routed: { operator: [uuid(10), uuid(11)] } }, { now: START });
     assert.deepEqual(record, { at: new Date(START).toISOString(), stalled: [uuid(5)], parked_open: [uuid(2), uuid(4)], failing: [], waiting_owner: [], waiting_owner_answered: [],
-      routed: { operator: [uuid(10)] }, new_input: [uuid(10)], leftover: [] }, 'closed (3, 7, 11) and device (6) tickets are left out; uuid(4)\'s input is older than its failure');
+      routed: { operator: [uuid(10)] }, new_input: [uuid(10)], proposed: [], leftover: [] }, 'closed (3, 7, 11) and device (6) tickets are left out; uuid(4)\'s input is older than its failure');
     assert.doesNotMatch(seen[0], new RegExp(uuid(6)));
     assert.deepEqual(JSON.parse(await readFile(path.join(directory, 'attention.json'), 'utf8')), record);
     assert.equal(((await stat(path.join(directory, 'attention.json'))).mode & 0o777), 0o600);

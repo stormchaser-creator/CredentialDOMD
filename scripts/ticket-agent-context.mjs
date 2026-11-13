@@ -9,7 +9,7 @@ import { prepareAgentReply, prepareRenderedReply, readVerificationKey, signPrepa
   MIGRATION, emailStatus, RUN_COMMITTER } from './ticket-fix/reply.mjs';
 import { checklistErrors, isSupportReply, isCustomerMessage, hostItemWork, replyHold, isCompletion, askItems, stillAsked, confirmsAsk, askedAt, readChecklist, RESOLUTION_KINDS, resolutionKind, isAttachmentWork, DATA_FIX_FILE, AGENT_REPLY_MAX, REMAINING_MAX, OBSERVED_MAX, MAX_ITEMS } from './ticket-fix/checklist.mjs';
 import { isMain } from './ticket-fix/is-main.mjs';
-import { MAX_BASES, countedBases, readLedger, routedTickets, recordAttempt, recordStall, validateBasis, acceptBasis, rejectApproach, routeTicket, coordinationView, actor as checkActor } from './ticket-fix/coordination.mjs';
+import { MAX_BASES, countedBases, readLedger, routedTickets, recordAttempt, recordStall, validateBasis, acceptBasis, proposeBasis, acceptingActor, rejectApproach, routeTicket, coordinationView, actor as checkActor } from './ticket-fix/coordination.mjs';
 
 export const APPROVED = '(public.is_admin(t.user_id) OR t.agent_approved_at IS NOT NULL)';
 // A refund ticket the refund ledger opened by itself (20260930071000,
@@ -749,17 +749,23 @@ async function blockedFor(directory, ticketId, record) {
   const parked = ((await failCounts(directory)).get(ticketId.toLowerCase()) ?? 0) >= PARK_AFTER;
   return { ledger, parked, blocked: record?.continuation?.state === 'stalled' || parked || ledger.owner !== 'worker' };
 }
-// Accepts a validated basis (inside the agent lock): the worker owns the
-// ticket again, the park is lifted (the count kept as .count.RB-n) and the
-// case gets fresh attempts.
+// Accepts a validated basis (inside the agent lock): the case gets fresh
+// attempts first (a crash before the ledger is written leaves it still
+// excluded, and the same --retry can run again), then the ledger gives the
+// ticket back to the worker and the park is lifted (the count kept as
+// .count.RB-n).
 async function liftOnBasis(directory, ticketId, record, ledger, basisArgs, now) {
+  if (record?.continuation && record.continuation.state !== 'suppressed') {
+    wake(record, now);
+    record.continuation.attempts = 0;
+    await writePrivate(path.join(directory, `${ticketId}.json`), JSON.stringify(record, null, 2));
+  }
   const basis = await acceptBasis(directory, ticketId, ledger, { ...basisArgs, now });
   const count = path.join(directory, 'failed', `${ticketId}.count`);
   try { await fs.rename(count, `${count}.${basis.id}`); } catch (error) { if (error.code !== 'ENOENT') throw error; }
   if (record?.continuation && record.continuation.state !== 'suppressed') {
-    wake(record, now);
-    record.continuation.attempts = 0;
     record.continuation.retry_basis = basis.id;
+    await writePrivate(path.join(directory, `${ticketId}.json`), JSON.stringify(record, null, 2));
   }
   return basis;
 }
@@ -802,22 +808,14 @@ export async function resolveItem(directory, ticketId, acId, kind, { note = '', 
     // message answers the earlier ask, not this one.
     if (kind === 'confirmed' && askedAt(record.asked_items, acId) !== askedAt(before.asked_items, acId)) throw Error(`${acId} was asked again meanwhile; check the newer answer`);
     record.resolutions = { ...(record.resolutions ?? {}), [acId]: { kind, at: new Date(now).toISOString(), note: text, ...(kind === 'confirmed' ? { message_id: messageId } : {}), ...(evidence ? { evidence } : {}) } };
-    const { ledger, blocked } = await blockedFor(directory, id(ticketId), record);
+    // Recorded either way; it wakes only an unblocked case. A stalled,
+    // parked or routed case takes a --retry by the operator or the owner
+    // (a checked confirmation or data fix as a `resolution` basis).
+    const { blocked } = await blockedFor(directory, id(ticketId), record);
     if (!blocked) wake(record, now);
-    // A reporter's confirmation the host checked against the thread is what
-    // a device-routed ticket waits for: it returns to the worker. A checked
-    // confirmation or an applied data fix also answers a stalled or parked
-    // worker ticket, as a counted basis. An owner decision (a one-line note)
-    // never does: that takes --retry plan.
-    else if (ledger.owner === 'device' && kind === 'confirmed') {
-      record.retry_basis = await liftOnBasis(directory, id(ticketId), record, ledger, { kind: 'device_confirmed', ref: messageId, by: 'host',
-        addresses: `the reporter confirmed ${acId} on their device`, validated: { message_id: messageId, item: acId } }, now);
-    } else if (ledger.owner === 'worker' && ['confirmed', 'data_fix'].includes(kind) && ledger.last_failure && countedBases(ledger) < MAX_BASES) {
-      record.retry_basis = await liftOnBasis(directory, id(ticketId), record, ledger, { kind: 'resolution', ref: acId, by: 'host',
-        addresses: `${acId} resolved by ${kind} after run ${ledger.last_failure.run}`, validated: { item: acId, kind, ...(kind === 'confirmed' ? { message_id: messageId } : { evidence }) } }, now);
-    } else record.not_woken = 'stalled, parked or routed: a run needs a validated basis (--retry)';
+    else record.not_woken = 'stalled, parked or routed: the operator or the owner retries it (--retry … resolution)';
     const saved = { ...record };
-    delete saved.retry_basis; delete saved.not_woken;
+    delete saved.not_woken;
     await writePrivate(path.join(directory, `${id(ticketId)}.json`), JSON.stringify(saved, null, 2));
     return record;
   });
@@ -894,22 +892,57 @@ export async function retryCase(directory, ticketId, { kind, ref, addresses, by,
   await ensureState(directory);
   id(ticketId);
   const who = checkActor(by);
+  const readCaseOrNull = async () => { try { return await readCase(directory, ticketId); } catch (error) { if (error.code === 'ENOENT') return null; throw error; } };
   // The database and git are read before the lock is taken, and the basis
   // checked again inside it against the record as it is then.
   const before = await readLedger(directory, ticketId);
-  await validateBasis(directory, ticketId, before, { kind, ref, addresses, by: who, query, repo, mainRef });
+  await validateBasis(directory, ticketId, before, { kind, ref, addresses, by: who, query, repo, mainRef, caseRecord: await readCaseOrNull() });
   return withAgentLock(lock, async () => {
     const ledger = await readLedger(directory, ticketId);
     if (JSON.stringify(ledger) !== JSON.stringify(before)) throw Error('The coordination record changed meanwhile; check again');
-    let record = null;
-    try { record = await readCase(directory, ticketId); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    const record = await readCaseOrNull();
     if (record?.continuation?.state === 'complete' && record.completion && record.completion.checklist_sha256 === (record.checklist_sha256 ?? null)) {
       throw Error('That case was answered as complete; a new message reopens it');
     }
-    const validated = await validateBasis(directory, ticketId, ledger, { kind, ref, addresses, by: who, query, repo, mainRef });
-    // The park and the stall it lifts are kept as history, never deleted.
+    const validated = await validateBasis(directory, ticketId, ledger, { kind, ref, addresses, by: who, query, repo, mainRef, caseRecord: record });
+    // The supervisor, an unattended model session, proposes; a person accepts.
+    if (!acceptingActor(who)) return { proposed: await proposeBasis(directory, ledger, { kind, ref, addresses, by: who, validated, now }), case_state: record?.continuation?.state ?? null };
     const basis = await liftOnBasis(directory, ticketId, record, ledger, { kind, ref, addresses, by: who, validated }, now);
-    if (record?.continuation) await writePrivate(path.join(directory, `${ticketId}.json`), JSON.stringify(record, null, 2));
+    return { basis, case_state: record?.continuation?.state ?? null };
+  });
+}
+// A device-routed ticket comes back when the reporter confirms on their
+// device: the operator or the owner names the reporter's message, which the
+// host checks (this ticket, the reporter's own, newer than the device run).
+// Only a route the host itself made (a run that needed a device), at most
+// twice per ticket. Not counted toward MAX_BASES.
+export async function deviceConfirmed(directory, ticketId, messageId, { by, query = null, now = Date.now(), lock = null } = {}) {
+  await ensureState(directory);
+  id(ticketId);
+  const who = checkActor(by);
+  if (!acceptingActor(who)) throw Error('A device confirmation is accepted by the operator or the owner, not the supervisor: note it for them');
+  if (!UUID.test(messageId || '')) throw Error('Name the reporter\'s message id');
+  if (!query) throw Error('A confirmation is checked against the thread: TICKET_DATABASE_TOKEN is required');
+  const check = ledger => {
+    if (ledger.owner !== 'device') throw Error('That ticket is not routed to a device');
+    const route = ledger.owner_history.at(-1);
+    if (route?.owner !== 'device' || route.by !== 'host' || ledger.last_failure?.route !== 'device') throw Error('Only a device route the host made (a run that needed a device) is confirmed this way');
+    if (ledger.bases.filter(b => b.kind === 'device_confirmed').length >= 2) throw Error('Two device confirmations are used; the operator owns this ticket');
+  };
+  const before = await readLedger(directory, ticketId);
+  check(before);
+  const rows = await query(reporterMessageSQL(ticketId, messageId));
+  const m = rows[0];
+  if (rows.length !== 1 || !isCustomerMessage(m, { owner_id: m.owner_id, approval: { from_admin: m.from_admin === true } })) throw Error('That message is not one the reporter wrote on this ticket');
+  if (!(Date.parse(m.created_at) > Date.parse(before.last_failure.at))) throw Error('That message is not newer than the device run');
+  return withAgentLock(lock, async () => {
+    const ledger = await readLedger(directory, ticketId);
+    if (JSON.stringify(ledger) !== JSON.stringify(before)) throw Error('The coordination record changed meanwhile; check again');
+    check(ledger);
+    let record = null;
+    try { record = await readCase(directory, ticketId); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    const basis = await liftOnBasis(directory, ticketId, record, ledger, { kind: 'device_confirmed', ref: messageId, by: who,
+      addresses: `the reporter confirmed on their device after run ${ledger.last_failure.run}`, validated: { message_id: messageId, message_at: m.created_at } }, now);
     return { basis, case_state: record?.continuation?.state ?? null };
   });
 }
@@ -1393,6 +1426,12 @@ export async function writeAttention(query, directory, queue, { now = Date.now()
     if (Number.isFinite(failed) && Date.parse(row.last_input_at) > failed) record.new_input.push(row.id);
   }
   record.new_input.sort();
+  // proposed: retries the supervisor proposed and the host checked, waiting
+  // for the operator or the owner to accept.
+  record.proposed = [];
+  for (const t of [...isOpen].sort()) {
+    try { if ((await readLedger(directory, t)).proposals?.length) record.proposed.push(t); } catch { /* unreadable: left out */ }
+  }
   // leftover: notes a finished ticket's run left open (saveReview keeps them
   // when the completion closes the case) that nobody has closed yet
   // (--close-leftover): real work the supervisor takes up, never a reason to
@@ -1489,7 +1528,7 @@ async function main(args) {
     console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} CLOSED — ${target.slice(0, 8)} leftover note; ${(record.leftover_follow_ups ?? []).length} left`);
     return;
   }
-  if (mode === '--wake') throw Error('--wake is gone: a case runs again only on a validated basis. Use --retry TICKET message|commit|plan REF PRIVATE_STATE');
+  if (mode === '--wake') throw Error('--wake is gone: a case runs again only on a validated basis. Use --retry TICKET message|commit|resolution|plan REF PRIVATE_STATE');
   const stamp = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
   const lock = process.env.TICKET_AGENT_LOCK || AGENT_LOCK;
   if (mode === '--record-attempt' && args.length === 7) {
@@ -1534,7 +1573,15 @@ async function main(args) {
     const [, target, kind, ref, directory] = args;
     const out = await retryCase(directory, id(target), { kind, ref, addresses: process.env.TICKET_RETRY_ADDRESSES ?? '', by: process.env.TICKET_ACTOR, repo: repository(),
       query: process.env.TICKET_DATABASE_TOKEN ? databaseQuery : null, lock });
-    console.log(`${stamp()} RETRY — ${target.slice(0, 8)} ${out.basis.id} (${kind}) accepted; back to the worker with fresh attempts; case ${out.case_state ?? 'none'}`);
+    console.log(out.proposed ? `${stamp()} PROPOSED — ${target.slice(0, 8)} ${kind} ${String(ref).slice(0, 40)} checked by the host; the operator or the owner accepts it with the same --retry`
+      : `${stamp()} RETRY — ${target.slice(0, 8)} ${out.basis.id} (${kind}) accepted; back to the worker with fresh attempts; case ${out.case_state ?? 'none'}`);
+    return;
+  }
+  if (mode === '--device-confirmed' && args.length === 4) {
+    // --device-confirmed TICKET MESSAGE_ID PRIVATE_STATE; TICKET_ACTOR, TICKET_DATABASE_TOKEN.
+    const [, target, messageId, directory] = args;
+    const out = await deviceConfirmed(directory, id(target), messageId, { by: process.env.TICKET_ACTOR, query: process.env.TICKET_DATABASE_TOKEN ? databaseQuery : null, lock });
+    console.log(`${stamp()} DEVICE CONFIRMED — ${target.slice(0, 8)} ${out.basis.id}; back to the worker; case ${out.case_state ?? 'none'}`);
     return;
   }
   if (mode === '--route' && args.length === 4) {
@@ -1599,6 +1646,6 @@ async function main(args) {
     if (status.completion) console.log(`${new Date().toISOString().slice(0, 19).replace('T', ' ')} COMPLETION REPLY — ${context.target_id.slice(0, 8)}: every item done; stored from a ${status.run_mode} run, case closed`);
     console.log(JSON.stringify(status)); return;
   }
-  throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --release-attempt TICKET_ID PRIVATE_STATE | --resolve-item TICKET_ID AC-n decision|data_fix|confirmed PRIVATE_STATE | --note-owner TICKET_ID PRIVATE_STATE | --close-follow-up TICKET_ID INDEX|WORK PRIVATE_STATE | --retry TICKET_ID message|commit|plan REF PRIVATE_STATE | --route TICKET_ID operator|eric|device PRIVATE_STATE | --reject-approach TICKET_ID PRIVATE_STATE | --coordination TICKET_ID PRIVATE_STATE | --record-attempt TICKET_ID PRIVATE_STATE WORK_STATE RUN EXIT REPO | --backfill TICKET_ID PRIVATE_STATE WORK_STATE | --close-leftover TICKET_ID INDEX|WORK PRIVATE_STATE | --validate CONTEXT MODEL_OUTPUT | --session MODEL_OUTPUT | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');
+  throw Error('Usage: ticket-agent-context.mjs --schema | --queue FILE PRIVATE_STATE | --load TICKET_ID FILE PRIVATE_STATE reply|continuation | --release-attempt TICKET_ID PRIVATE_STATE | --resolve-item TICKET_ID AC-n decision|data_fix|confirmed PRIVATE_STATE | --note-owner TICKET_ID PRIVATE_STATE | --close-follow-up TICKET_ID INDEX|WORK PRIVATE_STATE | --retry TICKET_ID message|commit|resolution|plan REF PRIVATE_STATE | --device-confirmed TICKET_ID MESSAGE_ID PRIVATE_STATE | --route TICKET_ID operator|eric|device PRIVATE_STATE | --reject-approach TICKET_ID PRIVATE_STATE | --coordination TICKET_ID PRIVATE_STATE | --record-attempt TICKET_ID PRIVATE_STATE WORK_STATE RUN EXIT REPO | --backfill TICKET_ID PRIVATE_STATE WORK_STATE | --close-leftover TICKET_ID INDEX|WORK PRIVATE_STATE | --validate CONTEXT MODEL_OUTPUT | --session MODEL_OUTPUT | --record-and-reply CONTEXT MODEL_OUTPUT PRIVATE_STATE');
 }
 if (isMain(import.meta.url)) main(process.argv.slice(2)).catch(error => { console.error(`ERROR: ${logSafe(error)}`); process.exitCode = 1; });
