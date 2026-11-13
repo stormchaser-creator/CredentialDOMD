@@ -49,12 +49,12 @@ test('missing, false or non-exact flags preserve email-only copy and offer no te
 // email they sign in with. The password and sign-in email card is not an SMS
 // feature: it shows for every signed-in member and opens Clerk's own verified
 // account screen, with the delete and username sections still hidden.
-test('flag off: every signed-in member gets a Password and sign-in email card that opens account security', () => {
+test('flag off: every signed-in member gets a Sign-in email card that opens account security', () => {
   for (const flag of [undefined, 'false', 'TRUE']) {
     const module = variants.get(flag), f = fixture();
     const html = render(module);
-    assert.match(html, /Password and sign-in email/);
-    assert.match(html, /Change password or sign-in email/);
+    assert.match(html, /Sign-in email/);
+    assert.match(html, /Change sign-in email/);
     assert.match(html, /make it primary/, 'says how a sign-in email change works');
     assert.match(html, /Email field .* contact address/, 'says the profile Email field is not the sign-in email');
     assert.doesNotMatch(html, /\u2014/, 'no em dash');

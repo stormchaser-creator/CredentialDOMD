@@ -571,7 +571,7 @@ function SettingsSection({ onUpgrade }) {
           </select>
         </Field>
         <Field label="Email" hint={emailRefused ? `${emailRefused} is on another CredentialDOMD account, so it was not saved.`
-          : emailProblem(emailShown) || "For share emails and your CV header. Not your sign-in email; change that under Password and sign-in email."}>
+          : emailProblem(emailShown) || "For share emails and your CV header. Not your sign-in email; change that under Sign-in email."}>
           <input type="email" name="email" autoComplete="email" value={emailShown} onChange={e => editEmail(e.target.value)}
             onBlur={e => commitEmail(e.target.value)}
             onKeyDown={e => { if (e.key === "Enter") { commitEmail(e.target.value); e.target.blur?.(); } }}

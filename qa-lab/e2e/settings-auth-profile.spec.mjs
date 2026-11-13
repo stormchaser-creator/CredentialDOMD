@@ -213,16 +213,16 @@ test('settings: birth month and day, licensed states, CME requirements, AI keys 
     const controls = await page.getByRole('button', { name: /password|sign-in|sign in|account security|manage account/i }).count();
     const links = await page.getByRole('link', { name: /password|sign-in|account security|manage account/i }).count();
     qa.check('Settings offers a way to change the password or sign-in email', controls + links > 0, `${controls} button(s), ${links} link(s); Settings mentions: ${(settingsText.match(/[^.]*(password|sign-in)[^.]*\./gi) || []).slice(0, 2).join(' | ') || 'neither word'}`);
-    // The Password and sign-in email card (d2bf73b0): its button opens Clerk's own account
+    // The Sign-in email card (d2bf73b0): its button opens Clerk's own account
     // screen (openUserProfile). The lab's Clerk stand-in has no such screen and says so in an
     // alert, which is how the journey sees that the tap reached it.
-    const change = page.getByRole('button', { name: 'Change password or sign-in email', exact: true });
+    const change = page.getByRole('button', { name: 'Change sign-in email', exact: true });
     if (await change.count()) {
       const seen = qa.report.dialogs.length;
       await change.click();
       await sleep(1000);
       const opened = qa.report.dialogs.slice(seen);
-      qa.check('"Change password or sign-in email" opens the account screen (Clerk openUserProfile)', opened.some((d) => /no Clerk account screen/.test(d)) && !(await page.getByRole('alert').filter({ hasText: /could not open|sign-in changed/i }).count()), opened.join(' | ') || 'nothing opened');
+      qa.check('"Change sign-in email" opens the account screen (Clerk openUserProfile)', opened.some((d) => /no Clerk account screen/.test(d)) && !(await page.getByRole('alert').filter({ hasText: /could not open|sign-in changed/i }).count()), opened.join(' | ') || 'nothing opened');
     }
     await openMore(page, 'Help & FAQ');
     await sleep(800);

@@ -1799,7 +1799,7 @@
     "id": "AUTH-012",
     "priority": "P1",
     "area": "AUTH",
-    "name": "Change password or sign-in email from inside the app",
+    "name": "Change sign-in email from inside the app",
     "roles": [
       "full member"
     ],
