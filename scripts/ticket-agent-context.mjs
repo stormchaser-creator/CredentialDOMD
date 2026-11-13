@@ -1553,7 +1553,8 @@ async function main(args) {
     await ensureState(directory);
     const names = (await fs.readdir(path.join(work, 'runs'))).filter(n => n.startsWith(`${id(target).slice(0, 8)}-`) && /^[0-9a-f]{8}-[0-9a-f]{16}$/.test(n));
     const runs = [];
-    for (const name of names) { try { runs.push(await runFiles(work, name)); } catch { /* an unreadable run is skipped */ } }
+    let unreadable = 0;
+    for (const name of names) { try { runs.push(await runFiles(work, name)); } catch { unreadable++; } }
     runs.sort((x, y) => String(x.run.started_at).localeCompare(String(y.run.started_at)));
     const record = await withAgentLock(lock, async () => {
       let last = null;
@@ -1568,9 +1569,11 @@ async function main(args) {
     // No kept run: the placeholder is all there is, and it is now known to be so.
     await withAgentLock(lock, async () => {
       const ledger = await readLedger(directory, target);
-      if (ledger.last_failure?.placeholder) { delete ledger.last_failure.placeholder; ledger.last_failure.backfilled = runs.length; await writeLedgerFile(directory, ledger); }
+      // Known only when every kept run was read (review: an unreadable run
+      // must not make an unread protection count as known).
+      if (ledger.last_failure?.placeholder && !unreadable) { delete ledger.last_failure.placeholder; ledger.last_failure.backfilled = runs.length; await writeLedgerFile(directory, ledger); }
     });
-    console.log(`${stamp()} BACKFILLED — ${target.slice(0, 8)} ${runs.length} runs; owner ${record?.owner ?? 'worker'}`);
+    console.log(`${stamp()} BACKFILLED — ${target.slice(0, 8)} ${runs.length} runs${unreadable ? `, ${unreadable} unreadable (still a placeholder)` : ''}; owner ${record?.owner ?? 'worker'}`);
     return;
   }
   if (mode === '--retry' && args.length === 5) {
