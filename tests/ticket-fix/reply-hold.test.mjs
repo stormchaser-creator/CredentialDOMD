@@ -5,12 +5,15 @@
 // the ticket stays unanswered, and its work goes on as a bounded continuation
 // until a later run finishes it and the reply reports what was done.
 // Synthetic records only.
+// The supervisor runs this suite too: its process would otherwise act as
+// the supervisor in every host command (coordination.mjs actor()).
+delete process.env.OPS_SUPERVISOR_PID;
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdirSync, symlinkSync } from 'node:fs';
 import path from 'node:path';
 import { closeLeftover, retryCase, checkDataFixes, finishRun, collectQueue, loadQueuedContext, queueSQL, heldLine, saveReview, resolveItem, noteOwner, closeFollowUp, withAgentLock, writeAttention, targetSQL, HELD_REPLY_WORK } from '../../scripts/ticket-agent-context.mjs';
-import { readLedger } from '../../scripts/ticket-fix/coordination.mjs';
+import { readLedger, recordAttempt } from '../../scripts/ticket-fix/coordination.mjs';
 import { spawn } from 'node:child_process';
 import { prepareRenderedReply } from '../../scripts/ticket-fix/reply.mjs';
 import { DATA_FIX_FILE, replyHold, itemsDigest, itemFollowUpWork, resolveFollowUpWork, finalStates, validResolutions, writeChecklist, renderAgentReply, stillAsked } from '../../scripts/ticket-fix/checklist.mjs';
@@ -141,6 +144,8 @@ test('a held reply is retried as a bounded continuation, not a fresh reply every
   try {
     const first = await loadQueuedContext(db.query, { id: T, mode: 'reply' }, state.dir);
     await finishRun(db.query, state.dir, first, result(), { stage3: stage3(OPEN), codeOutcome: 'none', requireStructured: true });
+    // The runner records each run (--record-attempt): this one finished, held.
+    await recordAttempt(state.dir, T, { exit: 0, run: { id: `${T.slice(0, 8)}-0000000000000001`, status: 'no_code', finished_at: new Date(start).toISOString() } });
     // The ticket is still unanswered, but no newer message: it leaves the
     // new-message queue and is due as a continuation after the cooldown.
     assert.deepEqual((await collectQueue(db.query, state.dir, { now: start + 10 * 60000 })).items, [], 'not rerun within the hour');

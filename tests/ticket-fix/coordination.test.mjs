@@ -3,6 +3,9 @@
 // records, routing away from the worker, and retries only on a basis the
 // host validates and a person accepts (owner request, 2026-11-13).
 // Synthetic data only.
+// The supervisor runs this suite too: its process would otherwise act as
+// the supervisor in every host command (coordination.mjs actor()).
+delete process.env.OPS_SUPERVISOR_PID;
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { mkdtempSync, mkdirSync, writeFileSync, readFileSync, readdirSync, existsSync, rmSync, chmodSync } from 'node:fs';
@@ -12,6 +15,7 @@ import path from 'node:path';
 import { classifyRun, recordAttempt, recordStall, readLedger, writeLedger, emptyLedger, rejectApproach, routeTicket, validateBasis, coordinationView, relativeImports,
   routedTickets, planDir, relevantPaths, ATTEMPTS_PER_BASIS } from '../../scripts/ticket-fix/coordination.mjs';
 import { retryCase, deviceConfirmed } from '../../scripts/ticket-agent-context.mjs';
+import { protectedFailure } from '../../scripts/ticket-fix/coordination.mjs';
 import { sessionEvidence, caseHistory } from '../../scripts/ticket-fix/session-context.mjs';
 
 const uuid = n => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -116,6 +120,7 @@ test('routing: the supervisor only escalates; a protected stop leaves the owner 
     await assert.rejects(rejectApproach(state.dir, T, { summary: 'Reading layer', source: 'journal 11-09' }), /TICKET_ACTOR/);
     const r = await rejectApproach(state.dir, T, { summary: 'Reading layer over intake', source: 'ops journal 2026-11-09', by: 'supervisor' });
     assert.deepEqual(r.rejected_approaches.map(a => [a.id, a.by]), [['RA-1', 'supervisor']]);
+    await recordAttempt(state.dir, T, { run: reviewRefused(R1), gates: reviewGates, exit: 0 });
     await assert.rejects(routeTicket(state.dir, T, 'worker', { reason: 'x', by: 'owner' }), /validated basis/);
     await assert.rejects(routeTicket(state.dir, T, 'device', { reason: 'x', by: 'operator' }), /Only the host/);
     assert.equal((await routeTicket(state.dir, T, 'eric', { reason: 'protected billing', by: 'supervisor' })).owner, 'eric');
@@ -313,10 +318,59 @@ test('the CLI refuses --wake, needs an actor, never routes to the worker, and pr
   try {
     const cli = (args, env = {}) => spawnSync(process.execPath, ['scripts/ticket-agent-context.mjs', ...args], { encoding: 'utf8', env: { ...process.env, TICKET_AGENT_LOCK: path.join(state.dir, 'lock'), TICKET_ACTOR: '', ...env } });
     assert.match(cli(['--wake', T, state.dir]).stderr, /--wake is gone/);
+    mkdirSync(path.join(state.dir, 'coordination'), { mode: 0o700 });
+    writeFileSync(path.join(state.dir, 'coordination', `${T}.json`), JSON.stringify({ ...emptyLedger(T), last_failure: { ...operatorFailure, route: 'worker' } }), { mode: 0o600 });
     assert.match(cli(['--route', T, 'operator', state.dir], { TICKET_ROUTE_NOTE: 'needs supabase/_shared' }).stderr, /TICKET_ACTOR/);
     assert.equal(cli(['--route', T, 'operator', state.dir], { TICKET_ROUTE_NOTE: 'needs supabase/_shared', TICKET_ACTOR: 'supervisor' }).status, 0);
     assert.equal(JSON.parse(cli(['--coordination', T, state.dir]).stdout).owner, 'operator');
     assert.match(cli(['--route', T, 'worker', state.dir], { TICKET_ROUTE_NOTE: 'x', TICKET_ACTOR: 'operator' }).stderr, /validated basis/);
     assert.match(cli(['--device-confirmed', T, uuid(1), state.dir], { TICKET_ACTOR: 'supervisor' }).stderr, /not the supervisor/);
   } finally { state.cleanup(); }
+});
+
+// The single review of 2026-11-13: three ways around a protected stop or
+// into a dead end, and the supervisor declaring another actor.
+test('a legacy park is a placeholder no basis answers until --backfill reads its runs; a protected run then keeps it protected', async () => {
+  const state = privateDir('coord-legacy-');
+  try {
+    let r = await recordStall(state.dir, T, { at: '2026-11-12T20:00:05.000Z', status: 'parked' });
+    assert.equal(r.last_failure.placeholder, true);
+    const caseRecord = { resolutions: { 'AC-1': { kind: 'confirmed', at: '2026-11-13T00:00:00Z', message_id: uuid(1) } } };
+    await assert.rejects(validateBasis(state.dir, T, r, { kind: 'resolution', ref: 'AC-1', addresses: `x ${r.last_failure.run.slice(9)}`, by: 'operator', caseRecord }), /--backfill first/);
+    r = await recordAttempt(state.dir, T, { exit: 0, run: { id: R1, status: 'refused', finished_at: '2026-11-11T00:00:00.000Z', protected: { protected: true, hits: [{ path: 'src/utils/forecast.js', rule: 'money_literal' }] } } });
+    assert.deepEqual([r.last_failure.placeholder, r.last_failure.route, r.owner, protectedFailure(r)], [undefined, 'eric', 'eric', true]);
+    await assert.rejects(validateBasis(state.dir, T, r, { kind: 'resolution', ref: 'AC-1', addresses: `x ${r.last_failure.run.slice(9)}`, by: 'operator', caseRecord }), /protected stop/);
+    // A stall after recorded runs is no placeholder.
+    const state2 = privateDir('coord-legacy2-');
+    try {
+      await recordAttempt(state2.dir, T, { exit: 0, run: { id: R2, status: 'no_code', finished_at: '2026-11-12T00:00:00.000Z' } });
+      assert.equal((await recordStall(state2.dir, T, { at: '2026-11-13T00:00:00.000Z' })).last_failure.placeholder, undefined);
+    } finally { state2.cleanup(); }
+  } finally { state.cleanup(); }
+});
+test('a protected refusal outranks a device route the host made, and --device-confirmed refuses a protected stop', async () => {
+  const state = privateDir('coord-device-protected-');
+  try {
+    await recordAttempt(state.dir, T, { exit: 9, run: { id: R1, status: 'needs_device', finished_at: '2026-11-10T00:00:00.000Z' } });
+    let r = await recordAttempt(state.dir, T, { exit: 0, run: { id: R2, status: 'refused', finished_at: '2026-11-11T00:00:00.000Z', protected: { protected: true, hits: [{ path: 'src/utils/forecast.js', rule: 'money_literal' }] } } });
+    assert.equal(r.owner, 'eric');
+    // Even a device-owned ledger with protected hits merged in is refused.
+    await writeLedger(state.dir, { ...r, owner: 'device', owner_history: [...r.owner_history, { owner: 'device', at: '2026-11-12T00:00:00.000Z', by: 'host' }], last_failure: { ...r.last_failure, route: 'device' } });
+    const query = async () => [{ id: uuid(1), ticket_id: T, owner_id: OWNER, from_admin: false, body: 'Synthetic.', created_at: '2026-11-13T00:00:00Z', author_id: OWNER, is_admin_reply: false }];
+    await assert.rejects(deviceConfirmed(state.dir, T, uuid(1), { by: 'operator', query, lock: path.join(state.dir, 'lock') }), /protected stop/);
+  } finally { state.cleanup(); }
+});
+test('a ticket with no failed run on record is never routed (no basis could bring it back); a supervisor process is the supervisor whatever it declares', async () => {
+  const state = privateDir('coord-noroute-');
+  const saved = process.env.OPS_SUPERVISOR_PID;
+  try {
+    await assert.rejects(routeTicket(state.dir, T, 'operator', { reason: 'x', by: 'owner' }), /No failed run is recorded/);
+    process.env.OPS_SUPERVISOR_PID = '12345';
+    const { actor } = await import('../../scripts/ticket-fix/coordination.mjs');
+    assert.equal(actor('operator'), 'supervisor');
+    assert.equal(actor('owner'), 'supervisor');
+  } finally {
+    if (saved === undefined) delete process.env.OPS_SUPERVISOR_PID; else process.env.OPS_SUPERVISOR_PID = saved;
+    state.cleanup();
+  }
 });

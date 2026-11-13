@@ -67,6 +67,10 @@ const oneLine = (value, max, what) => {
 function ticketId(value) { if (!UUID.test(value || '')) throw Error('Invalid support ID'); return value; }
 export function actor(value) {
   if (!ACTORS.includes(value)) throw Error(`Say who is acting: TICKET_ACTOR=${ACTORS.join('|')}`);
+  // A process the ops supervisor started is the supervisor, whatever it
+  // declares (ops-supervisor.sh exports OPS_SUPERVISOR_PID). Not a security
+  // boundary: the same user could clear it; see the docs.
+  if (process.env.OPS_SUPERVISOR_PID) return 'supervisor';
   return value;
 }
 
@@ -230,7 +234,11 @@ const SYNTHETIC = new Set(['stalled', 'parked']);
 const PATH_KEYS = ['missed_paths', 'product_files', 'test_files', 'failing_tests', 'out_of_scope'];
 const merge = (a, b, n = 20) => [...new Set([...(a ?? []), ...(b ?? [])])].sort().slice(0, n);
 function routeAway(record, failure, at) {
-  if (record.owner !== 'worker' || failure.route === 'worker') return;
+  if (failure.route === 'worker' || record.owner === failure.route) return;
+  // The host routes away from the worker, and a protected stop outranks any
+  // other route it made (review: a device route must not hide it).
+  const hostRouted = record.owner_history.at(-1)?.by === 'host';
+  if (!(record.owner === 'worker' || (failure.route === 'eric' && hostRouted && record.owner !== 'eric'))) return;
   setOwner(record, failure.route, { by: 'host', at, reason: `run ${failure.run}: ${failure.route === 'device' ? 'needs a device reproduction'
     : failure.route === 'eric' ? `a refused change in protected code (${failure.protected_hits.map(h => h.path).join(', ')}): the owner decides`
     : failure.status === 'release_failed' ? 'the release check failed' : `needs ${failure.out_of_scope.join(', ')}`}` });
@@ -271,7 +279,8 @@ export async function recordAttempt(state, ticket, { run, gates = null, exit, re
       for (const k of PATH_KEYS) stored[k] = merge(stored[k], failure[k]);
       stored.protected_hits = [...(stored.protected_hits ?? []), ...failure.protected_hits].slice(0, 10);
       Object.assign(stored, { after: failure.run, after_at: failure.at, after_cause: failure.cause, gate_failures: failure.gate_failures, review_reasons: failure.review_reasons });
-      if (stored.route === 'worker') stored.route = failure.route;
+      if (failure.route === 'eric' || stored.route === 'worker') stored.route = failure.route;
+      delete stored.placeholder;
     }
     exhausted(record, at);
     return writeLedger(state, record);
@@ -311,7 +320,11 @@ export async function recordStall(state, ticket, { at, runId = null, status = 's
     const id = /^[0-9a-f]{16}$/.test(runId ?? '') ? runId : when.toString(16).padStart(16, '0').slice(-16);
     const run = `${ticket.slice(0, 8)}-${id}`;
     const prior = record.last_failure ?? {};
-    record.last_failure = { run, at: stamp, exit: status, status, ok: false, refused: false, host_failure: false,
+    // Nothing on record at all: a legacy park or stall. Its protection is
+    // unknown until --backfill reads its kept runs (review: a protected
+    // de954247 could otherwise be retried on a message).
+    const placeholder = !record.attempts.length && !record.last_failure;
+    record.last_failure = { run, at: stamp, exit: status, status, ok: false, refused: false, host_failure: false, ...(placeholder ? { placeholder: true } : {}),
       cause: status === 'parked' ? 'parked after failed runs (no run record kept)' : 'three attempts ended without finishing every item (stalled)',
       gate_failures: [], review_reasons: [], ...Object.fromEntries(PATH_KEYS.map(k => [k, Array.isArray(prior[k]) ? prior[k] : []])),
       protected_hits: Array.isArray(prior.protected_hits) ? prior.protected_hits : [], route: prior.route ?? 'worker',
@@ -341,6 +354,8 @@ export async function routeTicket(state, ticket, owner, { reason, by, now = Date
   if (owner === 'worker') throw Error('A ticket goes back to the worker only on a validated basis: --retry');
   if (!OWNERS.includes(owner)) throw Error(`Owner is one of ${OWNERS.join(', ')}`);
   if (owner === 'device') throw Error('Only the host routes a ticket to a device (a run that needs a device reproduction)');
+  // Without a failed run on record no basis could ever return it (review).
+  if (!record.last_failure) throw Error('No failed run is recorded for this ticket: note it for the owner instead of routing it');
   if (record.owner === 'eric' && who !== 'owner') throw Error('A protected stop leaves the owner only by his own route');
   if (who === 'supervisor' && record.owner === 'device') throw Error('A device ticket returns with --device-confirmed, by the operator or the owner');
   setOwner(record, owner, { by: who, at: new Date(now).toISOString(), reason: oneLine(reason, 300, 'Why (TICKET_ROUTE_NOTE)') });
@@ -372,6 +387,7 @@ export async function validateBasis(state, ticket, record, { kind, ref, addresse
   actor(by);
   const failure = record.last_failure;
   if (!failure) throw Error('No failed run is recorded for this ticket; there is nothing to retry');
+  if (failure.placeholder) throw Error('This ticket was parked or stalled before 2026-11-13: run --backfill first, so its protection and files are known');
   if (countedBases(record) >= MAX_BASES) throw Error(`Both retry bases (${MAX_BASES}) are used; the operator owns this ticket`);
   const runId = String(failure.run ?? '').match(RUN_NAME)?.[2] ?? null;
   const how = oneLine(addresses, 400, 'How this addresses the last failure (TICKET_RETRY_ADDRESSES)');

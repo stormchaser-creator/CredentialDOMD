@@ -698,7 +698,13 @@ only escalates. `--coordination TICKET STATE` prints the record; `--backfill TIC
 STATE WORK` builds it from the kept run records. `TICKET_ACTOR` (`operator`, `supervisor`, `owner`) says who
 acted; `ops-supervisor.sh` sets `supervisor`. It is declared, not authenticated: on this
 single-user machine a process could claim another actor, so the record keeps it as
-provenance; the supervisor process can only propose unless it falsely declares another actor.
+provenance. A process the supervisor started (`OPS_SUPERVISOR_PID` set) is always the
+supervisor, and its tool rules block `TICKET_ACTOR=`; it could still clear the variable
+or edit the state files directly, so this is a convention, not a boundary (a separate
+user account would be one). A legacy park or stall (nothing on record) is a
+placeholder no basis answers until `--backfill` reads its kept runs; a protected run
+found then outranks any other route. A ticket with no failed run on record is never
+routed (no basis could bring it back).
 
 The worker and the reproduction session see `coordination` in their evidence (bounded at
 5 KB: owner, the rule, the last failure, the newest twelve rejections, the basis) and

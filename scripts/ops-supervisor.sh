@@ -216,7 +216,7 @@ export TICKET_ACTOR=supervisor
 "$CLAUDE" -p "$input" --append-system-prompt "$(cat "$PROMPT")" \
   --model claude-opus-5-5 --dangerously-skip-permissions --max-budget-usd $BUDGET_USD \
   --disallowedTools 'Bash(*osascript*)' 'Bash(*security *)' 'Bash(*supabase *)' 'Bash(*notify-owner.sh *)' \
-    'Bash(*signup-notify.sh*)' 'Bash(*ticket-agent.sh*)' 'Bash(*launchctl *)' \
+    'Bash(*signup-notify.sh*)' 'Bash(*ticket-agent.sh*)' 'Bash(*launchctl *)' 'Bash(*TICKET_ACTOR=*)' \
   --add-dir "$REPO" --add-dir "$HOME/Library/Application Support/CredentialDOMD" \
   > "$out" 2>> "$LOG" </dev/null &
 pid=$!

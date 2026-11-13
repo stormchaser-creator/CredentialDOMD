@@ -9,7 +9,7 @@ import { prepareAgentReply, prepareRenderedReply, readVerificationKey, signPrepa
   MIGRATION, emailStatus, RUN_COMMITTER } from './ticket-fix/reply.mjs';
 import { checklistErrors, isSupportReply, isCustomerMessage, hostItemWork, replyHold, isCompletion, askItems, stillAsked, confirmsAsk, askedAt, readChecklist, RESOLUTION_KINDS, resolutionKind, isAttachmentWork, DATA_FIX_FILE, AGENT_REPLY_MAX, REMAINING_MAX, OBSERVED_MAX, MAX_ITEMS } from './ticket-fix/checklist.mjs';
 import { isMain } from './ticket-fix/is-main.mjs';
-import { MAX_BASES, countedBases, readLedger, routedTickets, recordAttempt, recordStall, validateBasis, acceptBasis, proposeBasis, acceptingActor, rejectApproach, routeTicket, coordinationView, actor as checkActor } from './ticket-fix/coordination.mjs';
+import { MAX_BASES, countedBases, protectedFailure, readLedger, writeLedger as writeLedgerFile, routedTickets, recordAttempt, recordStall, validateBasis, acceptBasis, proposeBasis, acceptingActor, rejectApproach, routeTicket, coordinationView, actor as checkActor } from './ticket-fix/coordination.mjs';
 
 export const APPROVED = '(public.is_admin(t.user_id) OR t.agent_approved_at IS NOT NULL)';
 // A refund ticket the refund ledger opened by itself (20260930071000,
@@ -928,6 +928,8 @@ export async function deviceConfirmed(directory, ticketId, messageId, { by, quer
     const route = ledger.owner_history.at(-1);
     if (route?.owner !== 'device' || route.by !== 'host' || ledger.last_failure?.route !== 'device') throw Error('Only a device route the host made (a run that needed a device) is confirmed this way');
     if (ledger.bases.filter(b => b.kind === 'device_confirmed').length >= 2) throw Error('Two device confirmations are used; the operator owns this ticket');
+    if (protectedFailure(ledger)) throw Error('A protected stop needs the owner\'s decision in an approved plan, not a device confirmation');
+    if (ledger.last_failure?.placeholder) throw Error('Run --backfill first, so its protection is known');
   };
   const before = await readLedger(directory, ticketId);
   check(before);
@@ -1562,6 +1564,11 @@ async function main(args) {
         last = await recordAttempt(directory, target, { ...r, exit, repo: repository(), now: Date.parse(r.run.finished_at ?? r.run.started_at) || Date.now() }) ?? last;
       }
       return last;
+    });
+    // No kept run: the placeholder is all there is, and it is now known to be so.
+    await withAgentLock(lock, async () => {
+      const ledger = await readLedger(directory, target);
+      if (ledger.last_failure?.placeholder) { delete ledger.last_failure.placeholder; ledger.last_failure.backfilled = runs.length; await writeLedgerFile(directory, ledger); }
     });
     console.log(`${stamp()} BACKFILLED — ${target.slice(0, 8)} ${runs.length} runs; owner ${record?.owner ?? 'worker'}`);
     return;
