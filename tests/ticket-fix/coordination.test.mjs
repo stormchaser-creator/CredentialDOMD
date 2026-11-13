@@ -145,6 +145,24 @@ test('a commit counts only when it is on main, newer than the failure, not the a
     await assert.rejects(check('f'.repeat(40)), /No such commit/);
     const ok = await check(good);
     assert.deepEqual(ok.touched, ['supabase/functions/_shared/intake.mjs']);
+    // A merge stands for the commits it brings in: the one that changed the file is named instead.
+    repo.git(['checkout', '-q', '-b', 'topic', good]);
+    repo.commit('supabase/functions/_shared/intake.mjs', '2026-11-13T07:00:00Z');
+    repo.git(['checkout', '-q', 'main']);
+    repo.commit('docs/x.md', '2026-11-13T07:30:00Z');
+    repo.git(['merge', '-q', '--no-ff', '-m', 'Merge topic', 'topic'], { GIT_AUTHOR_NAME: 'S', GIT_AUTHOR_EMAIL: 'o@example.invalid', GIT_COMMITTER_NAME: 'S', GIT_COMMITTER_EMAIL: 'o@example.invalid', GIT_COMMITTER_DATE: '2026-11-13T08:00:00Z', GIT_AUTHOR_DATE: '2026-11-13T08:00:00Z' });
+    await assert.rejects(check(repo.git(['rev-parse', 'HEAD'])), /not a merge/);
+    // A revert is not a fix; deleting the file changes nothing it can run.
+    const env = { GIT_AUTHOR_NAME: 'S', GIT_AUTHOR_EMAIL: 'o@example.invalid', GIT_COMMITTER_NAME: 'S', GIT_COMMITTER_EMAIL: 'o@example.invalid', GIT_COMMITTER_DATE: '2026-11-13T09:00:00Z', GIT_AUTHOR_DATE: '2026-11-13T09:00:00Z' };
+    writeFileSync(path.join(repo.dir, 'supabase/functions/_shared/intake.mjs'), 'reverted\n');
+    repo.git(['commit', '-q', '-am', 'Revert "touch supabase/functions/_shared/intake.mjs"'], env);
+    await assert.rejects(check(repo.git(['rev-parse', 'HEAD'])), /revert is not a fix/);
+    repo.git(['rm', '-q', 'supabase/functions/_shared/intake.mjs']);
+    repo.git(['commit', '-q', '-m', 'drop it'], { ...env, GIT_COMMITTER_DATE: '2026-11-13T10:00:00Z', GIT_AUTHOR_DATE: '2026-11-13T10:00:00Z' });
+    await assert.rejects(check(repo.git(['rev-parse', 'HEAD'])), /touches none of the files/);
+    // The files the refused run edited are not what the failure implicates.
+    const productOnly = { ...emptyLedger(T), last_failure: { ...operatorFailure, out_of_scope: [], failing_tests: [], product_files: ['src/other.js'], route: 'worker' } };
+    await assert.rejects(validateBasis(state.dir, T, productOnly, { kind: 'commit', ref: unrelated, addresses: `x ${runId(R1)}`, by: 'operator', repo: repo.dir, mainRef: 'main' }), /implicates no file/);
     // A protected stop is never retried on a commit.
     await assert.rejects(validateBasis(state.dir, T, { ...record, owner: 'eric' }, { kind: 'commit', ref: good, addresses: `x ${runId(R1)}`, by: 'operator', repo: repo.dir, mainRef: 'main' }), /owner's decision/);
     await assert.rejects(validateBasis(state.dir, T, { ...record, bases: [{}, {}].slice(0, MAX_BASES) }, { kind: 'commit', ref: good, addresses: `x ${runId(R1)}`, by: 'operator', repo: repo.dir, mainRef: 'main' }), /Both retry bases/);
@@ -160,8 +178,10 @@ test('a message counts only for a worker-owned ticket, when the reporter wrote i
       [uuid(2)]: { author_id: OWNER, owner_id: OWNER, is_admin_reply: false, body: 'Old', from_admin: false, created_at: '2026-11-11T00:00:00Z' },
       [uuid(3)]: { author_id: uuid(5), owner_id: OWNER, is_admin_reply: true, body: 'Support note', from_admin: false, created_at: '2026-11-13T00:00:00Z' } };
     const query = async sql => { assert.match(sql, /^begin read only;/); const m = /m\.id='([^']+)'/.exec(sql)[1]; return rows[m] ? [{ id: m, ticket_id: T, ...rows[m] }] : []; };
-    const check = (ref, record = { ...emptyLedger(T), last_failure: failure }) => validateBasis(state.dir, T, record, { kind: 'message', ref, addresses: `the reporter says the spinner of run ${runId(R1)} shows online`, by: 'supervisor', query });
+    const check = (ref, record = { ...emptyLedger(T), last_failure: failure }) => validateBasis(state.dir, T, record, { kind: 'message', ref, addresses: `the reporter says the spinner of run ${runId(R1)} shows online`, by: 'operator', query });
     assert.deepEqual(await check(uuid(1)), { message_at: '2026-11-13T00:00:00Z' });
+    await assert.rejects(validateBasis(state.dir, T, { ...emptyLedger(T), last_failure: failure }, { kind: 'message', ref: uuid(1), addresses: `x ${runId(R1)}`, by: 'supervisor', query }), /not the supervisor/,
+      'whether a message changes the evidence is a person\'s call, never a model note');
     await assert.rejects(check(uuid(2)), /not newer than the failed run/);
     await assert.rejects(check(uuid(3)), /not one the reporter wrote/);
     await assert.rejects(check(uuid(4)), /not one the reporter wrote/);
@@ -223,7 +243,7 @@ test('retryCase accepts a validated basis under the lock: the park is kept renam
     // A case answered as complete is never retried.
     const SHA = 'a'.repeat(64);
     writeFileSync(path.join(state.dir, `${T}.json`), JSON.stringify({ ...record, checklist_sha256: SHA, continuation: { state: 'complete' }, completion: { checklist_sha256: SHA } }), { mode: 0o600 });
-    const later = repo.commit('supabase/functions/_shared/intake.mjs', '2026-11-13T06:00:00Z');
+    const later = repo.commit('src/AuthGate.jsx', '2026-11-13T06:00:00Z');
     await assert.rejects(retryCase(state.dir, T, { ...opts, ref: later, addresses: `again ${runId(R2)}` }), /answered as complete/);
   } finally { state.cleanup(); repo.cleanup(); }
 });
@@ -271,5 +291,55 @@ test('the CLI refuses --wake and the old hand revival, and prints the record rea
     assert.equal(shown.owner, 'operator');
     const back = cli(['--route', T, 'worker', state.dir], { TICKET_ROUTE_NOTE: 'try again', TICKET_ACTOR: 'operator' });
     assert.match(back.stderr, /validated basis/);
+  } finally { state.cleanup(); }
+});
+
+test('a recording failure is the host\'s, never a rejection or a protected stop; a support_owner follow-up naming an edge function routes to the operator', () => {
+  const held = classifyRun({ exit: 'record', run: { id: R1, status: 'held', protected: { protected: true, hits: [{ path: 'src/utils/forecast.js', rule: 'money_literal' }] } } });
+  assert.deepEqual([held.ok, held.route, held.host_failure, held.refused], [false, 'operator', true, false]);
+  const caseRecord = { pending_follow_up: [{ owner: 'support_owner', work: 'Change supabase/functions/_shared/intakeFacts.mjs so a failed scan is not a delivery', next_action: 'Operator edits scripts/x.mjs.' },
+    { owner: 'support_worker', work: 'Look at supabase/functions/other.ts' }, { owner: 'support_owner', work: 'Edit src/utils/x.js' }] };
+  const stop = classifyRun({ exit: 0, run: { id: R1, status: 'no_code' }, caseRecord });
+  assert.equal(stop.route, 'worker', 'a finished run is never routed on a note');
+  const failed = classifyRun({ exit: 0, run: { id: R1, status: 'refused', reason: 'review' }, caseRecord });
+  assert.deepEqual([failed.route, failed.out_of_scope], ['operator', ['scripts/x.mjs', 'supabase/functions/_shared/intakeFacts.mjs']]);
+});
+test('a host recording failure leaves no rejected approach; a backfill never moves the last failure back; a shipped change resets the count', async () => {
+  const state = privateDir('coord-order-');
+  try {
+    let r = await recordAttempt(state.dir, T, { exit: 'record', run: { id: R1, status: 'held', finished_at: '2026-11-10T00:00:00.000Z', protected: { protected: true, hits: [{ path: 'a', rule: 'b' }] } } });
+    assert.deepEqual([r.owner, r.rejected_approaches.length], ['operator', 0]);
+    const state2 = privateDir('coord-order2-');
+    try {
+      await recordAttempt(state2.dir, T, { exit: 0, run: reviewRefused(R2, '2026-11-12T00:00:00.000Z'), gates: reviewGates });
+      r = await recordAttempt(state2.dir, T, { exit: 0, run: reviewRefused(R1, '2026-11-01T00:00:00.000Z'), gates: reviewGates });
+      assert.equal(r.last_failure.run, R2, 'an older run never replaces the newer failure');
+      assert.deepEqual(r.attempts.map(a => a.run), [R1, R2], 'kept in time order');
+      r = await recordAttempt(state2.dir, T, { exit: 'record', run: reviewRefused(R2, '2026-11-12T00:00:00.000Z') });
+      assert.equal(r.attempts.length, 2, 'one entry per run, whichever step came first');
+      r = await recordAttempt(state2.dir, T, { exit: 0, run: { id: RUN('4444'), status: 'released', finished_at: '2026-11-13T00:00:00.000Z' } });
+      assert.equal(r.basis_attempts, 0);
+    } finally { state2.cleanup(); }
+  } finally { state.cleanup(); }
+});
+test('a stall keeps the files the previous failure implicated, so a commit can still answer it; once every basis is used it goes to the operator', async () => {
+  const state = privateDir('coord-stall-keep-');
+  try {
+    const { recordStall } = await import('../../scripts/ticket-fix/coordination.mjs');
+    await writeLedger(state.dir, { ...emptyLedger(T), owner: 'worker', last_failure: { ...operatorFailure, route: 'worker' } });
+    let r = await recordStall(state.dir, T, { at: '2026-11-13T00:00:00.000Z' });
+    assert.deepEqual([r.last_failure.status, r.last_failure.out_of_scope, r.last_failure.after], ['stalled', operatorFailure.out_of_scope, R1]);
+    assert.equal(r.basis_attempts, ATTEMPTS_PER_BASIS);
+    await writeLedger(state.dir, { ...r, bases: [{ id: 'RB-1', kind: 'commit' }, { id: 'RB-2', kind: 'plan' }] });
+    r = await recordStall(state.dir, T, { at: '2026-11-14T00:00:00.000Z' });
+    assert.equal(r.owner, 'operator');
+    // A device confirmation never counts toward the bound.
+    await writeLedger(state.dir, { ...emptyLedger(T), last_failure: { ...operatorFailure, route: 'worker', out_of_scope: [] }, bases: [{ kind: 'device_confirmed' }, { kind: 'device_confirmed' }] });
+    const repo = repoFixture();
+    try {
+      repo.commit('README.md', '2026-11-01T00:00:00Z');
+      const fix = repo.commit('tests/intake.test.mjs', '2026-11-13T03:00:00Z');
+      assert.ok((await validateBasis(state.dir, T, await readLedger(state.dir, T), { kind: 'commit', ref: fix, addresses: `fixes ${runId(R1)}`, by: 'supervisor', repo: repo.dir, mainRef: 'main' })).commit);
+    } finally { repo.cleanup(); }
   } finally { state.cleanup(); }
 });

@@ -49,6 +49,7 @@ export const ATTEMPTS_PER_BASIS = 3;
 export const MAX_BASES = 2;
 // At most one of those may be a revised plan.
 export const MAX_PLANS = 1;
+export { countedBases };
 const ATTEMPTS_KEPT = 20;
 const REJECTED_KEPT = 30;
 const LEDGER_MAX = 64 * 1024;
@@ -108,7 +109,7 @@ export async function routedTickets(state) {
     const record = await readLedger(state, ticket);
     if (record.owner !== 'worker') routed[ticket] = record.owner;
   }
-  if (Object.keys(routed).length > 500) throw Error('Routed tickets exceed bound; operator review required');
+  if (Object.keys(routed).length > 5000) throw Error('Routed tickets exceed bound; operator review required');
   return routed;
 }
 
@@ -133,8 +134,22 @@ const gitShow = (repo, rev, file) => {
 // take the next step: device (only a phone shows it), eric (the protected
 // billing or security rules stopped it), operator (it needs files the worker
 // may not edit), else worker.
-export function classifyRun({ run = {}, gates = null, exit, repo = null, readSource = null }) {
+// Paths outside the worker's reach that the host's saved case names in an
+// open owner follow-up (the worker's own "this needs an operator" stop).
+const PATH_NAMED = /\b((?:supabase|scripts|migrations|\.github)\/[A-Za-z0-9_./-]+[A-Za-z0-9_])/g;
+export function ownerFollowUpPaths(caseRecord) {
+  const out = new Set();
+  for (const f of Array.isArray(caseRecord?.pending_follow_up) ? caseRecord.pending_follow_up : []) {
+    if (f?.owner !== 'support_owner') continue;
+    for (const m of `${f.work ?? ''} ${f.next_action ?? ''}`.matchAll(PATH_NAMED)) if (!isEditable(m[1])) out.add(m[1]);
+  }
+  return [...out].sort().slice(0, 10);
+}
+export function classifyRun({ run = {}, gates = null, exit, repo = null, readSource = null, caseRecord = null }) {
   const status = String(run.status ?? '');
+  // The host could not record a result: its own failure, never a verdict on
+  // the change (a held protected change must not read as rejected).
+  const hostFailure = String(exit) === 'record';
   const ok = (exit === 0 || exit === '0') && ['merged', 'released', 'no_code', 'held', 'answered', 'replied'].includes(status);
   const review = Array.isArray(run.review?.reasons) ? run.review.reasons : [];
   const missed = [...new Set(review.flatMap(r => [...String(r).matchAll(/missed path ([^\s:;,]+)/g)].map(m => m[1])))].slice(0, 10);
@@ -151,13 +166,15 @@ export function classifyRun({ run = {}, gates = null, exit, repo = null, readSou
     const source = read(file);
     if (source) imported.push(...relativeImports(file, source).filter(p => !isEditable(p)));
   }
-  const outOfScope = [...new Set([...violating.filter(p => !isEditable(p)), ...imported])].sort().slice(0, 20);
+  const outOfScope = [...new Set([...violating.filter(p => !isEditable(p)), ...imported, ...(ok ? [] : ownerFollowUpPaths(caseRecord))])].sort().slice(0, 20);
   const device = String(exit) === '9' || status === 'needs_device';
-  const protectedStop = run.protected?.protected === true && !ok;
-  const route = ok ? 'worker' : device ? 'device' : protectedStop ? 'eric' : outOfScope.length || status === 'release_failed' ? 'operator' : 'worker';
+  // Only a change the gates or the review refused is a protected stop.
+  const refused = status === 'refused' && !hostFailure;
+  const protectedStop = refused && run.protected?.protected === true;
+  const route = ok ? 'worker' : device ? 'device' : protectedStop ? 'eric' : outOfScope.length || status === 'release_failed' || hostFailure ? 'operator' : 'worker';
   const cause = ok ? null : clip(run.reason ?? (String(exit) === 'record' ? 'the host could not record the result' : `exit ${exit}`), 400);
   return {
-    run: run.id ?? null, at: run.finished_at ?? run.started_at ?? null, exit: String(exit), status: status || null, ok, cause,
+    run: run.id ?? null, at: run.finished_at ?? run.started_at ?? null, exit: String(exit), status: status || null, ok, cause, refused, host_failure: hostFailure,
     gate_failures: Array.isArray(run.gates_failures) ? run.gates_failures.slice(0, 10) : [],
     review_reasons: review.slice(0, 8).map(r => clip(r, 200)), missed_paths: missed,
     product_files: (Array.isArray(diff.product) ? diff.product : []).slice(0, 20),
@@ -167,8 +184,10 @@ export function classifyRun({ run = {}, gates = null, exit, repo = null, readSou
     out_of_scope: outOfScope, route,
   };
 }
-// The files a basis must touch to count as addressing a failure.
-export const relevantPaths = failure => [...new Set([...(failure?.product_files ?? []), ...(failure?.missed_paths ?? []), ...(failure?.out_of_scope ?? []),
+// The files the failure itself implicates: what a commit basis must change.
+// Not the files the refused run happened to edit (a later edit to a busy file
+// says nothing about this failure: review of 2026-11-13).
+export const relevantPaths = failure => [...new Set([...(failure?.missed_paths ?? []), ...(failure?.out_of_scope ?? []),
   ...(failure?.failing_tests ?? []), ...(failure?.protected_hits ?? []).map(h => h.path)])].sort();
 
 function nextId(list, prefix) { return `${prefix}-${1 + list.reduce((n, e) => Math.max(n, Number(String(e.id ?? '').split('-')[1]) || 0), 0)}`; }
@@ -181,7 +200,7 @@ function setOwner(record, owner, { by, reason, at }) {
 // The approach a refused change took, as the host's gates or review
 // rejected it: never to be tried again as it was.
 function hostRejection(failure) {
-  if (failure.ok || (!failure.review_reasons.length && !failure.gate_failures.length && !failure.protected_hits.length && !failure.out_of_scope.length)) return null;
+  if (failure.ok || failure.host_failure || !(failure.refused || ['2', '5'].includes(failure.exit)) || (!failure.review_reasons.length && !failure.gate_failures.length && !failure.protected_hits.length && !failure.out_of_scope.length)) return null;
   const changed = failure.product_files.length ? `changed ${failure.product_files.join(', ')}` : failure.test_files.length ? `added tests only (${failure.test_files.join(', ')})` : 'changed nothing that was kept';
   const why = [failure.review_reasons.length ? `review: ${failure.review_reasons.join('; ')}` : '', failure.gate_failures.length ? `gates failed: ${failure.gate_failures.join(', ')}` : '',
     failure.protected_hits.length ? `protected: ${failure.protected_hits.map(h => `${h.path} (${h.rule})`).join(', ')}` : '',
@@ -193,15 +212,25 @@ function hostRejection(failure) {
 // own lock, so no other writer runs). Exits that say nothing about the
 // ticket (the usage limit, a stop from outside, another target's time) are
 // never recorded.
-export async function recordAttempt(state, ticket, { run, gates = null, exit, repo = null, readSource = null, now = Date.now() }) {
+export async function recordAttempt(state, ticket, { run, gates = null, exit, repo = null, readSource = null, caseRecord = null, now = Date.now() }) {
   ticketId(ticket);
   if (['8', '143'].includes(String(exit))) return null;
   const record = await readLedger(state, ticket);
-  const failure = classifyRun({ run, gates, exit, repo, readSource });
-  if (failure.run && record.attempts.some(a => a.run === failure.run && a.exit === failure.exit)) return record;
+  const failure = classifyRun({ run, gates, exit, repo, readSource, caseRecord });
+  // One entry per run, whichever step recorded it first (a backfill replays
+  // runs the runner already recorded).
+  if (failure.run && record.attempts.some(a => a.run === failure.run)) return record;
   const at = new Date(now).toISOString();
-  record.attempts = [...record.attempts, { run: failure.run, at: failure.at ?? at, exit: failure.exit, status: failure.status, ok: failure.ok, cause: failure.cause }].slice(-ATTEMPTS_KEPT);
-  if (failure.ok) return writeLedger(state, record);
+  record.attempts = [...record.attempts, { run: failure.run, at: failure.at ?? at, exit: failure.exit, status: failure.status, ok: failure.ok, cause: failure.cause }]
+    .sort((a, b) => String(a.at).localeCompare(String(b.at))).slice(-ATTEMPTS_KEPT);
+  if (failure.ok) {
+    // A change that shipped ends the run of failures, as the shell's breaker.
+    if (['merged', 'released'].includes(failure.status)) record.basis_attempts = 0;
+    return writeLedger(state, record);
+  }
+  // An older run (a backfill) never replaces a newer failure.
+  const newer = Date.parse(failure.at ?? at), stored = Date.parse(record.last_failure?.at ?? '');
+  if (Number.isFinite(stored) && Number.isFinite(newer) && newer < stored) return writeLedger(state, record);
   record.last_failure = failure;
   record.basis_attempts = (Number.isInteger(record.basis_attempts) ? record.basis_attempts : 0) + 1;
   const rejected = hostRejection(failure);
@@ -211,19 +240,27 @@ export async function recordAttempt(state, ticket, { run, gates = null, exit, re
   // The host only ever routes away from the worker; back to it takes a basis.
   if (record.owner === 'worker' && failure.route !== 'worker') {
     setOwner(record, failure.route, { by: 'host', at, reason: `run ${failure.run}: ${failure.route === 'device' ? 'needs a device reproduction'
-      : failure.route === 'eric' ? `a refused change in protected code (${failure.protected_hits.map(h => h.path).join(', ')}): the owner decides` : `needs ${failure.out_of_scope.join(', ')}`}` });
+      : failure.route === 'eric' ? `a refused change in protected code (${failure.protected_hits.map(h => h.path).join(', ')}): the owner decides`
+      : failure.host_failure ? 'the host could not record its result' : failure.status === 'release_failed' ? 'the release check failed' : `needs ${failure.out_of_scope.join(', ')}`}` });
   }
-  if (record.owner === 'worker' && record.basis_attempts >= ATTEMPTS_PER_BASIS && record.bases.length >= MAX_BASES) {
+  exhausted(record, at);
+  return writeLedger(state, record);
+}
+// Every basis used and its attempts failed: the operator owns it.
+const countedBases = record => record.bases.filter(b => b.kind !== 'device_confirmed').length;
+function exhausted(record, at) {
+  if (record.owner === 'worker' && record.basis_attempts >= ATTEMPTS_PER_BASIS && countedBases(record) >= MAX_BASES) {
     setOwner(record, 'operator', { by: 'host', at, reason: `every retry basis (${MAX_BASES}) is used and its ${ATTEMPTS_PER_BASIS} attempts failed` });
   }
-  return writeLedger(state, record);
 }
 
 // A stall is a failure too: three runs that each finished without finishing
 // the work (a held reply, items left open) record no failed run, yet a
-// retry must answer something. The queue records it once per stall (at: the
-// last attempt), under an id of the run shape that a basis names.
-export async function recordStall(state, ticket, { at, runId = null }) {
+// retry must answer something. So is a park with no run on record (one from
+// before 2026-11-13). The queue records each once (at: the last attempt or
+// the park), under an id of the run shape a basis names, and keeps the files
+// the previous failure implicated, so a commit can still answer it.
+export async function recordStall(state, ticket, { at, runId = null, status = 'stalled' }) {
   ticketId(ticket);
   const when = Date.parse(at ?? '');
   if (!Number.isFinite(when)) return null;
@@ -232,10 +269,16 @@ export async function recordStall(state, ticket, { at, runId = null }) {
   if (Number.isFinite(last) && last >= when) return record;
   const id = /^[0-9a-f]{16}$/.test(runId ?? '') ? runId : when.toString(16).padStart(16, '0').slice(-16);
   const run = `${ticket.slice(0, 8)}-${id}`;
-  record.last_failure = { run, at: new Date(when).toISOString(), exit: 'stalled', status: 'stalled', ok: false,
-    cause: 'three attempts ended without finishing every item (stalled)', gate_failures: [], review_reasons: [], missed_paths: [], product_files: [],
-    test_files: [], failing_tests: [], protected_hits: [], out_of_scope: [], route: 'worker' };
-  record.attempts = [...record.attempts, { run, at: record.last_failure.at, exit: 'stalled', status: 'stalled', ok: false, cause: record.last_failure.cause }].slice(-ATTEMPTS_KEPT);
+  const prior = record.last_failure ?? {};
+  const keep = key => (Array.isArray(prior[key]) ? prior[key] : []);
+  const stamp = new Date(when).toISOString();
+  record.last_failure = { run, at: stamp, exit: status, status, ok: false, refused: false, host_failure: false,
+    cause: status === 'parked' ? 'parked after failed runs (no run record kept)' : 'three attempts ended without finishing every item (stalled)',
+    gate_failures: [], review_reasons: [], missed_paths: keep('missed_paths'), product_files: keep('product_files'), test_files: keep('test_files'),
+    failing_tests: keep('failing_tests'), protected_hits: keep('protected_hits'), out_of_scope: keep('out_of_scope'), route: prior.route ?? 'worker', ...(prior.run ? { after: prior.run } : {}) };
+  if (!record.attempts.some(a => a.run === run)) record.attempts = [...record.attempts, { run, at: stamp, exit: status, status, ok: false, cause: record.last_failure.cause }].slice(-ATTEMPTS_KEPT);
+  record.basis_attempts = Math.max(Number.isInteger(record.basis_attempts) ? record.basis_attempts : 0, ATTEMPTS_PER_BASIS);
+  exhausted(record, stamp);
   return writeLedger(state, record);
 }
 
@@ -274,7 +317,7 @@ export async function validateBasis(state, ticket, record, { kind, ref, addresse
   const who = actor(by);
   const failure = record.last_failure;
   if (!failure) throw Error('No failed run is recorded for this ticket; there is nothing to retry');
-  if (record.bases.length >= MAX_BASES) throw Error(`Both retry bases (${MAX_BASES}) are used; the operator owns this ticket`);
+  if (countedBases(record) >= MAX_BASES) throw Error(`Both retry bases (${MAX_BASES}) are used; the operator owns this ticket`);
   const runId = String(failure.run ?? '').match(RUN_NAME)?.[2] ?? null;
   const how = oneLine(addresses, 400, 'How this addresses the last failure (TICKET_RETRY_ADDRESSES)');
   if (!runId || !how.includes(runId)) throw Error(`Name the failed run it addresses (${runId ?? 'unknown'}) in TICKET_RETRY_ADDRESSES`);
@@ -282,6 +325,9 @@ export async function validateBasis(state, ticket, record, { kind, ref, addresse
   const failedAt = Date.parse(failure.at ?? '');
   if (!Number.isFinite(failedAt)) throw Error('The recorded failure has no time');
   if (kind === 'message') {
+    // Whether a message changes the evidence is a judgement the host cannot
+    // check: a person makes it, never the supervisor (a model's note).
+    if (who === 'supervisor') throw Error('A message basis is accepted by the operator or the owner, not the supervisor: note it for them');
     if (record.owner !== 'worker') throw Error(`Routed to ${record.owner}: a message alone does not send it back to the worker`);
     if (!UUID.test(ref || '')) throw Error('A message basis names the message id');
     if (!query) throw Error('A message basis is checked against the thread: TICKET_DATABASE_TOKEN is required');
@@ -300,11 +346,18 @@ export async function validateBasis(state, ticket, record, { kind, ref, addresse
     const sha = gitOut(repo, ['rev-parse', '--verify', '--quiet', `${ref}^{commit}`]);
     if (!sha.ok) throw Error('No such commit');
     if (!gitOut(repo, ['merge-base', '--is-ancestor', sha.out, mainRef]).ok) throw Error(`That commit is not on ${mainRef}`);
-    const [email, time] = gitOut(repo, ['show', '-s', '--format=%ce%n%ct', sha.out]).out.split('\n');
+    const [email, time, parents = '', subject = ''] = gitOut(repo, ['show', '-s', '--format=%ce%n%ct%n%P%n%s', sha.out]).out.split('\n');
     if (AGENT_COMMITTER.test(email ?? '')) throw Error('A ticket agent\'s own commit is not new evidence');
     if (!(Number(time) * 1000 > failedAt)) throw Error('That commit is not newer than the failed run');
-    const files = gitOut(repo, ['diff-tree', '--no-commit-id', '--name-only', '-r', '-m', sha.out]).out.split('\n').filter(Boolean);
+    const parentList = parents.split(' ').filter(Boolean);
+    if (parentList.length > 1) throw Error('Name the commit that changed the file, not a merge');
+    if (/^Revert\b/.test(subject)) throw Error('A revert is not a fix');
+    // What this commit itself did to each file, renames as delete plus add.
+    const changes = gitOut(repo, parentList.length ? ['diff', '--no-renames', '--name-status', parentList[0], sha.out] : ['diff-tree', '--root', '--no-renames', '--no-commit-id', '--name-status', '-r', sha.out])
+      .out.split('\n').filter(Boolean).map(l => l.split('\t'));
+    const files = changes.filter(([st]) => st === 'A' || st === 'M').map(([, f]) => f);
     const relevant = relevantPaths(failure);
+    if (!relevant.length) throw Error('The failure implicates no file a commit could change; answer it with a revised plan');
     const touched = files.filter(f => relevant.includes(f));
     if (!touched.length) throw Error(`That commit touches none of the files the failure names (${relevant.join(', ') || 'none recorded'})`);
     if (failure.out_of_scope.length && !failure.out_of_scope.some(p => files.includes(p))) throw Error(`The failure needs ${failure.out_of_scope.join(', ')}; that commit changes none of them`);
@@ -330,7 +383,7 @@ export async function validateBasis(state, ticket, record, { kind, ref, addresse
 
 export async function acceptBasis(state, ticket, record, { kind, ref, addresses, by, validated, now = Date.now() }) {
   const at = new Date(now).toISOString();
-  const entry = { id: nextId(record.bases, 'RB'), kind, ref: String(ref), at, by, addresses: addresses.trim(), failure_run: record.last_failure.run, validated };
+  const entry = { id: nextId(record.bases, 'RB'), kind, ref: String(ref), at, by, addresses: String(addresses).trim(), failure_run: record.last_failure?.run ?? null, validated };
   record.bases = [...record.bases, entry];
   record.basis_attempts = 0;
   setOwner(record, 'worker', { by, at, reason: `${entry.id}: ${kind} ${String(ref).slice(0, 60)}` });

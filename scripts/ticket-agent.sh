@@ -202,7 +202,7 @@ record_attempt() {
   local NAME
   NAME=$(run_field run) || return 0
   [ -n "$NAME" ] || return 0
-  node "$HOST/ticket-agent-context.mjs" --record-attempt "$TICKET_ID" "$CASE_STATE" "$WORK_STATE" "$NAME" "$1" >> "$LOG" 2>&1 ||
+  node "$HOST/ticket-agent-context.mjs" --record-attempt "$TICKET_ID" "$CASE_STATE" "$WORK_STATE" "$NAME" "$1" "$REPO" >> "$LOG" 2>&1 ||
     echo "$(date '+%F %T') WARN — coordination record for $TICKET_ID not written" >> "$LOG"
 }
 reject() {
@@ -319,8 +319,7 @@ for TARGET in ${(f)TARGETS}; do
     3) reject "model run failed or timed out"; RC=1; continue ;;
     5) reject "changed files outside its scope"; RC=1; continue ;;
     7) echo 3 > "$FAIL_COUNT"
-       record_attempt 7
-       echo "$(date '+%F %T') REJECTED — $TICKET_ID checklist not extracted; parked" >> "$LOG"
+       echo "$(date '+%F %T') REJECTED — $TICKET_ID checklist not extracted; parked" >> "$LOG"; record_attempt 7
        node "$ALERT" park --state "$CASE_STATE" --ticket "$TICKET_ID" --count 3 --why checklist --notify "$NOTIFY" >> "$LOG" 2>&1
        RC=1; continue ;;
     # The limit, not the ticket: no reject, the fail count untouched, a

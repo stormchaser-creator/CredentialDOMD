@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, mkdirSync, symlinkSync } from 'node:fs';
 import path from 'node:path';
 import { closeLeftover, retryCase, checkDataFixes, finishRun, collectQueue, loadQueuedContext, queueSQL, heldLine, saveReview, resolveItem, noteOwner, closeFollowUp, withAgentLock, writeAttention, targetSQL, HELD_REPLY_WORK } from '../../scripts/ticket-agent-context.mjs';
-import { readLedger } from '../../scripts/ticket-fix/coordination.mjs';
+import { readLedger, recordAttempt } from '../../scripts/ticket-fix/coordination.mjs';
 import { spawn } from 'node:child_process';
 import { prepareRenderedReply } from '../../scripts/ticket-fix/reply.mjs';
 import { DATA_FIX_FILE, replyHold, itemsDigest, itemFollowUpWork, resolveFollowUpWork, finalStates, validResolutions, writeChecklist, renderAgentReply, stillAsked } from '../../scripts/ticket-fix/checklist.mjs';
@@ -171,8 +171,9 @@ test('a held reply is retried as a bounded continuation, not a fresh reply every
     const withMessage = async sql => (sql.includes('JOIN support_tickets t ON t.id=m.ticket_id') && sql.includes(M2)
       ? [{ id: M2, ticket_id: T, author_id: OWNER, body: 'Synthetic second follow-up.', is_admin_reply: false, created_at: LATER, owner_id: OWNER, from_admin: true }] : db.query(sql));
     const lock = path.join(state.dir, 'agent.lock');
-    await assert.rejects(retryCase(state.dir, T, { kind: 'message', ref: M2, addresses: 'the reporter wrote again', by: 'supervisor', query: withMessage, lock }), /Name the failed run/);
-    await retryCase(state.dir, T, { kind: 'message', ref: M2, addresses: `the reporter's new detail answers stall ${stall.run.slice(9)}`, by: 'supervisor', query: withMessage, lock });
+    await assert.rejects(retryCase(state.dir, T, { kind: 'message', ref: M2, addresses: 'the reporter wrote again', by: 'operator', query: withMessage, lock }), /Name the failed run/);
+    await assert.rejects(retryCase(state.dir, T, { kind: 'message', ref: M2, addresses: `the reporter's new detail answers stall ${stall.run.slice(9)}`, by: 'supervisor', query: withMessage, lock }), /not the supervisor/);
+    await retryCase(state.dir, T, { kind: 'message', ref: M2, addresses: `the reporter's new detail answers stall ${stall.run.slice(9)}`, by: 'operator', query: withMessage, lock });
     const fresh = await collectQueue(db.query, state.dir, { now: start + 6 * HOUR });
     assert.deepEqual(fresh.items, [{ id: T, mode: 'reply' }]);
     const context = await loadQueuedContext(db.query, fresh.items[0], state.dir, { now: start + 6 * HOUR });
@@ -722,6 +723,56 @@ test('N5 and N6: --resolve-item checks a confirmation against the thread and the
     assert.equal((await resolve(NEW, { note: 'Synthetic: corrected.' })).resolutions['AC-1'].note, 'Synthetic: corrected.');
     // And the host itself refuses a confirmation older than the ask.
     assert.equal(validResolutions({ 'AC-1': { kind: 'confirmed', at: later, message_id: M1 } }, { items: DEVICE_ITEMS, context: first, asked: record(state.dir).asked_items }).size, 0);
+  } finally { state.cleanup(); }
+});
+// 2026-11-13 review: a device-routed ticket had no way back, and a one-line
+// owner note or a closed follow-up woke a stalled case with nothing new.
+test('a checked device confirmation returns a device-routed, parked ticket to the worker; a decision note or a closed follow-up never wakes stalled work', async () => {
+  const state = privateDir('ticket-reply-device-');
+  const db = database();
+  try {
+    await writeChecklist(state.dir, { version: 1, ticket_id: T, owner_ticket: false, items: DEVICE_ITEMS, non_asks: [], seen: [T, M1] });
+    const first = await loadQueuedContext(db.query, { id: T, mode: 'reply' }, state.dir);
+    await finishRun(db.query, state.dir, first, probeResult(), { stage3: probeStage3(), codeOutcome: 'none', requireStructured: true });
+    const later = new Date(Date.parse(record(state.dir).asked_items[0].at) + 60000).toISOString();
+    const query = async sql => (/WHERE m.id='([^']+)'::uuid/.exec(sql)?.[1] === M2
+      ? [{ id: M2, ticket_id: T, owner_id: OWNER, from_admin: false, verification_id: null, support_actor_id: null, created_at: later, author_id: OWNER, is_admin_reply: false, body: 'Synthetic: it works on my phone.' }] : []);
+    // A device run parked it and routed it to the device.
+    const { mkdirSync, readdirSync } = await import('node:fs');
+    mkdirSync(path.join(state.dir, 'failed'), { mode: 0o700 });
+    writeFileSync(path.join(state.dir, 'failed', `${T}.count`), '3\n', { mode: 0o600 });
+    writeFileSync(path.join(state.dir, 'failed', `${T}.device`), '', { mode: 0o600 });
+    await recordAttempt(state.dir, T, { run: { id: `${T.slice(0, 8)}-0123456789abcdef`, status: 'needs_device', finished_at: '2026-11-06T10:00:00Z' }, exit: 9 });
+    assert.equal((await readLedger(state.dir, T)).owner, 'device');
+    const lock = path.join(state.dir, 'agent.lock');
+    const resolved = await resolveItem(state.dir, T, 'AC-1', 'confirmed', { note: 'Synthetic: the reporter confirms it works.', messageId: M2, query, lock });
+    assert.deepEqual([resolved.retry_basis.kind, resolved.retry_basis.validated.message_id], ['device_confirmed', M2]);
+    const ledger = await readLedger(state.dir, T);
+    assert.deepEqual([ledger.owner, ledger.bases.length, ledger.basis_attempts], ['worker', 1, 0]);
+    assert.ok(readdirSync(path.join(state.dir, 'failed')).includes(`${T}.count.RB-1`), 'the park is lifted and kept');
+    assert.equal(record(state.dir).continuation.state, 'pending');
+    assert.equal(record(state.dir).retry_basis, undefined, 'the basis lives in the coordination record, not the case');
+    assert.deepEqual((await collectQueue(db.query, state.dir, { now: Date.now() + 2 * HOUR })).routed, undefined);
+  } finally { state.cleanup(); }
+});
+test('a decision note and a closed follow-up leave stalled work stalled', async () => {
+  const state = privateDir('ticket-reply-stalled-note-');
+  const db = database();
+  const items = [ITEMS[0], { ...ITEMS[1], kind: 'owner_decision' }];
+  try {
+    await writeChecklist(state.dir, { version: 1, ticket_id: T, owner_ticket: false, items, non_asks: [], seen: [T, M1] });
+    await loadQueuedContext(db.query, { id: T, mode: 'reply' }, state.dir);
+    writeFileSync(path.join(state.dir, `${T}.json`), JSON.stringify({ version: 1, target_id: T, owner_id: OWNER,
+      pending_follow_up: [{ work: 'Synthetic: owner reads the attachment', owner: 'support_owner', next_action: 'Synthetic.' }],
+      checklist_states: [{ id: 'AC-1', state: 'done' }, { id: 'AC-2', state: 'needs_owner' }],
+      continuation: { state: 'stalled', attempts: 3, due_at: new Date().toISOString(), last_attempt_at: new Date().toISOString() } }), { mode: 0o600 });
+    const lock = path.join(state.dir, 'agent.lock');
+    const decided = await resolveItem(state.dir, T, 'AC-2', 'decision', { note: 'Synthetic owner decision.', lock });
+    assert.equal(decided.continuation.state, 'stalled');
+    assert.match(decided.not_woken, /validated basis/);
+    assert.equal(record(state.dir).resolutions['AC-2'].kind, 'decision', 'the decision is still recorded');
+    const closed = await closeFollowUp(state.dir, T, 0, { note: 'Synthetic: read it.', lock });
+    assert.equal(closed.continuation.state, 'stalled');
   } finally { state.cleanup(); }
 });
 test('N7 and noted: attention.json says when the reporter wrote since; a case noted for the owner leaves the list until it changes', async () => {

@@ -95,16 +95,24 @@ what happened.
      `owner`, `last_failure` and `rejected_approaches`. Then (the command
      takes the ticket agent's lock itself and fails while a run holds it):
      `TICKET_RETRY_ADDRESSES='<one line: how this answers run <run id>>' node scripts/ticket-agent-context.mjs --retry <ticket id> commit <sha> "$HOME/Library/Application Support/CredentialDOMD/ticket-context"`
-     for a fix on `origin/main` that touches a file the failure names (and,
-     when it names `out_of_scope` files, one of those), or `message <message
-     id>` (with `TICKET_DATABASE_TOKEN=$(security find-generic-password -l "Supabase CLI" -w)`)
-     for a reporter's message that changes the evidence. The line must name
-     the failed run's id and say how it answers that failure; a commit or a
-     message by itself never qualifies, and you never retry on time alone. A
-     revised plan (`plan`) is approved only by the operator or the owner:
+     for a fix on `origin/main` (the commit that changed the file, not a
+     merge or a revert) that adds or changes a file the failure itself
+     implicates (its `missed_paths`, `failing_tests`, `out_of_scope` or
+     protected paths; one of the `out_of_scope` ones when it names any). The
+     line must name the failed run's id and say how it answers that failure;
+     you never retry on time alone. A reporter's message, or a failure that
+     implicates no file, is not yours to retry on: whether a message changes
+     the evidence, and a revised plan (`plan`), are the operator's or the
+     owner's call. Note the ticket for them under `## For the owner`. A plan:
      write it under `ticket-context/coordination/plans/<ticket8>-<name>.md`
      with an `Approach:` line, the failed run's id and how it differs from
-     each `RA-n`, and note it for the owner instead of retrying. Never rename
+     each `RA-n`, and leave it for them to approve. A ticket parked before
+     2026-11-13 has its old runs read into the record once with
+     `node scripts/ticket-agent-context.mjs --backfill <ticket id> "$HOME/Library/Application Support/CredentialDOMD/ticket-context" "$HOME/Library/Application Support/CredentialDOMD/ticket-work"`
+     (it takes the lock). A checked device confirmation (`--resolve-item …
+     confirmed`) returns a device-routed ticket to the worker by itself, and
+     a checked confirmation or applied data fix answers a stalled worker
+     ticket; an owner decision does not (it needs a plan). Never rename
      `failed/` files or edit a case file's `continuation` by hand. Record an
      approach the journal or a review rejected, once, so no run repeats it:
      `TICKET_APPROACH='<one line>' TICKET_APPROACH_SOURCE='<journal date or review>' node scripts/ticket-agent-context.mjs --reject-approach <ticket id> "$HOME/Library/Application Support/CredentialDOMD/ticket-context"`.
@@ -120,7 +128,7 @@ what happened.
      note it for the owner. `eric`: a protected stop; note what he must decide
      under `## For the owner`, once. `device`: the reporter's device check. A
      reporter writing since ("the reporter wrote after the last failed run")
-     is evidence to read, not a reason to retry by itself.
+     is evidence to read and note for the owner, not a reason to retry.
    - **Failing tickets** (HEALTH names "open tickets a ticket run failed on
      in the last day"). Read the last failed run (`ticket-work/runs/<id8>-*`:
      gates-*.json, review-*.json, HELD.txt, and the agent log). If the fix
@@ -128,8 +136,11 @@ what happened.
      public/ and landing/: the edge functions under supabase/, a migration,
      scripts/, a shared module copy, a deploy that did not run), make the fix
      yourself (step 4), deploy what it needs (`deploy-function.sh` for an
-     edge function), and note the commit in the journal; the ticket's next
-     run then finds it live and replies. If the worker could have fixed it
+     edge function), and note the commit in the journal. Check the ticket's
+     coordination record (`--coordination`): when it is routed to the
+     operator, parked or stalled, no run comes until you retry it on that
+     commit (`--retry … commit`, above); otherwise its next run finds the
+     fix live and replies. If the worker could have fixed it
      and only made a mistake, leave it to the next run.
    - **Tickets waiting on the owner's decision** (HEALTH names "open tickets
      waiting on the owner's decision"). An item no run can finish waits on a

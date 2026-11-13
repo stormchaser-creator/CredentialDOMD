@@ -659,18 +659,35 @@ The runner records every counted run (`--record-attempt`, from `ticket-agent.sh`
 host only routes away from the worker: device for `needs_device`, eric for a protected
 stop, operator for out-of-scope files, a failed release, or every basis used and failed.
 
-Nothing comes back by time. `--retry TICKET message|commit|plan REF STATE` is the only
-way back to the worker, under the agent lock, at most `MAX_BASES` (2) per ticket and one
-plan. `TICKET_RETRY_ADDRESSES` must name the failed run and say how the basis answers it;
-the host then checks the basis itself: a `message` must be the reporter's on this ticket
-and newer than the failure (worker-owned tickets only); a `commit` must be on
-`origin/main`, newer than the failure, not the ticket agent's own, and touch a file the
-failure names (one of the `out_of_scope` files when it names any; never for an `eric`
-stop); a `plan` (`coordination/plans/<ticket8>-<name>.md`, owner-only) is approved by the
-operator or the owner, never the supervisor, and must have an `Approach:` line, the
-failed run's id and every RA-n, plus an `Owner decision:` line for an `eric` stop. The
-accepted basis lifts the park (the count is kept as `failed/<id>.count.RB-n`) and gives
-the case fresh attempts. `--wake` is gone.
+Nothing comes back by time. `--retry TICKET message|commit|plan REF STATE` returns a
+ticket to the worker, under the agent lock, at most `MAX_BASES` (2) counted bases per
+ticket and one plan. `TICKET_RETRY_ADDRESSES` must name the failed run and say how the
+basis answers it; the host then checks the basis itself:
+
+- `message`: the reporter's, on this ticket, newer than the failure; worker-owned
+  tickets only; accepted from the operator or the owner, never the supervisor (whether
+  a message changes the evidence is a judgement the host cannot check).
+- `commit`: on `origin/main`, newer than the failure, not the ticket agent's own, not a
+  merge or a revert, and it adds or changes a file the failure itself implicates (its
+  missed paths, failing tests, protected or `out_of_scope` paths; one of the
+  `out_of_scope` ones when it names any). The files the refused run happened to edit do
+  not count. Never for an `eric` stop.
+- `plan` (`coordination/plans/<ticket8>-<name>.md`, owner-only): the operator's or the
+  owner's, never the supervisor's; an `Approach:` line, the failed run's id, every RA-n,
+  and an `Owner decision:` line for an `eric` stop.
+
+`--resolve-item` still records resolutions, but wakes a case only when it is not stalled,
+parked or routed. Two checked resolutions also act as a basis: a reporter's
+confirmation returns a `device` ticket to the worker (`device_confirmed`, not counted
+toward the bound), and a confirmation or an applied data fix answers a stalled or parked
+worker ticket (`resolution`, counted). An owner decision note never does; that takes a
+plan. `--close-follow-up` never wakes a blocked case. A stall, and a park with no failure
+on record, are recorded as failures (`recordStall`) that keep the previous failure's
+files. The accepted basis lifts the park (the count kept as `failed/<id>.count.RB-n`) and
+gives the case fresh attempts. `--wake` is gone. A recording failure on the host's side
+(`exit record`) routes to the operator and is never a rejected approach or a protected
+stop; a `support_owner` follow-up naming `supabase/`, `scripts/`, migrations or `.github/`
+files on a failed run routes to the operator.
 
 `--route TICKET operator|eric|device STATE` and `--reject-approach` only restrict;
 `--coordination TICKET STATE` prints the record; `--backfill TICKET STATE WORK` builds it
