@@ -83,3 +83,9 @@ test('state guides stay physician guides: each carries the one NP and PA line, o
     assert.match(html, /(?:This is a|These are) physician \(MD and DO\) guides?\./, file);
   }
 });
+
+test('the home page says "Log in", never "Sign in", and the link still goes to the app', async () => {
+  const output = renderPublicLaunch(await read('landing/index.html'), 'home');
+  assert.match(output, /Already a member\? <a href="\/app\/">Log in<\/a>/);
+  assert.doesNotMatch(visible(output), /Sign in\b/);
+});
