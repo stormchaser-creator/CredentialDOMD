@@ -47,8 +47,8 @@ begin
       or exists(select 1 from public.limited_founding_slots f
         where f.livemode and f.state='paid' and f.profile_id=p.id)),
     exists(select 1 from public.access_grants g
-      where g.profile_id=p.id and g.livemode and g.kind='lifetime' and g.revoked_at is null
-        and (g.ends_at is null or g.ends_at>now())),
+      where g.profile_id=p.id and g.livemode and g.kind='lifetime' and g.scope='credential'
+        and g.revoked_at is null and g.starts_at<=now() and (g.ends_at is null or g.ends_at>now())),
     (select max(b.ends_at) from public.limited_beta_grants b
       where b.profile_id=p.id and b.livemode and b.revoked_at is null),
     (s.profile_id is null and exists(select 1 from public.billing_checkout_attempts a
@@ -70,15 +70,22 @@ grant execute on function public.admin_account_memberships() to authenticated;
 
 create or replace function public.founding_slot_marks_profile()
 returns trigger language plpgsql security definer set search_path='' as $$
+declare prior_lock_timeout text := current_setting('lock_timeout');
 begin
   if new.livemode and new.state='paid' and new.profile_id is not null then
     begin
+      -- A lock wait must end in an error this block catches, never in a
+      -- statement-timeout cancel that would fail the payment. Restored below
+      -- so the rest of the payment transaction keeps its own setting.
+      perform set_config('lock_timeout','2s',true);
       perform set_config('credentialdomd.founding_assign','1',true);
       update public.profiles set is_founding_member=true
         where id=new.profile_id and is_founding_member is not true;
       perform set_config('credentialdomd.founding_assign','',true);
+      perform set_config('lock_timeout',prior_lock_timeout,true);
     exception when others then
       perform set_config('credentialdomd.founding_assign','',true);
+      perform set_config('lock_timeout',prior_lock_timeout,true);
       raise warning 'founding badge not set for profile %: %', new.profile_id, sqlerrm;
     end;
   end if;

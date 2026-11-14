@@ -1039,7 +1039,7 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
         Accounts ({shown.length}){hiddenCount > 0 && <button onClick={() => setShowTest(v => !v)} style={{ marginLeft: 8, fontSize: 11, border: "none", background: "transparent", color: T.accent, cursor: "pointer" }}>{showTest ? "hide" : "show"} {hiddenCount} empty account record{hiddenCount === 1 ? "" : "s"}</button>}
       </div>
       <div style={{ fontSize: 12, color: T.textMuted, margin: "0 0 8px", lineHeight: 1.5 }}>
-        Everyone here signed in with an emailed code. People who only asked for a state guide are on the Waitlist tab, not here.
+        Everyone here has signed in to the app. People who only asked for a state guide are on the Waitlist tab, not here.
         {groups && ` ${groups.paying.length} paying, ${groups.free.length} free access, ${groups.unpaid.length} signed in without paying${groups.closed.length ? `, ${groups.closed.length} closed` : ""}.`}
       </div>
       {memberships?.error && <div role="status" style={{ fontSize: 12, color: T.textMuted, margin: "0 0 8px" }}>Payment details could not be loaded, so accounts are not sorted by membership. Refresh to try again.</div>}
