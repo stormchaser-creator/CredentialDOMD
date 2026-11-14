@@ -24,7 +24,7 @@ test('About you is done for a PA and an NP; MBBS and blank stay pending and ask 
     const b = build(base(deg));
     assert.equal(b.byId.identity.status, 'pending', deg);
     assert.match(b.byId.identity.detail, /Still needed: your profession\./);
-    assert.match(b.byId.identity.why, /MD, DO, PA or NP/);
+    assert.match(b.byId.identity.why, /DO, MD, PA or NP/);
   }
 });
 
@@ -100,7 +100,7 @@ test('row labels never call a PA or NP a physician', () => {
   for (const deg of ['PA', 'NP']) {
     const b = build(base(deg));
     const text = b.tasks.map(t => [t.label, t.why, t.detail, t.cardLine, t.nextPhrase].join(' ')).join(' ');
-    assert.doesNotMatch(text, /medical school|medical license|MD or DO/i, deg);
+    assert.doesNotMatch(text, /medical school|medical license|MD or DO|DO or MD/i, deg);
   }
   assert.equal(build(base('NP')).byId.cme.label, 'CE for the current cycle');
   assert.equal(build(base('PA')).byId.lifeSupport.label, 'BLS, ACLS or PALS');

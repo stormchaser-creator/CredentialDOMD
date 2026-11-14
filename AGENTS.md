@@ -58,7 +58,7 @@ The user-facing product/company name is CredentialDOMD, with this exact capitali
 - A membership bought at $199 before the removal, if one exists, keeps renewing, settling and refunding against its own quote (`RETIRED_CREDENTIAL_PRICE_PHASES`, read only with `historical: true`).
 - Marketing site: while founder places remain it shows only the $99 Founder plan card. When `public/membership-offer.js` learns the founders are sold out it shows two cards, Credential $149 and Credential + Practice $245. With no usable answer it stays on the Founder card. Signup buttons say "Sign up today"; the header has "Log in" and "Sign up".
 - Founder countdown: the site shows "N of 100 founder spots left" from `founderSpotsLeft` in the public offer (migration `20261113130000`): 100 minus PAID founding places, never replenished by a refund or cancellation. Only that aggregate is public. The number is never printed, cached or guessed: with no confirmed answer it is hidden.
-- CredentialDOMD is for physicians (MD/DO), nurse practitioners and physician assistants. The state guides are physician-board guides; do not invent NP or PA board requirements.
+- CredentialDOMD is for physicians (DO/MD), nurse practitioners and physician assistants. The state guides are physician-board guides; do not invent NP or PA board requirements.
 
 ## Sign-in experience approved September 20, 2026
 
@@ -75,7 +75,7 @@ The user-facing product/company name is CredentialDOMD, with this exact capitali
 
 ## Dashboard CME guidance
 
-- An unanswered CME applicability question must identify the missing information and provide a direct action to review it. Missing MD/DO selection belongs in Profile & settings; conditional requirements belong with the affected state's CME details.
+- An unanswered CME applicability question must identify the missing information and provide a direct action to review it. Missing DO/MD selection belongs in Profile & settings; conditional requirements belong with the affected state's CME details.
 - Keep the tracked-standing ring's numeric deadline score visible. Explain its meaning and show unanswered questions separately. Do not change compliance calculations, presume an exemption, or treat a deadline score as proof that all CME requirements are complete.
 
 ## Support replies (2026-09-28)

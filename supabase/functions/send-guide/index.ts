@@ -125,7 +125,7 @@ function emailHtml(state: string, s: Guide) {
 
   if (cme) {
     let block = P(esc(s.cmeDetails || cme));
-    if (s.cmeSplit) block += P("This state counts MD and DO requirements separately. Check the set that applies to your license.");
+    if (s.cmeSplit) block += P("This state counts DO and MD requirements separately. Check the set that applies to your license.");
     if (s.cmeSource) {
       block += P(`Rule: ${esc(s.cmeSource)}${s.cmeSourceUrl ? `<br>${A(s.cmeSourceUrl)}` : ""}`);
     }
@@ -195,7 +195,7 @@ function emailText(state: string, s: Guide) {
   if (s.steps?.length) { rule(); L.push("RENEWING, STEP BY STEP", ""); s.steps.forEach((x, i) => L.push(`${i + 1}. ${x}`)); }
   if (cme) {
     rule(); L.push("CME REQUIRED", "", s.cmeDetails || cme);
-    if (s.cmeSplit) L.push("", "This state counts MD and DO requirements separately.");
+    if (s.cmeSplit) L.push("", "This state counts DO and MD requirements separately.");
     if (s.cmeSource) L.push("", `Rule: ${s.cmeSource}${s.cmeSourceUrl ? ` (${s.cmeSourceUrl})` : ""}`);
   }
   if (s.renewalFee || s.lateFee) {

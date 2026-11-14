@@ -24,7 +24,7 @@ import {
   EDUCATION_TYPES, EDUCATION_TYPES_PA, EDUCATION_TYPES_NP,
 } from "../constants/credentialTypes.js";
 
-// MD and DO prompts keep their exact text. A PA or NP is given their own
+// DO and MD prompts keep their exact text. A PA or NP is given their own
 // lists and hints; a member with no profession yet is given every
 // profession's lists, so a PA's licence is typed as one before the
 // profession review asks them to choose (DESIGN 1.3, 4.12).
@@ -40,7 +40,7 @@ const clinicianSentence = (d) => (d === "PA"
   ? "The clinician is a physician assistant (PA). Type an NCCPA certificate as \"Board Certification (NCCPA)\"; a state physician assistant, physician associate or physician's assistant license as \"State Physician Assistant License\"; a supervision, collaboration, delegation or practice agreement as \"Practice Agreement\". A PANRE-LA quarter is category \"NCCPA PANRE-LA (Category 1 Self-Assessment)\" at the credits stated (2 a quarter). A self-assessment or PI-CME certificate keeps its sponsor's category. Nursing-only contact hours are \"Category 2 CME\". For a certificate stating \"N credits including M pharmacology\", put N in hours and M in pharmacologyHours."
   : d === "NP"
     ? "The clinician is a nurse practitioner (NP). Type an AANPCB (also NPCB), ANCC, PNCB, NCC or AACN certificate as \"Board Certification (AANPCB)\" and so on by certifier; a multistate (compact) RN license as \"RN License (Multistate)\"; an APRN, CRNP, ARNP or nurse practitioner license or certificate as \"APRN License (NP)\"; a collaborative or supervisory agreement, protocol or standardized procedures as \"Practice Agreement\". For a CE certificate stating \"N contact hours including M pharmacology\", put N in hours and M in pharmacologyHours."
-    : "The clinician has not chosen a profession yet (MD, DO, PA or NP); classify from the document itself.");
+    : "The clinician has not chosen a profession yet (DO, MD, PA or NP); classify from the document itself.");
 
 // "cv" is a CLASSIFICATION only. A CV holds many records across many
 // sections and this pipeline returns one record for one section, so a cv

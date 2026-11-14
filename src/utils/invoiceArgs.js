@@ -29,7 +29,7 @@ export const balanceOf = (inv) => (inv?.writeOffAt ? 0 : Math.max(0, (parseFloat
 
 /**
  * "Jane Doe, DO", or a placeholder when Settings has no name: "Physician"
- * for an MD or DO, "Clinician" for a PA, an NP or a member with no
+ * for an DO or MD, "Clinician" for a PA, an NP or a member with no
  * profession chosen, since an invoice goes to a third party (DESIGN 1.3,
  * 7.2). A name typed with its degree already ("Jane Doe, DO") does not get
  * it twice. Both placeholders are outgoingText.js PLACEHOLDER_SENDERS, which
@@ -42,7 +42,7 @@ export const physicianLabel = (settings = {}) =>
  * What an invoice calls the member's work and the member, for the cover
  * letter (owner decision D-2): "physician assistant services", "nurse
  * practitioner services", and "clinical services" when no profession is
- * chosen, since the invoice goes to a third party. MD and DO add nothing, so
+ * chosen, since the invoice goes to a third party. DO and MD add nothing, so
  * their letters read exactly as before ("physician services").
  */
 export function invoiceProfessionFields(settings = {}) {
@@ -58,14 +58,14 @@ export function invoiceProfessionFields(settings = {}) {
  * phrase and noun. A send site spreads it in place of
  * `physician: physicianLabel(s)`, one line:
  *   ...invoiceSenderFields(s),
- * MD and DO get exactly { physician } as before.
+ * DO and MD get exactly { physician } as before.
  */
 export const invoiceSenderFields = (settings = {}) => ({ physician: physicianLabel(settings), ...invoiceProfessionFields(settings) });
 
 /**
  * The sender fields the read-only archive (ReadOnlyRecords.jsx) downloads a
  * saved invoice with. That path always printed the name as typed, with no
- * degree added ("Physician" with no name), so for an MD or DO it keeps doing
+ * degree added ("Physician" with no name), so for an DO or MD it keeps doing
  * exactly that: their archived PDFs and file names stay byte-identical. A
  * PA, an NP or a member with no profession chosen gets invoiceSenderFields.
  */

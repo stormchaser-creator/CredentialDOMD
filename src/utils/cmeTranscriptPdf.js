@@ -308,7 +308,7 @@ function transcriptFileName(scope, physician = {}, title = "CME Transcript") {
 }
 
 /**
- * What the transcript calls the member: "Physician" for MD and DO, as
+ * What the transcript calls the member: "Physician" for DO and MD, as
  * always; "Physician Assistant", "Nurse Practitioner", or "Clinician" when
  * no profession is chosen (a transcript goes to a board or an employer).
  */

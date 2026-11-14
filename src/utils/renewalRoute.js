@@ -1,7 +1,7 @@
 // Where a physician renews a licence, and what a licence card's one-line
 // renewal box (RenewalInfo.jsx) shows.
 //
-// The MD/DO route selection lives here once. Vera's renewal evidence
+// The DO/MD route selection lives here once. Vera's renewal evidence
 // (assistantEvidence.js) and the card both read it, so the card can no longer
 // send a DO to an MD-only renewal page that Vera already knew to avoid
 // (Arizona's md-renewal-application, West Virginia's /practitioners/MD/renew/).
@@ -130,7 +130,7 @@ export function researchedLabel(recorded) {
  */
 export function renewalView(item, degree, { alertable = true } = {}) {
   if (!item || isInactive(item)) return null;
-  // MD and DO: today's path, byte for byte. Everyone else: a PA, RN or APRN
+  // DO and MD: today's path, byte for byte. Everyone else: a PA, RN or APRN
   // licence gets its own board's box (board name and link, the cycle only
   // when verified, no fee, no portal). A PA or NP member's DEA keeps the DEA
   // box; any other record of theirs, including one filed as a medical

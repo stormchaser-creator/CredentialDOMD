@@ -295,11 +295,11 @@ export const EVIDENCE_INSTRUCTIONS = `SOURCE AND ANSWER CONTRACT (CME, renewal, 
 // The blank member's addition: no rule is sent, so a rule question gets the
 // one-tap profession choice instead of an answer.
 const BLANK_PROFESSION_RULE = `
-8. The member has not chosen a profession yet (MD, DO, PA or NP), so the app sends no licence, CME, CE or certification rule for them (referenceEvidence.professionStatus is not_chosen). Answer what does not depend on a licence rule: how the app works, what their saved records and documents say, and general steps. When an answer depends on a rule (required hours, topics or categories, renewal cycles, deadlines, fees, boards or certification requirements), give no rule, figure, board or link from memory or from another profession: say in one sentence that the answer depends on the license they hold, and add "needsProfession": true at the top level of your JSON. The app then shows the one-tap choice of MD, DO, PA or NP and answers the question once they choose.`;
+8. The member has not chosen a profession yet (DO, MD, PA or NP), so the app sends no licence, CME, CE or certification rule for them (referenceEvidence.professionStatus is not_chosen). Answer what does not depend on a licence rule: how the app works, what their saved records and documents say, and general steps. When an answer depends on a rule (required hours, topics or categories, renewal cycles, deadlines, fees, boards or certification requirements), give no rule, figure, board or link from memory or from another profession: say in one sentence that the answer depends on the license they hold, and add "needsProfession": true at the top level of your JSON. The app then shows the one-tap choice of DO, MD, PA or NP and answers the question once they choose.`;
 
 // The PA and NP variant of the contract: rule 4 asks MD vs DO, which a PA or
 // NP is never asked; unverified items are reported as such with the board
-// link. MD and DO members get EVIDENCE_INSTRUCTIONS unchanged; a member with
+// link. DO and MD members get EVIDENCE_INSTRUCTIONS unchanged; a member with
 // no profession gets it with rule 8 added.
 export function evidenceInstructionsFor(degree) {
   if (!isKnownDegree(degree)) return EVIDENCE_INSTRUCTIONS + BLANK_PROFESSION_RULE;
@@ -307,5 +307,5 @@ export function evidenceInstructionsFor(degree) {
   return EVIDENCE_INSTRUCTIONS.replace(/^4\. Ask MD vs DO when degreeSelectionNeeded; show both routes if useful\. /m, '4. ')
     .replace('applicable jurisdiction/MD-or-DO and counting cycle', 'applicable jurisdiction, license and counting cycle')
     + `
-8. The member is a ${degree === 'PA' ? 'physician assistant' : 'nurse practitioner'}. For PA and NP rules, items marked not yet verified (notYetVerified, rulesVerified false, status unverified, savedHours null) are not yet verified: say so and give the board link; never supply a number from memory or from physician rules. Physician (MD or DO) CME rules never apply to this member. National certification rules (certificationRules) are the certifier's own and are separate from state licence rules.`;
+8. The member is a ${degree === 'PA' ? 'physician assistant' : 'nurse practitioner'}. For PA and NP rules, items marked not yet verified (notYetVerified, rulesVerified false, status unverified, savedHours null) are not yet verified: say so and give the board link; never supply a number from memory or from physician rules. Physician (DO or MD) CME rules never apply to this member. National certification rules (certificationRules) are the certifier's own and are separate from state licence rules.`;
 }

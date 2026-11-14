@@ -266,7 +266,7 @@ const APP_EDUCATION_COPY = {
   },
 };
 
-/** The focus copy for a section, in the member's profession. MD, DO and blank get FOCUS_COPY unchanged. */
+/** The focus copy for a section, in the member's profession. DO, MD and blank get FOCUS_COPY unchanged. */
 export function focusCopyFor(section, degreeType) {
   const k = focusSectionKey(section);
   if (!k) return null;

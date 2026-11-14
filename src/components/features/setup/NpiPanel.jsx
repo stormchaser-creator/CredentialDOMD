@@ -74,7 +74,7 @@ export default function NpiPanel({ onImported, dense = false }) {
       catch { setMsg(APP_RULES_UNAVAILABLE); return; }
     }
     const patch = { npi: clean };
-    // Fills a blank profession only: MD or DO from the credential as before,
+    // Fills a blank profession only: DO or MD from the credential as before,
     // PA or NP from the NUCC taxonomy or the credential (professions.js).
     const { degree } = degreeAfterNppes(saved.degreeType, { credential: r.credential, taxonomies: r.allTaxonomies }, { site: "setup" });
     if (degree) patch.degreeType = degree;

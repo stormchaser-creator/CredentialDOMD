@@ -1,4 +1,4 @@
-// The one-tap profession choice: "Which license do you hold?" MD, DO, PA or
+// The one-tap profession choice: "Which license do you hold?" DO, MD, PA or
 // NP. Home's empty card asks it (GetStartedCard), and so do the CV reader and
 // Vera, inline, before they read a CV or answer a member who has not chosen:
 // the licence types, rules and boards all follow the profession. The caller
@@ -7,7 +7,7 @@
 import { useEffect, useRef, useState } from "react";
 import { afterAppRules, degreeNeedsAppRules, preloadAppRules, APP_RULES_UNAVAILABLE } from "../../utils/appRules.js";
 
-export const PROFESSION_CHOICES = Object.freeze(["MD", "DO", "PA", "NP"]);
+export const PROFESSION_CHOICES = Object.freeze(["DO", "MD", "PA", "NP"]);
 
 // A finger on PA or NP starts loading their rule data (utils/appRules.js), so
 // it is usually in by the time the choice is saved.

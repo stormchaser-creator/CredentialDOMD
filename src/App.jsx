@@ -935,7 +935,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
     const s = data.settings;
     const gaps = [];
     if (!s.name) gaps.push("your name");
-    if (!s.degreeType) gaps.push("profession (MD, DO, PA or NP, which decides the rules that apply)");
+    if (!s.degreeType) gaps.push("profession (DO, MD, PA or NP, which decides the rules that apply)");
     if (!s.primaryState) gaps.push("primary state");
     // A PA's or NP's certification is asked in setup, never a board specialty.
     if (!isAdvancedPractice(s.degreeType) && !(s.specialties || []).length) gaps.push("board specialty (drives your board's CME requirements)");
@@ -1013,7 +1013,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   const statesMissingLicense = useMemo(() => {
     // A historical or superseded record says nothing about a state today.
     const current = (data.licenses || []).filter(l => !isInactive(l));
-    // The profession's practice licence (a medical licence for MD, DO and
+    // The profession's practice licence (a medical licence for DO, MD and
     // blank, as before; a PA licence; an APRN or RN licence).
     const licensed = new Set(current.filter(l => l.state && isPracticeLicense(l, data.settings.degreeType)).map(l => l.state));
     const out = new Set();
@@ -2098,7 +2098,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
     ));
     // A PA or NP: records filed under the other profession's types, and
     // certification records whose role is not answered yet (DESIGN 4.2,
-    // decision 16). An MD or DO holding a PA or NP typed record sees the
+    // decision 16). An DO or MD holding a PA or NP typed record sees the
     // review too.
     if (professionMismatches(data).length) licenseWarnings.push(<ProfessionReviewCard key="profession-review" />);
     for (const c of certRoleQuestions) {
@@ -2675,7 +2675,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
           </div>
         )}
         <CrudSection title="Licenses" sectionKey="licenses" favoritable {...crudTarget("licenses")} deskDefaultSort={{ key: "expirationDate", dir: "asc" }} deskColumns={licenseDeskColumns(T, reminderLeadDays(data.settings.reminderLeadDays))} filterTabs={[
-          // MD and DO keep "Medical Licenses"; a PA, an NP and a member with
+          // DO and MD keep "Medical Licenses"; a PA, an NP and a member with
           // no profession yet get "State Licenses" (credentialForms.js).
           licenseTypeTab(data.settings.degreeType),
           { key: "dea", label: "DEA / CSR", match: i => /dea|controlled substance/i.test(i.type || "") },
@@ -2787,7 +2787,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
       // relationship; peer_references.relationship is NOT NULL, so that
       // reference was refused whole and lived on one device.
       return (<>
-        <CrudSection title="Peer References" sectionKey="peerReferences" favoritable {...crudTarget("peerReferences")} items={data.peerReferences || []} {...crud("peerReferences")} onShare={openShare} onShareMany={shareManyReferences} addHeader={<ExistingReferences items={data.peerReferences || []} />} emptyIcon={"\ud83d\udc65"} emptyTitle="No references" emptySub="Store peer references needed for credentialing applications." contactImport fields={[{ key: "name", label: "Full Name", placeholder: "e.g. Jane Smith, MD" }, { key: "degree", label: "Degree/Credential", placeholder: "MD, DO, etc." }, { key: "specialty", label: "Specialty" }, { key: "institution", label: "Institution/Hospital" }, { key: "relationship", label: "Relationship", type: "select", options: REFERENCE_RELATIONSHIPS, required: true }, { key: "email", label: "Email" }, { key: "phone", label: "Phone" }, { key: "knownSince", label: "Known Since (month & year)", type: "month" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => <PeerNotify peer={item} />} />
+        <CrudSection title="Peer References" sectionKey="peerReferences" favoritable {...crudTarget("peerReferences")} items={data.peerReferences || []} {...crud("peerReferences")} onShare={openShare} onShareMany={shareManyReferences} addHeader={<ExistingReferences items={data.peerReferences || []} />} emptyIcon={"\ud83d\udc65"} emptyTitle="No references" emptySub="Store peer references needed for credentialing applications." contactImport fields={[{ key: "name", label: "Full Name", placeholder: "e.g. Jane Smith, MD" }, { key: "degree", label: "Degree/Credential", placeholder: "DO, MD, etc." }, { key: "specialty", label: "Specialty" }, { key: "institution", label: "Institution/Hospital" }, { key: "relationship", label: "Relationship", type: "select", options: REFERENCE_RELATIONSHIPS, required: true }, { key: "email", label: "Email" }, { key: "phone", label: "Phone" }, { key: "knownSince", label: "Known Since (month & year)", type: "month" }, { key: "notes", label: "Notes", type: "textarea" }]} renderExtra={item => <PeerNotify peer={item} />} />
       </>);
     }
     if (sub === "malpracticeHistory") {

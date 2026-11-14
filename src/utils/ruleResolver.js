@@ -10,7 +10,7 @@
 // `rules` is injectable so the engine is testable with synthetic rule data.
 //
 // The PA and NP rule data (about 470 KB of the generated modules) is not in
-// the app's entry bundle: every MD and DO downloaded and parsed it at launch
+// the app's entry bundle: every DO and MD downloaded and parsed it at launch
 // and never read it (goal4, 2026-10-02). utils/appRules.js loads it as its own
 // chunk for a member who needs it and installs it here (installAppRules); the
 // app shows its loading screen until it is in, so a rule card never reads

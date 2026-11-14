@@ -86,7 +86,7 @@ test('home shows founding policy before sign-in and its offer buttons lead to pu
     assert.doesNotMatch(html, /Review membership offers|Check membership offers/);
   }
   assert.match(hero, /Founder plan: \$99\/year, everything included/);
-  assert.match(hero, /For MDs, DOs, NPs and PAs/);
+  assert.match(hero, /<span class="eyebrow eyebrow-plain">For DOs, MDs, NPs and PAs · /);
   assert.match(hero, /locked for life while membership remains active/);
   assert.match(hero, /confirmed before payment/);
   const plans = output.slice(output.indexOf('<section id="planned-pricing"'), output.indexOf('<!-- ============ GUARANTEE'));
@@ -116,7 +116,7 @@ test('home signup and team FAQs use current offers in visible answers and struct
   const faq = jsonLd(output).find(item => item['@type'] === 'FAQPage');
   assert.equal(faq.mainEntity.length, 3);
   const audience = faq.mainEntity.find(item => item.name === 'Is CredentialDOMD for NPs and PAs?').acceptedAnswer.text;
-  assert.match(audience, /^Yes\. CredentialDOMD is for physicians \(MD and DO\), nurse practitioners and physician assistants\./);
+  assert.match(audience, /^Yes\. CredentialDOMD is for physicians \(DO and MD\), nurse practitioners and physician assistants\./);
   assert.match(audience, /NP and PA requirements differ by board\.$/);
   // The founding offer sentences sit in spans membership-offer.js repaints
   // for the live phase (BILL-004); the words are the JSON-LD's.

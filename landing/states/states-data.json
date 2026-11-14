@@ -21,9 +21,9 @@
       "cmeSplit": false,
       "cmeSource": "Ala. Admin. Code r. 540-X-14-.02; r. 540-X-4-.09(8) (controlled substance CME)",
       "cmeSourceUrl": "https://www.albme.gov/resources/licensees/continuing-medical-education/licensure-cme-requirement",
-      "renewalFee": "$300 (full MD/DO license, annual renewal). ACSC (Alabama Controlled Substances Certificate) renewal is a separate $150 if held.",
+      "renewalFee": "$300 (full DO/MD license, annual renewal). ACSC (Alabama Controlled Substances Certificate) renewal is a separate $150 if held.",
       "lateFee": "$100, applied to renewals submitted January 1 through January 31 (Ala. Admin. Code r. 545-X-2-.03; also stated in the Board's Medical Digest, Fall 2020)",
-      "graceOrLapse": "Grace period January 1-31 for full MD/DO licenses only, with the $100 late fee; the license remains in Active status (authorized to practice) until midnight January 31. If not renewed within 31 days after due, the license automatically becomes Inactive (r. 545-X-2-.03(6)). Reinstatement requires a paper application to the Medical Licensure Commission with all past-due renewal fees (up to two years) plus $250 (per r. 545-X-2-.03(7); the Board's reinstatement letter states $550 if expired at the most recent Dec. 31, $850 if expired earlier), a $65 criminal background check with two FBI fingerprint cards, 25 AMA PRA Category 1 CME credits earned in the previous 12 months, and proof of citizenship/lawful presence. Physicians inactive two or more years must enter a reentry agreement with the Board. Incomplete reinstatement applications expire six months from receipt. The ACSC has NO grace period; it expires December 31 and requires reissue if lapsed.",
+      "graceOrLapse": "Grace period January 1-31 for full DO/MD licenses only, with the $100 late fee; the license remains in Active status (authorized to practice) until midnight January 31. If not renewed within 31 days after due, the license automatically becomes Inactive (r. 545-X-2-.03(6)). Reinstatement requires a paper application to the Medical Licensure Commission with all past-due renewal fees (up to two years) plus $250 (per r. 545-X-2-.03(7); the Board's reinstatement letter states $550 if expired at the most recent Dec. 31, $850 if expired earlier), a $65 criminal background check with two FBI fingerprint cards, 25 AMA PRA Category 1 CME credits earned in the previous 12 months, and proof of citizenship/lawful presence. Physicians inactive two or more years must enter a reentry agreement with the Board. Incomplete reinstatement applications expire six months from receipt. The ACSC has NO grace period; it expires December 31 and requires reissue if lapsed.",
       "processingTime": null,
       "steps": [
         "Complete your CME for the cycle (25 hours) (see details below)",
@@ -42,7 +42,7 @@
       "faqs": [
         {
           "question": "When does my Alabama medical license expire and when can I renew?",
-          "answer": "Every MD/DO license expires December 31 each year, regardless of issue date. The renewal window opens October 1 in the Licensee Gateway (dashboard.albme.gov) and runs through December 31. Reminder emails go to your address of record starting in October."
+          "answer": "Every DO/MD license expires December 31 each year, regardless of issue date. The renewal window opens October 1 in the Licensee Gateway (dashboard.albme.gov) and runs through December 31. Reminder emails go to your address of record starting in October."
         },
         {
           "question": "What does renewal cost?",
@@ -50,7 +50,7 @@
         },
         {
           "question": "What happens if I miss December 31?",
-          "answer": "Full MD/DO licenses get a grace period from January 1 to January 31 with a $100 late fee, and the license stays in Active status until midnight January 31. The ACSC gets no grace period: you cannot write controlled substances after December 31 until it is reissued."
+          "answer": "Full DO/MD licenses get a grace period from January 1 to January 31 with a $100 late fee, and the license stays in Active status until midnight January 31. The ACSC gets no grace period: you cannot write controlled substances after December 31 until it is reissued."
         },
         {
           "question": "What if I miss the January 31 grace deadline?",
@@ -195,7 +195,7 @@
       "cmeSplit": false,
       "cmeSource": "Alaska Admin. Code tit. 12, § 40.200",
       "cmeSourceUrl": "https://www.commerce.alaska.gov/web/portals/5/pub/med0077.pdf",
-      "renewalFee": "$350 (active MD or DO, full-term biennial renewal, or lapsed less than 1 year). $175 prorated if the license was first issued in the second year of the cycle. Inactive status: $200 full-term or $100 prorated. Retired status: $150 one time.",
+      "renewalFee": "$350 (active DO or MD, full-term biennial renewal, or lapsed less than 1 year). $175 prorated if the license was first issued in the second year of the cycle. Inactive status: $200 full-term or $100 prorated. Retired status: $150 one time.",
       "lateFee": "None published. Alaska has no separate late-renewal penalty fee; a physician lapsed less than 1 year pays the same $350 biennial renewal fee but must add FSMB clearance if lapsed at least 60 days. The real penalty is the lapse itself, since there is no grace period.",
       "graceOrLapse": "No grace period. The license lapses after December 31 and it is illegal to practice with a lapsed license from day one. Lapsed at least 60 days but under 1 year: renewal application, $350 fee, CME proof, plus clearance from FSMB sent directly to the division (12 AAC 40.025(a)). Lapsed 1 to 5 years: Reinstatement of Medical License Application (form 08-4974), CME proof, FSMB clearance, DEA clearance sent directly by DEA, license verifications from every state ever licensed, and hospital privilege verifications for the past 5 years (12 AAC 40.025(b)). Lapsed 5 years or more: considered expired and may not be reinstated; a new license application is required. A separate 30-day grace period can be requested on the renewal form solely for completing unfinished CME.",
       "processingTime": "4 to 6 weeks for a correct and complete renewal application (per form 08-0077); once processed, the license is printable via the MY LICENSE portal",
@@ -221,7 +221,7 @@
         },
         {
           "question": "How much does renewal cost?",
-          "answer": "$350 for a full-term active biennial renewal (MD and DO use the same form and fee). If your license was first issued in the second year of the cycle, the renewal fee is prorated to $175. Inactive status renewal is $200 (or $100 prorated), and converting to retired status is a one-time $150."
+          "answer": "$350 for a full-term active biennial renewal (DO and MD use the same form and fee). If your license was first issued in the second year of the cycle, the renewal fee is prorated to $175. Inactive status renewal is $200 (or $100 prorated), and converting to retired status is a one-time $150."
         },
         {
           "question": "Can I renew online?",
@@ -341,7 +341,7 @@
       "portalUrl": "https://azmd.gov/Licensure/Licensure/md-renewal-application",
       "doBoardName": "Arizona Board of Osteopathic Examiners in Medicine and Surgery",
       "doBoardUrl": "https://azdo.gov",
-      "renewalCycle": "Biennial (2 years) for both MD and DO",
+      "renewalCycle": "Biennial (2 years) for both DO and MD",
       "renewalAnchor": "MD: every other year on or before the licensee's birthday (A.R.S. 32-1430(A); the on-year depends on your license record, check your profile at azmd.gov Doctor Search). DO: December 31 of either even-numbered or odd-numbered years depending on the licensee's assigned renew-by date; the DO renewal portal opens on or about October 1.",
       "renewalMonth": "October",
       "cmeHours": 40,
@@ -361,7 +361,7 @@
         "Submit and save your confirmation"
       ],
       "pitfalls": [
-        "MD and DO run on completely different clocks in Arizona. MDs renew on or before their birthday every other year; DOs renew by December 31 of their assigned even or odd year. A dual-boarded practice manager who assumes one deadline will miss the other.",
+        "DO and MD run on completely different clocks in Arizona. MDs renew on or before their birthday every other year; DOs renew by December 31 of their assigned even or odd year. A dual-boarded practice manager who assumes one deadline will miss the other.",
         "An expired Arizona DO license has no reinstatement path at all. After May 1 the board requires a full new-physician application, quotes up to 6 months to process, and states there is no guarantee of relicensure. The MD board likewise requires reapplication once the license auto-expires 4 months after the birthday.",
         "DO renewal is online only: no paper form exists, checks are not accepted, and credit card payments are not taken by phone. The DO portal takes Visa, MasterCard and Discover; the MD online renewal takes Visa, MasterCard and AMEX (no Discover). Bring the right card for the right board.",
         "Any Arizona MD with a DEA registration (or intending to get one) must register with the Controlled Substances Prescription Monitoring Program (CSPMP) under A.R.S. 36-2606; the board warns failure to register may result in Board action.",
@@ -488,8 +488,8 @@
       "cmeSplit": false,
       "cmeSource": "ASMB Rule 17 (CME) and Rule 2 (prescriber education), armedicalboard.org/professionals/pdf/mpa.pdf",
       "cmeSourceUrl": "https://www.armedicalboard.org/professionals/pdf/mpa.pdf",
-      "renewalFee": "$11 (MD/DO annual renewal) under the Act 114 of 2023 fee reduction, which the board's fee schedule says runs July 1, 2023 through June 30, 2027 ($50 late fee). Statutory default is $70 per year under A.C.A. 17-95-411(a)(4); the reduction may or may not continue. Waived for active-duty military.",
-      "lateFee": "$50 late fee to reinstate an expired MD/DO license (fee schedule and MD application packet agree)",
+      "renewalFee": "$11 (DO/MD annual renewal) under the Act 114 of 2023 fee reduction, which the board's fee schedule says runs July 1, 2023 through June 30, 2027 ($50 late fee). Statutory default is $70 per year under A.C.A. 17-95-411(a)(4); the reduction may or may not continue. Waived for active-duty military.",
+      "lateFee": "$50 late fee to reinstate an expired DO/MD license (fee schedule and MD application packet agree)",
       "graceOrLapse": "No grace period. Failure to renew before midnight on the last day of the birth month causes the license to automatically expire, and practicing on a lapsed license is illegal. Reinstatement requires the renewal plus the $50 late fee. If the license has lapsed 5 or more consecutive years, the physician must reapply completely as a new applicant (the board may reuse some original file verifications but does not guarantee it); A.C.A. 17-1-107 requires reduced reinstatement requirements for previously licensed practitioners in good standing.",
       "processingTime": null,
       "steps": [
@@ -518,7 +518,7 @@
         },
         {
           "question": "How much does renewal cost?",
-          "answer": "The posted fee schedule lists $11 for MD/DO annual renewal, a reduced amount under Act 114 of 2023 stated to be in effect 7/1/2023 through 6/30/2027. The statutory annual fee under A.C.A. 17-95-411 is $70, which is also the cap; the fee is waived for active-duty military members."
+          "answer": "The posted fee schedule lists $11 for DO/MD annual renewal, a reduced amount under Act 114 of 2023 stated to be in effect 7/1/2023 through 6/30/2027. The statutory annual fee under A.C.A. 17-95-411 is $70, which is also the cap; the fee is waived for active-duty military members."
         },
         {
           "question": "Can I renew for more than one year at a time?",
@@ -540,11 +540,11 @@
         },
         {
           "url": "https://armedicalboard.adh.arkansas.gov/Professionals/pdf/Fees.pdf",
-          "what": "Official ASMB fee schedule PDF: MD/DO renewal $11, $50 late fee, Act 114 of 2023 reduction effective 7/1/2023 to 6/30/2027, misc fees"
+          "what": "Official ASMB fee schedule PDF: DO/MD renewal $11, $50 late fee, Act 114 of 2023 reduction effective 7/1/2023 to 6/30/2027, misc fees"
         },
         {
           "url": "https://armedicalboard.adh.arkansas.gov/Professionals/pdf/MD_AppPack.pdf",
-          "what": "MD/DO application packet (Rev 4/15/2026): exact renewal language (annual, last day of birth month, no grace period, email reminders at 60/45/30 days, auto-expiration, $50 late fee, illegal to practice on lapsed license)"
+          "what": "DO/MD application packet (Rev 4/15/2026): exact renewal language (annual, last day of birth month, no grace period, email reminders at 60/45/30 days, auto-expiration, $50 late fee, illegal to practice on lapsed license)"
         },
         {
           "url": "https://armedicalboard.adh.arkansas.gov/faq.aspx?type=4",
@@ -857,7 +857,7 @@
         },
         {
           "question": "I am a DO. Do I renew through a different board?",
-          "answer": "No. Colorado has a single Colorado Medical Board that licenses and renews both MDs and DOs through the same DPO Online Services portal on the same April 30 odd-year schedule. There is no separate osteopathic board in Colorado."
+          "answer": "No. Colorado has a single Colorado Medical Board that licenses and renews both DOs and MDs through the same DPO Online Services portal on the same April 30 odd-year schedule. There is no separate osteopathic board in Colorado."
         },
         {
           "question": "Do I need malpractice insurance to renew or reinstate?",
@@ -956,7 +956,7 @@
       "cmeSplit": false,
       "cmeSource": "Conn. Gen. Stat. § 20-10b",
       "cmeSourceUrl": "https://portal.ct.gov/dph/practitioner-licensing--investigations/physician/continuing-medical-education",
-      "renewalFee": "$575 per year (Physician/Surgeon, MD or DO). Statutory composition under CGS 19a-88(b): the class I professional services fee plus $5, plus an additional $5 for medicine/surgery licensees. DPH's Physician Licensure page lists the renewal fee as $575.00. Paid online by credit card or electronic funds transfer.",
+      "renewalFee": "$575 per year (Physician/Surgeon, DO or MD). Statutory composition under CGS 19a-88(b): the class I professional services fee plus $5, plus an additional $5 for medicine/surgery licensees. DPH's Physician Licensure page lists the renewal fee as $575.00. Paid online by credit card or electronic funds transfer.",
       "lateFee": "Neither the DPH renewal pages nor CGS 19a-88 publish a late fee. During the 90-day grace period the license is renewed at the normal $575 fee; after that the license is void and the $565 reinstatement fee applies instead.",
       "graceOrLapse": "90-day grace period after expiration during which the physician \"may continue to practice and renew the license\" (DPH renewal information page; CGS 19a-88(f)). On the 91st day the license becomes void and the physician must apply for reinstatement: online-only application, $565 reinstatement fee, verification of 25 CME hours completed within the one year immediately preceding application, source-submitted verification of most recent clinical employment and of all out-of-state licenses, current CV; applicants out of active clinical practice longer than 6 months are reviewed by the Connecticut Medical Examining Board. There is no inactive status option.",
       "processingTime": "A renewal or reinstatement processing time is not specified in this guide. Online renewals process through eLicense; no stated timeline.",
@@ -981,7 +981,7 @@
         },
         {
           "question": "How much does renewal cost and how do I pay?",
-          "answer": "$575 per year for a Physician/Surgeon license (MD or DO). Online renewal is mandatory for physicians through eLicense (www.elicense.ct.gov), paid by credit card or electronic funds transfer; DPH notifies physicians of renewal by email only."
+          "answer": "$575 per year for a Physician/Surgeon license (DO or MD). Online renewal is mandatory for physicians through eLicense (www.elicense.ct.gov), paid by credit card or electronic funds transfer; DPH notifies physicians of renewal by email only."
         },
         {
           "question": "What happens if I miss my renewal date?",
@@ -1133,7 +1133,7 @@
       "faqs": [
         {
           "question": "When does my Delaware medical license expire?",
-          "answer": "All Delaware physician (MD and DO) licenses expire on March 31 of odd-numbered years; the current cycle ends March 31, 2027. A renewal notice is emailed to the address on record a few months before expiration."
+          "answer": "All Delaware physician (DO and MD) licenses expire on March 31 of odd-numbered years; the current cycle ends March 31, 2027. A renewal notice is emailed to the address on record a few months before expiration."
         },
         {
           "question": "How do I renew?",
@@ -1163,7 +1163,7 @@
         },
         {
           "url": "https://dpr.delaware.gov/boards/medicalpractice/fees/",
-          "what": "Fee schedule: renewal fee amount disclosed only at time of renewal, late fee is 50% of renewal fee, MD/DO application fee $440, DELPROS-only payment, fees non-refundable"
+          "what": "Fee schedule: renewal fee amount disclosed only at time of renewal, late fee is 50% of renewal fee, DO/MD application fee $440, DELPROS-only payment, fees non-refundable"
         },
         {
           "url": "https://dpr.delaware.gov/boards/medicalpractice/physician-m-d-or-d-o-reapplication/",
@@ -1171,7 +1171,7 @@
         },
         {
           "url": "https://dpr.delaware.gov/boards/medicalpractice/",
-          "what": "Board name, contact info, confirmation the board licenses both MD and DO"
+          "what": "Board name, contact info, confirmation the board licenses both DO and MD"
         }
       ],
       "verified": "2026-11-13 (partial)",
@@ -1265,7 +1265,7 @@
       "cmeSplit": false,
       "cmeSource": "D.C. Mun. Regs. tit.17, § 4607.4",
       "cmeSourceUrl": "https://dchealth.dc.gov/bomed",
-      "renewalFee": "$500 (MD/DO renewal license fee for the 2-year term, per 17 DCMR 3500.1, Medical Doctors: \"License (original, renewal, temporary, renewal, or reinstated) - By endorsement, reciprocity, renewal, waiver... $500.00\"). A $50 criminal background check fee also appears in the same schedule and the Board notes CBC review is part of renewal processing.",
+      "renewalFee": "$500 (DO/MD renewal license fee for the 2-year term, per 17 DCMR 3500.1, Medical Doctors: \"License (original, renewal, temporary, renewal, or reinstated) - By endorsement, reciprocity, renewal, waiver... $500.00\"). A $50 criminal background check fee also appears in the same schedule and the Board notes CBC review is part of renewal processing.",
       "lateFee": "$85 (17 DCMR 3500.1, Medical Doctors, \"Late Renewal Fee $85.00\")",
       "graceOrLapse": "No true grace period for practice. A late renewal fee ($85) exists in the fee regulation, implying a late-renewal window. Per the Board's current renewal notice: licensees who submitted the renewal application before the expiration date may continue to work while it is pending with status \"Renewal pending / Authorized to work\"; those who did not renew show \"Expired - renewal eligible\" and may not work (for the current cycle, not beyond September 1, 2026, without an active license). A fully lapsed license requires reinstatement: 17 DCMR 3500.1 lists an MD reinstatement application fee of $305 (by endorsement/reciprocity/waiver path) plus the $500 license fee, and the Board lists a Reinstatement Application Checklist on its Physician Licensing page.",
       "processingTime": "No fixed published timeline. Board renewal notice (August 2026): \"the issuance of the renewed license is taking longer than expected\" due to volume and required review of criminal background checks and disciplinary history; timely filers keep working under \"Renewal pending / Authorized to work\" status.",
@@ -1291,7 +1291,7 @@
         },
         {
           "question": "How much does renewal cost?",
-          "answer": "The renewal license fee for an MD or DO is $500 for the 2-year term under 17 DCMR 3500.1 (amended effective May 17, 2024). The same regulation lists an $85 late renewal fee and a $50 criminal background check fee. The Board's fee schedule web page does not print amounts; the regulation and the application in the portal control."
+          "answer": "The renewal license fee for an DO or MD is $500 for the 2-year term under 17 DCMR 3500.1 (amended effective May 17, 2024). The same regulation lists an $85 late renewal fee and a $50 criminal background check fee. The Board's fee schedule web page does not print amounts; the regulation and the application in the portal control."
         },
         {
           "question": "How do I renew?",
@@ -1407,7 +1407,7 @@
       "portalUrl": "https://mqa-vo.doh.state.fl.us/datamart/voservicesportal",
       "doBoardName": "Florida Board of Osteopathic Medicine",
       "doBoardUrl": "https://floridasosteopathicmedicine.gov/",
-      "renewalCycle": "Biennial (2 years) for both MD and DO",
+      "renewalCycle": "Biennial (2 years) for both DO and MD",
       "renewalAnchor": "MD: fixed date, January 31. The board splits MD licensees into two groups: \"licenses in Group 1 expire on January 31 in even-numbered years and those in Group 2 expire on January 31 in odd-numbered years\" (your group is set by the board, not by your birth date or license anniversary; check your printed expiration date). DO: fixed date, the licensure biennial period concludes on March 31 of even-numbered years (all DOs renew together). Online renewal opens no later than 90 days before expiration; the deadline is midnight Eastern Time on the expiration date.",
       "renewalMonth": "January",
       "cmeHours": 40,
@@ -1432,7 +1432,7 @@
         "CME must already be reported into CE Broker before you renew; the boards confirm hours through CE Broker and board staff cannot enter hours on your behalf. Certificates in a drawer do not count until they are in CE Broker.",
         "MD renewal dates are not uniform: Group 1 licenses expire January 31 of even-numbered years and Group 2 January 31 of odd-numbered years, so do not assume your renewal year matches a colleague's; verify your own expiration date in the MQA portal.",
         "Budget for the add-ons: a $43.25 FDLE fingerprint-retention fee is charged at renewal when your retention is expiring, and dispensing practitioners pay an extra $100, so the real MD active renewal is often $398.25 or $498.25, not $355.",
-        "MDs and DOs are on entirely different clocks and fee schedules: DOs all expire March 31 of even-numbered years and pay $405, with a 1-hour Florida Laws and Rules CME requirement MDs do not have."
+        "DOs and MDs are on entirely different clocks and fee schedules: DOs all expire March 31 of even-numbered years and pay $405, with a 1-hour Florida Laws and Rules CME requirement MDs do not have."
       ],
       "faqs": [
         {
@@ -1546,13 +1546,13 @@
         },
         {
           "field": "domestic_violence",
-          "value": "2 hrs domestic violence every third biennial cycle (every 6 years), MD and DO",
+          "value": "2 hrs domestic violence every third biennial cycle (every 6 years), DO and MD",
           "source": "https://floridasosteopathicmedicine.gov/renewals/osteopathic-physician-renewal/",
           "verifiedOn": "2026-11-13"
         },
         {
           "field": "hiv_aids",
-          "value": "1-hour board-approved HIV/AIDS course required ONCE, before first renewal (MD and DO)",
+          "value": "1-hour board-approved HIV/AIDS course required ONCE, before first renewal (DO and MD)",
           "source": "https://flboardofmedicine.gov/medical-doctor-renewal/",
           "verifiedOn": "2026-11-13"
         },
@@ -1565,7 +1565,7 @@
       ],
       "unverified": [],
       "firstRenewal": {
-        "text": "1-hour board-approved HIV/AIDS course required ONCE, before first renewal (MD and DO)",
+        "text": "1-hour board-approved HIV/AIDS course required ONCE, before first renewal (DO and MD)",
         "source": "https://flboardofmedicine.gov/medical-doctor-renewal/",
         "verifiedOn": "2026-11-13"
       },
@@ -1621,7 +1621,7 @@
         },
         {
           "question": "How much does renewal cost?",
-          "answer": "$230 for a full physician license (MD or DO) per the board's fee schedule. Late renewal is $455. Telemedicine, Administrative, and Institutional physician licenses also renew at $230."
+          "answer": "$230 for a full physician license (DO or MD) per the board's fee schedule. Late renewal is $455. Telemedicine, Administrative, and Institutional physician licenses also renew at $230."
         },
         {
           "question": "Where do I renew?",
@@ -1754,7 +1754,7 @@
       "cmeSourceUrl": "https://cca.hawaii.gov/pvl/boards/medical/physician-podiatrist-and-emt-continuing-education-requirements/",
       "renewalFee": "$402.00 (Physician MD, on-time 2-year renewal, as posted by the board for the Feb 1, 2026 to Jan 31, 2028 period). Osteopathic Physician (DOS): $312.00. Physician-Government (MDG, annual): $171.00.",
       "lateFee": "There is no posted flat late fee; Hawaii has no late-renewal window. A license not renewed by the expiration date is forfeited, and the board instead posts a total \"Cost to Restore (late renewal)\": MD $408.00, DOS $392.00, MDG $271.00.",
-      "graceOrLapse": "No grace period. The board states licenses not renewed by the license expiration date are unlicensed and may not practice. A forfeited MD or DO license may be restored within 2 years of expiration (MDG within 1 year) by requesting a restoration form, submitting it with a wet signature, the restoration fee, and documentation proving CE compliance for the previous biennium. After the restoration window the license is terminated and the physician must apply as a new applicant under current requirements.",
+      "graceOrLapse": "No grace period. The board states licenses not renewed by the license expiration date are unlicensed and may not practice. A forfeited DO or MD license may be restored within 2 years of expiration (MDG within 1 year) by requesting a restoration form, submitting it with a wet signature, the restoration fee, and documentation proving CE compliance for the previous biennium. After the restoration window the license is terminated and the physician must apply as a new applicant under current requirements.",
       "processingTime": null,
       "steps": [
         "Complete your CME for the cycle (40 hours) (see details below)",
@@ -1764,11 +1764,11 @@
         "Submit and save your confirmation"
       ],
       "pitfalls": [
-        "The MD and DO deadlines are different even though one board licenses both: MDs expire January 31 of even years, DOs expire June 30 of even years. A dual-degree assumption of one date can forfeit a license.",
+        "The DO and MD deadlines are different even though one board licenses both: MDs expire January 31 of even years, DOs expire June 30 of even years. A dual-degree assumption of one date can forfeit a license.",
         "There is no grace period at all. On February 1 (or July 1 for DOs) an unrenewed license is forfeited and practicing on it is unlicensed practice; recovery requires a restoration form with a wet (ink) signature plus CE proof, not just an online click.",
         "Physicians employed by the government hold a separate MDG license that renews every single year by January 31 at $171, not biennially. Moving between government and private practice changes your renewal calendar.",
         "Restoration is only available for 2 years after expiration (1 year for MDG). Miss that window and the license is terminated; you start over as a new applicant under current licensing requirements.",
-        "Renewal CE is attestation-based, but the board runs random post-renewal CME audits (audit notices for MD, DO, PO, PA, EMT are posted on the board site), so keep certificates for the 40 Category 1 hours from the prior biennium."
+        "Renewal CE is attestation-based, but the board runs random post-renewal CME audits (audit notices for DO, MD, PO, PA, EMT are posted on the board site), so keep certificates for the 40 Category 1 hours from the prior biennium."
       ],
       "faqs": [
         {
@@ -1785,7 +1785,7 @@
         },
         {
           "question": "What happens if I miss the January 31 deadline?",
-          "answer": "The license is forfeited immediately; you are unlicensed and may not practice. You may restore within 2 years (MD/DO) or 1 year (MDG) by requesting a restoration form and submitting it with a wet signature, the restoration fee (MD $408, DOS $392, MDG $271 as posted), and documentation of CE compliance for the previous biennial cycle. After that window the license terminates and you must reapply as a new applicant."
+          "answer": "The license is forfeited immediately; you are unlicensed and may not practice. You may restore within 2 years (DO/MD) or 1 year (MDG) by requesting a restoration form and submitting it with a wet signature, the restoration fee (MD $408, DOS $392, MDG $271 as posted), and documentation of CE compliance for the previous biennial cycle. After that window the license terminates and you must reapply as a new applicant."
         },
         {
           "question": "I am a DO. Is my renewal the same as an MD's?",
@@ -1793,7 +1793,7 @@
         },
         {
           "question": "Do I have to prove my CME at renewal?",
-          "answer": "Renewal is attestation-based, but the board conducts random continuing-education audits after renewal (notice-of-audit letters for MDs, DOs and other license types are posted on the board's CE and Random Audit Information page). Hawaii requires 40 Category 1 credits per biennium for MDs, so retain your certificates."
+          "answer": "Renewal is attestation-based, but the board conducts random continuing-education audits after renewal (notice-of-audit letters for DOs, MDs and other license types are posted on the board's CE and Random Audit Information page). Hawaii requires 40 Category 1 credits per biennium for MDs, so retain your certificates."
         }
       ],
       "sources": [
@@ -1807,7 +1807,7 @@
         },
         {
           "url": "https://cca.hawaii.gov/pvl/boards/medical/medical-continuing-education-and-random-audit-information/",
-          "what": "CE and random audit page listing notice-of-audit PDFs for MD, DO, PA, PO, EMT (confirms post-renewal random CME audits)"
+          "what": "CE and random audit page listing notice-of-audit PDFs for DO, MD, PA, PO, EMT (confirms post-renewal random CME audits)"
         }
       ],
       "verified": "2026-11-13 (partial)",
@@ -1920,7 +1920,7 @@
         },
         {
           "question": "How much does renewal cost?",
-          "answer": "The renewal fee is $160 per year for both MDs and DOs (reduced from $200 effective January 1, 2025). Under the new biennial cycle DOPL charges only for whole years, so a 2-year renewal doubles the annual fee."
+          "answer": "The renewal fee is $160 per year for both DOs and MDs (reduced from $200 effective January 1, 2025). Under the new biennial cycle DOPL charges only for whole years, so a 2-year renewal doubles the annual fee."
         },
         {
           "question": "Where do I renew?",
@@ -1935,7 +1935,7 @@
           "answer": "If lapsed less than 5 years, you can reinstate by filing a renewal application with all back renewal fees, a $35 reinstatement fee, and proof of CME. If lapsed more than 5 years, you must submit a new application for licensure."
         },
         {
-          "question": "Do MDs and DOs renew with different boards?",
+          "question": "Do DOs and MDs renew with different boards?",
           "answer": "No. Idaho has a single Board of Medicine under DOPL that licenses and renews both Physician and Surgeon (MD) and Osteopathic Physician and Surgeon (DO) licenses at the same $160 annual fee."
         }
       ],
@@ -1946,7 +1946,7 @@
         },
         {
           "url": "https://dopl.idaho.gov/wp-content/uploads/2024/12/Fee-Changes_Medicine.pdf",
-          "what": "DOPL fee change notice: MD and DO renewal, application, and initial licensure fees all $200 to $160 effective January 1, 2025"
+          "what": "DOPL fee change notice: DO and MD renewal, application, and initial licensure fees all $200 to $160 effective January 1, 2025"
         },
         {
           "url": "https://dopl.idaho.gov/pressrelease/big-changes-are-on-the-way-stay-informed-about-important-licensure-updates-that-may-impact-your-renewal-cycle-27/",
@@ -2031,7 +2031,7 @@
       "cmeSplit": false,
       "cmeSource": "Ill. Admin. Code tit.68, § 1285.110; 720 ILCS 570/315.5",
       "cmeSourceUrl": "https://idfpr.illinois.gov/dpr/continuing-education.html",
-      "renewalFee": "$543 for the 3-year renewal if the licensee has held the Illinois Physician and Surgeon license for more than 365 days as of the application signature date; $181 if held for 365 days or fewer (first renewal shortly after initial licensure). Same license type and fees for MD and DO. Source: IDFPR 2026 Physicians Batch Renewal Form IL486-2611 (4/26).",
+      "renewalFee": "$543 for the 3-year renewal if the licensee has held the Illinois Physician and Surgeon license for more than 365 days as of the application signature date; $181 if held for 365 days or fewer (first renewal shortly after initial licensure). Same license type and fees for DO and MD. Source: IDFPR 2026 Physicians Batch Renewal Form IL486-2611 (4/26).",
       "lateFee": null,
       "graceOrLapse": "225 ILCS 60/21: the license may still be renewed within 90 days after expiration by meeting renewal requirements and paying an additional fee, and that renewal is retroactive to the expiration date; the license is not deemed lapsed until 90 days after expiration and after the Department has attempted notice. After lapse, reinstatement is required per 68 Ill. Adm. Code 1285.130: if expired or not renewed 3 years or less, pay all lapsed renewal fees, submit a completed physician profile, and show 150 hours CME; if more than 3 years, submit an application with fee, physician profile, 150 CME hours, plus evidence of competency (active practice in another jurisdiction, recent postgraduate training, or passing USMLE Step 3, SPEX, or COMVEX-USA within 3 years, among options), and IDFPR may require an oral interview before the Medical Licensing Board. IDFPR asks lapsed physicians to request a reinstatement application through the form at idfpr.illinois.gov/dpr/reactivate-your-license.html; responses come within 5 business days by email.",
       "processingTime": "Online renewals: allow 2 to 4 business days for the license to post in IDFPR systems and the status to update (idfpr.illinois.gov/ori.html and the physicians page). Licensees print their own license via the Department's Print My License tool.",
@@ -2053,7 +2053,7 @@
       "faqs": [
         {
           "question": "When does my Illinois physician license expire?",
-          "answer": "All Illinois Physician and Surgeon licenses (MD and DO share the same license type) expire on July 31 every third year: 2026, 2029, 2032. For the 2026 cycle only, IDFPR granted a variance extending the renewal completion deadline to August 31, 2026, because of its transition to a new operating system."
+          "answer": "All Illinois Physician and Surgeon licenses (DO and MD share the same license type) expire on July 31 every third year: 2026, 2029, 2032. For the 2026 cycle only, IDFPR granted a variance extending the renewal completion deadline to August 31, 2026, because of its transition to a new operating system."
         },
         {
           "question": "How much does renewal cost?",
@@ -2212,14 +2212,14 @@
       "doBoardName": null,
       "doBoardUrl": null,
       "renewalCycle": "Biennial (2 years)",
-      "renewalAnchor": "All physician (MD and DO) licenses expire at 11:59 p.m. EDT on October 31 of odd-numbered years, statewide, regardless of issue date. The most recent cycle closed 10/31/2025; the next renewal deadline is 10/31/2027. Renewal notices are emailed approximately 90 days before expiration to the email address on file.",
+      "renewalAnchor": "All physician (DO and MD) licenses expire at 11:59 p.m. EDT on October 31 of odd-numbered years, statewide, regardless of issue date. The most recent cycle closed 10/31/2025; the next renewal deadline is 10/31/2027. Renewal notices are emailed approximately 90 days before expiration to the email address on file.",
       "renewalMonth": "October",
       "cmeHours": 0,
       "cmeDetails": "No general CME hour requirement for renewal.",
       "cmeSplit": false,
       "cmeSource": "No statutory CME requirement",
       "cmeSourceUrl": "https://www.in.gov/pla/professions/physicians-home/physicians-licensing-information/",
-      "renewalFee": "$200 (active MD or DO, 2-year renewal). $100 for renewal into Inactive status (no office or practice permitted). CSR (Controlled Substance Registration) is a separate renewal with its own fee.",
+      "renewalFee": "$200 (active DO or MD, 2-year renewal). $100 for renewal into Inactive status (no office or practice permitted). CSR (Controlled Substance Registration) is a separate renewal with its own fee.",
       "lateFee": "$50 penalty fee applied to each late renewal application (so a late physician license plus a late CSR each incur $50). Board fee table shows expired up to 3 years = $200 renewal + $50 late fee = $250 total.",
       "graceOrLapse": "There is no practice grace period, but online late renewal stays available through MyLicense.IN.gov for up to 3 years after expiration with the $50 penalty per application. Expired more than 3 years requires reinstatement: $450 fee plus work history documentation, verification of active licenses in other states, an NPDB report, and documentation for any positive responses. Separately, a timely renewal that is still under board review after October 31 is placed in the active status \"Valid to Practice While Reviewed,\" and the Board must decide within 120 days of the expiration date; if you apply after October 31 and review is needed, the license shows \"Expired\" instead.",
       "processingTime": null,
@@ -2231,7 +2231,7 @@
         "Submit and save your confirmation"
       ],
       "pitfalls": [
-        "Your physician license and your Controlled Substance Registration (CSR) are separate renewals; one application does not cover both, and the board requires renewing in order: primary MD/DO license first, then CSR, then the ePrescribing waiver if you hold one.",
+        "Your physician license and your Controlled Substance Registration (CSR) are separate renewals; one application does not cover both, and the board requires renewing in order: primary DO/MD license first, then CSR, then the ePrescribing waiver if you hold one.",
         "If your Indiana license was obtained through the Interstate Medical Licensure Compact, you cannot renew through Indiana's MyLicense portal at all; you must renew at imlcc.com/renew.",
         "The $50 late penalty applies per application, so a physician who forgets both license and CSR pays it twice; and letting the license sit expired past 3 years escalates to a $450 reinstatement with work history, other-state license verification, and an NPDB report.",
         "Any positive response to a renewal question (arrests, diversion agreements, malpractice judgments or settlements since last renewal) requires an explanation and supporting documents uploaded at the time of submission to proceed online; failure to answer correctly can draw a civil penalty from the Board, and a malpractice claim disclosed as pending in a prior cycle must be disclosed again once settled.",
@@ -2240,11 +2240,11 @@
       "faqs": [
         {
           "question": "When does my Indiana physician license expire?",
-          "answer": "All MD and DO licenses in Indiana expire at 11:59 p.m. EDT on October 31 of odd-numbered years. The next deadline is October 31, 2027. Renewal notices are sent by email about 90 days before expiration."
+          "answer": "All DO and MD licenses in Indiana expire at 11:59 p.m. EDT on October 31 of odd-numbered years. The next deadline is October 31, 2027. Renewal notices are sent by email about 90 days before expiration."
         },
         {
           "question": "Can I renew my license and my Controlled Substance Registration together?",
-          "answer": "No. The license and the CSR are separate renewal applications, both filed online at MyLicense.IN.gov. The board instructs physicians to renew the primary MD/DO license first, then the CSR, then the ePrescribing waiver if applicable."
+          "answer": "No. The license and the CSR are separate renewal applications, both filed online at MyLicense.IN.gov. The board instructs physicians to renew the primary DO/MD license first, then the CSR, then the ePrescribing waiver if applicable."
         },
         {
           "question": "I missed the October 31 deadline. Can I still renew online?",
@@ -2395,7 +2395,7 @@
           "answer": "Within one year of going inactive: submit a renewal application, the $550 reinstatement fee, and documentation of the CME and mandatory training for the most recent period. After one year or more: a full reactivation application, $500 plus $45 fingerprint/background check, 40 hours of Category 1 CME within the previous two years, and if you have not practiced clinically in 3+ years, a board-approved competency evaluation, SPEX/COMVEX, retraining, or reentry program (r. 481-652.14)."
         },
         {
-          "question": "Do MDs and DOs renew with the same board?",
+          "question": "Do DOs and MDs renew with the same board?",
           "answer": "Yes. Iowa has no separate osteopathic board; the Iowa Board of Medicine licenses both medicine and surgery and osteopathic medicine and surgery under Iowa Code chapter 148, with identical renewal rules and fees."
         }
       ],
@@ -2518,7 +2518,7 @@
       "cmeSplit": false,
       "cmeSource": "Kan. Admin. Regs. § 100-15-5",
       "cmeSourceUrl": "https://sos.ks.gov/publications/Register/Volume-40/Issues/Issue%2016/04-22-21-49068.html",
-      "renewalFee": "$360 online ($430 by paper) for annual renewal of an active or federally active MD/DO license under the Healing Arts Act; inactive or exempt license renews at $150; resident active $100; reentry active $300",
+      "renewalFee": "$360 online ($430 by paper) for annual renewal of an active or federally active DO/MD license under the Healing Arts Act; inactive or exempt license renews at $150; resident active $100; reentry active $300",
       "lateFee": "Additional +$100 for online late renewal (+$230 for paper late renewal) of an active or federally active license; inactive/exempt late renewal adds +$55 online (+$80 paper)",
       "graceOrLapse": "There is a built-in late month with a late fee (MD: July 1-31; DO: October 1-31). If not renewed by the end of that month, the license goes to \"Cancelled - Failure to Renew\" status the next day (MD: August 1; DO: November 1). Practicing on a cancelled license may subject the physician to disciplinary action. Reinstatement of a cancelled license requires a reinstatement application and a $400 fee, and the board may require additional testing, training, or education depending on the circumstances (reinstatement of a revoked license is $1,000).",
       "processingTime": null,
@@ -2526,12 +2526,12 @@
         "Complete your CME for the cycle (50 hours) (see details below)",
         "Log in to the Kansas State Board of Healing Arts (KSBHA) renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($360 online ($430 by paper) for annual renewal of an active or federally active MD/DO license under the Healing Arts Act; inactive or exempt license renews at $150; resident active $100; reentry active $300)",
+        "Pay the renewal fee ($360 online ($430 by paper) for annual renewal of an active or federally active DO/MD license under the Healing Arts Act; inactive or exempt license renews at $150; resident active $100; reentry active $300)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
         "The printed expiration date is NOT the on-time deadline. An MD license expires July 31, but on-time renewal ends June 30; renewing in July costs the late fee (+$100 online, +$230 paper). Same structure for DOs: expires October 31 but on-time renewal ends September 30.",
-        "MD and DO renew on different calendars at the same board: MD May 15 to July 31, DO August 15 to October 31. Dual-degree groups and credentialing staff tracking both types miss this split.",
+        "DO and MD renew on different calendars at the same board: MD May 15 to July 31, DO August 15 to October 31. Dual-degree groups and credentialing staff tracking both types miss this split.",
         "Paper renewal is materially more expensive: $430 vs $360 on time, and the paper late surcharge is $230 vs $100 online, so a paper late renewal totals $660 vs $460 online.",
         "One day past the late window the license is administratively cancelled (status Cancelled - Failure to Renew on August 1 for MD, November 1 for DO). Reinstatement is $400, may require additional testing, training, or education at the board's discretion, and practicing on a cancelled license can draw disciplinary action.",
         "An active Kansas license carries a mandatory malpractice insurance condition: the Health Care Stabilization Fund Act requires coverage of at least $500,000 per claim / $1,500,000 annual aggregate (K.S.A. 40-3402, 40-3404, 65-2809(c)). Physicians who leave practice but keep an active license at renewal still carry this obligation; exempt or inactive designations avoid it."
@@ -2543,7 +2543,7 @@
         },
         {
           "question": "How much does renewal cost?",
-          "answer": "$360 for online renewal of an active or federally active MD/DO license, $430 by paper. Late renewal adds $100 online or $230 by paper. Inactive and exempt licenses renew at $150."
+          "answer": "$360 for online renewal of an active or federally active DO/MD license, $430 by paper. Late renewal adds $100 online or $230 by paper. Inactive and exempt licenses renew at $150."
         },
         {
           "question": "How do I renew online?",
@@ -2569,7 +2569,7 @@
         },
         {
           "url": "https://www.ksbha.ks.gov/departments/licensing/license-fees",
-          "what": "Healing Arts Act (MD/DO/DC) fee schedule: $360 online / $430 paper active renewal, late surcharges +$100/+$230, inactive/exempt $150, reinstatement of cancelled license $400, revoked $1,000, conversion $175"
+          "what": "Healing Arts Act (DO/MD/DC) fee schedule: $360 online / $430 paper active renewal, late surcharges +$100/+$230, inactive/exempt $150, reinstatement of cancelled license $400, revoked $1,000, conversion $175"
         },
         {
           "url": "https://www.ksbha.ks.gov/departments/licensing/licensing-faqs/doctor-of-medicine-and-surgery",
@@ -2661,7 +2661,7 @@
       "cmeSplit": false,
       "cmeSource": "201 KAR 9:310",
       "cmeSourceUrl": "https://kbml.ky.gov/cme/Pages/default.aspx",
-      "renewalFee": "$150 (annual registration or renewal of regular MD/DO license, online). Paper renewal adds $10. Limited license renewal is $65.",
+      "renewalFee": "$150 (annual registration or renewal of regular DO/MD license, online). Paper renewal adds $10. Limited license renewal is $65.",
       "lateFee": "$50 penalty if paid March 1 to April 1; $100 penalty after April 1 (at which point the license has also automatically become inactive). Per KBML Board Fees PDF and 201 KAR 9:041.",
       "graceOrLapse": "Late window March 1 to April 1 with a $50 penalty on top of the $150 fee. After April 1 the license automatically becomes inactive and further practice is considered the unauthorized practice of medicine or osteopathy. Reactivation cannot be done online: the physician must contact the Board at (502) 764-2607 or teresa.kleinhenz@ky.gov for a re-registration form; the fee for re-registration of an inactive license is $250. The online application is for new applicants only.",
       "processingTime": "Online renewal is effective at payment: a temporary wallet card and receipt print at completion, and the renewed license shows on the Board's online verification site in approximately 48 hours (per the Board's renewal page, archived copy). No stated processing time for paper renewals.",
@@ -2818,7 +2818,7 @@
       "cmeSplit": false,
       "cmeSource": "La. Admin. Code tit. 46, pt. XLV §§435-449, §4005; R.S. 37:1270(A)(8)",
       "cmeSourceUrl": "https://www.lsbme.la.gov/content/board-orientations-online-courses",
-      "renewalFee": "$332 per year (active MD/DO): $300 renewal fee plus $25 physician health program assessment plus $7 CME assessment under La. R.S. 37:1281. Derived from statute; the board site itself publishes only the $382 initial licensure fee (which is the same $350 + $25 + $7 statutory structure). Reduced by one half for qualifying physicians age 70+ or disabled who have surrendered CDS registration (LAC 46:XLV.418).",
+      "renewalFee": "$332 per year (active DO/MD): $300 renewal fee plus $25 physician health program assessment plus $7 CME assessment under La. R.S. 37:1281. Derived from statute; the board site itself publishes only the $382 initial licensure fee (which is the same $350 + $25 + $7 statutory structure). Reduced by one half for qualifying physicians age 70+ or disabled who have surrendered CDS registration (LAC 46:XLV.418).",
       "lateFee": "Not published as a dollar amount by the board. The board states a late fee is assessed for online renewal of a license expired less than 1 year; R.S. 37:1281(A)(3)(c) caps the delinquency fee at an amount equal to the renewal fee, i.e. up to $300 on top of the renewal fee.",
       "graceOrLapse": "No grace period; the license expires on the first day of the birth month. Timely filing of a complete renewal keeps the license in full force while the Board processes it (LAC 46:XLV.415). Expired less than 1 year: renew online via LaMED with a late fee. Expired more than 1 year: full reinstatement application required; reinstatement is available only within 4 years of expiration, with fees of $632 (expired 0-2 yrs), $932 (2-3 yrs), $1,232 (3-4 yrs), plus 20 hours of Category 1 CME for each year since the license was last renewed. Beyond 4 years, re-licensure (new application).",
       "processingTime": null,
@@ -2848,7 +2848,7 @@
         },
         {
           "question": "How much does renewal cost?",
-          "answer": "$332 per year for an active MD/DO: a $300 renewal fee plus statutory $25 and $7 annual assessments under R.S. 37:1281, paid by credit/debit card in LaMED. Physicians age 70+ (or disabled) who have surrendered their controlled substance registrations qualify for a half-price renewal under LAC 46:XLV.418."
+          "answer": "$332 per year for an active DO/MD: a $300 renewal fee plus statutory $25 and $7 annual assessments under R.S. 37:1281, paid by credit/debit card in LaMED. Physicians age 70+ (or disabled) who have surrendered their controlled substance registrations qualify for a half-price renewal under LAC 46:XLV.418."
         },
         {
           "question": "What happens if I miss my renewal deadline?",
@@ -2856,7 +2856,7 @@
         },
         {
           "question": "Do DOs renew with a separate osteopathic board?",
-          "answer": "No. Louisiana has no separate osteopathic board; the LSBME licenses and renews both MDs and DOs under the same rules and fees (the board's own fee line reads \"Licensure- $382.00 (MD/DO)\")."
+          "answer": "No. Louisiana has no separate osteopathic board; the LSBME licenses and renews both DOs and MDs under the same rules and fees (the board's own fee line reads \"Licensure- $382.00 (MD/DO)\")."
         },
         {
           "question": "Do I have to use CE Broker?",
@@ -2874,7 +2874,7 @@
         },
         {
           "url": "https://www.lsbme.la.gov/content/application-instructions-initial-licensure-physicians",
-          "what": "Board initial licensure page: $382.00 MD/DO licensure fee (confirms the statute-cap-plus-assessments fee structure)"
+          "what": "Board initial licensure page: $382.00 DO/MD licensure fee (confirms the statute-cap-plus-assessments fee structure)"
         },
         {
           "url": "https://www.law.cornell.edu/regulations/louisiana/La-Admin-Code-tit-46-SS-XLV-415",
@@ -3134,7 +3134,7 @@
       "cmeSplit": false,
       "cmeSource": "COMAR 10.32.01.10",
       "cmeSourceUrl": "https://www.mbp.state.md.us/forms/2026_renewal_info.pdf",
-      "renewalFee": "$512.00 total for MDs and DOs (2026 cycle): $436 renewal fee + $50 rehabilitation/peer review program + $26 Maryland Health Care Commission assessment (Health Occ. sec. 1-209). IMLC compact-licensed physicians pay an additional $25 Compact processing fee ($537 total, paid to the Compact).",
+      "renewalFee": "$512.00 total for DOs and MDs (2026 cycle): $436 renewal fee + $50 rehabilitation/peer review program + $26 Maryland Health Care Commission assessment (Health Occ. sec. 1-209). IMLC compact-licensed physicians pay an additional $25 Compact processing fee ($537 total, paid to the Compact).",
       "lateFee": null,
       "graceOrLapse": "No grace period and no late-renewal window. The online renewal system closes at 11:59 pm EST on September 30 and is not available afterward. An unrenewed license expires; practicing on an expired license risks a civil fine of up to $50,000 (Health Occ. secs. 14-601, 14-606). The only path back is the online Physician Reinstatement application: $700 nonrefundable fee, a new criminal history records check, and 50 Category 1 CME credits (confirm the reinstatement split with the Board) in the 2 years preceding the reinstatement application. Revoked, surrendered, or suspended licenses cannot use the online reinstatement system.",
       "processingTime": "Completed renewal applications are processed the next business day; the public website reflects the new expiration date 1 to 2 business days after processing. A digital copy of the renewed license is printable immediately after payment.",
@@ -3160,7 +3160,7 @@
         },
         {
           "question": "How much does renewal cost?",
-          "answer": "$512.00 for both MDs and DOs: $436 renewal fee, $50 rehabilitation/peer review program, and a $26 Maryland Health Care Commission assessment required by Health Occ. sec. 1-209. Physicians renewing through the Interstate Medical Licensure Compact pay a $25 Compact processing fee on top ($537 total)."
+          "answer": "$512.00 for both DOs and MDs: $436 renewal fee, $50 rehabilitation/peer review program, and a $26 Maryland Health Care Commission assessment required by Health Occ. sec. 1-209. Physicians renewing through the Interstate Medical Licensure Compact pay a $25 Compact processing fee on top ($537 total)."
         },
         {
           "question": "Is there a late fee or grace period if I miss September 30?",
@@ -3186,7 +3186,7 @@
         },
         {
           "url": "https://www.mbp.state.md.us/licensure_phyrenewals.aspx",
-          "what": "Board's Physician License Renewals page: portal link for A-L 2026, fee breakdown $436 + $50 + $26 = $512 for MDs and DOs, IMLC $25 compact fee, no late renewal or grace period, online-only, reinstatement link"
+          "what": "Board's Physician License Renewals page: portal link for A-L 2026, fee breakdown $436 + $50 + $26 = $512 for DOs and MDs, IMLC $25 compact fee, no late renewal or grace period, online-only, reinstatement link"
         },
         {
           "url": "https://www.mbp.state.md.us/resource_information/faqs/resource_faqs_physician_renewals.aspx",
@@ -3241,7 +3241,7 @@
         },
         {
           "field": "renewal_fee",
-          "value": "$512.00 MD/DO renewal; IMLC +$25 = $537",
+          "value": "$512.00 DO/MD renewal; IMLC +$25 = $537",
           "source": "https://www.mbp.state.md.us/licensure_phyrenewals.aspx",
           "verifiedOn": "2026-11-13"
         },
@@ -3350,7 +3350,7 @@
         },
         {
           "question": "Do DOs renew through a separate osteopathic board?",
-          "answer": "No. Massachusetts has a single Board of Registration in Medicine for MDs and DOs; the board accepts ACGME and AOA accredited training. There is no separate osteopathic licensing board."
+          "answer": "No. Massachusetts has a single Board of Registration in Medicine for DOs and MDs; the board accepts ACGME and AOA accredited training. There is no separate osteopathic licensing board."
         },
         {
           "question": "Do I submit CME certificates with my renewal?",
@@ -3458,9 +3458,9 @@
       "cmeSplit": true,
       "cmeSource": "LARA MD Licensing Guide",
       "cmeSourceUrl": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/medical/medical-doctor-licensing-guides-and-faqs/md-licensing-guide-and-faqs",
-      "renewalFee": "$314.40 (MD or DO 3-year renewal, per LARA License Renewal Fees schedule and the DO licensing guide rev. 1/26/2026). Controlled substance license renewal is a separate $248.10 if applicable. Payment by Visa, Mastercard, American Express, or Discover only. Note: the MD licensing guide web page states $314.00, which conflicts with the fee schedule; see notes.",
-      "lateFee": "Amount not published for physicians. MCL 333.16201(2) requires payment of \"renewal and late renewal fees\" to renew within 60 days after expiration, but neither the current MD/DO licensing guides nor the LARA fee schedule states the dollar amount for MD/DO (LARA's FAQs for some other BPL professions have cited $20.00, which could not be verified for physicians from a currently published page).",
-      "graceOrLapse": "60-day grace period: a license not renewed by expiration may be renewed within 60 days after the expiration date on application, payment of renewal and late renewal fees, and completion of CME; the physician MAY continue to practice during those 60 days (MCL 333.16201(2)). After 60 days the license is null and void and practice is prohibited (MCL 333.16201(3)). Relicensure via MiPLUS \"Modification\": $395.00 (MD or DO relicensure fee per the 2026 licensing guides) plus proof of 150 hours CME in the prior 3 years. Lapsed more than 3 but less than 5 years: also need an active license in good standing in another state OR one of SPEX (COMVEX for DOs), a board-approved postgraduate program, or an accredited physician re-entry program. Lapsed 5+ years: active out-of-state license OR BOTH the exam and a training/re-entry program. Relicensure applicants whose license expired within the last 3 years skip the criminal background check.",
+      "renewalFee": "$314.40 (DO or MD 3-year renewal, per LARA License Renewal Fees schedule and the DO licensing guide rev. 1/26/2026). Controlled substance license renewal is a separate $248.10 if applicable. Payment by Visa, Mastercard, American Express, or Discover only. Note: the MD licensing guide web page states $314.00, which conflicts with the fee schedule; see notes.",
+      "lateFee": "Amount not published for physicians. MCL 333.16201(2) requires payment of \"renewal and late renewal fees\" to renew within 60 days after expiration, but neither the current DO/MD licensing guides nor the LARA fee schedule states the dollar amount for DO/MD (LARA's FAQs for some other BPL professions have cited $20.00, which could not be verified for physicians from a currently published page).",
+      "graceOrLapse": "60-day grace period: a license not renewed by expiration may be renewed within 60 days after the expiration date on application, payment of renewal and late renewal fees, and completion of CME; the physician MAY continue to practice during those 60 days (MCL 333.16201(2)). After 60 days the license is null and void and practice is prohibited (MCL 333.16201(3)). Relicensure via MiPLUS \"Modification\": $395.00 (DO or MD relicensure fee per the 2026 licensing guides) plus proof of 150 hours CME in the prior 3 years. Lapsed more than 3 but less than 5 years: also need an active license in good standing in another state OR one of SPEX (COMVEX for DOs), a board-approved postgraduate program, or an accredited physician re-entry program. Lapsed 5+ years: active out-of-state license OR BOTH the exam and a training/re-entry program. Relicensure applicants whose license expired within the last 3 years skip the criminal background check.",
       "processingTime": "Renewals are generally completed within a few days (LARA MiPLUS user assistance page); new licenses average 4-6 weeks.",
       "steps": [
         "Complete your CME for the cycle (150 hours) (see details below)",
@@ -3470,9 +3470,9 @@
         "Submit and save your confirmation"
       ],
       "pitfalls": [
-        "Your expiration date is personal to you: Michigan MD and DO licenses expire 3 years from the license issue date anniversary, not on a birthday or fixed calendar date, and the MiPLUS renewal window does not open until 90 days before that date (R 338.7002; MD and DO licensing guides).",
+        "Your expiration date is personal to you: Michigan DO and MD licenses expire 3 years from the license issue date anniversary, not on a birthday or fixed calendar date, and the MiPLUS renewal window does not open until 90 days before that date (R 338.7002; DO and MD licensing guides).",
         "The controlled substance license is a separate renewal with a separate $248.10 fee, and all controlled substance licensees must certify completion of the one-time opioids and controlled substances awareness training meeting R 338.3135 before the renewal can be completed.",
-        "Implicit bias training is 1 hour for EACH year of the cycle (3 hours per 3-year renewal) and is not a one-time requirement; it must be completed before the renewal is processed, in addition to the 150 CME hours (MD and DO licensing guides).",
+        "Implicit bias training is 1 hour for EACH year of the cycle (3 hours per 3-year renewal) and is not a one-time requirement; it must be completed before the renewal is processed, in addition to the 150 CME hours (DO and MD licensing guides).",
         "Changing your name as part of the renewal will slow the renewal because staff must review the documents; LARA advises renewing first, then filing a Modification for the name change (MiPLUS user assistance page).",
         "Renewal is attestation-based with no CME upload, but the Board runs a random audit after each renewal period and you must keep CME certificates for at least 4 years from the renewal application date.",
         "Miss the 60-day grace window and the license is null and void: relicensure costs $395.00, and a lapse over 3 years adds SPEX/COMVEX or re-entry program requirements unless you hold an active license in good standing in another state (MCL 333.16201; licensing guides)."
@@ -3484,7 +3484,7 @@
         },
         {
           "question": "How much does renewal cost and how do I pay?",
-          "answer": "$314.40 for the 3-year MD or DO renewal per the LARA fee schedule, plus $248.10 if you also renew a controlled substance license. Payment must be by Visa, Mastercard, American Express, or Discover credit or debit card in MiPLUS. The MD guide page lists $314.00, but the fee schedule and current DO guide both say $314.40."
+          "answer": "$314.40 for the 3-year DO or MD renewal per the LARA fee schedule, plus $248.10 if you also renew a controlled substance license. Payment must be by Visa, Mastercard, American Express, or Discover credit or debit card in MiPLUS. The MD guide page lists $314.00, but the fee schedule and current DO guide both say $314.40."
         },
         {
           "question": "How early can I renew?",
@@ -3499,7 +3499,7 @@
           "answer": "No. You attest at renewal that you completed the required CME (150 hours per 3-year cycle: minimum 75 Category 1 for MDs, 60 Category 1 for DOs; 3 hours pain and symptom management including 1 hour controlled substance prescribing; 1 hour medical ethics; plus 1 hour per year implicit bias training, one-time human trafficking training, and opioid awareness training for controlled substance licensees). Keep documentation at least 4 years; the Board randomly audits after each renewal period. BPL partners with CE Broker for optional tracking."
         },
         {
-          "question": "Do MDs and DOs renew differently?",
+          "question": "Do DOs and MDs renew differently?",
           "answer": "Both renew through the same MiPLUS system, on the same 3-year issue-date cycle, at the same $314.40 fee, under separate boards. The main difference is CME composition: MDs need at least 75 of 150 hours in Category 1; DOs need at least 60 of 150 hours in Category 1 (per R 338.143, at least 40 of those AOA or MOA approved)."
         }
       ],
@@ -3625,7 +3625,7 @@
       "cmeSplit": false,
       "cmeSource": "Minnesota Rules, parts 5605.0100 and 5605.0300",
       "cmeSourceUrl": "https://mn.gov/boards/medical-practice/licensing/continuing-ed/",
-      "renewalFee": "$192 (Physician Annual License, MD and DO; confirmed in Minn. Stat. 147.01 subd. 7 as \"physician annual registration renewal fee, $192\" and in the board's September 2, 2025 fee schedule PDF)",
+      "renewalFee": "$192 (Physician Annual License, DO and MD; confirmed in Minn. Stat. 147.01 subd. 7 as \"physician annual registration renewal fee, $192\" and in the board's September 2, 2025 fee schedule PDF)",
       "lateFee": "$60 (MD Late Fee; Minn. Stat. 147.01 subd. 7 \"physician late fee, $60\" and board fee schedule PDF dated 2025-09-02)",
       "graceOrLapse": "Per Minn. Stat. 147.02 subd. 7(b), licensees who do not return a complete renewal application, the annual license fee, or the late application fee within 30 days are removed from the list of individuals authorized to practice medicine and surgery for that renewal period; upon reinstatement the name is restored to the list. Minnesota Rules 5600.0605 subp. 6 adds that a renewal application and fee received after the last day of the month in which the license expires \"shall not be processed\" (reinstatement is then required). Per Minn. Stat. 147.039, a license lapsed and not renewed within two annual renewal cycles cannot be renewed, reissued, reinstated, or restored; the physician must obtain a new license by applying and meeting all current initial-licensure requirements. The board does not publish a separate physician reinstatement fee; none appears in the statute or fee schedule.",
       "processingTime": "Online renewal is processed by the board's system once the online payment is confirmed with a 15-digit confirmation number by the MN Department of Revenue; license status updates in real time on the board's Professional Profile lookup. The new license/registration card is mailed in about 2 weeks (contact the board if not received in 3-4 weeks; a $20 replacement fee applies if reported after 30 days).",
@@ -3655,7 +3655,7 @@
         },
         {
           "question": "How much does renewal cost?",
-          "answer": "$192 per year for physicians (MD and DO), set in Minn. Stat. 147.01 subd. 7. The $60 late fee is added if you renew late. The $424 figure on the board's fee page is the initial licensure total (application $200 + first annual fee $192 + criminal background check $32), not the renewal fee."
+          "answer": "$192 per year for physicians (DO and MD), set in Minn. Stat. 147.01 subd. 7. The $60 late fee is added if you renew late. The $424 figure on the board's fee page is the initial licensure total (application $200 + first annual fee $192 + criminal background check $32), not the renewal fee."
         },
         {
           "question": "Do I need to send CME certificates with my renewal?",
@@ -3667,7 +3667,7 @@
         },
         {
           "question": "I am a DO. Do I renew with a separate osteopathic board?",
-          "answer": "No. Minnesota has a single Board of Medical Practice that licenses both MDs and DOs; the state's license category is 'Physician (Doctor of Medicine (M.D.) and Doctor of Osteopathic Medicine (D.O.))'. Same portal, same $192 fee, same birth-month cycle."
+          "answer": "No. Minnesota has a single Board of Medical Practice that licenses both DOs and MDs; the state's license category is 'Physician (Doctor of Medicine (M.D.) and Doctor of Osteopathic Medicine (D.O.))'. Same portal, same $192 fee, same birth-month cycle."
         },
         {
           "question": "How do I prove I renewed before the new card arrives?",
@@ -3760,14 +3760,14 @@
       "doBoardName": null,
       "doBoardUrl": null,
       "renewalCycle": "Annual (1 year); CME compliance is certified at renewal only in even-numbered years",
-      "renewalAnchor": "Fixed statewide window: renewal opens May 1 and the deadline is June 30 each year, for every permanent MD/DO license. The renewal year runs July 1 to June 30. Late renewal begins August 1.",
+      "renewalAnchor": "Fixed statewide window: renewal opens May 1 and the deadline is June 30 each year, for every permanent DO/MD license. The renewal year runs July 1 to June 30. Late renewal begins August 1.",
       "renewalMonth": "May",
       "cmeHours": 40,
       "cmeDetails": "40 hours per 2-year cycle, including at least 40 Category 1 (attested at each annual renewal). required topics: the board's controlled-substance training is satisfied by the one-time federal 8-hour DEA training.",
       "cmeSplit": false,
       "cmeSource": "30 Miss. Admin. Code Pt. 2610 Ch. 2, Rule 2.1 (amended, effective Feb 27, 2026)",
       "cmeSourceUrl": "https://www.msbml.ms.gov/licensure/cme-requirements",
-      "renewalFee": "$300.00 (MD/DO permanent license, 1-year renewal) plus a convenience fee charged through MELS",
+      "renewalFee": "$300.00 (DO/MD permanent license, 1-year renewal) plus a convenience fee charged through MELS",
       "lateFee": "$25.00 base fine plus $5.00 for each month the license remains delinquent",
       "graceOrLapse": "The board does not describe July 1 to 31 as a grace period; the deadline is June 30 and the late renewal process opens August 1. After August 1 the licensee must submit a late renewal request through MELS with an explanation, and the Board must approve it before the license is renewed (licensee notified by email). Late fines are $25.00 plus $5.00 per delinquent month. If the license has been expired for more than one year, renewal is no longer possible: the physician must apply for reinstatement. The reinstatement application fee is $250.00 non-refundable (credited toward the total due on approval), and under Miss. Code section 73-25-14 the applicant must pay back fees for up to the five prior renewal years plus the current year: $300 renewal + $25 late penalty + $5 per delinquent month for each lapsed year, so a full unrenewed year totals $385.00.",
       "processingTime": null,
@@ -3789,7 +3789,7 @@
       "faqs": [
         {
           "question": "When do I renew my Mississippi medical license?",
-          "answer": "Every year. The renewal window opens May 1 and closes June 30, and every permanent MD/DO license follows the same July 1 to June 30 renewal year. There is no birth-month or anniversary staggering."
+          "answer": "Every year. The renewal window opens May 1 and closes June 30, and every permanent DO/MD license follows the same July 1 to June 30 renewal year. There is no birth-month or anniversary staggering."
         },
         {
           "question": "Where do I renew?",
@@ -3815,11 +3815,11 @@
       "sources": [
         {
           "url": "https://www.msbml.ms.gov/licensure/md-do-permanent-renewal",
-          "what": "MD/DO Permanent License Renewal page: window May 1 to June 30, $300 fee plus convenience fee, late renewal begins August 1 with $25 + $5/month fines, both-periods rule, reinstatement trigger at >1 year expired, MELS portal, CME certification rules"
+          "what": "DO/MD Permanent License Renewal page: window May 1 to June 30, $300 fee plus convenience fee, late renewal begins August 1 with $25 + $5/month fines, both-periods rule, reinstatement trigger at >1 year expired, MELS portal, CME certification rules"
         },
         {
           "url": "https://www.msbml.ms.gov/licensure/fee-schedule",
-          "what": "License Fee Schedule: $300 annual MD/DO renewal, $250 non-refundable reinstatement application fee credited on approval, arrearage formula under Miss. Code 73-25-14 (up to 5 prior years, $385 per full lapsed year, worked example), $25 late fee, $5/month fine, no-refund policy, $50 incomplete application fee, IMLC renews via IMLC"
+          "what": "License Fee Schedule: $300 annual DO/MD renewal, $250 non-refundable reinstatement application fee credited on approval, arrearage formula under Miss. Code 73-25-14 (up to 5 prior years, $385 per full lapsed year, worked example), $25 late fee, $5/month fine, no-refund policy, $50 incomplete application fee, IMLC renews via IMLC"
         },
         {
           "url": "https://gateway.msbml.ms.gov/",
@@ -3919,7 +3919,7 @@
       "cmeSplit": false,
       "cmeSource": "20 CSR 2150-2.125",
       "cmeSourceUrl": "https://www.sos.mo.gov/cmsimages/adrules/csr/current/20csr/20c2150-2.pdf",
-      "renewalFee": "$147 (Permanent Physician Renewal Fee, MD and DO alike, 1-year registration) per 20 CSR 2150-2.080(1)(A)4. All fees are nonrefundable.",
+      "renewalFee": "$147 (Permanent Physician Renewal Fee, DO and MD alike, 1-year registration) per 20 CSR 2150-2.080(1)(A)4. All fees are nonrefundable.",
       "lateFee": "$25 Late Renewal Fee (Delinquent Fee) per 20 CSR 2150-2.080(1)(B)4; the board may waive it for extenuating circumstances such as illness (section 334.090, RSMo), but failure to receive a renewal notice is expressly not an extenuating circumstance (20 CSR 2150-2.001(8))",
       "graceOrLapse": "No practice grace period: once expired you cannot practice in Missouri until renewal is granted. Late renewal remains possible through MOPRO with the $25 delinquent fee. If registration lapses more than 6 months, the renewal application is denied unless accompanied by all required fees plus a completed renewal application made under oath with full disclosure of disciplinary actions and current physical and mental fitness (20 CSR 2150-2.050); the fee schedule lists a $75 Reinstatement Fee. If the license is not renewed for two consecutive renewal periods it becomes VOID (section 334.080, RSMo); a void license may not be renewed or reactivated (20 CSR 2150-2.001(18)). A license revoked, suspended, or inactive more than 2 years can require 25 hrs CME per lapsed year plus a competency exam (SPEX, specialty board exam, or CPEP/PACE assessment) for reinstatement (20 CSR 2150-2.150); inactive more than 5 years may trigger reexamination (20 CSR 2150-2.153).",
       "processingTime": null,
@@ -4212,7 +4212,7 @@
         "Submit and save your confirmation"
       ],
       "pitfalls": [
-        "The fixed October 1 even-year expiration applies regardless of issue date, so every Nebraska MD and DO renews at the same time; a physician licensed in mid-2026 faces renewal almost immediately on October 1, 2026.",
+        "The fixed October 1 even-year expiration applies regardless of issue date, so every Nebraska DO and MD renews at the same time; a physician licensed in mid-2026 faces renewal almost immediately on October 1, 2026.",
         "Physicians holding a license issued through the Interstate Medical Licensure Compact must renew via the compact website (imlcc.com), not the Nebraska mylicense.com portal; the DHHS renewal page bolds this restriction.",
         "There is no grace period and no simple late fee: one day past October 1 the license is expired, reinstatement paperwork plus a $35 reinstatement fee is required, and each day of practice on the expired license draws a $10/day administrative penalty up to $1,000.",
         "A physician who has not actively practiced for roughly 2 to 3 years before reinstating may be offered only a reentry license by the Board of Medicine and Surgery, and the application is denied if the reentry license is not accepted; CE alone does not routinely satisfy the continued-competency requirement.",
@@ -4242,7 +4242,7 @@
         },
         {
           "question": "Do DOs renew through a separate osteopathic board?",
-          "answer": "No. Nebraska licenses osteopathic physicians under the same Medicine and Surgery Practice Act, and MDs and DOs use the same renewal notice, the same reinstatement application, the same fees, and the same October 1 even-year cycle through the DHHS Licensure Unit."
+          "answer": "No. Nebraska licenses osteopathic physicians under the same Medicine and Surgery Practice Act, and DOs and MDs use the same renewal notice, the same reinstatement application, the same fees, and the same October 1 even-year cycle through the DHHS Licensure Unit."
         }
       ],
       "sources": [
@@ -4357,7 +4357,7 @@
       "pitfalls": [
         "Missing the MD June 30 odd-year deadline doubles the cost immediately: the license expires with no grace period and reinstatement is twice the biennial fee, $1,500 instead of $750 (NRS 630.267(2); board Licensure Fees PDF). After 2 years expired, reinstatement is impossible and a full new application is required.",
         "Expired Nevada MD licenses are reported to the DEA and the Nevada State Board of Pharmacy by September 30 of the renewal year (NRS 630.267(5)), so a lapse quickly ripples into federal and state prescribing registrations.",
-        "MDs and DOs are on completely different clocks: MDs renew by June 30 of odd-numbered years, DOs by December 31 and now only in even-numbered years under AB 56 (2025). Physicians moving between the boards or holding dual credentials must track both anchors.",
+        "DOs and MDs are on completely different clocks: MDs renew by June 30 of odd-numbered years, DOs by December 31 and now only in even-numbered years under AB 56 (2025). Physicians moving between the boards or holding dual credentials must track both anchors.",
         "DO renewal notices are emailed from noreply@thentiacloud.com, not a bom.nv.gov address. The board's Summer 2025 newsletter warns these can land in spam and that failure to keep your email current may result in late payment fees; late fees were assessed for anyone who missed December 31, 2025.",
         "The MD board cannot accept personal or business checks: payment must be cashier's check, money order, or credit card, and credit cards carry a nonrefundable 2.5% processing fee (Licensure Fees PDF).",
         "The DO lapse window is short: 10 days after the renewal date triggers a 15-day certified-mail notice, and the license then expires automatically without a hearing (NRS 633.481). Restoration requires all past-due fees, the late fee, and verified CME for every period since expiration."
@@ -4647,14 +4647,14 @@
       "doBoardName": null,
       "doBoardUrl": null,
       "renewalCycle": "Biennial (2 years)",
-      "renewalAnchor": "Fixed date: all MD and DO licenses expire June 30 of ODD-numbered years, regardless of when the license was issued. The board's licensing presentation states renewal is \"Every 2 years on odd years\" for MD and DO (example cycle: July 1, 2005 to June 30, 2007), and the DCA's own license verification system shows current MD licenses expiring 6/30/2027. Renewal notices are mailed at least 60 days before expiration (N.J.S.A. 45:1-7.1(e)).",
+      "renewalAnchor": "Fixed date: all DO and MD licenses expire June 30 of ODD-numbered years, regardless of when the license was issued. The board's licensing presentation states renewal is \"Every 2 years on odd years\" for DO and MD (example cycle: July 1, 2005 to June 30, 2007), and the DCA's own license verification system shows current MD licenses expiring 6/30/2027. Renewal notices are mailed at least 60 days before expiration (N.J.S.A. 45:1-7.1(e)).",
       "renewalMonth": "June",
       "cmeHours": 100,
       "cmeDetails": "100 hours per 2-year cycle, including at least 40 Category 1. 1 hr prescription opioids (every renewal), 2 hrs sexual misconduct prevention (every renewal starting with the period that began July 1 2025), 1 hr explicit and implicit bias (every renewal; perinatal care providers only).",
       "cmeSplit": false,
       "cmeSource": "N.J. Admin. Code 13:35-6.15; 13:35-6.25",
       "cmeSourceUrl": "https://www.law.cornell.edu/regulations/new-jersey/N-J-A-C-13-35-6-15",
-      "renewalFee": "$580 (active MD/DO, full biennial renewal). The board FAQ states the registration fee is $290 per year of the biennial period; the board's licensing presentation lists renewal fees as: Active $580; Reduced-fee active-retired (65+, no HMO or hospital affiliation) $125; Inactive $0; Retired $0. Dollar figures come from the board's 2017 presentation and the FAQ (last modified 2023); the governing fee rule N.J.A.C. 13:35-6.13 publishes its table only as an image, so the current codified amounts could not be read directly.",
+      "renewalFee": "$580 (active DO/MD, full biennial renewal). The board FAQ states the registration fee is $290 per year of the biennial period; the board's licensing presentation lists renewal fees as: Active $580; Reduced-fee active-retired (65+, no HMO or hospital affiliation) $125; Inactive $0; Retired $0. Dollar figures come from the board's 2017 presentation and the FAQ (last modified 2023); the governing fee rule N.J.A.C. 13:35-6.13 publishes its table only as an image, so the current codified amounts could not be read directly.",
       "lateFee": "$100 late fee if renewed within the 30-day window after expiration (board licensing presentation; N.J.A.C. 13:35-3.14 requires \"a renewal fee and a late fee\" for late renewal).",
       "graceOrLapse": "30-day grace period by statute (N.J.S.A. 45:1-7.1(b)): the license may be renewed within 30 days after expiration by paying the renewal fee plus late fee, and during those 30 days the license remains valid and the physician is not deemed practicing without a license. Any license not renewed within 30 days of expiration is SUSPENDED without a hearing, and continued practice after the 30 days is unlicensed practice even if no suspension notice was received (45:1-7.1(c)). Reinstatement (N.J.S.A. 45:1-7.4; request application via BMEReinstatement@dca.njoag.gov) requires: renewal application, certification of employment for every job held during suspension, the current biennial renewal fee, the unpaid back renewal fee, a $175 reinstatement fee, and proof of the CME that was due (board presentation adds a criminal history background check). A current out-of-state license in good standing with that state's CE satisfied can substitute for the CME proof. The board may require an examination, skills assessment, or refresher course if it suspects practice deficiencies.",
       "processingTime": null,
@@ -4676,11 +4676,11 @@
       "faqs": [
         {
           "question": "When does my New Jersey medical license expire?",
-          "answer": "On June 30 of odd-numbered years, for every MD and DO regardless of issue date. The current biennial period ends June 30, 2027. The board mails a renewal notice at least 60 days before expiration."
+          "answer": "On June 30 of odd-numbered years, for every DO and MD regardless of issue date. The current biennial period ends June 30, 2027. The board mails a renewal notice at least 60 days before expiration."
         },
         {
           "question": "How much does renewal cost?",
-          "answer": "$580 for an active MD/DO license ($290 per year of the biennial period). Physicians 65 or older with no HMO or hospital affiliation may renew as reduced-fee active-retired for $125. Renewing as Inactive or Retired is free, but those statuses bar practicing and prescribing in New Jersey."
+          "answer": "$580 for an active DO/MD license ($290 per year of the biennial period). Physicians 65 or older with no HMO or hospital affiliation may renew as reduced-fee active-retired for $125. Renewing as Inactive or Retired is free, but those statuses bar practicing and prescribing in New Jersey."
         },
         {
           "question": "What happens if I miss the June 30 deadline?",
@@ -4692,7 +4692,7 @@
         },
         {
           "question": "Do DOs renew through a different board?",
-          "answer": "No. New Jersey has one board: the State Board of Medical Examiners licenses both MDs and DOs (and podiatrists) on the same June 30 odd-year cycle, and the board's FAQ confirms DOs hold all the same practice authority as MDs."
+          "answer": "No. New Jersey has one board: the State Board of Medical Examiners licenses both DOs and MDs (and podiatrists) on the same June 30 odd-year cycle, and the board's FAQ confirms DOs hold all the same practice authority as MDs."
         },
         {
           "question": "Do I have to finish my CME before renewing?",
@@ -4702,11 +4702,11 @@
       "sources": [
         {
           "url": "https://www.njconsumeraffairs.gov/documents/licenseprocess/bme-licensing-august-2017.pdf",
-          "what": "Board licensing presentation: renewal every 2 years on odd years for MD/DO, licenses expire June 30 of odd years, online renewal, $580 active renewal fee, $125 reduced-fee 65+, $0 inactive/retired, $100 late fee, $175 reinstatement fee plus back fees, background check and CME verification for reinstatement"
+          "what": "Board licensing presentation: renewal every 2 years on odd years for DO/MD, licenses expire June 30 of odd years, online renewal, $580 active renewal fee, $125 reduced-fee 65+, $0 inactive/retired, $100 late fee, $175 reinstatement fee plus back fees, background check and CME verification for reinstatement"
         },
         {
           "url": "https://www.njconsumeraffairs.gov/bme/Pages/FAQ.aspx",
-          "what": "Board FAQ: $290/year registration fee within biennial period, CME 100 credits as renewal condition, CME waiver certified-mail 60-day rule, reduced-fee retired-active 65+ rules, address-change misconduct warning, license type coverage MD/DO"
+          "what": "Board FAQ: $290/year registration fee within biennial period, CME 100 credits as renewal condition, CME waiver certified-mail 60-day rule, reduced-fee retired-active 65+ rules, address-change misconduct warning, license type coverage DO/MD"
         },
         {
           "url": "https://www.njconsumeraffairs.gov/bme",
@@ -4980,7 +4980,7 @@
       "cmeSplit": false,
       "cmeSource": "N.Y. Comp. Codes tit. 8, §§ 59.12-13",
       "cmeSourceUrl": "https://www.op.nysed.gov/professions/physicians/nysdoh-mandatory-prescriber-education",
-      "renewalFee": "$600 (registration renewal for Medicine, MD and DO, per two-year registration period; Office of the Professions Fees Chart, Rev. 2/21). Online payment is credit card only (Visa, MasterCard, American Express) and fees are not refundable.",
+      "renewalFee": "$600 (registration renewal for Medicine, DO and MD, per two-year registration period; Office of the Professions Fees Chart, Rev. 2/21). Online payment is credit card only (Visa, MasterCard, American Express) and fees are not refundable.",
       "lateFee": "$10 per month of delayed registration (\"an additional fee for late filing of ten dollars for each month that registration has been delayed\", NY Education Law 6502)",
       "graceOrLapse": "There is no grace period to practice: practicing after a lapse requires actual possession of the registration certificate, and failure to register while practicing can be deemed professional misconduct. Online renewal remains available until 4 months after the registration period ends; after that you must submit a paper Delayed Registration Application, paying the $600 plus $10/month late fees. Paying a delayed registration re-registers you for the full lapsed period in question, not a fresh two years from the payment date. Physicians not practicing in NY can switch to Inactive status free of charge and avoid late fees; resuming practice requires re-registration and any applicable post-licensure requirements.",
       "processingTime": "Online renewals: up to 2 business days (longer if the renewal requires review); address changes 2 business days; optional professional photo ID card about 6 weeks",
@@ -5005,7 +5005,7 @@
         },
         {
           "question": "How much does renewal cost?",
-          "answer": "$600 per two-year registration period for Medicine (MD and DO), per the Office of the Professions Fees Chart. Online payment is by credit card only (Visa, MasterCard, American Express) and fees are not refundable. An optional professional photo ID card is an extra $30."
+          "answer": "$600 per two-year registration period for Medicine (DO and MD), per the Office of the Professions Fees Chart. Online payment is by credit card only (Visa, MasterCard, American Express) and fees are not refundable. An optional professional photo ID card is an extra $30."
         },
         {
           "question": "How do I renew online?",
@@ -5121,7 +5121,7 @@
       "cmeSplit": false,
       "cmeSource": "N.C. Admin. Code tit. 21, r. 32R.0101",
       "cmeSourceUrl": "https://www.ncmedboard.org/resources-information/faqs/professional-faqs/cme",
-      "renewalFee": "$250 (MD and DO, annual renewal; set by N.C. Gen. Stat. 90-13.2 and the board's fee schedule, last updated 08.21.2026)",
+      "renewalFee": "$250 (DO and MD, annual renewal; set by N.C. Gen. Stat. 90-13.2 and the board's fee schedule, last updated 08.21.2026)",
       "lateFee": "$50, added 30 days after the renewal date (birthday) passes, on top of the $250 renewal fee",
       "graceOrLapse": "After the $50 late fee is assessed (30 days past the birthday), the board sends a certified letter and the licensee has an additional 30 days to complete renewal. If renewal is still not completed within that period, the license is automatically placed on inactive status, and it is unlawful to practice with an inactive license. A license inactive for less than one year (with no discipline involved) can be reactivated: a $300 application fee plus $38 fingerprinting and a $2.50 NPDB fee, and a CME log for the inactive period; average processing is 8 weeks. Inactive more than one year, or inactive due to board action, requires full reinstatement, which is essentially a new licensure application. Physicians out of clinical practice for two or more years may also be required to demonstrate competence, determined case by case.",
       "processingTime": "Online renewals are processed immediately once payment shows \"transaction approved\"; the renewal itself typically takes 10-15 minutes to complete. Reactivation after lapse averages 8 weeks.",
@@ -5142,11 +5142,11 @@
       "faqs": [
         {
           "question": "When is my North Carolina medical license renewal due?",
-          "answer": "Every year, no later than 30 days after your birthday, regardless of when your license was issued. This applies to both MDs and DOs, and your first renewal is due within 30 days of your next birthday even if it falls soon after issuance."
+          "answer": "Every year, no later than 30 days after your birthday, regardless of when your license was issued. This applies to both DOs and MDs, and your first renewal is due within 30 days of your next birthday even if it falls soon after issuance."
         },
         {
           "question": "How much does renewal cost?",
-          "answer": "$250 per year for MDs and DOs, paid by credit card through the Licensee Gateway at portal.ncmedboard.org. A $50 late fee is added if you renew more than 30 days after your birthday."
+          "answer": "$250 per year for DOs and MDs, paid by credit card through the Licensee Gateway at portal.ncmedboard.org. A $50 late fee is added if you renew more than 30 days after your birthday."
         },
         {
           "question": "What happens if I miss the deadline entirely?",
@@ -5180,7 +5180,7 @@
         },
         {
           "url": "https://www.ncmedboard.org/images/uploads/other_pdfs/NCMB_Fee_Schedule_08212026.pdf",
-          "what": "Official fee schedule (08.21.2026): MD/DO $250 annual, $50 late fee, first-renewal rule, application fee does not count toward first renewal"
+          "what": "Official fee schedule (08.21.2026): DO/MD $250 annual, $50 late fee, first-renewal rule, application fee does not count toward first renewal"
         },
         {
           "url": "https://www.ncmedboard.org/",
@@ -5407,7 +5407,7 @@
       "cmeSplit": false,
       "cmeSource": "OAC 4731-10-02(A); OAC 4731-29-01(A), (B)(1), (C). CME statements rechecked 2026-09-18; other guide facts retain their earlier review date.",
       "cmeSourceUrl": "https://codes.ohio.gov/ohio-administrative-code/rule-4731-10-02",
-      "renewalFee": "$305 (MD/DO/DPM biennial renewal, per ORC 4731.281 and the board's fee list), of which $20 goes to the Ohio Physician Loan Repayment Fund; plus a $3.50 eLicense transaction fee, paid online by credit card",
+      "renewalFee": "$305 (DO/MD/DPM biennial renewal, per ORC 4731.281 and the board's fee list), of which $20 goes to the Ohio Physician Loan Repayment Fund; plus a $3.50 eLicense transaction fee, paid online by credit card",
       "lateFee": "No named late fee. An expired license instead requires reinstatement at $405 (plus $3.50 transaction fee) if lapsed 2 years or less, effectively $100 more than on-time renewal (ORC 4731.281; board fee list)",
       "graceOrLapse": "No grace period: ORC 4731.281 states failure to renew \"shall operate automatically to suspend the holder's license to practice.\" Lapsed 2 years or less: reinstatement is mandatory (\"the board shall reinstate\") on submission of a renewal application and the $405 reinstatement fee. Lapsed more than 2 years: restoration is discretionary (\"the board may restore\") and requires a restoration application, $505 fee, FBI and Ohio BCI fingerprint background checks sent directly from the vendor, an AMA (MD) or AOA (DO) physician profile report, and completion of the 50-hour CME requirement in the 24 months preceding the restoration application. Board allows 10 business days for initial review of a restoration application.",
       "processingTime": "Online renewal is effectively immediate: after submitting payment on eLicense, an automated email delivers a \"Successful License Renewal Letter\" with a replica wallet card attached (board renewal page and Renewal FAQs). Restoration applications get an initial board review within about 10 business days.",
@@ -5543,7 +5543,7 @@
       "portalUrl": "https://www.medicalboard.ok.gov/s/",
       "doBoardName": "Oklahoma State Board of Osteopathic Examiners",
       "doBoardUrl": "https://oklahoma.gov/osboe.html",
-      "renewalCycle": "Annual (1 year) for both MD and DO",
+      "renewalCycle": "Annual (1 year) for both DO and MD",
       "renewalAnchor": "MD: annual reregistration during the month of initial licensure, per OAC 435:10-7-10 (\"Reregistration shall be conducted during the month of initial licensure of each individual licensee\"). It is NOT birth month and NOT a fixed calendar date. DO: all osteopathic licenses expire June 30 every year; the OSBOE renewal window opens May 1.",
       "renewalMonth": "May",
       "cmeHours": 60,
@@ -5698,15 +5698,15 @@
       "doBoardName": null,
       "doBoardUrl": null,
       "renewalCycle": "Biennial (2 years) for Active, Inactive, Locum Tenens, Telemedicine, and similar statuses. Emeritus and Active-One Year (postgraduate) statuses renew annually.",
-      "renewalAnchor": "Fixed date, statewide: the renewal application and fee must be received and satisfactorily complete on or before December 31 of each odd-numbered year for all physicians and physician associates (OAR 847-008-0005(1)). All MD/DO licensees share the same deadline regardless of when the license was issued; the current registration period ends December 31, 2027. Emeritus renews by December 31 every year; acupuncturists (also under this board) renew by June 30 of even-numbered years.",
+      "renewalAnchor": "Fixed date, statewide: the renewal application and fee must be received and satisfactorily complete on or before December 31 of each odd-numbered year for all physicians and physician associates (OAR 847-008-0005(1)). All DO/MD licensees share the same deadline regardless of when the license was issued; the current registration period ends December 31, 2027. Emeritus renews by December 31 every year; acupuncturists (also under this board) renew by June 30 of even-numbered years.",
       "renewalMonth": "June",
       "cmeHours": 60,
       "cmeDetails": "60 hours per 2-year cycle, including at least 60 Category 1, 1 hour pain management, 2 hours cultural competency.",
       "cmeSplit": false,
       "cmeSource": "OAR 847-008-0070; 847-008-0075; 847-008-0077",
       "cmeSourceUrl": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=847-008-0070",
-      "renewalFee": "$756 total for an Active MD/DO two-year renewal per the board fee schedule effective 7/2/2026: $608 license registration + $20 OHSU library + $50 HPSP fee + $70 prescription monitoring + $8 OHA workforce database. Inactive or Administrative Medicine status totals $686 (no PDMP fee). Active-One Year (postgraduate) is $378/year; Emeritus $114/year. Underlying rule: registration is $314/year including $10/year OHSU library (OAR 847-005-0005), rising to $375/year on or after March 1, 2028. All fees are nonrefundable, nontransferable, and cannot be prorated.",
-      "lateFee": "$195 (Delinquent MD/DO Registration Renewal, OAR 847-005-0005(6)(a)), assessed for any renewal not submitted and paid before the December 31 deadline.",
+      "renewalFee": "$756 total for an Active DO/MD two-year renewal per the board fee schedule effective 7/2/2026: $608 license registration + $20 OHSU library + $50 HPSP fee + $70 prescription monitoring + $8 OHA workforce database. Inactive or Administrative Medicine status totals $686 (no PDMP fee). Active-One Year (postgraduate) is $378/year; Emeritus $114/year. Underlying rule: registration is $314/year including $10/year OHSU library (OAR 847-005-0005), rising to $375/year on or after March 1, 2028. All fees are nonrefundable, nontransferable, and cannot be prorated.",
+      "lateFee": "$195 (Delinquent DO/MD Registration Renewal, OAR 847-005-0005(6)(a)), assessed for any renewal not submitted and paid before the December 31 deadline.",
       "graceOrLapse": "No grace period for practice: a license not renewed by December 31 lapses and the licensee may not practice; practicing medicine on a lapsed license is practicing without a license, a felony and grounds for discipline (board renewal page). Reinstatement path (OAR 847-008-0050): within 90 days of the end of the registration period, reinstate by paying the $195 late fee plus the renewal fees and completing the required forms. After 90 days but within two biennia, a full Reactivation Application is required ($50 processing fee) plus the late fee and back renewal fees for the lapsed periods, with additional requirements under OAR 847-008-0055. A license not reinstated or reactivated within two biennia (about 4 years) expires, and the former licensee must reapply as a new applicant under current requirements.",
       "processingTime": "Not published as a fixed figure. The board asks licensees to complete renewal by December 1 so staff have time to review and process before the December 31 deadline; once approved, an email tells you how to print the new Certificate of Registration from Applicant/Licensee Services.",
       "steps": [
@@ -5722,16 +5722,16 @@
         "Miss the 90-day reinstatement window and you are into full reactivation: application, $50 processing fee, the $195 delinquent fee, and back renewal fees for every lapsed period. Let it sit more than two biennia and the license expires outright, forcing a brand-new application (OAR 847-008-0050).",
         "Fees are nonrefundable, nontransferable, and never prorated. Prescribers also pay a $70/biennium Prescription Drug Monitoring Program fee on top of registration, so the real Active renewal cost is $756, not the $628 registration line.",
         "Paper renewals are not offered at all; renewal is online only through omb.oregon.gov. Also expect a possible random CME audit triggered during the renewal application, with 60 days to produce documentation (MOC participation can satisfy it).",
-        "A scheduled fee increase is already in rule: MD/DO registration rises from $314/year to $375/year on or after March 1, 2028, so the renewal due December 31, 2029 will cost more."
+        "A scheduled fee increase is already in rule: DO/MD registration rises from $314/year to $375/year on or after March 1, 2028, so the renewal due December 31, 2029 will cost more."
       ],
       "faqs": [
         {
-          "question": "When is my Oregon MD/DO license renewal due?",
+          "question": "When is my Oregon DO/MD license renewal due?",
           "answer": "On or before December 31 of each odd-numbered year, for every physician and physician associate at once (OAR 847-008-0005(1)). The current period ends December 31, 2027. The application and fee must be received and satisfactorily complete by that date; the board recommends finishing by December 1."
         },
         {
           "question": "How much does renewal cost?",
-          "answer": "For an Active MD/DO license, $756 for the two-year period under the fee schedule effective 7/2/2026 ($608 registration, $20 OHSU library, $50 HPSP, $70 prescription monitoring, $8 workforce database). Inactive is $686. Fees are nonrefundable and not prorated."
+          "answer": "For an Active DO/MD license, $756 for the two-year period under the fee schedule effective 7/2/2026 ($608 registration, $20 OHSU library, $50 HPSP, $70 prescription monitoring, $8 workforce database). Inactive is $686. Fees are nonrefundable and not prorated."
         },
         {
           "question": "Where do I renew?",
@@ -5757,7 +5757,7 @@
         },
         {
           "url": "https://www.oregon.gov/omb/licensing/Documents/all-fees.pdf",
-          "what": "Licensee Renewal Fees schedule effective 7/2/2026: MD/DO two-year Active $756 total, Inactive $686, one-year statuses $378 and $114, with line-item breakdown"
+          "what": "Licensee Renewal Fees schedule effective 7/2/2026: DO/MD two-year Active $756 total, Inactive $686, one-year statuses $378 and $114, with line-item breakdown"
         },
         {
           "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=847-008-0005",
@@ -5765,7 +5765,7 @@
         },
         {
           "url": "https://secure.sos.state.or.us/oard/view.action?ruleNumber=847-005-0005",
-          "what": "OAR 847-005-0005 fee rule: $314/year MD/DO registration ($375/year on or after 3/1/2028), $195 delinquent MD/DO renewal fee, $50 reactivation application, PDMP $35/year, HPSP $25/year, workforce $4/year, biennial collection"
+          "what": "OAR 847-005-0005 fee rule: $314/year DO/MD registration ($375/year on or after 3/1/2028), $195 delinquent DO/MD renewal fee, $50 reactivation application, PDMP $35/year, HPSP $25/year, workforce $4/year, biennial collection"
         },
         {
           "url": "https://www.oregon.gov/omb/pages/default.aspx",
@@ -5997,7 +5997,7 @@
       "cmeSplit": false,
       "cmeSource": "216-RICR-40-05-1.5.5",
       "cmeSourceUrl": "https://rules.sos.ri.gov/regulations/part/216-40-05-1",
-      "renewalFee": "$1,090.00 (biennial renewal, same for MD and DO); $870.00 for \"Renewal with Approved Training\" (per 216-RICR-10-05-2 § 2.9, citing RIGL 5-37-10(a) and 23-1-54)",
+      "renewalFee": "$1,090.00 (biennial renewal, same for DO and MD); $870.00 for \"Renewal with Approved Training\" (per 216-RICR-10-05-2 § 2.9, citing RIGL 5-37-10(a) and 23-1-54)",
       "lateFee": "$170.00 added to the base renewal fee (216-RICR-10-05-2 § 2.9, citing RIGL 5-37-10(b) and 23-1-54)",
       "graceOrLapse": "No grace period. Per 216-RICR-40-05-1.5.6(D) and RIGL 5-37-10, licenses whose renewals are not filed on or before July 1 \"shall be automatically lapsed.\" Reinstatement is at the Board's discretion upon payment of the current registration fee plus the additional fee under RIGL 23-1-54 ($170 late renewal fee per the fee regulation). Reinstatement from inactive to active status costs $1,090 (fee reg § 2.9, RIGL 5-37-11). The board page directs previously licensed physicians to email DOH.Elicense@health.ri.gov for a reactivation or reinstatement application.",
       "processingTime": null,
@@ -6027,14 +6027,14 @@
         },
         {
           "question": "How much does renewal cost?",
-          "answer": "$1,090.00 for both MDs and DOs, per the DOH fee regulation 216-RICR-10-05-2 § 2.9. Physicians renewing with approved training pay $870.00. Late renewal adds $170.00 to the base fee."
+          "answer": "$1,090.00 for both DOs and MDs, per the DOH fee regulation 216-RICR-10-05-2 § 2.9. Physicians renewing with approved training pay $870.00. Late renewal adds $170.00 to the base fee."
         },
         {
           "question": "What happens if I miss the deadline?",
           "answer": "The license lapses automatically on July 1; there is no grace period (216-RICR-40-05-1.5.6(D), RIGL 5-37-10). The Board may, in its discretion, reinstate a lapsed license upon payment of the current registration fee plus the additional fee under RIGL 23-1-54 ($170). Previously licensed physicians should contact the Board at DOH.Elicense@health.ri.gov for a reactivation or reinstatement application."
         },
         {
-          "question": "Are MDs and DOs licensed by different boards in Rhode Island?",
+          "question": "Are DOs and MDs licensed by different boards in Rhode Island?",
           "answer": "No. A single Board of Medical Licensure and Discipline within the RI Department of Health licenses both allopathic and osteopathic physicians, and the renewal regulation (216-RICR-40-05-1) and fee schedule apply identically to both, at the same $1,090 renewal fee."
         },
         {
@@ -6049,7 +6049,7 @@
         },
         {
           "url": "https://rules.sos.ri.gov/regulations/part/216-10-05-2",
-          "what": "DOH fee regulation 216-RICR-10-05-2 § 2.9: $1,090 renewal (MD and DO), $870 renewal with approved training, $170 late renewal fee, $1,090 inactive-to-active reinstatement"
+          "what": "DOH fee regulation 216-RICR-10-05-2 § 2.9: $1,090 renewal (DO and MD), $870 renewal with approved training, $170 late renewal fee, $1,090 inactive-to-active reinstatement"
         },
         {
           "url": "https://rules.sos.ri.gov/regulations/part/216-40-05-1",
@@ -6131,14 +6131,14 @@
       "doBoardName": null,
       "doBoardUrl": null,
       "renewalCycle": "Biennial (2 years)",
-      "renewalAnchor": "Fixed statewide date: licenses expire June 30 of odd-numbered years (current cycle is 2025-2027; the prior license lapsed June 30, 2025 if not renewed, per the board's 2025-2027 late renewal application). SC Code 40-47-41 provides that a license \"may be renewed biennially or as otherwise provided by the board.\" The board page does not publish the exact opening date of the on-time renewal window for MD/DO.",
+      "renewalAnchor": "Fixed statewide date: licenses expire June 30 of odd-numbered years (current cycle is 2025-2027; the prior license lapsed June 30, 2025 if not renewed, per the board's 2025-2027 late renewal application). SC Code 40-47-41 provides that a license \"may be renewed biennially or as otherwise provided by the board.\" The board page does not publish the exact opening date of the on-time renewal window for DO/MD.",
       "renewalMonth": "May",
       "cmeHours": 40,
       "cmeDetails": "40 hours per 2-year cycle, including at least 40 Category 1 (30 in your specialty; first renewal exempt). 2 hrs safe prescribing and monitoring of controlled substances, 1 hr human trafficking awareness (EM and primary care and related settings; by January 1 2028 if licensed before 2026 then every 6 years).",
       "cmeSplit": false,
       "cmeSource": "SC Code § 40-47-40",
       "cmeSourceUrl": "https://llr.sc.gov/med/PDF/Medical_CE_Reqs.pdf",
-      "renewalFee": "$140 (active MD/DO permanent license, 2-year renewal, 2025-2027 cycle)",
+      "renewalFee": "$140 (active DO/MD permanent license, 2-year renewal, 2025-2027 cycle)",
       "lateFee": "$100 per month, added to the $140 renewal fee (July after the deadline through the following June 30, reaching $140 + $1,200 = $1,340 by month 12). If the physician practiced in SC after the lapse, an additional $1,000 per month unauthorized-practice penalty applies (up to $13,340 total at month 12).",
       "graceOrLapse": "No practice grace period. The license lapses at the close of the renewal period (June 30) and \"the licensee may not practice in this State until the licensee is reinstated\" (SC Code 40-47-41). A 12-month late renewal window follows (for the current cycle: July 1, 2025 through June 30, 2026), paper application only, with a $100/month late fee and a notarized sworn Practice Activity Statement under SC Code 40-47-43; practicing after lapse adds $1,000/month. Beginning the 13th month (July 1, 2026 for this cycle), late renewal is no longer available and a full reactivation application is required. Statute allows reinstatement on payment of a reinstatement fee, the current renewal fee, and demonstration of continued competency satisfactory to the board.",
       "processingTime": null,
@@ -6146,7 +6146,7 @@
         "Complete your CME for the cycle (40 hours) (see details below)",
         "Log in to the South Carolina Board of Medical Examiners (SC Department of Labor, Licensing and Regulation) renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($140 (active MD/DO permanent license, 2-year renewal, 2025-2027 cycle))",
+        "Pay the renewal fee ($140 (active DO/MD permanent license, 2-year renewal, 2025-2027 cycle))",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -6161,7 +6161,7 @@
       "faqs": [
         {
           "question": "When is my South Carolina medical license renewal due?",
-          "answer": "SC MD/DO permanent licenses renew biennially on a fixed statewide cycle ending June 30 of odd-numbered years. The current cycle is 2025-2027; licenses not renewed by June 30, 2025 lapsed on July 1, 2025. Renew online through the LLR Online Services portal before the deadline."
+          "answer": "SC DO/MD permanent licenses renew biennially on a fixed statewide cycle ending June 30 of odd-numbered years. The current cycle is 2025-2027; licenses not renewed by June 30, 2025 lapsed on July 1, 2025. Renew online through the LLR Online Services portal before the deadline."
         },
         {
           "question": "How much does renewal cost?",
@@ -6177,7 +6177,7 @@
         },
         {
           "question": "Do I have to send CME certificates when I renew?",
-          "answer": "Not if you renew on time: MD/DO licensees self-attest and are told not to send certificates, but must keep them (or track in CE Broker) for a random audit at the end of the renewal period. Physicians renewing late must submit actual proof of CME with the paper application."
+          "answer": "Not if you renew on time: DO/MD licensees self-attest and are told not to send certificates, but must keep them (or track in CE Broker) for a random audit at the end of the renewal period. Physicians renewing late must submit actual proof of CME with the paper application."
         },
         {
           "question": "Is CME required for my first renewal?",
@@ -6191,7 +6191,7 @@
       "sources": [
         {
           "url": "https://llr.sc.gov/med/renewals.aspx",
-          "what": "Board renewal page: MD/DO 2025-2027 renewal fee $140, late renewal period July 1, 2025 - June 30, 2026, reactivation from July 1, 2026, online portal link, late-renewal-is-paper rule, CME attestation and volunteer credit, military exemptions, proxy pay"
+          "what": "Board renewal page: DO/MD 2025-2027 renewal fee $140, late renewal period July 1, 2025 - June 30, 2026, reactivation from July 1, 2026, online portal link, late-renewal-is-paper rule, CME attestation and volunteer credit, military exemptions, proxy pay"
         },
         {
           "url": "https://llr.sc.gov/med/PDF/Renewal/2025-2027_LATE_Physician_Renewal_App.pdf",
@@ -6299,7 +6299,7 @@
       "cmeSplit": false,
       "cmeSource": "No statutory CME requirement",
       "cmeSourceUrl": "https://www.sdbmoe.gov/professions-physicians/professions-physicians-physician-license-md-do/",
-      "renewalFee": "$400 (biennial renewal of the physician and surgeon license, MD and DO alike; ARSD 20:47:06:01, within the $400 statutory cap of SDCL 36-4-24.1)",
+      "renewalFee": "$400 (biennial renewal of the physician and surgeon license, DO and MD alike; ARSD 20:47:06:01, within the $400 statutory cap of SDCL 36-4-24.1)",
       "lateFee": null,
       "graceOrLapse": "No grace period and no late fee exist. SDCL 36-4-24.2: failure to renew on or before March 1 in the odd-numbered years \"shall constitute a forfeiture of the license.\" A forfeited license may be renewed only at the board's discretion, upon payment of the fee and the application required for licensure by reciprocity (SDCL 36-4-19, 36-4-19.1); ARSD 20:47:06:01 sets reinstatement of a forfeited license at $400. The board's own page adds that forfeited licenses are not automatically eligible for renewal.",
       "processingTime": null,
@@ -6325,7 +6325,7 @@
         },
         {
           "question": "How much does renewal cost?",
-          "answer": "$400 for the biennial renewal, set by ARSD 20:47:06:01. Statute caps the biennial fee at $400 (SDCL 36-4-24.1). MD and DO pay the same fee to the same combined board."
+          "answer": "$400 for the biennial renewal, set by ARSD 20:47:06:01. Statute caps the biennial fee at $400 (SDCL 36-4-24.1). DO and MD pay the same fee to the same combined board."
         },
         {
           "question": "Do I need CME to renew?",
@@ -6347,7 +6347,7 @@
       "sources": [
         {
           "url": "https://www.sdbmoe.gov/professions-physicians/professions-physicians-physician-license-md-do/",
-          "what": "Board physician license (MD/DO) page: renewal responsibility, reminders are courtesy only, forfeited licenses not automatically renewable, MySD portal and statute/rule links"
+          "what": "Board physician license (DO/MD) page: renewal responsibility, reminders are courtesy only, forfeited licenses not automatically renewable, MySD portal and statute/rule links"
         },
         {
           "url": "https://sdbmoe.gov/faqs/",
@@ -6757,7 +6757,7 @@
       "cmeSplit": false,
       "cmeSource": "Utah Admin. Code R156-67-304",
       "cmeSourceUrl": "https://commerce.utah.gov/dopl/physician-and-surgeon/renew-a-license/",
-      "renewalFee": "$193 (MD or DO, 2-year renewal). Add $78 to renew a Utah controlled substance license (total $271). Verified on the FY 7/1/2025-6/30/2026 DOPL fee schedule (\"Physician and Surgeon ... Renewal Fee 193.00\"; \"Osteopathic Physician and Surgeon 200.00 / 193.00\"; \"Controlled Substance 100.00 / 78.00\") and stated as \"$193 renewal fee\" on the DO renewal page. Fees are non-refundable and \"subject to change each July 1.\"",
+      "renewalFee": "$193 (DO or MD, 2-year renewal). Add $78 to renew a Utah controlled substance license (total $271). Verified on the FY 7/1/2025-6/30/2026 DOPL fee schedule (\"Physician and Surgeon ... Renewal Fee 193.00\"; \"Osteopathic Physician and Surgeon 200.00 / 193.00\"; \"Controlled Substance 100.00 / 78.00\") and stated as \"$193 renewal fee\" on the DO renewal page. Fees are non-refundable and \"subject to change each July 1.\"",
       "lateFee": "No separate late-renewal window; a lapsed license is a reinstatement. Within 30 days after expiration: renewal fee PLUS $20 for EACH license being reinstated. After 30 days and within 2 years: renewal fee PLUS $50 for EACH license (from the DOPL Renewal/Reinstatement form v.20231107; matches the fee schedule's \"Late Renewal Fee $20.00 / Reinstatement Fee $50.00\"). The physician license and the controlled substance license are separate licenses, so the per-license fee applies to each.",
       "graceOrLapse": "No grace period: under Utah Code 58-1-308(2)(b) \"A license that is not renewed prior to the expiration date shown on the license automatically expires.\" Reinstatement is available within 2 years of nonrenewal (renewal fee + reinstatement fee + proof of renewal qualifications); a license \"reinstated no later than 120 days after it expires shall be retroactively reinstated to the date it expired\" (58-1-308(5)(c)). After 2 years you must qualify for a new license (58-1-308(6)(a)), with a 6-month exception for those practicing under federal employment or another state license after reestablishing Utah domicile. Reinstatement cannot be done online; DOPL requires the manual Renewal/Reinstatement form. Practicing after expiration is unlawful conduct and a criminal offense (Utah Code 58-1-501(1)(a), 58-1-502), and DOPL may discipline for time worked unlicensed even after reinstatement.",
       "processingTime": "Online renewal via My License One: payment receipt emailed within 2 business days; a copy of the renewed license is emailed 1-3 business days after approval (stated on the DO renewal page; both professions use the same My License One system). No published timeline for paper reinstatements.",
@@ -6769,7 +6769,7 @@
         "Submit and save your confirmation"
       ],
       "pitfalls": [
-        "MD and DO deadlines are different: MD licenses expire January 31 of even years, DO licenses May 31 of even years. A dual-boarded or converting physician can miss one of the two.",
+        "DO and MD deadlines are different: MD licenses expire January 31 of even years, DO licenses May 31 of even years. A dual-boarded or converting physician can miss one of the two.",
         "The controlled substance license is a separate license renewed at the same time ($78 on top of the $193). If you lapse, the per-license reinstatement penalty ($20 within 30 days, $50 after) is charged for EACH license, so an MD+CS lapse costs double penalties.",
         "There is no grace period. The license automatically expires on the expiration date (Utah Code 58-1-308(2)(b)), and continuing to practice is a criminal offense (58-1-501/58-1-502); DOPL can discipline for unlicensed practice even after you reinstate.",
         "Reinstatement and re-application cannot be done through the online portal; DOPL requires the paper Renewal/Reinstatement form mailed with fees. Only on-time renewal is online.",
@@ -6783,7 +6783,7 @@
         },
         {
           "question": "How much does renewal cost?",
-          "answer": "$193 for the 2-year MD or DO renewal, plus $78 if you also hold a Utah controlled substance license ($271 total). Fees are non-refundable and reset each July 1 (FY2026 DOPL fee schedule)."
+          "answer": "$193 for the 2-year DO or MD renewal, plus $78 if you also hold a Utah controlled substance license ($271 total). Fees are non-refundable and reset each July 1 (FY2026 DOPL fee schedule)."
         },
         {
           "question": "How do I renew online?",
@@ -6890,7 +6890,7 @@
       "portalUrl": "https://medicallicensing.vermont.gov/portal/public",
       "doBoardName": "Vermont Board of Osteopathic Physicians and Surgeons (Secretary of State, Office of Professional Regulation)",
       "doBoardUrl": "https://sos.vermont.gov/osteopathic-physicians",
-      "renewalCycle": "Biennial (2 years) for both MD and DO",
+      "renewalCycle": "Biennial (2 years) for both DO and MD",
       "renewalAnchor": "MD: licenses expire November 30 of even-numbered years (next deadline November 30, 2026); a license issued before September 1 of an even year expires that same November 30 and must be renewed at the full fee. DO: licenses renew September 30 of even-numbered years per the OPR fee and renewal-date schedule (next deadline September 30, 2026).",
       "renewalMonth": "September",
       "cmeHours": 30,
@@ -6939,7 +6939,7 @@
         },
         {
           "question": "How much CME do I need to renew?",
-          "answer": "Both MDs and DOs need 30 hours per 2-year cycle. MDs must include 1 hour of hospice, palliative care, or pain management and, for DEA registrants, 2 hours on safe prescribing of controlled substances (Board of Medical Practice Rules, Section 24). DO CME is set by 26 V.S.A. § 1836(c) and board rule."
+          "answer": "Both DOs and MDs need 30 hours per 2-year cycle. MDs must include 1 hour of hospice, palliative care, or pain management and, for DEA registrants, 2 hours on safe prescribing of controlled substances (Board of Medical Practice Rules, Section 24). DO CME is set by 26 V.S.A. § 1836(c) and board rule."
         }
       ],
       "sources": [
@@ -7005,7 +7005,7 @@
           "liveValue": "MD 30 hrs incl 1 pain, 2 CS; DO 30",
           "note": "Vermont board pages fetched did not state hours",
           "source": "https://healthvermont.gov/systems/medical-practice-board/statutes-rules-policies-and-newsletters",
-          "publicNote": "We're confirming the CME hours for MDs and DOs with the board."
+          "publicNote": "We're confirming the CME hours for DOs and MDs with the board."
         }
       ],
       "mateAct": {
@@ -7034,7 +7034,7 @@
       "cmeSplit": false,
       "cmeSource": "18VAC85-20-235 (eff. 2025-02-27); Va. Code § 54.1-2912.1; § 54.1-2928.3",
       "cmeSourceUrl": "https://law.lis.virginia.gov/admincode/title18/agency85/chapter20/section235/",
-      "renewalFee": "$337 (active MD/DO biennial renewal; inactive license renewal is $168) per 18VAC85-20-22",
+      "renewalFee": "$337 (active DO/MD biennial renewal; inactive license renewal is $168) per 18VAC85-20-22",
       "lateFee": "$115 additional fee for processing a late renewal application within one renewal cycle (active license); $55 per cycle for late renewal of an inactive license (18VAC85-20-22)",
       "graceOrLapse": "No stated grace period for practice. A license not renewed in the birth month can be late-renewed within one renewal cycle by paying the $337 renewal fee plus the $115 late fee. Once lapsed two successive years or more, late renewal is no longer available: the physician must file a reinstatement application, pay the $497 reinstatement fee, and attest to CME equal to the requirement for the years lapsed (capped at 4 years' worth) per 18VAC85-20-240. If out of active practice more than four years, the Board may additionally require passage of SPEX or COMVEX-USA. Reinstatement after suspension/revocation or after a denied petition is $2,000.",
       "processingTime": "Effectively immediate for online renewal: the Board is paperless and states the renewed status displays on License Lookup as soon as the fee is validated (Board FAQ). No paper license is mailed.",
@@ -7042,7 +7042,7 @@
         "Complete your CME for the cycle (30 hours) (see details below)",
         "Log in to the Virginia Board of Medicine (Department of Health Professions) renewal portal",
         "Complete the renewal application and answer the attestation questions",
-        "Pay the renewal fee ($337 (active MD/DO biennial renewal; inactive license renewal is $168) per 18VAC85-20-22)",
+        "Pay the renewal fee ($337 (active DO/MD biennial renewal; inactive license renewal is $168) per 18VAC85-20-22)",
         "Submit and save your confirmation"
       ],
       "pitfalls": [
@@ -7059,7 +7059,7 @@
         },
         {
           "question": "How much does renewal cost?",
-          "answer": "$337 for an active MD or DO license; $168 to renew an inactive license (18VAC85-20-22). Online payment accepts Visa, MasterCard, American Express, or Discover."
+          "answer": "$337 for an active DO or MD license; $168 to renew an inactive license (18VAC85-20-22). Online payment accepts Visa, MasterCard, American Express, or Discover."
         },
         {
           "question": "What happens if I miss my birth-month deadline?",
@@ -7093,7 +7093,7 @@
         },
         {
           "url": "https://www.dhp.virginia.gov/Boards/Medicine/PractitionerResources/Fees/",
-          "what": "Board fees page confirming MD/DO fees live in 18VAC85-20-22 (links to the regulation)"
+          "what": "Board fees page confirming DO/MD fees live in 18VAC85-20-22 (links to the regulation)"
         },
         {
           "url": "https://www.dhp.virginia.gov/Boards/Medicine/",
@@ -7198,7 +7198,7 @@
         "The advertised MD fee is not the check you write: $824 base becomes $996 after the mandatory $32 HEAL-WA and $140 Washington Physician Health Program surcharges, and paying inside HELMS by credit card adds a 2.5% convenience fee (ACH is free).",
         "You cannot renew early at will: online renewal is available only within 90 days of expiration, only for active-status licenses with no restrictions, probation, or conditions, and only if you are not changing status. Military, inactive, and retired statuses must renew by other means.",
         "Washington moved licensing to HELMS, reached through a two-step Secure Access Washington (SAW) login. If you have never set up a SAW account and added the HELMS service, do it before your renewal window. Name changes must be submitted at least two weeks before renewing.",
-        "MDs and DOs are on different clocks: MDs renew every two years on their birthday, DOs every single year on their birthday, even though the DO CME cycle is three years and the MD CME cycle is four. Do not assume the CME cycle and the renewal cycle match.",
+        "DOs and MDs are on different clocks: MDs renew every two years on their birthday, DOs every single year on their birthday, even though the DO CME cycle is three years and the MD CME cycle is four. Do not assume the CME cycle and the renewal cycle match.",
         "MDs must complete the Demographic Census for Workforce Planning as part of renewal, alongside the CME attestations (including the one-time 6-hour suicide prevention training and 1-hour opioid course if prescribing).",
         "DOH will not receive USPS-forwarded mail: the renewed credential is mailed to the address on file at the time of renewal, so a stale address means a lost license document and possibly a missed 90-day renewal notice."
       ],
@@ -7476,7 +7476,7 @@
       "boardName": "Wisconsin Medical Examining Board (Department of Safety and Professional Services, DSPS)",
       "boardUrl": "https://dsps.wi.gov/a-z-boards-and-councils-list/meb/",
       "portalUrl": "https://license.wi.gov/",
-      "doBoardName": "No separate osteopathic board: the Medical Examining Board licenses both MDs and DOs (the DSPS physician page covers \"medical and osteopathic physicians,\" and the fee schedule lists Medicine and Surgery (MD) and Medicine and Surgery (DO) as parallel credentials of the same board).",
+      "doBoardName": "No separate osteopathic board: the Medical Examining Board licenses both DOs and MDs (the DSPS physician page covers \"medical and osteopathic physicians,\" and the fee schedule lists Medicine and Surgery (MD) and Medicine and Surgery (DO) as parallel credentials of the same board).",
       "doBoardUrl": "https://dsps.wi.gov/a-z-boards-and-councils-list/meb/",
       "renewalCycle": "Biennial (2 years)",
       "renewalAnchor": "October 31 of each odd-numbered year, for all physicians statewide (Wis. Stat. 440.08(2)). The board states this applies even if the initial license was issued in the months just before the date: a license issued shortly before October 31 of an odd year still must be renewed by that date. Next renewal deadline: October 31, 2027.",
@@ -7486,7 +7486,7 @@
       "cmeSplit": false,
       "cmeSource": "Wis. Admin. Code MED § 13.02",
       "cmeSourceUrl": "https://docs.legis.wisconsin.gov/code/admin_code/med/13/02",
-      "renewalFee": "$120 (Medicine and Surgery, MD or DO, 2-year renewal). Same $120 applies to the Compact (IMLC-issued) MD and DO credentials and to Administrative Medicine and Surgery licenses. Per the DSPS Credential Fees and Renewal Dates page; DSPS's August 8, 2025 news release confirms the physician fee rose to $120 effective for applications opening in August 2025.",
+      "renewalFee": "$120 (Medicine and Surgery, DO or MD, 2-year renewal). Same $120 applies to the Compact (IMLC-issued) DO and MD credentials and to Administrative Medicine and Surgery licenses. Per the DSPS Credential Fees and Renewal Dates page; DSPS's August 8, 2025 news release confirms the physician fee rose to $120 effective for applications opening in August 2025.",
       "lateFee": "$25 late renewal fee, making the total $145 with the renewal fee (Wis. Stat. 440.08(3)(a); the DSPS Credential Fees and Renewal Dates page applies a $25 late fee to every business and health credential renewed after it expires).",
       "graceOrLapse": "No practice grace period: the license expires October 31 if no renewal was filed. However, under Wis. Stat. 227.51(2) (quoted on the DSPS physician page), if the renewal application and fee are submitted by 11:59 pm on the deadline, the existing license remains valid until DSPS finishes acting on the application. After expiration, the credential can be restored at any time by paying the renewal fee plus the $25 late fee (Wis. Stat. 440.08(3)(a)). If expired more than 5 years, the board may impose additional restoration requirements to establish competency, not to exceed initial-licensure education/exam requirements (Wis. Stat. 440.08(3)(b)). DSPS may also summarily deny a renewal to protect public health, safety, or welfare, with a 30-day window to request a hearing (Wis. Stat. 440.08(4)).",
       "processingTime": "DSPS does not publish a physician renewal processing time on its site. The board page notes that a timely-filed renewal keeps the license valid while under review (Wis. Stat. 227.51(2)), and employers can confirm active status via DSPS Public Look-Up. At a September 30, 2025 DSPS renewal webinar (reported by the Wisconsin Hospital Association), DSPS said legal file reviews take about one week once all requested information is received.",
@@ -7507,11 +7507,11 @@
       "faqs": [
         {
           "question": "When is my Wisconsin medical license renewal due?",
-          "answer": "October 31 of every odd-numbered year, for every MD and DO regardless of when the license was first issued (Wis. Stat. 440.08(2); DSPS physician page). The next deadline is October 31, 2027."
+          "answer": "October 31 of every odd-numbered year, for every DO and MD regardless of when the license was first issued (Wis. Stat. 440.08(2); DSPS physician page). The next deadline is October 31, 2027."
         },
         {
           "question": "How much does renewal cost?",
-          "answer": "$120 for the 2-year renewal for both MDs and DOs, per the DSPS Credential Fees and Renewal Dates page. DSPS raised the fee to $120 in August 2025 and notes it remains the lowest physician renewal fee in the nation."
+          "answer": "$120 for the 2-year renewal for both DOs and MDs, per the DSPS Credential Fees and Renewal Dates page. DSPS raised the fee to $120 in August 2025 and notes it remains the lowest physician renewal fee in the nation."
         },
         {
           "question": "Where do I renew?",
@@ -7533,7 +7533,7 @@
       "sources": [
         {
           "url": "https://dsps.wi.gov/a-z-professions-list/physician-mddo/",
-          "what": "DSPS Physician MD/DO page: renewal opens about 4 weeks before expiry and is done in LicensE at license.wi.gov (Renew My License); licenses issued through the IMLC renew through the IMLC; 30 hours of AMA or AOA Category 1 CME, 2 of them on prescribing opioids and other controlled substances for DEA registrants; CE Broker used by the board for audits"
+          "what": "DSPS Physician DO/MD page: renewal opens about 4 weeks before expiry and is done in LicensE at license.wi.gov (Renew My License); licenses issued through the IMLC renew through the IMLC; 30 hours of AMA or AOA Category 1 CME, 2 of them on prescribing opioids and other controlled substances for DEA registrants; CE Broker used by the board for audits"
         },
         {
           "url": "https://dsps.wi.gov/credentialing/credential-fees-and-renewal-dates/",
@@ -7541,7 +7541,7 @@
         },
         {
           "url": "https://web.archive.org/web/20260314164702/https://dsps.wi.gov/Pages/Professions/Physician/Default.aspx",
-          "what": "Archived copy (March 2026) of the former DSPS physician profession page, since removed by DSPS: renewal date 10/31 odd years per Wis. Stat. 440.08(2), applies even to just-issued licenses; IMLC renewals via imlcc.com/renew; Form 4570 paper option; Wis. Stat. 227.51(2) timely-renewal validity language; MD and DO both licensed by the Medical Examining Board"
+          "what": "Archived copy (March 2026) of the former DSPS physician profession page, since removed by DSPS: renewal date 10/31 odd years per Wis. Stat. 440.08(2), applies even to just-issued licenses; IMLC renewals via imlcc.com/renew; Form 4570 paper option; Wis. Stat. 227.51(2) timely-renewal validity language; DO and MD both licensed by the Medical Examining Board"
         },
         {
           "url": "https://web.archive.org/web/20260508112735/https://dsps.wi.gov/Documents/NewsMedia/20250808FeeAdjustmentNewsRelease.pdf",

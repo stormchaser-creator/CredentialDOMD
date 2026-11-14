@@ -166,7 +166,7 @@ export function normalizeCvSections(raw, { deg = "", name = "" } = {}) {
     const v = str(s[k]);
     if (v) settings[k] = v;
   }
-  // MD, DO, PA or NP as the CV states it; offered through the review, never
+  // DO, MD, PA or NP as the CV states it; offered through the review, never
   // applied silently.
   const degree = str(s.degreeType).toUpperCase();
   if (isKnownDegree(degree)) settings.degreeType = degree;

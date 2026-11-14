@@ -542,7 +542,7 @@ function finishRow(r, deg, extraTopics = []) {
   const cat = mapCreditType(r.rawCategory, deg);
   r.category = r.category || cat.category;
   r.categoryAssumed = r.categoryAssumed || (!r.rawCategory ? true : cat.assumed);
-  // A PA's Self-Assessment or PI-CME activity (never set for MD or DO).
+  // A PA's Self-Assessment or PI-CME activity (never set for DO or MD).
   if (cat.activity) r.customFields = { ...(r.customFields || {}), [NCCPA_ACTIVITY_FIELD]: cat.activity };
   if (!r.topics?.length) r.topics = guessTopics(r.title, r.rawSubjects, extraTopics);
   const w = [];

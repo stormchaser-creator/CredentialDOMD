@@ -7,7 +7,8 @@
 // Pure and import free, so credentialTypes.js, the scanner and the edge
 // functions (through scripts/sync-shared-app-modules.mjs) share one copy.
 
-export const DEGREES = Object.freeze(["MD", "DO", "PA", "NP"]);
+// DO first wherever the four are listed to a member (owner, 2026-11-13).
+export const DEGREES = Object.freeze(["DO", "MD", "PA", "NP"]);
 export const DEGREE_LABELS = Object.freeze({
   MD: "Doctor of Medicine",
   DO: "Doctor of Osteopathic Medicine",
@@ -30,7 +31,7 @@ export function professionOf(d) {
 }
 
 // ── Licence kinds ───────────────────────────────────────────────────
-// "medical" keeps today's exact test, so MD and DO are unchanged.
+// "medical" keeps today's exact test, so DO and MD are unchanged.
 
 export const PRACTICE_KINDS = Object.freeze({
   physician: Object.freeze(["medical"]),
@@ -192,7 +193,7 @@ export function professionFromTaxonomy(code) {
 }
 
 /**
- * MD or DO from a registry credential string ("D.O.", "M.D.", "MD, PHD",
+ * DO or MD from a registry credential string ("D.O.", "M.D.", "MD, PHD",
  * "DO FACOS"). Dots are stripped and whole tokens matched so "MD" inside
  * another word cannot flip the degree. Empty when neither is present.
  */
@@ -233,10 +234,10 @@ const isPrimaryRow = (t) => t.isPrimary === true || t.primary === true;
 
 /**
  * The profession a registry record supports, with the reason. Never assumes:
- *  0. a 363A/363L primary taxonomy with an MD/DO credential, or a credential
+ *  0. a 363A/363L primary taxonomy with an DO/MD credential, or a credential
  *     naming both a physician and a PA/NP on a non-physician record, is a
  *     conflict: blank, reported.
- *  1. MD/DO credential tokens (physicians identical to before)
+ *  1. DO/MD credential tokens (physicians identical to before)
  *  2. primary taxonomy (363A PA, 363L NP; a 20* physician stays blank, MD vs DO unknown)
  *  3. every taxonomy: exactly PA, or exactly NP (RN rows ignored)
  *  4. PA/NP credential tokens, when only one profession is named
@@ -277,7 +278,7 @@ export function licenseTypeFor(degreeType) {
 }
 
 /**
- * Type and name for one imported registry licence row. MD and DO accounts
+ * Type and name for one imported registry licence row. DO and MD accounts
  * get today's medical licence exactly. A blank account keeps today's result
  * except for rows the taxonomy shows are PA, APRN or RN licences. A PA or NP
  * account types every row by its taxonomy.
@@ -297,8 +298,8 @@ export function licenseTypeForNppesRow(row, degreeType) {
 
 /**
  * What an NPPES lookup may do to the stored profession. A PA or NP answer
- * fills a blank (or unrecognised) profession only. An MD or DO answer keeps
- * each site's old rule (Settings replaces a blank, MD or DO; Setup fills a
+ * fills a blank (or unrecognised) profession only. An DO or MD answer keeps
+ * each site's old rule (Settings replaces a blank, DO or MD; Setup fills a
  * blank only) and never replaces a chosen PA or NP. A disagreement with a
  * chosen profession, or a conflicting record, comes back as a finding for
  * the member to look at, never as a change.

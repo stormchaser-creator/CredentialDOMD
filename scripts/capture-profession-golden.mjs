@@ -1,4 +1,4 @@
-// Writes tests/profession/golden/md-do.json: the MD and DO outputs the PA and
+// Writes tests/profession/golden/md-do.json: the DO and MD outputs the PA and
 // NP work must leave unchanged (DESIGN 7.1). Run only at the base commit:
 //   GOLDEN_UPDATE=1 node scripts/capture-profession-golden.mjs
 // It refuses anywhere else, so a golden cannot be "updated" to match a

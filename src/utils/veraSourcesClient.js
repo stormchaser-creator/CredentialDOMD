@@ -35,7 +35,7 @@ export function sourceIdsForQuestion(history = [], snapshot = {}) {
   if (states.includes('OH')) ids.push('oh-cme-general', 'oh-pain-clinic');
   if (/\b(?:MATE|DEA)\b/i.test(text)) ids.push('dea-mate');
   // A chosen PA or NP is offered only sources that cover their profession:
-  // never the Ohio physician rules. MD and DO members are unchanged. A member
+  // never the Ohio physician rules. DO and MD members are unchanged. A member
   // with no profession chosen is offered none: her turn carries no rule until
   // she chooses (assistantEvidence.js evidenceForTurn marks it not_chosen).
   if (snapshot.referenceEvidence?.professionStatus === 'not_chosen') return [];

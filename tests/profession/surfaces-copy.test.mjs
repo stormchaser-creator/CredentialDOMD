@@ -60,8 +60,8 @@ test('matrix: a PA row has the PA licence, CME, DEA, CSR and agreement columns; 
   assert.ok(labels.includes('DEA') && labels.includes('State Controlled Substance') && labels.includes('Practice agreement'));
   assert.equal(cells.find(c => c.label === 'Practice agreement').props?.status ?? cells.find(c => c.label === 'Practice agreement').status, 'Required in this state');
   const text = JSON.stringify(cells);
-  assert.doesNotMatch(text, /Medical License|MD or DO|null|undefined|NaN|—/);
-  assert.doesNotMatch(m.pageText(), /MD or DO/);
+  assert.doesNotMatch(text, /Medical License|MD or DO|DO or MD|null|undefined|NaN|—/);
+  assert.doesNotMatch(m.pageText(), /MD or DO|DO or MD/);
 });
 
 test('matrix: an NP row shows the APRN licence and a multistate RN from another compact state', async () => {
@@ -84,7 +84,7 @@ test('App: licences carry their record questions, cards their details, and Home 
   const app = read('src/App.jsx');
   assert.match(app, /renderExtra=\{item => <><RenewalInfo item=\{item\} \/><RecordQuestions item=\{item\} \/><\/>\}/);
   assert.match(app, /<ConditionalCmeTopics comp=\{comp\} \/>\n\s+<AppCardDetails comp=\{comp\} lic=\{lic\} \/>/);
-  assert.match(app, /"profession \(MD, DO, PA or NP, which decides the rules that apply\)"/);
+  assert.match(app, /"profession \(DO, MD, PA or NP, which decides the rules that apply\)"/);
   assert.match(app, /!isAdvancedPractice\(s\.degreeType\) && !\(s\.specialties \|\| \[\]\)\.length/, 'a PA or NP is never asked for a board specialty');
   assert.match(read('src/utils/credentialForms.js'), /label: "State Licenses"/);
   assert.match(app, /licenseTypeTab\(data\.settings\.degreeType\)/);

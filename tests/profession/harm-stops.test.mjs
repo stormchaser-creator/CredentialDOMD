@@ -120,7 +120,7 @@ test('scanner: a PA or NP gets their own types and categories; blank gets every 
   assert.match(np, /pharmacologyHours/);
   const blank = SYSTEM_PROMPT('');
   for (const t of ['State Medical License', 'State Physician Assistant License', 'APRN License (NP)', 'AMA PRA Category 1', 'AAPA Category 1 CME', 'Accredited Nursing CE']) assert.ok(blank.includes(`"${t}"`), t);
-  assert.doesNotMatch(blank, /an MD or DO \(degree not yet specified/);
+  assert.doesNotMatch(blank, /an (?:MD or DO|DO or MD) \(degree not yet specified/);
 });
 
 test('credit labels name the PA or NP minimum from its own categories', () => {
@@ -238,7 +238,7 @@ test('copy added for PA and NP carries no physician wording or dashes', () => {
     evidenceInstructionsFor('PA').split('\n').at(-1),
   ];
   for (const t of texts) {
-    assert.doesNotMatch(t.replace(/physician associate|physician's assistant|physician assistant|physician \(MD or DO\)|physician rules/gi, ''), PHYSICIAN_WORD, t);
+    assert.doesNotMatch(t.replace(/physician associate|physician's assistant|physician assistant|physician \((?:MD or DO|DO or MD)\)|physician rules/gi, ''), PHYSICIAN_WORD, t);
     assert.doesNotMatch(t, /[–—]/);
   }
 });

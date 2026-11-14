@@ -45,7 +45,7 @@ export const APP_EXTRA_TOPICS = [
   "Medical Cannabis",
 ];
 
-/** The topic list a profession tags CME with: MD, DO and blank keep CME_TOPICS. */
+/** The topic list a profession tags CME with: DO, MD and blank keep CME_TOPICS. */
 export function getCmeTopics(deg) {
   if (deg !== "PA" && deg !== "NP") return CME_TOPICS;
   const general = CME_TOPICS.indexOf("General / No Specific Topic");

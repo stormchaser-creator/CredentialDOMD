@@ -40,7 +40,7 @@ import ProfessionPicker from "./ProfessionPicker";
  * otherwise, and that is how a physician gives up halfway and ends with half
  * a record.
  *
- * A member who has not chosen a profession is asked it (MD, DO, PA or NP,
+ * A member who has not chosen a profession is asked it (DO, MD, PA or NP,
  * the one-tap choice Home shows) before anything is read: the licence and
  * education types the reader offers follow it. The CV she picked waits, and
  * is read with that profession's lists as soon as she chooses; the choice is
@@ -437,7 +437,7 @@ function CvImportReview({ source = null, onSaved, onClose }) {
             fontSize: 13, color: T.text, backgroundColor: T.infoDim,
             borderRadius: 10, padding: "10px 12px", lineHeight: 1.45,
           }}>
-            {fileName || "Your CV"} was not read. The reader needs your license type (MD, DO, PA or NP)
+            {fileName || "Your CV"} was not read. The reader needs your license type (DO, MD, PA or NP)
             to read your licenses and training right. Choose the file again when you are ready to say which.
           </div>
         )}

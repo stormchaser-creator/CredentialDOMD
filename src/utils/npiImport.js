@@ -104,7 +104,7 @@ export function extractLicensesFromNPI(result) {
   return [...seen.values()];
 }
 
-// Physician licence typing and the MD/DO credential reading live with the
+// Physician licence typing and the DO/MD credential reading live with the
 // profession rules (src/constants/professions.js), which the public-record
 // edge function shares; re-exported for the existing importers.
 export { licenseTypeFor, degreeFromCredential, degreeFromNppes, nppesProfession, licenseTypeForNppesRow } from "../constants/professions.js";
@@ -202,7 +202,7 @@ export function licenseKeysOnFile(licenses, offered = []) {
  * "35.123456" is not duplicated by the registry's "35123456"). Returns only
  * the items to add; the caller persists them.
  *
- * MD and DO accounts get today's medical licences exactly. PA and NP accounts
+ * DO and MD accounts get today's medical licences exactly. PA and NP accounts
  * type each row by its NUCC taxonomy (licenseTypeForNppesRow), take APRN rows
  * first, then PA, RN, medical and the rest, and keep an RN and an APRN row
  * that share a number as two records. A blank account keeps today's result

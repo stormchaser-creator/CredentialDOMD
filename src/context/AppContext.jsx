@@ -1792,7 +1792,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   // The PA and NP rule data these records read (utils/appRules.js): until it
   // is in at launch, the screens get the loading state (loaded false, no
   // records), so a rule card never reads "not yet verified" for want of the
-  // data. An MD or DO never loads it.
+  // data. An DO or MD never loads it.
   //
   // Once this account has been on screen, a change that needs the data
   // (another device's profession change, a PA, RN or APRN licence added by a
@@ -2233,7 +2233,7 @@ export function AppProvider({ children, onNavigate, offlineSession = null }) {
   }, [guardedSetData, refuseUnsavableDeviceOnly]);
 
   // Tracked states: Settings picks plus every state where the profession's
-  // practice licence is held (a medical licence for MD, DO and blank; a PA,
+  // practice licence is held (a medical licence for DO, MD and blank; a PA,
   // APRN or RN licence for a PA or NP; src/utils/compliance.js trackedStates).
   const allTrackedStates = useMemo(
     () => trackedStates(data.settings.primaryState, data.settings.additionalStates, data.licenses, data.settings.degreeType),

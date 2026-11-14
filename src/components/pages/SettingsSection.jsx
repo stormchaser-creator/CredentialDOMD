@@ -47,8 +47,8 @@ const TAP_MIN = 36;
 // pinned equal by tests/profession/pickers.test.mjs). Spelled out here so the
 // picker renders in the component harness without the module.
 const PROFESSION_OPTIONS = [
-  ["MD", "Doctor of Medicine"],
   ["DO", "Doctor of Osteopathic Medicine"],
+  ["MD", "Doctor of Medicine"],
   ["PA", "Physician Assistant"],
   ["NP", "Nurse Practitioner"],
 ];
@@ -229,8 +229,8 @@ function SettingsSection({ onUpgrade }) {
       settingsUpdates.name = `${result.firstName} ${result.lastName}`;
     }
     // NPPES returns "D.O.", "M.D.", "MD, PHD", "DO FACOS", "PA-C", "FNP-BC"
-    // and the record's NUCC taxonomies. An MD or DO answer replaces a blank,
-    // MD or DO as before; a PA or NP answer fills a blank only, and nothing
+    // and the record's NUCC taxonomies. An DO or MD answer replaces a blank,
+    // DO or MD as before; a PA or NP answer fills a blank only, and nothing
     // here ever replaces a chosen PA or NP (src/constants/professions.js).
     const { degree } = degreeAfterNppes(records.settings.degreeType, { credential: result.credential, taxonomies: result.allTaxonomies }, { site: "settings" });
     if (degree) settingsUpdates.degreeType = degree;
@@ -987,7 +987,7 @@ function SettingsSection({ onUpgrade }) {
       <div style={{ backgroundColor: T.card, border: `1px solid ${T.border}`, borderRadius: 14, padding: 18, boxShadow: T.shadow1 }}>
         <h3 style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 10 }}>{s.degreeType === "NP" ? "CE" : "CME"} Requirements{s.degreeType ? ` (${s.degreeType})` : ""}</h3>
 
-        {/* A blank member may be a PA or an NP: never offer only MD or DO,
+        {/* A blank member may be a PA or an NP: never offer only DO or MD,
             or a PA clearing the warning becomes an MD with physician rules. */}
         {!professionKnown && (
           <div style={{ padding: "12px 14px", backgroundColor: T.warningDim, border: `1px solid ${T.warning}`, borderRadius: 10, marginBottom: 10 }}>
@@ -1198,7 +1198,7 @@ function buildBoardList(degreeType) {
     if (abmsSubs.length) sections.push({ label: "ABMS Subspecialties", items: abmsSubs });
   }
 
-  // UCNS — available to both MD and DO
+  // UCNS — available to both DO and MD
   const ucns = (UCNS_CERTS || []).map(s => ({
     id: `UCNS:${s.name}`, name: s.name,
     detail: `UCNS \u00b7 ${s.exam}`, source: "UCNS",

@@ -25,16 +25,16 @@ test('a blank member is asked her profession on the first card, with the one-tap
   assert.deepEqual(calls, [['choose', 'PA']]);
 });
 
-test('the picker: "Which license do you hold?" with MD, DO, PA and NP, one tap each; "Not now" only where offered', async () => {
+test('the picker: "Which license do you hold?" with DO, MD, PA and NP, one tap each; "Not now" only where offered', async () => {
   const chosen = [];
   const T2 = { ...T, textDim: '#777' };
   const appRules = await import('../../src/utils/appRules.js');
   const home = await mountComponent('src/components/features/ProfessionPicker.jsx', { modules: { appRules },
     props: { id: 'get-started-profession', why: 'Your profession sets the license types and the rules the app tracks.', onChoose: d => chosen.push(d), theme: T2 } });
   // Home's card reads exactly as it did before the picker was shared.
-  assert.equal(home.pageText(), 'Which license do you hold? Your profession sets the license types and the rules the app tracks.MDDOPANP');
+  assert.equal(home.pageText(), 'Which license do you hold? Your profession sets the license types and the rules the app tracks.DOMDPANP');
   const buttons = home.nodes().filter(n => n.type === 'button');
-  assert.deepEqual(buttons.map(b => home.text(b)), ['MD', 'DO', 'PA', 'NP']);
+  assert.deepEqual(buttons.map(b => home.text(b)), ['DO', 'MD', 'PA', 'NP']);
   buttons.find(b => home.text(b) === 'NP').props.onClick();
   assert.deepEqual(chosen, ['NP']);
   let dismissed = 0;

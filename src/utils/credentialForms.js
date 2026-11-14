@@ -34,7 +34,7 @@ const STATE_INSTRUMENT_KINDS = new Set(["rx", "agreement"]);
 const CYCLE_START_KINDS = new Set(["pa", "aprn", "rn", "cert"]);
 const namePlaceholder = (degreeType) => (degreeType === "PA" ? "e.g. CA Physician Assistant License" : degreeType === "NP" ? "e.g. CA APRN License" : "e.g. CA Medical License");
 
-// The Licenses page's first type tab. MD and DO keep "Medical Licenses" with
+// The Licenses page's first type tab. DO and MD keep "Medical Licenses" with
 // its exact test. A PA or NP sees "State Licenses" for her practice licences
 // (and any medical licence still on file). A member with no profession is
 // offered every profession's types (licenseFields below), so her tab is the

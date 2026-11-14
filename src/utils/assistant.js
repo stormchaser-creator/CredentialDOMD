@@ -179,7 +179,7 @@ export function buildSnapshot(data, allTrackedStates = []) {
     deaRenewal: { portal: "https://www.deadiversion.usdoj.gov/online_forms_apps.html", fee: null, feeStatus: "current_amount_not_verified", currentVerification: "not_performed" },
     // A PA's or NP's rows go newest first, so the 40 sent are the current
     // cycle's, and carry the fields their certifier weighs (NCCPA activity
-    // type, pharmacology hours) and the topics a state mandate counts. MD, DO
+    // type, pharmacology hours) and the topics a state mandate counts. DO, MD
     // and blank members get the first 40 in stored order, exactly as before.
     cme: (isAdvancedPractice(data.settings.degreeType)
       ? [...(data.cme || [])].sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")))
@@ -506,7 +506,7 @@ ${JSON.stringify(snapshot)}`;
 
 /**
  * The static prompt for a PA or NP: the same instructions, about their own
- * profession, with the PA and NP evidence contract. MD and DO members get
+ * profession, with the PA and NP evidence contract. DO and MD members get
  * SYSTEM_STATIC unchanged. A member with no profession chosen is not called
  * a surgeon, and the contract tells Vera no rule is sent until she chooses.
  */

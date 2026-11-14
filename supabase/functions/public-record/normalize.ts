@@ -141,7 +141,7 @@ export function oneLineAddress(parts: {
   return [street, city, tail].filter(Boolean).join(", ");
 }
 
-/** MD or DO from a registry credential string. Whole tokens only. */
+/** DO or MD from a registry credential string. Whole tokens only. */
 export function degreeFromCredential(credential: unknown): string {
   return appDegreeFromCredential(clean(credential));
 }
@@ -195,8 +195,8 @@ export function normalizeNppes(raw: any, ctx: NormalizeContext): Finding[] {
   const source = src("nppes", npiProfileUrl(clean(result.number) || ctx.npi), ctx);
   const basic = result.basic || {};
   const rows = arr(result.taxonomies);
-  // MD or DO from the credential exactly as before; PA or NP from the NUCC
-  // taxonomy or the credential. An MD or DO credential on a PA or NP record
+  // DO or MD from the credential exactly as before; PA or NP from the NUCC
+  // taxonomy or the credential. An DO or MD credential on a PA or NP record
   // is a conflict: no degree, and a finding says so (professions.js).
   const reading = nppesProfession({
     credential: clean(basic.credential),
@@ -302,7 +302,7 @@ export function normalizeNppes(raw: any, ctx: NormalizeContext): Finding[] {
     const key = nurse ? `${licenseKey(state, licenseNumber)}|${nurse}` : licenseKey(state, licenseNumber);
     if (seen.has(key)) continue;
     const desc = clean(t?.desc);
-    // MD and DO: the medical licence exactly as before. A PA or NP record, or
+    // DO and MD: the medical licence exactly as before. A PA or NP record, or
     // a row the NUCC taxonomy shows is a PA, APRN or RN licence, is typed by
     // its taxonomy (professions.js licenseTypeForNppesRow). With no profession
     // and no such taxonomy there is no license type this app offers for

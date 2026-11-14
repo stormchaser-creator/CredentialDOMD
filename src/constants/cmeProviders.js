@@ -418,7 +418,7 @@ export const CME_PROVIDERS = [
       "Pain Management", "Opioid Prescribing", "Controlled Substances",
       "Ethics", "Substance Use Disorders", "General / No Specific Topic",
     ],
-    description: "CME compliance platform with question banks, summarized guidelines, guideline-based algorithms, and a price transparency tool. Comprehensive state-by-state requirement guides for MD and DO physicians.",
+    description: "CME compliance platform with question banks, summarized guidelines, guideline-based algorithms, and a price transparency tool. Comprehensive state-by-state requirement guides for DO and MD physicians.",
     stateSpecific: true,
     stateSpecificNote: "Detailed state-by-state guides for all 50 states plus territories",
     dualAccredited: false,

@@ -122,7 +122,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
   const [showArchives, setShowArchives] = useState(false);
   const [viewArchive, setViewArchive] = useState(null);
   const [attachment, setAttachment] = useState(null); // {dataUrl?|text?, name, kind}
-  // A member with no profession is asked it (MD, DO, PA or NP, the one-tap
+  // A member with no profession is asked it (DO, MD, PA or NP, the one-tap
   // choice Home shows) before Vera answers her first question: the rules
   // Vera reads all follow it. Her question waits here ({ msgId, text,
   // attachment }) and is answered as soon as she chooses, never asked twice.

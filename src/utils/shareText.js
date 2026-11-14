@@ -59,7 +59,7 @@ const listItem = (name) => {
   return !t || /[.!?)]$/.test(t) ? t : `${t}.`;
 };
 
-// The no-name fallback on outgoing text: "Physician" for MD and DO, as
+// The no-name fallback on outgoing text: "Physician" for DO and MD, as
 // always; "Clinician" for a PA, an NP or no profession chosen yet (the text
 // goes to a third party and never asserts a profession not chosen). The
 // noun ("the physician", "the physician assistant", "the nurse
@@ -345,7 +345,7 @@ export function peerHeadsUp(settings = {}, peer = {}) {
   if (!String(settings?.name || "").trim()) return null;
   // A PA or NP is never "Dr.", and their reference's profession is unknown,
   // so a PA's or NP's letter greets the reference by full name (DESIGN 5.3).
-  // MD, DO and blank keep the letter they had.
+  // DO, MD and blank keep the letter they had.
   const app = isAdvancedPractice(settings?.degreeType);
   const userName = String(settings.name).trim();
   const userFull = withDegree(userName, settings?.degreeType);

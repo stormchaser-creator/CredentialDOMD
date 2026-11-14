@@ -2,7 +2,7 @@
 //
 // The generated rule modules were about 470 KB of the entry bundle (57 to 71
 // KB compressed) that every member's iPhone downloaded and parsed at launch,
-// MD and DO included, who never read them. They are a chunk of their own now
+// DO and MD included, who never read them. They are a chunk of their own now
 // (utils/appRulesData.js), loaded only for a member who needs them
 // (needsAppRules), as early as that is known: the account's hint on this
 // device before the network, the account's profile as it is read, a PA or NP
@@ -133,7 +133,7 @@ export const degreeNeedsAppRules = (degreeType) => {
 /**
  * Whether these records read the PA and NP rule data: a PA or NP, or a member
  * with no physician degree holding a PA, RN or APRN licence (that licence's
- * renewal board). An MD or DO never does, nor a member with no profession and
+ * renewal board). An DO or MD never does, nor a member with no profession and
  * none of those licences.
  */
 export function needsAppRules(data) {

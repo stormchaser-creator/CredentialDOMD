@@ -59,7 +59,7 @@ test('the pickers spell out exactly the four professions the model knows', () =>
   const listed = [...settingsSrc.matchAll(/^\s*\["(MD|DO|PA|NP)", "([^"]+)"\],$/gm)].map(m => [m[1], m[2]]);
   assert.deepEqual(listed, DEGREES.map(d => [d, DEGREE_LABELS[d]]));
   const setupSrc = readFileSync(new URL('../../src/components/features/SetupPage.jsx', import.meta.url), 'utf8');
-  assert.match(setupSrc, /\[\["MD", "MD"\], \["DO", "DO"\], \["PA", "PA"\], \["NP", "NP"\]\]/);
+  assert.match(setupSrc, /\[\["DO", "DO"\], \["MD", "MD"\], \["PA", "PA"\], \["NP", "NP"\]\]/);
   assert.doesNotMatch(settingsSrc + setupSrc, /\["MD", "DO"\]\.map/);
 });
 
@@ -70,7 +70,7 @@ test('Settings: a blank member picks PA in one tap, from the profile or the CME 
   for (const d of DEGREES) assert.ok(s.buttons().some(b => s.c.text(b).startsWith(d) && s.c.text(b).includes(DEGREE_LABELS[d])), d);
   assert.match(text, /Which profession\?/);
   for (const label of ['I am an MD', 'I am a DO', 'I am a PA', 'I am an NP']) assert.ok(s.button(new RegExp(`^${label}$`)), label);
-  assert.doesNotMatch(text, /Which degree do you hold\?|Several states run separate MD and DO boards/);
+  assert.doesNotMatch(text, /Which degree do you hold\?|Several states run separate (?:MD and DO|DO and MD) boards/);
   s.button(/^I am a PA$/).props.onClick();
   assert.deepEqual(s.saved, [{ degreeType: 'PA' }]);
 });
@@ -109,7 +109,7 @@ test('Settings, blank profession: Licensed States marks the physician figure pro
   for (const st of ['FL', 'CA']) {
     const text = (await settings({ degreeType: '', primaryState: st })).c.pageText();
     assert.match(text, /Choose your profession above to see this state's rules\./, st);
-    assert.doesNotMatch(text, /Separate MD and DO boards|Set your degree above/, st);
+    assert.doesNotMatch(text, /Separate (?:MD and DO|DO and MD) boards|Set your degree above/, st);
   }
   // A physician's row is unchanged.
   const md = (await settings({ degreeType: 'MD', primaryState: 'TX' })).c.pageText();
@@ -154,7 +154,7 @@ test('Settings for a PA and an NP: no physician board list, a NUCC specialty ins
   };
   for (const h of [pa, np]) {
     const text = h.c.pageText() + reqText(h);
-    assert.doesNotMatch(text, /48 hours|48 hrs|all physicians|null|NaN|undefined|State medical board rule|No general CME hour requirement|Separate MD and DO boards/);
+    assert.doesNotMatch(text, /48 hours|48 hrs|all physicians|null|NaN|undefined|State medical board rule|No general CME hour requirement|Separate (?:MD and DO|DO and MD) boards/);
   }
   // Texas PA: the verified 40 hours every 2 years (22 TAC 183.16), never the
   // Texas physician 48.
@@ -183,7 +183,7 @@ test('Setup About you offers four chips; tapping NP saves it', async () => {
     useInputStyle: { useInputStyle: () => ({}) }, states: await import(src('constants/states.js')), appRules: await import(src('utils/appRules.js')),
   } });
   const chips = c.nodes().filter(n => n.type === 'button' && /^(MD|DO|PA|NP)$/.test(c.text(n)));
-  assert.deepEqual(chips.map(b => c.text(b)), ['MD', 'DO', 'PA', 'NP']);
+  assert.deepEqual(chips.map(b => c.text(b)), ['DO', 'MD', 'PA', 'NP']);
   chips[3].props.onClick();
   assert.deepEqual(JSON.parse(JSON.stringify(saved)), [{ degreeType: 'NP' }]);
   assert.match(c.pageText(), /Profession/);

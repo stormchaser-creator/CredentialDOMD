@@ -1,6 +1,6 @@
 // The "where to renew" line under each licence in the reminder email.
 //
-// Pulled out of send-reminders/index.ts so node tests can pin it. MD and DO
+// Pulled out of send-reminders/index.ts so node tests can pin it. DO and MD
 // get exactly the line they always got. A PA, RN or APRN licence (held by a
 // PA, an NP or a member who has not chosen a profession) gets its own board's
 // link, "Board: <url>", from appBoardLinks.json, which scripts/generate-app-

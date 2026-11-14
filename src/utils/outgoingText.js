@@ -15,7 +15,7 @@
  */
 
 // The sender labels an invoice gets when Settings has no name
-// (invoiceArgs.js physicianLabel): "Physician" for an MD or DO, "Clinician"
+// (invoiceArgs.js physicianLabel): "Physician" for an DO or MD, "Clinician"
 // for a PA, an NP or a member with no profession chosen. A placeholder is
 // never a sender's name: a subject, a file name or a signature that hides
 // one hides both.
@@ -81,7 +81,7 @@ function tailIsDegree(sep, word, degree) {
 // app stores ("PA-C" for PA; "FNP-BC", "NP-C", "APRN" for NP). A name that
 // already ends in one is not given the stored degree again: "Pat Example,
 // PA-C" stays as typed, never "Pat Example, PA-C, PA". "DNP" is a doctorate,
-// not the NP credential, so it is not one of them. MD and DO match only
+// not the NP credential, so it is not one of them. DO and MD match only
 // themselves, so physician names read exactly as before. Compared in capitals
 // with dots removed ("P.A.-C." reads "PA-C").
 const SIGNED_AS = Object.freeze({

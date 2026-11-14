@@ -273,7 +273,7 @@ export function createCredentialPortalHandler(deps, policy = CREDENTIAL_PORTAL_P
         }
         const id = crypto.randomUUID(), mailId = crypto.randomUUID(), inviteToken = token();
         // The owner's own profession names them ("A physician assistant has
-        // invited you"); MD and DO read exactly as before.
+        // invited you"); DO and MD read exactly as before.
         let inviter = null;
         try { inviter = deps.store.ownerProfile ? await deps.store.ownerProfile(identity.profileId) : null; } catch { inviter = null; }
         const encrypted = await deps.crypto.seal(mailId, { to: email, subject: 'Private credential document invitation', text: documentInvitationText({ degreeType: inviter?.degree_type, link: `${origin}/credential-access/#invite=${inviteToken}` }) });

@@ -55,12 +55,12 @@ test('the home page names physicians, NPs and PAs in its copy, metadata and stru
     assert.doesNotMatch(content, /optional Practice|MDs and DOs,/i, name);
   }
   const app = jsonLd(output).find(item => item['@type'] === 'SoftwareApplication');
-  assert.deepEqual(app.audience, { '@type': 'Audience', audienceType: 'Physicians (MD and DO), nurse practitioners (NP) and physician assistants (PA)' });
+  assert.deepEqual(app.audience, { '@type': 'Audience', audienceType: 'Physicians (DO and MD), nurse practitioners (NP) and physician assistants (PA)' });
   assert.match(jsonLd(output).find(item => item['@type'] === 'Organization').description, /physicians, NPs and PAs/);
   const text = visible(output);
   assert.ok(text.includes(`For ${AUDIENCE}`), 'hero badge');
   assert.match(text, /For physicians, nurse practitioners and physician assistants\./);
-  assert.match(text, /Choose your profession \(MD, DO, NP or PA\)/);
+  assert.match(text, /Choose your profession \(DO, MD, NP or PA\)/);
   assert.match(text, /NCCPA, AANPCB and ANCC certification for PAs and NPs/);
   assert.ok(text.includes(NP_PA_QUESTION) && text.includes(NP_PA_ANSWER), 'the FAQ entry');
   assert.equal(output.split(`<summary>${NP_PA_QUESTION}</summary>`).length, 2);
@@ -84,8 +84,28 @@ test('the founder countdown is printed empty and hidden: on the home hero by the
   assert.throws(() => renderPublicLaunch(without, 'pricing'), /Incomplete pricing migration: founder-spots/);
 });
 
+test('credential lists read DO first and the hero eyebrow keeps its own capitals (owner, 2026-11-13)', async () => {
+  const PAIR = /\bMDs?(?:,? (?:and|or|&amp;|&) |, | ?\/ ?)DOs?\b/;
+  const css = await read('public/site.css');
+  assert.match(css, /\.eyebrow-plain\{text-transform:none;/, 'uppercase would print "DOS, MDS, NPS AND PAS"');
+  for (const [file, surface] of [['index', 'home'], ['pricing', 'pricing'], ['locums', 'locums'], ['cme', 'cme'], ['security', 'legal-navigation'], ['terms', 'legal-navigation']]) {
+    const page = renderPublicLaunch(await read(`landing/${file}.html`), surface).replace(/<style\b[\s\S]*?<\/style>/gi, '');
+    assert.doesNotMatch(page, PAIR, `${file}: copy, metadata and structured data`);
+  }
+  const home = renderPublicLaunch(await read('landing/index.html'), 'home');
+  assert.match(home, /<span class="eyebrow eyebrow-plain">For DOs, MDs, NPs and PAs · <span data-membership-phase>Founder plan<\/span><\/span>/);
+  assert.match(home, /for physicians \(DO\/MD\), nurse practitioners and physician assistants/);
+  assert.match(home, /Choose your profession \(DO, MD, NP or PA\)/);
+  // The state guides: only a board's own quoted words keep the board's order.
+  for (const file of (await readdir(new URL('../landing/states/', import.meta.url))).filter(name => name.endsWith('.html'))) {
+    const page = (await read(`landing/states/${file}`)).replace(/&quot;[^&]*?&quot;|\\"[^"]*?\\"/g, '');
+    assert.doesNotMatch(page, PAIR, file);
+  }
+});
+
 test('the professions the site names are the ones the app lets a member choose', () => {
-  assert.deepEqual([...DEGREES].sort(), ['DO', 'MD', 'NP', 'PA']);
+  assert.deepEqual([...DEGREES], ['DO', 'MD', 'PA', 'NP'], 'DO first');
+  assert.equal(AUDIENCE, 'DOs, MDs, NPs and PAs');
   for (const degree of DEGREES) assert.ok(AUDIENCE.includes(`${degree}s`), degree);
 });
 
@@ -97,7 +117,7 @@ test('state guides stay physician guides: each carries the one NP and PA line, o
     const html = await read(`landing/states/${file}`);
     assert.equal(html.split(LINE).length, 2, file);
     assert.equal(html.split('np-pa-note').length, 2, file);
-    assert.match(html, /(?:This is a|These are) physician \(MD and DO\) guides?\./, file);
+    assert.match(html, /(?:This is a|These are) physician \(DO and MD\) guides?\./, file);
   }
 });
 

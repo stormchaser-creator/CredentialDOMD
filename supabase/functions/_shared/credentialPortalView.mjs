@@ -75,7 +75,7 @@ const CUSTOM_SECTION = Object.freeze({
 });
 
 // What the owner is called to a recipient, by the profession they chose:
-// "physician" for MD and DO, as always; a PA or NP by theirs; "clinician"
+// "physician" for DO and MD, as always; a PA or NP by theirs; "clinician"
 // when none is chosen (an invitation never asserts a profession not chosen).
 const INVITER_NOUN = Object.freeze({ MD: 'physician', DO: 'physician', PA: 'physician assistant', NP: 'nurse practitioner' });
 export const inviterNoun = degreeType => INVITER_NOUN[degreeType] || 'clinician';
@@ -95,7 +95,7 @@ const APP_LICENSES_HINTS = Object.freeze({
   NP: "APRN and RN licenses, prescriptive authority, practice agreements, DEA and state controlled substance, national certification, the NCLEX-RN, life support and other professional certificates. Driver's licenses and ID cards never appear.",
   none: "Medical, PA, APRN and RN licenses, prescriptive authority, practice agreements, DEA and state controlled substance, boards and national certification, licensing exams, life support and other professional certificates. Driver's licenses and ID cards never appear.",
 });
-/** A section's hint for the owner's profession (MD and DO keep the catalog's). */
+/** A section's hint for the owner's profession (DO and MD keep the catalog's). */
 export function sectionHint(section, degreeType) {
   if (section?.key !== 'licenses' || degreeType === 'MD' || degreeType === 'DO') return section?.hint;
   return APP_LICENSES_HINTS[degreeType === 'PA' || degreeType === 'NP' ? degreeType : 'none'];

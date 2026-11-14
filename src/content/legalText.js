@@ -176,7 +176,7 @@ const CURRENT_TERMS = {
     {
       title: "2. Your account",
       blocks: [
-        "An account is required and is issued through Clerk. Keep your sign-in method to yourself, sign out on shared computers, and tell us if you think someone else has used your account. One person per account. You must be at least 18 and either a physician (MD or DO), a resident or fellow, or someone with permission to manage a physician's credentials."
+        "An account is required and is issued through Clerk. Keep your sign-in method to yourself, sign out on shared computers, and tell us if you think someone else has used your account. One person per account. You must be at least 18 and either a physician (DO or MD), a resident or fellow, or someone with permission to manage a physician's credentials."
       ],
     },
     {

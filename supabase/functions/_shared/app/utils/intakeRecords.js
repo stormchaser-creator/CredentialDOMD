@@ -81,7 +81,7 @@ export const SECTION_TYPES = Object.freeze({
   insurance: Object.freeze([...INSURANCE_TYPES]),
   privileges: Object.freeze([...PRIVILEGE_TYPES]),
   // Intake does not know the member's profession, so it accepts every
-  // profession's vocabulary (MD, DO, PA and NP).
+  // profession's vocabulary (DO, MD, PA and NP).
   licenses: Object.freeze(uniq([...ALL_LICENSE_TYPES])),
   cme: Object.freeze(uniq([...ALL_CME_CATEGORIES])),
 });

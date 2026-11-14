@@ -290,10 +290,10 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   const allTopicsMet = topicResults.every(t => t.met);
   const knownRequirementsMet = totalMet && cat1Met && allTopicsMet && (!mate || mate.met);
   // Split-board fallback numbers remain visible, but cannot certify compliance
-  // or assert a board-specific shortfall until the physician selects MD or DO.
+  // or assert a board-specific shortfall until the physician selects DO or MD.
   //
   // D-1 never hides a recorded shortfall (DESIGN 7.2): in a combined-board
-  // state the MD and DO numbers are the same, so a blank member who is short
+  // state the DO and MD numbers are the same, so a blank member who is short
   // keeps the gap ("needs-hours") exactly as before D-1; only a blank member
   // whose hours are met, or one in a split-board state where the stand-in
   // numbers may be the wrong board's, waits on the profession choice.
@@ -340,7 +340,7 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     sourceUrl: entry?.sourceUrl || "",
     upcoming: Array.isArray(entry?.upcoming) ? entry.upcoming : [],
     noGeneralReq,
-    // True when the physician has not chosen MD or DO and this state runs
+    // True when the physician has not chosen DO or MD and this state runs
     // separate boards: the numbers above use the MD rule set as a stand-in.
     // Callers should surface a "set your degree" prompt rather than assert.
     degreeUnknown,
@@ -446,7 +446,7 @@ const ofKind = (l, kind) => (kind === "medical" ? /medical license/i.test(l?.typ
 /**
  * Tagged courses a topic's counting period leaves out, for the card to say why
  * a tag did not count (ticket 53890221). Derived from the periods the engine
- * already reports, so computeCompliance's output (pinned by the MD/DO goldens)
+ * already reports, so computeCompliance's output (pinned by the DO/MD goldens)
  * is unchanged. A PA/NP result carries its own `outsidePeriod`. Null when
  * nothing tagged is left out or the period is unknown.
  */
@@ -529,7 +529,7 @@ export function trackedStates(primaryState, additionalStates, licenses, degreeTy
   const states = new Set([primaryState, ...(Array.isArray(additionalStates) ? additionalStates : [])].filter(Boolean));
   for (const l of licenses || []) {
     if (!l || isInactive(l)) continue;
-    // MD, DO and blank: a medical licence, exactly as before. PA: a PA
+    // DO, MD and blank: a medical licence, exactly as before. PA: a PA
     // licence. NP: an APRN or RN licence. A multistate RN licence tracks only
     // its own state; no state is added from compact membership.
     if (l.state && isPracticeLicense(l, degreeType)) states.add(l.state);

@@ -76,7 +76,7 @@ const FAQ_DATA = [
         a: "Open More > Setup > About you and check your name, degree and primary state. Review any NPI lookup match before importing it. Continue with Your licenses and Expiration dates, using the dates on your current documents. You can return to Setup later; the other app features remain available.",
       },
       {
-        q: "What's the difference between MD and DO mode?",
+        q: "What's the difference between DO and MD mode?",
         a: "Selecting DO enables AOA-specific CME categories (Category 1-A, 1-B, 2-A, 2-B), AOA national requirements tracking, dual-accredited provider filtering, and AOA board certification types. Selecting MD uses AMA PRA categories. You can switch at any time in Settings.",
       },
     ],

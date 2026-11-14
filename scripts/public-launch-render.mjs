@@ -49,12 +49,12 @@ export const AFTER_FOUNDERS = Object.freeze({
 });
 export const FOUNDER_AVAILABILITY = `Sign up to join. ${FOUNDER_PLAN.offer} Availability is confirmed before payment; signing up does not reserve a place. Paid membership requires a card at checkout and your explicit agreement.`;
 
-// Who the product is for. The app asks each member's profession (MD, DO, PA
+// Who the product is for. The app asks each member's profession (DO, MD, PA
 // or NP: src/constants/professions.js) and tracks that profession's licence
 // types and national certifications.
-export const AUDIENCE = 'MDs, DOs, NPs and PAs';
+export const AUDIENCE = 'DOs, MDs, NPs and PAs';
 export const NP_PA_QUESTION = 'Is CredentialDOMD for NPs and PAs?';
-export const NP_PA_ANSWER = 'Yes. CredentialDOMD is for physicians (MD and DO), nurse practitioners and physician assistants. You choose your profession when you set up your account, and the app tracks the licenses and certifications that go with it: PA licenses and NCCPA certification for PAs, and APRN and RN licenses and national certification (such as AANPCB or ANCC) for NPs. The free state renewal guides on this site cover physician licenses; NP and PA requirements differ by board.';
+export const NP_PA_ANSWER = 'Yes. CredentialDOMD is for physicians (DO and MD), nurse practitioners and physician assistants. You choose your profession when you set up your account, and the app tracks the licenses and certifications that go with it: PA licenses and NCCPA certification for PAs, and APRN and RN licenses and national certification (such as AANPCB or ANCC) for NPs. The free state renewal guides on this site cover physician licenses; NP and PA requirements differ by board.';
 
 const escapeHtml = value => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 /**

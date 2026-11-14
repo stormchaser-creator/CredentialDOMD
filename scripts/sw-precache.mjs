@@ -162,7 +162,7 @@ export function verifyPrecache(distDir) {
     if (!stamped.has(shell)) throw new Error(`precache verify: shell URL ${shell} missing from precache list`);
   }
 
-  // The PA and NP rule chunk: out of the entry closure (no MD or DO device
+  // The PA and NP rule chunk: out of the entry closure (no DO or MD device
   // precaches it), and listed for the devices that need it.
   const rulesMatch = sw.match(/const APP_RULES_URLS = (\[[\s\S]*?\]);/);
   if (!rulesMatch) throw new Error("precache verify: could not locate APP_RULES_URLS in dist/sw.js");

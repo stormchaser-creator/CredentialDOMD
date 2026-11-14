@@ -274,7 +274,7 @@ const CODE_IN_PARENS_RE = /\b(?:licen[sc]e|licensure|dea|csr|registration|permit
 
 /**
  * The first two-letter code in one of those places that is in capitals, a
- * real state, and not MD, DO or ID: "MD license" is a medical degree, "in"
+ * real state, and not DO, MD or ID: "MD license" is a medical degree, "in"
  * is a preposition, and "ID" is the thing on a driver's licence. Every
  * match is tried, not just the first, so "MD license for CO" is Colorado.
  */
@@ -660,7 +660,7 @@ function contentWords(s: string): string[] {
 // it), so a compound split reads each part the way the proposal will: a
 // PA's "practice agreement and your NCCPA certificate" is two asks, as a
 // physician's "BLS card and board certificate" always was. Unset (every
-// other caller, and MD or DO, whose asks classify the same with or without
+// other caller, and DO or MD, whose asks classify the same with or without
 // it), the split reads exactly as before. A signature line is still read
 // without it, so "Pat Example, PA-C" under a message stays a name.
 let askDegree: string | undefined;
@@ -1206,7 +1206,7 @@ export function classifyAsk(ask: unknown, opts: { degreeType?: string | null } =
   const focusRule = FOCUS_RULES.find((f) => f.ask.test(t));
   const focus = focusRule ? focusRule.key : null;
   // A PA's or NP's own documents (NCCPA, PANCE, practice agreement, RN and
-  // APRN licences) are read before the physician rules; MD and DO asks never
+  // APRN licences) are read before the physician rules; DO and MD asks never
   // reach this, so they classify exactly as before.
   if (app) {
     const appKind = appKindOf(t, degreeType);

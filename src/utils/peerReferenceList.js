@@ -1,6 +1,6 @@
 // The references a member already has, shown at the top of the Add form so
 // they can see who is on the list before adding another (ticket 0b15a181).
-// Each line is the first and last name, the credential (MD, DO or what was
+// Each line is the first and last name, the credential (DO, MD or what was
 // entered) and the date the reference was added when the record carries it.
 
 // "M.D." and "md" read as MD; anything else stays as the member wrote it.

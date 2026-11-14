@@ -197,7 +197,7 @@ async function handle(req: Request, queueJob: { id: string; lease_token: string 
       // A warning without the door to fix it is homework, not help: every
       // license line names where to renew it.
       // A PA's or NP's licence names its own board, never the medical board
-      // portal (_shared/reminderRenewalLine.mjs); MD and DO lines unchanged.
+      // portal (_shared/reminderRenewalLine.mjs); DO and MD lines unchanged.
       const renewLine = (i: typeof items[0]) => renewalLineFor(i, p.degree_type ?? "", { renewalLinks, appBoardLinks });
       const line = (i: typeof items[0]) => `  - ${i.name}: ${fmt(i.exp)} (${i.days < 0 ? `${-i.days} day${i.days === -1 ? "" : "s"} ago` : i.days === 0 ? "today" : `in ${i.days} day${i.days === 1 ? "" : "s"}`})${renewLine(i)}`;
       const parts: string[] = [];

@@ -37,14 +37,14 @@ export { SETUP_STATE_VERSION, EMPTY_SETUP_STATE, normalizeSetupState } from "./s
 const MS_PER_DAY = 86400000;
 
 /* ─── Type matching ───────────────────────────────────────────────
- * The MD and DO license vocabularies differ ("State Medical License" vs
+ * The DO and MD license vocabularies differ ("State Medical License" vs
  * "State Medical License (DO)", "Board Certification (ABMS)" vs "(AOA)"),
  * so every rule here is a case-insensitive substring test that matches
  * both. Hardcoding the MD strings would mean a DO account never completes.
  */
 export const isMedicalLicense = (l) => /medical license/i.test(l?.type || "");
 /**
- * The licence a profession practises under: a medical licence for MD, DO and
+ * The licence a profession practises under: a medical licence for DO, MD and
  * a blank profession (exactly the test above), a PA licence for a PA, an APRN
  * or RN licence for an NP (src/constants/professions.js).
  */
@@ -104,7 +104,7 @@ export const currentDeaRecords = (licenses) => (licenses || []).filter((l) => l 
 const practice = (ctx) => (l) => isPracticeLicense(l, ctx.s.degreeType);
 /**
  * The licence task is done when the profession's practice licence is held:
- * a medical licence for MD, DO and blank (as before), a PA licence for a PA,
+ * a medical licence for DO, MD and blank (as before), a PA licence for a PA,
  * and for an NP both an APRN licence and an RN licence (single state or
  * multistate), since an NP holds both and each has its own board's rules.
  */
@@ -260,11 +260,11 @@ export const TASK_DEFS = [
     secs: 30,
     pro: false,
     label: "About you",
-    // MD and DO keep the words they had; everyone else is asked for a
+    // DO and MD keep the words they had; everyone else is asked for a
     // profession, since a blank member may be a PA or an NP.
     why: ({ s }) => (isPhysicianDegree(s.degreeType)
-      ? "Degree picks the MD or DO rule set. Primary state sets the CME clock."
-      : "Your profession picks the rule set: MD, DO, PA or NP. Primary state sets the clock."),
+      ? "Degree picks the DO or MD rule set. Primary state sets the CME clock."
+      : "Your profession picks the rule set: DO, MD, PA or NP. Primary state sets the clock."),
     verb: "Fill in your details",
     doneWhen: ({ s }) => !!s.name && isKnownDegree(s.degreeType) && !!s.primaryState,
     evidenceWhen: null,
@@ -981,7 +981,7 @@ export function buildSetup(data, { isPro = false, isFreeBeta = false, hasSubscri
   // should be able to see what a full packet contains. countTier and the
   // ranker both skip them, so a paywall can never be the page's next action.
   // A row that applies only to some members (the PA or NP practice agreement)
-  // is left off the board for everyone else, so MD and DO boards are unchanged.
+  // is left off the board for everyone else, so DO and MD boards are unchanged.
   const tasks = TASK_DEFS.filter((def) => !def.appliesWhen || def.appliesWhen(ctx)).map((def) => resolveTask(def, ctx, state));
   const tier1 = tasks.filter((t) => t.tier === 1);
   const tier2 = tasks.filter((t) => t.tier === 2);

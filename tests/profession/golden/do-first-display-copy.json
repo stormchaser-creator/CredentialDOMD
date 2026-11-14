@@ -1,0 +1,467 @@
+{
+  "reason": "Owner request 2026-11-13: lists of the two physician degrees read DO first (\"DO/MD\", \"DO and MD\") in the state renewal copy the app displays (src/constants/renewalInfo.js and stateRequirements.js notes, generated from landing/states/states-data.json). Each case below was compared, full output against full output, with the commit before the change: 90 differ only by that word order. The two Arkansas views also carry the November 13, 2026 state-guide correction to the fee sentence (the fee reduction runs through June 30, 2027), which reached the app data when it was regenerated from the same file. No DO/MD compliance engine or renewal calculation changes.",
+  "entries": [
+    {
+      "key": "rules:getStateReq:CT:MD",
+      "originalHash": "1fc7936e7812fc126f6048f04df7f19a601a732f96a3fe4f4a8a76d0255ad0e7",
+      "reviewedHash": "737f43a8dbcdf5afc22e2b2d57e97168ac3b372469a2b894dc066b5ec8bc4b76"
+    },
+    {
+      "key": "rules:getStateEntry:CT:MD",
+      "originalHash": "30acb4148633b1ee89c61ce2b84a4aa13ce235c16991f9ca04e3983cc22785b9",
+      "reviewedHash": "53e830ed41334630ddea3f4cd539bf1ccc91c947d9130bd0dbeb60e975a47e4b"
+    },
+    {
+      "key": "engine:CT:MD:empty:rolling",
+      "originalHash": "9880f8bae54eace230c9f606e0697cc341e0082de17ac81f79ffc10322fbb76e",
+      "reviewedHash": "8d380a289cdb27901307a69f41d8c7ac29b9ce34e1b2ebabf6a8b6b1d8c8adb0"
+    },
+    {
+      "key": "engine:CT:MD:empty:anchored",
+      "originalHash": "c634eae2aff7877682635172d1cbc3f2c4795fb10c58f92e43ec52f941ecdf19",
+      "reviewedHash": "baf7c3e95403c25888fc8c6d886234b1cf546b5e793c7a611c4ab9ce9a0ea72f"
+    },
+    {
+      "key": "engine:CT:MD:empty:custom",
+      "originalHash": "849a4204bf233d5dead29bd4c53bf928525b8b92296ed0a2460146f5ad7d1eb8",
+      "reviewedHash": "acedff2ec44df654b563e1c48600c81060fea0c556d7074ae3a4d2d36e917f87"
+    },
+    {
+      "key": "engine:CT:MD:empty:badStart",
+      "originalHash": "8a4c7dc90d993d49fd57868f724ae171f193ce1235bf2f0a70449b2372d6720b",
+      "reviewedHash": "3c298e71e5e77077316e43d19c58fefaacd3dca1c52129ab4ecabcd765a32e98"
+    },
+    {
+      "key": "engine:CT:MD:mixed:rolling",
+      "originalHash": "969ca8348d44bb4fae3db02474e8202e29fb94e503389bad22cd23157beee640",
+      "reviewedHash": "c119dd2794a9d2d4ddfb817cf26858ae744d2dbadae8170ff13e8c12acf42dbc"
+    },
+    {
+      "key": "engine:CT:MD:mixed:anchored",
+      "originalHash": "9ee13d4d14262d86aced05583d8225a28dfd94d06dab697f6245a19eaaa54f64",
+      "reviewedHash": "032e3d17936b6439f40da2685aba91879d60350437c52deb775f5d914fcef506"
+    },
+    {
+      "key": "engine:CT:MD:mixed:custom",
+      "originalHash": "617658286fe5e30bc9cf0f2500f74717e754512f97b5dd0c55e089972b060c9c",
+      "reviewedHash": "16423ec274f905ce7a4bffea33ea3a06b33c6a659e26606f1ffe84191b4d7666"
+    },
+    {
+      "key": "engine:CT:MD:mixed:badStart",
+      "originalHash": "12169b33ac0f18da1632bfd7218e48fe845c4acb23a0457e40842dc3f5d53035",
+      "reviewedHash": "f2c800b7248430035815251ec710dd67059036d18e1606f951d55b27eacb6291"
+    },
+    {
+      "key": "engine:CT:MD:boundary:rolling",
+      "originalHash": "8e1d148704982040af9e368df91b62642d08109611cb1cc019dc3ca17df41c56",
+      "reviewedHash": "69d9d02a16415813bd7ac938dbaad59d547b43bc127fbb3dc804715d2ad1a412"
+    },
+    {
+      "key": "engine:CT:MD:boundary:anchored",
+      "originalHash": "0a87ddbb31286eb8ed26e13dcad28892a66b4feabca24a5f55d920867dfdfca9",
+      "reviewedHash": "9fcd8b3bf9bf7df0e2e13d380676e9e5ffff0ed7d82ad400afeb73860d1b4a19"
+    },
+    {
+      "key": "engine:CT:MD:boundary:custom",
+      "originalHash": "0bf490f35136ba36cc0a0d2bb375224d18ad4dcae5aad52e08771b561a53bc11",
+      "reviewedHash": "238febd706fa403d5bc59dbbc812a443b45483a9fd94140e8b145f501dd15adf"
+    },
+    {
+      "key": "engine:CT:MD:boundary:badStart",
+      "originalHash": "371a8a0699f344af0eb16dbb0bfc11b1be4fcc379d4ab6e99e290b03f007765b",
+      "reviewedHash": "f323401d0455db7d113b5a0c7134961a770e3f841ce5e7c414d4037db9ee64f1"
+    },
+    {
+      "key": "view:AK:MD:State Medical License",
+      "originalHash": "2f4422d47096468a26f7c6e0f17c935cf3c57466f2910587f5eba090cf924ca2",
+      "reviewedHash": "1ddbb1278281427fcea2bc156a4fc87f43803bfa5b4b56e33d9752e7c8a012f0"
+    },
+    {
+      "key": "view:AL:MD:State Medical License",
+      "originalHash": "ce0b97497f2e5da96469d605ac81dccd621724459c45cf4b06a0dcd993743f8b",
+      "reviewedHash": "e1d0576ee759a8aa388bb78faf45ef6bf718ed3eaab53d312f817345cc7f16d0"
+    },
+    {
+      "key": "view:AR:MD:State Medical License",
+      "originalHash": "d16ea6660be37b1b853a236eff9f7c2da2862ec71378e79818c084fd8f43c59c",
+      "reviewedHash": "5d973be791f63f99f5fd6de6079225555a00bec66ccd2b0906b58fd137099520",
+      "also": "Arkansas fee sentence corrected (state-guide corrections, 2026-11-13)"
+    },
+    {
+      "key": "view:AZ:MD:State Medical License",
+      "originalHash": "fa8e555a59ae2fb9da0ea2ab95d69b9186d4411698b40fe4c286feeb856b6d73",
+      "reviewedHash": "0de8c8130141229f6ce79bfe2fb64bd35c389a06a17c700957046e699758dde7"
+    },
+    {
+      "key": "view:CT:MD:State Medical License",
+      "originalHash": "16983589d98edba0d352f2002e925d327e7b29bd9abb4f9a576cfc3e3d893a86",
+      "reviewedHash": "ffdc579a2370b8fbeaf37ac8aefba5870f64abf82b49397a2a05c62118ec6fe2"
+    },
+    {
+      "key": "view:DC:MD:State Medical License",
+      "originalHash": "cc9737d86e8a8a13e9cc3e3e4c7d3761d42034c061c381c297cbfaa30b64b984",
+      "reviewedHash": "3fcddabfea5ed9b5610f230250cbd75e764ea5a8ea485f5379a7428099edad4c"
+    },
+    {
+      "key": "view:FL:MD:State Medical License",
+      "originalHash": "5d2757802b104666dda671b16197f52273783e821b4e2b69e01d4dba2656b8e0",
+      "reviewedHash": "4679da7c186b8a412b85775a64a5e5c2c4681f6152ad2579392f564d135e061a"
+    },
+    {
+      "key": "view:IL:MD:State Medical License",
+      "originalHash": "f28bf714e7664ac3cc521ca5e0c14f1cb0dbf6bcae1c6746c28c1c63a3f73ede",
+      "reviewedHash": "3b3a6b864d90c8f5a4beefb3cba3142e529ae9982e7e807081a25f4a74a4dd7d"
+    },
+    {
+      "key": "view:IN:MD:State Medical License",
+      "originalHash": "d734349eb005131ea1bef4194b612e18418f5952d13448d7e3e592e95be0327a",
+      "reviewedHash": "92d1d37b18b3e5518255ec038f81092c743641d81e249f652e548aaf514f9a34"
+    },
+    {
+      "key": "view:KS:MD:State Medical License",
+      "originalHash": "14627c03ff5ec47ae6edce7c13c8cfa5ca8bdfef953ee104549870938ee1439b",
+      "reviewedHash": "dc9f9b96c32e2f134179c7a953c8c41f22aa8caaa80dd5231d9a8d11f08846e5"
+    },
+    {
+      "key": "view:KY:MD:State Medical License",
+      "originalHash": "8c23600d4a1ac6bd98bc195aeff92debc48fa1763cb931dd8ed0308fd964e4c2",
+      "reviewedHash": "924489f2012cc3ca1c25183aa260e500dd5e4d3e5d2ca305a5dc8697d1b391bc"
+    },
+    {
+      "key": "view:LA:MD:State Medical License",
+      "originalHash": "b990389182ea84bcf3a498f9fe8354c52e4b3386beb9ffa1dc266688c70803b2",
+      "reviewedHash": "15f42161b4c56810faff2afc0c15bc18a284148a3f624b129152ad0a0dafcd96"
+    },
+    {
+      "key": "view:MD:MD:State Medical License",
+      "originalHash": "aa1f9539f1e00354168ffcc476dcee69ee13b0bc42f6ab67e0fa8ba88857df59",
+      "reviewedHash": "c5482b5e5e03264e8d507b1d0d74cc23922521a33cdb82db188dbe68c3e1c579"
+    },
+    {
+      "key": "view:MI:MD:State Medical License",
+      "originalHash": "f7b321879259ffb123a71a6c65c2df91e9b460bc53233cf0cc84f9508afe03ae",
+      "reviewedHash": "23d5dad89a3121e1beb14bd1bffdc355ceda525a4db9aa84c3f3980f339e7238"
+    },
+    {
+      "key": "view:MN:MD:State Medical License",
+      "originalHash": "cc8a7e46fb6bfcf7d4309db4dc11854974c853b226f7b389a5ec1d6bf5581861",
+      "reviewedHash": "d90577ed5f35e63364f945e5f4079449f7a719622549172eae497ba01654520b"
+    },
+    {
+      "key": "view:MO:MD:State Medical License",
+      "originalHash": "608435a53adcb5e9d7c42d903d13173d907d996c1897187cd8efb8544d44626d",
+      "reviewedHash": "8e6b78696113ad2d5e7da75a33b424d74d5577ddbdfe8b95c3474490b9e95a6a"
+    },
+    {
+      "key": "view:MS:MD:State Medical License",
+      "originalHash": "b1984ffa3b514c6644615d9fc7f443850f97c9dd5882e55f88f02d65cc4a0636",
+      "reviewedHash": "ab4f1de29b28a328c8744532a297e9c4cf456189ed2669734e9ca89ee5c41d54"
+    },
+    {
+      "key": "view:NC:MD:State Medical License",
+      "originalHash": "3b9f89327376e1d5e665d942f363c7c60f38cbbd04995025d58c74e726553857",
+      "reviewedHash": "e5d0bb876c134115522ebe217ae1a9c984752bbbe59d7b8b522d121b684297c7"
+    },
+    {
+      "key": "view:NJ:MD:State Medical License",
+      "originalHash": "0e96ac73de89a2f25916566447dd9e57f048933ffb813c329aef66a1036002b7",
+      "reviewedHash": "934aaa1a32e8534729fd6e03eb1f39b759115c9cd4d146f7ec8bbf230ebbf512"
+    },
+    {
+      "key": "view:NY:MD:State Medical License",
+      "originalHash": "21a8297340b4b846c884fa5fc9b1f7de47a78123164a929483f7642ff0933889",
+      "reviewedHash": "75f150c35c4ea3416f1191cd8c4cc0a4722c391d76a0f1b27adbcb583711fc12"
+    },
+    {
+      "key": "view:OH:MD:State Medical License",
+      "originalHash": "b1d16875fc030a3b3532b4f841aada24e002b8edf88c79ae04c6939c6a29bbfa",
+      "reviewedHash": "f0b2df345f5abdd09532d92404dfa1d317d88e0ec3d5791062fce9759d964c60"
+    },
+    {
+      "key": "view:OK:MD:State Medical License",
+      "originalHash": "aecab3640e1d7b23c4b8f06872bd265d8ed64507fb1a12954bf3f8bb7c7cf8be",
+      "reviewedHash": "762fb10197c02d07107c51086976f7506ad0196f18c93895de970c8fb7002f7d"
+    },
+    {
+      "key": "view:OR:MD:State Medical License",
+      "originalHash": "9b528f4a4026fc29648724d50740c864a4c815387c8fe7fe88e0bf83272c91bf",
+      "reviewedHash": "ad59897e871fb66df1aeb7199a1190012d03707824f8e682ac0401d8168dccf8"
+    },
+    {
+      "key": "view:RI:MD:State Medical License",
+      "originalHash": "e97b5d1e27e69b2b334044e50f4a5007ba4b3574d994dc41695d11f3d1d93923",
+      "reviewedHash": "f92f8a472a1b3406d90b0d78f186e95b54be00fbf46457040e4d96e433280186"
+    },
+    {
+      "key": "view:SC:MD:State Medical License",
+      "originalHash": "1886f8c31ed943f0f47ea4aa38a965fef0fd95df0ef7c18f196cf4d69042ee54",
+      "reviewedHash": "cd315137408f933a07da81bfd0f9814c5fd8571373b79793ef566ae3042f7626"
+    },
+    {
+      "key": "view:SD:MD:State Medical License",
+      "originalHash": "beba096f8c5aec4035fb9171b490cb3c69479e98a47c96e07c55a10125f55836",
+      "reviewedHash": "2904a5d31a111dfe61de4db4423e4d2c4e52ce6c43b511e267712ef829657416"
+    },
+    {
+      "key": "view:UT:MD:State Medical License",
+      "originalHash": "bf636ad6b009d252e375ebdcf93c548ada984d9f8933007e589c9c6b9f27bd5f",
+      "reviewedHash": "3f345c7448f69e2922f027907192b5f72ca8b1b19062832b218c3149f5676978"
+    },
+    {
+      "key": "view:VA:MD:State Medical License",
+      "originalHash": "060d6ab05f464bc3cefb1b636c55b8d6b25c555fb7b3156a80a5a243663c866e",
+      "reviewedHash": "dd911d40395ea62b9fcff6e1d08b86c0c993646c785fc5e49e6898410c6fb890"
+    },
+    {
+      "key": "view:VT:MD:State Medical License",
+      "originalHash": "b4cfbee2a6bd5af5e82149ceebe98b8a87a786c61f78ebd42346a813baf9afea",
+      "reviewedHash": "540aa4dc091907feabcc84c8c3e277a6525e2159af7d87a6cd1601b10bcde337"
+    },
+    {
+      "key": "view:WI:MD:State Medical License",
+      "originalHash": "e4baec84893062d77ac08d7d7db60930086e2dfb07081c389a3514d09e1c78f1",
+      "reviewedHash": "e2c0690a0c621bc4fd2b452b121d6073167e18e09a194cce9511ecf551b3021a"
+    },
+    {
+      "key": "evidence:CT:MD",
+      "originalHash": "b51ddefced2752b32075dbdadd508864816ba2ad458bb9718333b7306ec98d42",
+      "reviewedHash": "de34291d973d2162029f7056c8dafc622e730bf15a2828f0bfe5e3eb86f89dea"
+    },
+    {
+      "key": "setup:MD",
+      "originalHash": "e3344a8835a645fbf0da45565e3f9a3ee98808b976a05e5557b7e54cc15b4075",
+      "reviewedHash": "25396c2e3e600d8d2102d1da08f8bb3f8bc7332ad8f0b295832849bb07bfed35"
+    },
+    {
+      "key": "rules:getStateReq:CT:DO",
+      "originalHash": "1fc7936e7812fc126f6048f04df7f19a601a732f96a3fe4f4a8a76d0255ad0e7",
+      "reviewedHash": "737f43a8dbcdf5afc22e2b2d57e97168ac3b372469a2b894dc066b5ec8bc4b76"
+    },
+    {
+      "key": "rules:getStateEntry:CT:DO",
+      "originalHash": "30acb4148633b1ee89c61ce2b84a4aa13ce235c16991f9ca04e3983cc22785b9",
+      "reviewedHash": "53e830ed41334630ddea3f4cd539bf1ccc91c947d9130bd0dbeb60e975a47e4b"
+    },
+    {
+      "key": "engine:CT:DO:empty:rolling",
+      "originalHash": "e41cd1864c47972c2312cf7d054028382a4ff4d4ad5b421285958ed54f2b14af",
+      "reviewedHash": "6eb90dd1909cc74be0fc11308bdf50ec939982c32650ac6f0992ba3956346636"
+    },
+    {
+      "key": "engine:CT:DO:empty:anchored",
+      "originalHash": "5ea352c0964ca2cc2eb430d02aa615e4ce324ba07207a0cb4076695cfcf34c4c",
+      "reviewedHash": "cd843a745e35453d6abd3480749670db7d6f95fa95f00718f6905ff0eda8d6d4"
+    },
+    {
+      "key": "engine:CT:DO:empty:custom",
+      "originalHash": "c30f26af89abdd66848974d7a2defd767c996a00bb62dce7ec045ac7525af2ae",
+      "reviewedHash": "caac2b525726a2473fefc2f2f51847dc6e9aa77f3e018b0be2818b7e6ef70e37"
+    },
+    {
+      "key": "engine:CT:DO:empty:badStart",
+      "originalHash": "a06ac75870680e489c58cdbb029f824dbdd2d995f5147fb801902ced015cb299",
+      "reviewedHash": "f5fbc74e83f0892d9bcc6afb1fd45aa8344205dbe08b777ac6883c9e090a2795"
+    },
+    {
+      "key": "engine:CT:DO:mixed:rolling",
+      "originalHash": "4cf23f067a4cf0363c892aee8c29b473f38ae28ee6ad348918ed1c283425a5df",
+      "reviewedHash": "ae63f20707a00b457048b76ecb3379e73c0244fb8ed8ebf54a8df37a42386b34"
+    },
+    {
+      "key": "engine:CT:DO:mixed:anchored",
+      "originalHash": "675f223c8ad841636af7b34a33bb69c3c94b27cfd91adf4e70362605d612bab3",
+      "reviewedHash": "744da7623f70a398d785abe59b657d759aedc30b5957896ade4f79a581118377"
+    },
+    {
+      "key": "engine:CT:DO:mixed:custom",
+      "originalHash": "455ec5a66d40fb304444fce6bf15a0d1c35f0c293c29fcd7e134b86707e6ecba",
+      "reviewedHash": "0513dbaf12763ff6f778e60231fb6e78938fb6ea2f1d519f15d9d40153deb3d2"
+    },
+    {
+      "key": "engine:CT:DO:mixed:badStart",
+      "originalHash": "b4bc13de237ceae2fbff6b0cf26ec9554af8682b03a3b41a54a7be6f0f106169",
+      "reviewedHash": "9f72ad38a946e15401338bf620749bd327703c53257f6b5426b2f03393c4b2d8"
+    },
+    {
+      "key": "engine:CT:DO:boundary:rolling",
+      "originalHash": "bb687925c8adca11249011134191f283425f9afbc1818c11a39d673abc4798ee",
+      "reviewedHash": "4812cbccf8c56b56fc7d70998a5eaf4e780e2db378d42b2d1297a34156e7ee82"
+    },
+    {
+      "key": "engine:CT:DO:boundary:anchored",
+      "originalHash": "eea8a087df5ab2bd4560b3ca18a676123d9c567e3a608f7f3494c0cf76aac64f",
+      "reviewedHash": "77032209d4f23d81b9df071129c95a5591783800f977f2276a3ecb8bee958f7d"
+    },
+    {
+      "key": "engine:CT:DO:boundary:custom",
+      "originalHash": "ab58e28bf75437d6fc183904b0867251825ae851bd5571fd74d4f718a986803b",
+      "reviewedHash": "db1cddc31bbaef1e5270589be4f082b62bce710f374dfce445b02878df2d630a"
+    },
+    {
+      "key": "engine:CT:DO:boundary:badStart",
+      "originalHash": "1156c93a58544a19b6c635ece937da4e1cb592257a3bcdcee8f47b51cf82842c",
+      "reviewedHash": "74a320ed8f79b97ebd90f45c42b037bcaf05df587b2c07e00e177843d60efe15"
+    },
+    {
+      "key": "view:AK:DO:State Medical License (DO)",
+      "originalHash": "2f4422d47096468a26f7c6e0f17c935cf3c57466f2910587f5eba090cf924ca2",
+      "reviewedHash": "1ddbb1278281427fcea2bc156a4fc87f43803bfa5b4b56e33d9752e7c8a012f0"
+    },
+    {
+      "key": "view:AL:DO:State Medical License (DO)",
+      "originalHash": "ce0b97497f2e5da96469d605ac81dccd621724459c45cf4b06a0dcd993743f8b",
+      "reviewedHash": "e1d0576ee759a8aa388bb78faf45ef6bf718ed3eaab53d312f817345cc7f16d0"
+    },
+    {
+      "key": "view:AR:DO:State Medical License (DO)",
+      "originalHash": "d16ea6660be37b1b853a236eff9f7c2da2862ec71378e79818c084fd8f43c59c",
+      "reviewedHash": "5d973be791f63f99f5fd6de6079225555a00bec66ccd2b0906b58fd137099520",
+      "also": "Arkansas fee sentence corrected (state-guide corrections, 2026-11-13)"
+    },
+    {
+      "key": "view:AZ:DO:State Medical License (DO)",
+      "originalHash": "47dad4da51c4337d327a4e2ff8f6d9cb5c9d57f98ae26db5bc5669c227e5c38e",
+      "reviewedHash": "b9951a127d9add234472d5e4f6d1850f23f438e171e73662571c60e34ce4385f"
+    },
+    {
+      "key": "view:CT:DO:State Medical License (DO)",
+      "originalHash": "16983589d98edba0d352f2002e925d327e7b29bd9abb4f9a576cfc3e3d893a86",
+      "reviewedHash": "ffdc579a2370b8fbeaf37ac8aefba5870f64abf82b49397a2a05c62118ec6fe2"
+    },
+    {
+      "key": "view:DC:DO:State Medical License (DO)",
+      "originalHash": "cc9737d86e8a8a13e9cc3e3e4c7d3761d42034c061c381c297cbfaa30b64b984",
+      "reviewedHash": "3fcddabfea5ed9b5610f230250cbd75e764ea5a8ea485f5379a7428099edad4c"
+    },
+    {
+      "key": "view:FL:DO:State Medical License (DO)",
+      "originalHash": "152eef625ef50ce7028a049d9d8de9912f46f16f191cf4c24a2cc7592a65f458",
+      "reviewedHash": "f31d23ee813cf66288fa8cf83f2ce48a17bcc042022705790f80840503a16a87"
+    },
+    {
+      "key": "view:IL:DO:State Medical License (DO)",
+      "originalHash": "f28bf714e7664ac3cc521ca5e0c14f1cb0dbf6bcae1c6746c28c1c63a3f73ede",
+      "reviewedHash": "3b3a6b864d90c8f5a4beefb3cba3142e529ae9982e7e807081a25f4a74a4dd7d"
+    },
+    {
+      "key": "view:IN:DO:State Medical License (DO)",
+      "originalHash": "d734349eb005131ea1bef4194b612e18418f5952d13448d7e3e592e95be0327a",
+      "reviewedHash": "92d1d37b18b3e5518255ec038f81092c743641d81e249f652e548aaf514f9a34"
+    },
+    {
+      "key": "view:KS:DO:State Medical License (DO)",
+      "originalHash": "14627c03ff5ec47ae6edce7c13c8cfa5ca8bdfef953ee104549870938ee1439b",
+      "reviewedHash": "dc9f9b96c32e2f134179c7a953c8c41f22aa8caaa80dd5231d9a8d11f08846e5"
+    },
+    {
+      "key": "view:KY:DO:State Medical License (DO)",
+      "originalHash": "8c23600d4a1ac6bd98bc195aeff92debc48fa1763cb931dd8ed0308fd964e4c2",
+      "reviewedHash": "924489f2012cc3ca1c25183aa260e500dd5e4d3e5d2ca305a5dc8697d1b391bc"
+    },
+    {
+      "key": "view:LA:DO:State Medical License (DO)",
+      "originalHash": "b990389182ea84bcf3a498f9fe8354c52e4b3386beb9ffa1dc266688c70803b2",
+      "reviewedHash": "15f42161b4c56810faff2afc0c15bc18a284148a3f624b129152ad0a0dafcd96"
+    },
+    {
+      "key": "view:MD:DO:State Medical License (DO)",
+      "originalHash": "aa1f9539f1e00354168ffcc476dcee69ee13b0bc42f6ab67e0fa8ba88857df59",
+      "reviewedHash": "c5482b5e5e03264e8d507b1d0d74cc23922521a33cdb82db188dbe68c3e1c579"
+    },
+    {
+      "key": "view:MI:DO:State Medical License (DO)",
+      "originalHash": "985d446117c9d56b646a7843c2c872a40f075e845d68d3210eb09462545b6688",
+      "reviewedHash": "8694e8abc3372b5d63fb90b9d53345f6008f99bf899bbcfec17ad64ea0af202e"
+    },
+    {
+      "key": "view:MN:DO:State Medical License (DO)",
+      "originalHash": "cc8a7e46fb6bfcf7d4309db4dc11854974c853b226f7b389a5ec1d6bf5581861",
+      "reviewedHash": "d90577ed5f35e63364f945e5f4079449f7a719622549172eae497ba01654520b"
+    },
+    {
+      "key": "view:MO:DO:State Medical License (DO)",
+      "originalHash": "608435a53adcb5e9d7c42d903d13173d907d996c1897187cd8efb8544d44626d",
+      "reviewedHash": "8e6b78696113ad2d5e7da75a33b424d74d5577ddbdfe8b95c3474490b9e95a6a"
+    },
+    {
+      "key": "view:MS:DO:State Medical License (DO)",
+      "originalHash": "b1984ffa3b514c6644615d9fc7f443850f97c9dd5882e55f88f02d65cc4a0636",
+      "reviewedHash": "ab4f1de29b28a328c8744532a297e9c4cf456189ed2669734e9ca89ee5c41d54"
+    },
+    {
+      "key": "view:NC:DO:State Medical License (DO)",
+      "originalHash": "3b9f89327376e1d5e665d942f363c7c60f38cbbd04995025d58c74e726553857",
+      "reviewedHash": "e5d0bb876c134115522ebe217ae1a9c984752bbbe59d7b8b522d121b684297c7"
+    },
+    {
+      "key": "view:NJ:DO:State Medical License (DO)",
+      "originalHash": "0e96ac73de89a2f25916566447dd9e57f048933ffb813c329aef66a1036002b7",
+      "reviewedHash": "934aaa1a32e8534729fd6e03eb1f39b759115c9cd4d146f7ec8bbf230ebbf512"
+    },
+    {
+      "key": "view:NY:DO:State Medical License (DO)",
+      "originalHash": "21a8297340b4b846c884fa5fc9b1f7de47a78123164a929483f7642ff0933889",
+      "reviewedHash": "75f150c35c4ea3416f1191cd8c4cc0a4722c391d76a0f1b27adbcb583711fc12"
+    },
+    {
+      "key": "view:OH:DO:State Medical License (DO)",
+      "originalHash": "b1d16875fc030a3b3532b4f841aada24e002b8edf88c79ae04c6939c6a29bbfa",
+      "reviewedHash": "f0b2df345f5abdd09532d92404dfa1d317d88e0ec3d5791062fce9759d964c60"
+    },
+    {
+      "key": "view:OK:DO:State Medical License (DO)",
+      "originalHash": "c80ed6197bbea617c5ff566f66569e7a1ec29f8763b3b6bfa61169339eee3fcd",
+      "reviewedHash": "0950c0144c4acd4a1f58c98edcfee8818a52f849ac1e63b5d9067ffb49da23e1"
+    },
+    {
+      "key": "view:OR:DO:State Medical License (DO)",
+      "originalHash": "9b528f4a4026fc29648724d50740c864a4c815387c8fe7fe88e0bf83272c91bf",
+      "reviewedHash": "ad59897e871fb66df1aeb7199a1190012d03707824f8e682ac0401d8168dccf8"
+    },
+    {
+      "key": "view:RI:DO:State Medical License (DO)",
+      "originalHash": "e97b5d1e27e69b2b334044e50f4a5007ba4b3574d994dc41695d11f3d1d93923",
+      "reviewedHash": "f92f8a472a1b3406d90b0d78f186e95b54be00fbf46457040e4d96e433280186"
+    },
+    {
+      "key": "view:SC:DO:State Medical License (DO)",
+      "originalHash": "1886f8c31ed943f0f47ea4aa38a965fef0fd95df0ef7c18f196cf4d69042ee54",
+      "reviewedHash": "cd315137408f933a07da81bfd0f9814c5fd8571373b79793ef566ae3042f7626"
+    },
+    {
+      "key": "view:SD:DO:State Medical License (DO)",
+      "originalHash": "beba096f8c5aec4035fb9171b490cb3c69479e98a47c96e07c55a10125f55836",
+      "reviewedHash": "2904a5d31a111dfe61de4db4423e4d2c4e52ce6c43b511e267712ef829657416"
+    },
+    {
+      "key": "view:UT:DO:State Medical License (DO)",
+      "originalHash": "8fa46cd0299c755606811b554a0f1c4284ff09244f19a4a9170b771781a74964",
+      "reviewedHash": "3b52b617c6acc100c9d785b48797dfba06810ab0350286bd27349ad1b7e6e713"
+    },
+    {
+      "key": "view:VA:DO:State Medical License (DO)",
+      "originalHash": "060d6ab05f464bc3cefb1b636c55b8d6b25c555fb7b3156a80a5a243663c866e",
+      "reviewedHash": "dd911d40395ea62b9fcff6e1d08b86c0c993646c785fc5e49e6898410c6fb890"
+    },
+    {
+      "key": "view:VT:DO:State Medical License (DO)",
+      "originalHash": "d8729ce49aadd48766f33ead2a6f5578c91e13d1b198d5c618f5fe7b0a3ab0d5",
+      "reviewedHash": "5c8bcf9229d29bc249ba00caf059ce9a227c7e231736db5bdd4e0d4996fa64c7"
+    },
+    {
+      "key": "view:WI:DO:State Medical License (DO)",
+      "originalHash": "e4baec84893062d77ac08d7d7db60930086e2dfb07081c389a3514d09e1c78f1",
+      "reviewedHash": "e2c0690a0c621bc4fd2b452b121d6073167e18e09a194cce9511ecf551b3021a"
+    },
+    {
+      "key": "evidence:CT:DO",
+      "originalHash": "62fc1f60c5b02a8fbf2fd06accfbfd823378620ac4502c5458ed7ea3a4b5bdc6",
+      "reviewedHash": "e9d79612119cb20b82db170823a7071fa05b6790404c549c424d7c7dc682035c"
+    },
+    {
+      "key": "setup:DO",
+      "originalHash": "e3344a8835a645fbf0da45565e3f9a3ee98808b976a05e5557b7e54cc15b4075",
+      "reviewedHash": "25396c2e3e600d8d2102d1da08f8bb3f8bc7332ad8f0b295832849bb07bfed35"
+    }
+  ]
+}

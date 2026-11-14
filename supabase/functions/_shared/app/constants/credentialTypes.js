@@ -11,7 +11,7 @@ export const CERTIFICATION_TYPE = "Certification";
 // leftover "not yet known" flag on them is not a question to resolve.
 export const NON_EXPIRING_LICENSE_TYPES = Object.freeze([CERTIFICATION_TYPE, "USMLE", "COMLEX", "ECFMG Certificate"]);
 // The PA and NP licensing exams, passed once. Kept apart from the list above
-// so that list (and everything printed from it) is unchanged for MD and DO.
+// so that list (and everything printed from it) is unchanged for DO and MD.
 // NCCPA and every NP certification expire and are never here.
 export const APP_NON_EXPIRING_LICENSE_TYPES = Object.freeze(["PANCE", "NCLEX-RN"]);
 export function isInherentlyNonExpiringLicense(type) {
@@ -416,7 +416,7 @@ export const REFERENCE_RELATIONSHIPS = [
   "Other",
 ];
 
-// A PA or NP names the physician they practise with; MD and DO keep the list above.
+// A PA or NP names the physician they practise with; DO and MD keep the list above.
 export const getReferenceRelationships = (deg) => {
   const p = professionOf(deg);
   if (p !== "pa" && p !== "np") return REFERENCE_RELATIONSHIPS;

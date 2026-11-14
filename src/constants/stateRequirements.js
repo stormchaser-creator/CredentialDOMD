@@ -1,7 +1,7 @@
 import { ruleSetFor } from "../utils/ruleResolver.js";
 
 // Comprehensive state CME requirements (from Feb 2026 CME Compliance Database)
-// States with separate MD/DO boards have { md: {...}, do: {...} } structure.
+// States with separate DO/MD boards have { md: {...}, do: {...} } structure.
 // States with combined boards have a flat structure.
 // States with NO CME requirement (IN, MT, SD) have total: 0.
 //
@@ -142,7 +142,7 @@ export const STATE_REQS = {
     { topic: "Domestic Violence", hours: 1.0, note: "first renewal in which CME is required, then once every 6 years", period: { years: 6 } },
     { topic: "Cultural Competency", hours: 1.0, note: "includes systemic racism, explicit and implicit bias, racial disparities, and care of transgender and gender diverse persons; first renewal in which CME is required, then once every 6 years", period: { years: 6 } },
     { topic: "Behavioral Health", hours: 2.0, note: "mental health conditions common to veterans and their families (PTSD, suicide risk, depression, grief), or suicide prevention, or cognitive conditions (Alzheimer's, dementia, delirium); first renewal in which CME is required, then once every 6 years", period: { years: 6 } },
-  ], notes: "Six mandated topics (infectious diseases, risk management, sexual assault, domestic violence, cultural competency, behavioral health) required in the first renewal in which CME is required and then once every 6 years. CME is not required for the first license renewal. Same rule for MD and DO.", rollover: "No (up to 10 hr waiver for Board service)", moc: "No", source: "Conn. Gen. Stat. \u00a7 20-10b", verified: "2026-08", sourceUrl: "https://portal.ct.gov/dph/practitioner-licensing--investigations/physician/continuing-medical-education" },
+  ], notes: "Six mandated topics (infectious diseases, risk management, sexual assault, domestic violence, cultural competency, behavioral health) required in the first renewal in which CME is required and then once every 6 years. CME is not required for the first license renewal. Same rule for DO and MD.", rollover: "No (up to 10 hr waiver for Board service)", moc: "No", source: "Conn. Gen. Stat. \u00a7 20-10b", verified: "2026-08", sourceUrl: "https://portal.ct.gov/dph/practitioner-licensing--investigations/physician/continuing-medical-education" },
   DC: { total: 50, cycle: 2, cat1min: 50, cat1note: "All Cat 1; 10% (5 hrs) in public health priorities", topics: [
     { topic: "Cultural Competency", hours: 2.0, note: "2 hrs LGBTQ cultural competency" },
     { topic: "Pharmacology", hours: 0, note: "1 pharmacology course" },

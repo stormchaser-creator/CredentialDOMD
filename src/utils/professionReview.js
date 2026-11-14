@@ -2,7 +2,7 @@
 //
 // A PA who imported NPPES licences, scanned a card or logged CME before
 // choosing PA has them filed as a State Medical License and under MD CME
-// categories (the only choices a blank member had). An MD or DO may hold a
+// categories (the only choices a blank member had). An DO or MD may hold a
 // record typed for a PA or NP. This lists them so the member can retype each
 // one or keep it as it is; "Keep as is" is stored on the record
 // (customFields["Profession review"] = "kept") so it is not asked again.

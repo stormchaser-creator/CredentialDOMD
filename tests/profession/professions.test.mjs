@@ -18,7 +18,7 @@ import { mergeNpiLicenses, extractLicensesFromNPI, degreeFromCredential } from '
 import { SECTION_TYPES } from '../../src/utils/intakeRecords.js';
 
 test('four professions, blank and anything else unknown', () => {
-  assert.deepEqual([...DEGREES], ['MD', 'DO', 'PA', 'NP']);
+  assert.deepEqual([...DEGREES], ['DO', 'MD', 'PA', 'NP']);
   assert.equal(DEGREE_LABELS.PA, 'Physician Assistant');
   assert.equal(DEGREE_LABELS.NP, 'Nurse Practitioner');
   for (const d of ['MD', 'DO', 'PA', 'NP']) assert.ok(isKnownDegree(d));

@@ -99,7 +99,7 @@ test('CV import, blank member: "Not now" reads nothing and says the reader needs
   assert.deepEqual(cv.reads(), [], 'nothing parsed');
   assert.deepEqual(cv.calls.filter(c => c[0] === 'updateSettings'), [], 'no profession saved');
   assert.equal(cv.picker(), undefined);
-  assert.match(text, /Synthetic CV\.pdf was not read\. The reader needs your license type \(MD, DO, PA or NP\)/);
+  assert.match(text, /Synthetic CV\.pdf was not read\. The reader needs your license type \(DO, MD, PA or NP\)/);
   assert.equal(cv.ui.fileInputs().length, 1, 'she can choose the file again');
   // Choosing the file again asks again; nothing is read until she answers.
   await cv.pickCv();

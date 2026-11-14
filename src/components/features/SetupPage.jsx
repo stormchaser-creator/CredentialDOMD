@@ -179,7 +179,7 @@ export function IdentityDrawer() {
       {/* Four professions, two by two at phone width (src/constants/professions.js
           DEGREES; tests/profession/pickers.test.mjs pins the list). */}
       <div role="group" aria-labelledby="setup-degree-label" style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8, margin: "4px 0 12px" }}>
-        {[["MD", "MD"], ["DO", "DO"], ["PA", "PA"], ["NP", "NP"]].map(([d, label]) => chip(label, s.degreeType === d, () => chooseDegree(d)))}
+        {[["DO", "DO"], ["MD", "MD"], ["PA", "PA"], ["NP", "NP"]].map(([d, label]) => chip(label, s.degreeType === d, () => chooseDegree(d)))}
       </div>
       {degreeWait && <div role="status" style={{ margin: "-4px 0 12px", fontSize: 13, color: T.textMuted }}>Loading the {degreeWait} rules...</div>}
       {degreeUnavailable && <div role="alert" style={{ margin: "-4px 0 12px", fontSize: 13, color: T.textMuted, lineHeight: 1.45 }}>{APP_RULES_UNAVAILABLE}</div>}
@@ -224,7 +224,7 @@ function LicensesDrawer({ onAddByHand }) {
   const deg = s.degreeType;
   const appProfession = deg === "PA" || deg === "NP";
   // A PA's licence is read by licenseKindOf, the one test that folds a
-  // curly apostrophe; MD, DO and NP keep their tests unchanged.
+  // curly apostrophe; DO, MD and NP keep their tests unchanged.
   const practiceType = deg === "NP" ? /\b(aprn|arnp|crnp|apn|nurse practitioner|rn)\b.*licen[sc]e|^rn license/i : /medical license/i;
   const isPractice = (type) => (deg === "PA" ? licenseKindOf(type) === "pa" : practiceType.test(type || ""));
   const hasPrimary = !primary || (data.licenses || []).some(

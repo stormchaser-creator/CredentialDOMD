@@ -41,7 +41,7 @@ export default function MultiStateMatrix({ onAddLicense }) {
   const { data, theme: T } = useApp();
   const degreeType = data.settings?.degreeType || "";
   // A PA or NP gets their own licences, CE and agreement columns
-  // (utils/appMatrix.js); MD and DO rows are built below as before.
+  // (utils/appMatrix.js); DO and MD rows are built below as before.
   const app = isAdvancedPractice(degreeType);
 
   const stateRows = useMemo(() => {
@@ -77,7 +77,7 @@ export default function MultiStateMatrix({ onAddLicense }) {
       );
 
       // CME compliance for this state. The engine's own totals are the
-      // numbers to show: `totalRequired` already follows MD/DO and
+      // numbers to show: `totalRequired` already follows DO/MD and
       // `totalEarned` is counted inside the license-anchored window.
       const cmeData = complianceFor(data, state);
       const unmet = (cmeData?.topicResults || []).filter((t) => t.met === false);
@@ -186,7 +186,7 @@ export default function MultiStateMatrix({ onAddLicense }) {
                   padding: "2px 8px", borderRadius: 10,
                   backgroundColor: T.input, color: T.textMuted,
                 }}>
-                  {degreeType || "MD or DO?"}
+                  {degreeType || "DO or MD?"}
                 </span>
               </div>
 

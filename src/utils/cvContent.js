@@ -38,7 +38,7 @@ export function buildCvContent(data, template = "clinical") {
     const sections = [];
     const deg = s.degreeType || "";
     const fullDegree = deg === "DO" ? "Doctor of Osteopathic Medicine" : deg === "MD" ? "Doctor of Medicine" : (DEGREE_LABELS[deg] || "");
-    // "Dr." only for MD and DO (as before); a PA, an NP or a member who has
+    // "Dr." only for DO and MD (as before); a PA, an NP or a member who has
     // not chosen a profession is never given an honorific on a CV.
     const physician = isPhysicianDegree(deg);
     const yr = (d) => (d ? String(d).slice(0, 4) : "");

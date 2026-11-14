@@ -158,3 +158,5 @@ section[id]{scroll-margin-top:84px}
 [hidden]{display:none!important}
 /* The founder countdown, filled in by membership-offer.js from the server's count. */
 .spots{display:block;width:fit-content;margin:0 0 12px;padding:5px 12px;border-radius:999px;background:var(--mint);color:#065f46;font-weight:700;font-size:.95rem}
+/* An eyebrow that names credentials keeps its own capitals: uppercase turns "DOs" into "DOS". */
+.eyebrow-plain{text-transform:none;letter-spacing:.02em;font-size:.95rem}

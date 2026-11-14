@@ -1,5 +1,5 @@
 // The words the app uses for the member's own profession (DESIGN 5.2).
-// MD and DO keep every string they had. Audience "member": a blank profession
+// DO and MD keep every string they had. Audience "member": a blank profession
 // reads as physician copy in the app. Audience "third-party" (share text,
 // CV, invoices, the credential portal): a blank profession is neutral, since
 // a document sent out never asserts what the member has not chosen.
