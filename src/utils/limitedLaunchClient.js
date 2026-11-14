@@ -66,7 +66,11 @@ function practiceTermsMatch(value, expected) {
 }
 
 function validateQuote(value, offerId) {
-  if (!contract(value) || value.offerId !== offerId || !["founding", "earlybird", "standard"].includes(value.pricePhase)) throw unavailable();
+  // Credential is quoted at founding ($99) or earlybird ($149) only; "standard"
+  // is the stored label of the $245 package and nothing else (the $199
+  // Credential tier was removed, 2026-11-13).
+  if (!contract(value) || value.offerId !== offerId
+    || !(offerId === "core" ? ["founding", "earlybird"] : ["standard"]).includes(value.pricePhase)) throw unavailable();
   const expected = getPublicBillingOffer(offerId, value.pricePhase);
   if (!expected || value.name !== expected.name || value.annualCents !== expected.annualCents
     || value.currency !== "usd" || value.interval !== "year" || value.pricePhase !== expected.pricePhase
@@ -111,6 +115,8 @@ function validatePortal(value) {
 }
 
 // limited-refund's answer: what would be refunded, or what was.
+// 19900 is the removed $199 Credential tier: no longer sold, but a payment
+// made at it before the removal is still refunded in full.
 const REFUND_AMOUNTS = new Set([9900, 14900, 19900, 24500]);
 const REFUND_STATES = { status: ["resume", "refunded", "needs_support"], quote: ["available", "resume", "refunded", "needs_support"], refund: ["refunded", "needs_support", "resume"] };
 function validateRefund(value, step) {
@@ -156,7 +162,7 @@ function validateEnrollment(value) {
   if (!contract(value) || !["lifetime", "grandfathered_beta", "paid"].includes(value.enrollmentKind)
     || !["active", "pending"].includes(value.accessStatus) || value.subscriptionCreated !== false
     || value.cardRequired !== (value.enrollmentKind === "paid")
-    || ![null, "founding", "earlybird", "standard"].includes(value.pricePhase)
+    || ![null, "founding", "earlybird"].includes(value.pricePhase)
     || !object(beta) || !["none", "active", "expired"].includes(beta.state) || beta.autoCharges !== false
     || (beta.state === "none" ? beta.startsAt !== null || beta.endsAt !== null
       : !date(beta.startsAt) || !date(beta.endsAt)

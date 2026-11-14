@@ -8,7 +8,7 @@ const request = (method='GET', origin='https://credentialdomd.com') => new Reque
 const offer = {schemaVersion:1,phase:'founding',annualCents:9900,checkoutEnabled:true,availability:'available'};
 
 test('anonymous public offer exposes only matching authoritative price and availability with no caching',async()=>{
-  for(const [phase,annualCents] of [['founding',9900],['earlybird',14900],['standard',19900]])
+  for(const [phase,annualCents] of [['founding',9900],['earlybird',14900]])
     for(const availability of ['available','temporarily_full','paused']) {
       // Founding Credential includes Practice, so the bundle waits for founding to end (20260928190000).
       const expected={...offer,phase,annualCents,availability,checkoutEnabled:availability!=='paused',bundleAvailable:phase!=='founding'};
@@ -21,6 +21,14 @@ test('anonymous public offer exposes only matching authoritative price and avail
       assert.equal(response.headers.get('cache-control'),'no-store');
       assert.equal(response.headers.get('access-control-allow-origin'),'https://credentialdomd.com');
     }
+});
+test('the removed $199 standard tier, or any amount that is not $99 or $149, is never published',async()=>{
+  for(const bad of [{phase:'standard',annualCents:19900,bundleAvailable:true},{phase:'earlybird',annualCents:19900,bundleAvailable:true},{phase:'founding',annualCents:14900},{phase:'earlybird',annualCents:24500,bundleAvailable:true}]){
+    const h=createPublicMembershipOfferHandler({readOffer:async()=>({...offer,...bad})});
+    const response=await h(request());
+    assert.equal(response.status,503,JSON.stringify(bad));
+    assert.deepEqual(await response.json(),{error:'membership_offer_unavailable'});
+  }
 });
 test('foreign origins and writes never read policy; OPTIONS is bounded and authentication is unnecessary',async()=>{
   let reads=0;const h=createPublicMembershipOfferHandler({readOffer:async()=>{reads++;return offer;}});

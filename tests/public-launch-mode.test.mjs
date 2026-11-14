@@ -80,13 +80,13 @@ test('both views retain the active-membership rate condition and distinct earlie
     assert.match(view.fullPackage, /\$245\/year/);
     // No "no founding discount": founding Credential at $99 already includes Practice.
     assert.equal(view.fullPackage, `${view.bundleOffer} It is not offered to founding buyers, because founding Credential at $99/year already includes Practice while you are a member.`);
-    assert.equal(view.bundleOffer, 'Credential + Practice is $245/year total at first purchase, with no early bird discount.');
+    assert.equal(view.bundleOffer, 'Credential + Practice is $245/year total at first purchase.');
     assert.doesNotMatch(view.fullPackage, /no founding/);
     assert.match(view.promisedBeta, /earlier free-beta wording/);
     assert.match(view.promisedBeta, /30 days free with no card/);
     assert.match(view.promisedBeta, /no automatic charge/);
     assert.match(view.lifetimeException, /keep Credential and Practice free for life/);
-    assert.match(view.practiceTrial, /Founding Credential members have Practice included for as long as their membership stays active\. Early bird and standard Credential members receive a separate 30 day Practice trial/);
+    assert.match(view.practiceTrial, /Founding Credential members have Practice included for as long as their membership stays active\. Members who join Credential at \$149\/year receive a separate 30 day Practice trial/);
     assert.match(view.practiceTrial, /explicit purchase/);
   }
 });
@@ -107,7 +107,9 @@ test('founding marketing states the paid cap without claiming live availability 
   assert.match(view.availability, /Availability is confirmed before payment/);
   assert.match(view.availability, /does not reserve a place/);
   assert.match(view.foundingRate, /membership remains continuously active/);
-  assert.match(view.rateComparison, /After the 100 paid founding memberships.*\$149.*\$199/);
+  // Owner decision 2026-11-13: $149 Credential and the $245 package after the founders; no $199 tier.
+  assert.equal(view.rateComparison, 'After the 100 paid founding memberships, Credential is $149/year and Credential + Practice is $245/year.');
+  for (const mode of [undefined, { enabled: false, signupHref: null }]) assert.doesNotMatch(JSON.stringify(publicLaunchPresentation(mode)), /\$199|standard Credential|early.bird/i);
   // Liability hedging about a never-charged $149 price was removed for a live product.
   assert.equal(view.foundingChange, undefined);
   assert.doesNotMatch(JSON.stringify(view), /previously planned/i);

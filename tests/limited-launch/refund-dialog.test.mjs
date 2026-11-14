@@ -92,7 +92,8 @@ test('a paid member sees Cancel and get a refund; asking changes nothing until t
   assert.match(html, /in full to the card you paid with\./);
   assert.match(html, /Your membership ends now\. The subscription is cancelled today and will not renew, and you can no longer add or change records\./);
   assert.match(html, /Nothing is deleted\. Your saved records and documents stay available to view and export until you delete them yourself\./);
-  assert.match(html, /If you join again later, you pay the standard price at that time\./);
+  assert.match(html, /If you join again later, you pay the price offered at that time\./);
+  assert.doesNotMatch(html, /standard price/);
   assert.match(html, /without a refund\? Use Manage paid subscription to turn off renewal instead\./, 'cancelling at period end stays available');
   const confirm = button(f, 'Cancel membership and refund $149.00');
   assert.equal(confirm.props.disabled, true, 'an explicit confirmation first');

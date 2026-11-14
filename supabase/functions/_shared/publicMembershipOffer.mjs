@@ -1,4 +1,6 @@
-const amounts = Object.freeze({ founding: 9900, earlybird: 14900, standard: 19900 });
+// The two Credential prices on sale (owner decision 2026-11-13). Any other
+// phase or amount from the database is refused: no page is ever told $199.
+const amounts = Object.freeze({ founding: 9900, earlybird: 14900 });
 
 /** Anonymous, read-only, identity-free public projection of the SQL quote policy. */
 export function createPublicMembershipOfferHandler({ readOffer, origin = 'https://credentialdomd.com', origins = [origin] }) {

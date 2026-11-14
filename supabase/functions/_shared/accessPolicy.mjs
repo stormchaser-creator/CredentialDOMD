@@ -1,5 +1,19 @@
 /** Owner-approved future policy. This module does not activate billing or access enforcement. */
-export const CREDENTIAL_PRICE_PHASES = Object.freeze({ founding: 9900, earlybird: 14900, standard: 19900 });
+// Owner decision, 2026-11-13: two Credential prices. The first 100 paid
+// members are founders: $99/year with Practice included. After them
+// Credential is $149/year (its key stays 'earlybird': Stripe lookup keys and
+// stored rows use it) and Credential + Practice is $245/year. The $199
+// "standard" Credential tier is removed and is never quoted or sold.
+export const CREDENTIAL_PRICE_PHASES = Object.freeze({ founding: 9900, earlybird: 14900 });
+// The package has one price. 'standard' is only the label its stored rows
+// and its Stripe lookup key carry (limited_billing_quotes requires it); it
+// is not a Credential tier.
+export const BUNDLE_PRICE_PHASE = 'standard';
+export const BUNDLE_ANNUAL_CENTS = 24500;
+// The removed $199 Credential tier. Kept ONLY so a membership that was bought
+// at it before the removal still renews, settles and refunds against its own
+// stored quote. Nothing new is quoted, previewed or sold from here.
+export const RETIRED_CREDENTIAL_PRICE_PHASES = Object.freeze({ standard: 19900 });
 export const PUBLIC_BILLING_POLICY = Object.freeze({
   version: '2026-09-19-credential-practice-v1',
   pricePhase: 'founding', // Current price and capacity are confirmed by the server.
@@ -7,31 +21,47 @@ export const PUBLIC_BILLING_POLICY = Object.freeze({
   billingEnabled: false,
   checkoutEnabled: false,
   enforcementEnabled: true,
-  // Early-bird and standard Credential only. Founding Credential includes
-  // Practice for as long as the membership stays active (owner, 2026-09-28).
+  // $149 Credential only. Founding Credential includes Practice for as long
+  // as the membership stays active (owner, 2026-09-28).
   practiceTrialDays: 30,
   trialAutoCharges: false,
   lifetimeScope: 'credential_and_practice',
 });
 
-export function getPublicBillingOffer(id, phase = PUBLIC_BILLING_POLICY.pricePhase) {
-  if (!Object.hasOwn(CREDENTIAL_PRICE_PHASES, phase)) throw new Error('Unknown Credential price phase');
-  if (!['core', 'core_locum'].includes(id)) return null;
+export function getPublicBillingOffer(id, phase = PUBLIC_BILLING_POLICY.pricePhase, { historical = false } = {}) {
+  // A stored quote of the removed tier, read back for settlement or a refund.
+  if (historical && id === 'core' && Object.hasOwn(RETIRED_CREDENTIAL_PRICE_PHASES, phase)) {
+    const cents = RETIRED_CREDENTIAL_PRICE_PHASES[phase];
+    return Object.freeze({
+      id, offerId: id, name: 'Credential', tier: 'founding', annualCents: cents, unitAmount: cents,
+      currency: 'usd', interval: 'year', pricePhase: phase, priceLockedWhileActive: false, retired: true,
+      eligibilityLabel: 'Credential annual membership (price no longer sold)',
+      practiceIncluded: false, practiceTrialDays: PUBLIC_BILLING_POLICY.practiceTrialDays,
+      trialAutoCharges: false, billingEnabled: false,
+      productId: `prod_credentialdomd_${id}_v2`, lookupKey: `credentialdomd_${id}_${phase}_annual_v2`,
+    });
+  }
+  if (!['core', 'core_locum'].includes(id)) {
+    if (!Object.hasOwn(CREDENTIAL_PRICE_PHASES, phase) && phase !== BUNDLE_PRICE_PHASE) throw new Error('Unknown Credential price phase');
+    return null;
+  }
   const core = id === 'core';
-  const amount = core ? CREDENTIAL_PRICE_PHASES[phase] : 24500;
+  // The package is asked for beside any Credential phase, or by its own label.
+  if (!Object.hasOwn(CREDENTIAL_PRICE_PHASES, phase) && !(phase === BUNDLE_PRICE_PHASE && !core)) throw new Error('Unknown Credential price phase');
+  const amount = core ? CREDENTIAL_PRICE_PHASES[phase] : BUNDLE_ANNUAL_CENTS;
   // The bundle, and founding Credential, include Practice while active; the
   // later Credential phases get one Practice trial instead.
   const practiceIncluded = !core || phase === 'founding';
   return Object.freeze({
     id, offerId: id, name: core ? 'Credential' : 'Credential + Practice',
     tier: core ? 'founding' : 'locum', annualCents: amount, unitAmount: amount,
-    currency: 'usd', interval: 'year', pricePhase: core ? phase : 'standard',
-    priceLockedWhileActive: core && phase !== 'standard',
-    eligibilityLabel: core && phase === 'founding' ? 'First 100 paid founding memberships' : core && phase === 'earlybird' ? 'Early-bird membership' : 'Standard annual membership',
+    currency: 'usd', interval: 'year', pricePhase: core ? phase : BUNDLE_PRICE_PHASE,
+    priceLockedWhileActive: core,
+    eligibilityLabel: core && phase === 'founding' ? 'First 100 paid founding memberships' : core ? 'Credential annual membership' : 'Credential + Practice annual membership',
     practiceIncluded, practiceTrialDays: practiceIncluded ? 0 : PUBLIC_BILLING_POLICY.practiceTrialDays,
     trialAutoCharges: false, billingEnabled: false,
     productId: `prod_credentialdomd_${id}_v2`,
-    lookupKey: `credentialdomd_${id}_${core ? phase : 'standard'}_annual_v2`,
+    lookupKey: `credentialdomd_${id}_${core ? phase : BUNDLE_PRICE_PHASE}_annual_v2`,
   });
 }
 export const getPublicBillingOffers = (phase = PUBLIC_BILLING_POLICY.pricePhase) => ['core', 'core_locum'].map(id => getPublicBillingOffer(id, phase));

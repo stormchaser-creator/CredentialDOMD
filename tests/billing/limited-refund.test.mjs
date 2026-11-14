@@ -23,7 +23,9 @@ function stripeError(type, code) { const e = new Error('synthetic provider failu
 function fixture({ phase = 'earlybird', offerId = 'core', billingReason = 'subscription_cycle' } = {}) {
   const calls = [];
   const profile = { id: '20000000-0000-4000-8000-000000000001', auth_user_id: 'user_member', access_status: 'active', deleted_at: null };
-  const offer = limitedOffer(offerId, phase, config.productIds);
+  // An existing membership's own quote, as the handler reads it: one bought at
+  // the removed $199 tier before 2026-11-13 is still refunded in full.
+  const offer = limitedOffer(offerId, phase, config.productIds, { historical: true });
   const product = { id: offer.productId, active: true, livemode: false, metadata: { app: config.app, offer_id: offerId, pricing_policy_version: config.policyVersion, catalog_version: config.version } };
   const price = { id: 'price_Annual', product, active: true, livemode: false, currency: 'usd', unit_amount: offer.unitAmount, type: 'recurring', recurring: { interval: 'year', interval_count: 1, usage_type: 'licensed' }, lookup_key: offer.lookupKey, billing_scheme: 'per_unit' };
   const account = { profile_id: profile.id, livemode: false, stripe_customer_id: 'cus_A' };

@@ -40,7 +40,7 @@ export const INVITE_TO_JOIN_URL = 'https://credentialdomd.com/app/';
 export const MONEY_BACK_GUARANTEE = '100% no-hassle money-back guarantee on your most recent annual membership payment, including renewals.';
 export const PRODUCT_SENTENCE = 'CredentialDOMD keeps your medical licenses, DEA registrations, board certifications, CME and professional documents in one place, organized for the next renewal or credentialing request.';
 
-const PRICES = Object.freeze({ founding: 9900, earlybird: 14900, standard: 19900 });
+const PRICES = Object.freeze({ founding: 9900, earlybird: 14900 });
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const SUBJECT_ID = /^user_[A-Za-z0-9]+$/;
 const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -93,9 +93,7 @@ export function offerParagraph({ phase, annualCents, availability }) {
   const rate = `$${annualCents / 100}/year`;
   const price = phase === 'founding'
     ? `The founding membership is ${rate} for the first 100 paid members, with Practice included while you are a member. That annual rate stays locked for life while your membership remains continuously active.`
-    : phase === 'earlybird'
-      ? `Membership is ${rate} (early bird Credential), with one 30 day Practice trial when your first annual payment is confirmed. That annual rate stays locked for life while your membership remains continuously active.`
-      : `Membership is ${rate} (standard Credential), with one 30 day Practice trial when your first annual payment is confirmed.`;
+    : `Credential membership is ${rate}, with one 30 day Practice trial when your first annual payment is confirmed. That annual rate stays locked for life while your membership remains continuously active. Credential + Practice is $245/year.`;
   const status = availability === 'paused'
     ? 'Paid checkout is paused at the moment; you can create your account now and choose to pay when it reopens.'
     : availability === 'temporarily_full'

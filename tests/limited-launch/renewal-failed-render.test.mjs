@@ -40,7 +40,7 @@ const none = { state: 'none', startsAt: null, endsAt: null, autoCharges: false }
 const snapshot = patch => ({
   schemaVersion: 1, policyVersion: PUBLIC_BILLING_POLICY.version, evaluatedAt: '2027-10-02T12:00:00Z', enforcementEnabled: true,
   accessStatus: 'active', purchasedOfferId: null, practiceIncluded: false, bundleAvailable: true, billingEnabled: true,
-  checkoutEligible: false, checkoutResumeAvailable: false, checkoutResumeOfferId: null, pricePhase: 'standard', invitationActivationEnabled: false,
+  checkoutEligible: false, checkoutResumeAvailable: false, checkoutResumeOfferId: null, pricePhase: 'earlybird', invitationActivationEnabled: false,
   scheduledMembership: null, lifetime: { credential: false, practice: false }, freeBeta: none,
   practiceTrial: { state: 'expired', startsAt: '2026-10-01T00:00:00Z', endsAt: '2026-10-31T00:00:00Z', autoCharges: false },
   capabilities: { credential: capability(false), practice: capability(false) }, billingSubscriptionStatus: 'past_due', ...patch,

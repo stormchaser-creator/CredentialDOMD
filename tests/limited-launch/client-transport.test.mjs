@@ -244,7 +244,7 @@ const activationFixture = () => ({
 });
 
 test('quote posts only the selected offer and optional invitation, then validates every public price phase', async () => {
-  for (const [offerId, phase] of [['core', 'founding'], ['core', 'earlybird'], ['core', 'standard'], ['core_locum', 'standard']]) {
+  for (const [offerId, phase] of [['core', 'founding'], ['core', 'earlybird'], ['core_locum', 'standard']]) {
     let request;
     const quote = quoteFixture(offerId, phase);
     const { client } = setup({ fetchImpl: async (...args) => { request = args; return Response.json(quote); } });
@@ -253,6 +253,12 @@ test('quote posts only the selected offer and optional invitation, then validate
     assert.equal(request[0], 'https://membership.invalid/functions/v1/billing-quote');
     assert.deepEqual(JSON.parse(request[1].body), input);
   }
+  // Owner decision 2026-11-13: no Credential quote at the removed $199 tier is ever shown, whatever a server sends.
+  const retired = { ...quoteFixture('core', 'earlybird'), pricePhase: 'standard', annualCents: 19900, priceLockedWhileActive: false };
+  const { client } = setup({ fetchImpl: async () => Response.json(retired) });
+  await assert.rejects(client.quote({ offerId: 'core' }), unavailable);
+  const mislabelled = { ...quoteFixture('core_locum', 'standard'), pricePhase: 'earlybird' };
+  await assert.rejects(setup({ fetchImpl: async () => Response.json(mislabelled) }).client.quote({ offerId: 'core_locum' }), unavailable);
 });
 
 test('checkout requires explicit boolean consent and valid quote identifiers before any request', async () => {
@@ -308,17 +314,17 @@ test('quote contracts reject changed prices, consent metadata, policy, and autom
   }
 });
 
-test('practice terms follow the phase: founding includes Practice, early-bird and standard carry the trial, older functions still read', async () => {
+test('practice terms follow the phase: founding includes Practice, $149 Credential carries the trial, older functions still read', async () => {
   const read = async value => { const { client } = setup({ fetchImpl: async () => Response.json(value) }); return client.quote({ offerId: value.offerId }); };
   assert.deepEqual([(await read(quoteFixture('core', 'founding'))).practiceIncluded, (await read(quoteFixture('core', 'founding'))).practiceTrialDays], [true, 0]);
-  for (const phase of ['earlybird', 'standard']) {
+  for (const phase of ['earlybird']) {
     const value = await read(quoteFixture('core', phase));
     assert.deepEqual([value.practiceIncluded, value.practiceTrialDays], [false, 30]);
     await assert.rejects(read({ ...quoteFixture('core', phase), practiceIncluded: true, practiceTrialDays: 0 }), unavailable);
   }
   // A function deployed before 20260928190000 sends no practiceIncluded and
   // puts the trial on every Credential quote; that shape is still read.
-  for (const phase of ['founding', 'earlybird', 'standard']) {
+  for (const phase of ['founding', 'earlybird']) {
     const older = { ...quoteFixture('core', phase), practiceTrialDays: 30 }; delete older.practiceIncluded;
     assert.equal((await read(older)).practiceIncluded, undefined);
     await assert.rejects(read({ ...older, practiceTrialDays: 0 }), unavailable);

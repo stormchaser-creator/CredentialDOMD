@@ -24,7 +24,7 @@ export function createAccessPolicyHandler(deps, policy = PUBLIC_BILLING_POLICY) 
       }
       const snapshot = await deps.readOwnSnapshot(req);
       if (snapshot?.schemaVersion !== 1 || snapshot.policyVersion !== policy.version || snapshot.enforcementEnabled !== true || typeof snapshot.billingEnabled !== 'boolean') throw Error('Policy cutover incomplete');
-      if (snapshot.checkoutEligible != null && (typeof snapshot.checkoutEligible !== 'boolean' || (snapshot.checkoutEligible && (!snapshot.billingEnabled || !['founding','earlybird','standard'].includes(snapshot.pricePhase))))) throw Error('Checkout eligibility unavailable');
+      if (snapshot.checkoutEligible != null && (typeof snapshot.checkoutEligible !== 'boolean' || (snapshot.checkoutEligible && (!snapshot.billingEnabled || !['founding','earlybird'].includes(snapshot.pricePhase))))) throw Error('Checkout eligibility unavailable');
       // A paid membership that includes Practice: the bundle, or founding Credential.
       if (snapshot.practiceIncluded != null && (typeof snapshot.practiceIncluded !== 'boolean' || (snapshot.practiceIncluded && !['core','core_locum'].includes(snapshot.purchasedOfferId)) || (snapshot.purchasedOfferId === 'core_locum' && !snapshot.practiceIncluded))) throw Error('Practice membership unavailable');
       if (snapshot.bundleAvailable != null && typeof snapshot.bundleAvailable !== 'boolean') throw Error('Bundle availability unavailable');

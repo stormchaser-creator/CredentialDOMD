@@ -23,8 +23,11 @@ test('shows the founding offer exactly as the public site words it', async () =>
 
 test('follows the live phase rather than a hardcoded price', async () => {
   const offer = await loadAuthOffer({ ...base, fetchImpl: reply({ ...founding, phase: 'earlybird', annualCents: 14900 }) });
-  assert.equal(offer.headline, 'Early bird Credential: $149/year');
-  assert.equal((await loadAuthOffer({ ...base, fetchImpl: reply({ ...founding, phase: 'earlybird', annualCents: 14900, bundleAvailable: true }) })).headline, 'Early bird Credential: $149/year');
+  assert.equal(offer.headline, 'Credential: $149/year');
+  assert.equal(offer.action, 'Join for $149 a year');
+  assert.equal((await loadAuthOffer({ ...base, fetchImpl: reply({ ...founding, phase: 'earlybird', annualCents: 14900, bundleAvailable: true }) })).headline, 'Credential: $149/year');
+  // The removed $199 tier is refused like any other unknown reply: the screen shows no price at all.
+  assert.equal(await loadAuthOffer({ ...base, fetchImpl: reply({ ...founding, phase: 'standard', annualCents: 19900, bundleAvailable: true }) }), null);
 });
 
 test('when checkout is paused or founding is full it says so in the words the site uses', async () => {

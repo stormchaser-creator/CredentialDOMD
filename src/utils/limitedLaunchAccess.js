@@ -86,7 +86,8 @@ export function validateAccessSnapshot(value) {
   if (value.checkoutResumeAvailable === true
     ? value.billingEnabled !== true || !["core", "core_locum"].includes(value.checkoutResumeOfferId)
     : value.checkoutResumeOfferId != null) throw new Error("Checkout resume information could not be verified.");
-  if (value.pricePhase != null && !["founding", "earlybird", "standard"].includes(value.pricePhase)) throw new Error("Membership information could not be verified.");
+  // The Credential offer this account would get: $99 founding or $149. No other tier exists.
+  if (value.pricePhase != null && !["founding", "earlybird"].includes(value.pricePhase)) throw new Error("Membership information could not be verified.");
   // The live subscription's status while it can still be paid or managed
   // (20260930002000); older servers leave it out. It never grants access.
   if (value.billingSubscriptionStatus != null && !MANAGEABLE_SUBSCRIPTION_STATUSES.includes(value.billingSubscriptionStatus)) {
@@ -119,6 +120,7 @@ export function validateAccessSnapshot(value) {
       // servers leave it out.
       || (scheduled.cancelsAt != null && (!scheduled.firstChargeCanceled || !date(scheduled.cancelsAt)
         || Date.parse(scheduled.cancelsAt) >= Date.parse(scheduled.startsAt)))
+      // 19900: a first charge scheduled at the removed $199 tier before its removal still shows as it was agreed.
       || !(scheduled.offerId === "core" ? [9900, 14900, 19900] : [24500]).includes(scheduled.annualCents)) {
       throw new Error("Scheduled membership information could not be verified.");
     }

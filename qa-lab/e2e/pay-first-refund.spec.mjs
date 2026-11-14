@@ -404,7 +404,7 @@ test('Cancel and get a refund: the exact amount, one refund of the latest charge
     qa.check('the other device: Credentials is read-only after a reload', await other.page.getByRole('heading', { name: 'Credential saved records' }).waitFor({ timeout: 30000 }).then(() => true, () => false));
   });
 
-  await qa.feature('BILL-007', 'Every later visit shows the recorded outcome; joining again is at the standard price', async () => {
+  await qa.feature('BILL-007', 'Every later visit shows the recorded outcome; joining again is at $149 Credential', async () => {
     const refundAnswers = [];
     const onRefund = (r) => { if (r.url().endsWith('/functions/v1/limited-refund')) refundAnswers.push(r.status()); };
     page.on('response', onRefund);
@@ -432,7 +432,7 @@ test('Cancel and get a refund: the exact amount, one refund of the latest charge
       await offer.click();
       await card.getByRole('button', { name: 'Continue to secure payment' }).waitFor({ timeout: 60000 }).catch(() => {});
       const review = await text(card);
-      qa.check('a later purchase is quoted at the standard price ($199.00 per year)', /Credential \$199\.00 per year/.test(review), review.match(/Credential \$[\d.]+ per year/)?.[0]);
+      qa.check('a later purchase is quoted at Credential $149.00 per year', /Credential \$149\.00 per year/.test(review), review.match(/Credential \$[\d.]+ per year/)?.[0]);
     } else qa.check('the card offers to join again', false, (await text(card)).slice(0, 300));
   });
 });

@@ -12,7 +12,8 @@ function fixture(phase='founding') {
     invoice:{id:'in_a',customer:'cus_a',subscription:'sub_a',livemode:false,status:'paid',paid:true,billing_reason:'subscription_create',currency:'usd',status_transitions:{paid_at:1800000000},amount_paid:amount,amount_due:amount,amount_remaining:0,lines:{has_more:false,data:[{price:'price_a',quantity:1,amount}]}}};
 }
 test('authoritative planned prices and product scopes never introduce automatic trial billing',()=>{
-  assert.deepEqual(CREDENTIAL_PRICE_PHASES,{founding:9900,earlybird:14900,standard:19900});
+  // Owner decision 2026-11-13: two Credential prices; the $199 standard tier is removed.
+  assert.deepEqual(CREDENTIAL_PRICE_PHASES,{founding:9900,earlybird:14900});
   for(const phase of Object.keys(CREDENTIAL_PRICE_PHASES)){
     const [core,full]=getPublicBillingOffers(phase);
     assert.equal(core.unitAmount,CREDENTIAL_PRICE_PHASES[phase]); assert.equal(core.annualCents,core.unitAmount);
@@ -20,11 +21,19 @@ test('authoritative planned prices and product scopes never introduce automatic 
     // Founding Credential includes Practice while active (owner, 2026-09-28); later phases keep the 30-day trial.
     assert.equal(core.practiceIncluded,phase==='founding');assert.equal(core.practiceTrialDays,phase==='founding'?0:30);
     assert.equal(full.practiceIncluded,true);assert.equal(full.practiceTrialDays,0);assert.equal(core.trialAutoCharges,false);
-    assert.equal(core.priceLockedWhileActive,phase!=='standard');
+    assert.equal(core.priceLockedWhileActive,true);assert.equal(full.pricePhase,'standard','the package keeps its stored label');
   }
   assert.equal(PUBLIC_BILLING_POLICY.billingEnabled,false);assert.equal(PUBLIC_BILLING_POLICY.checkoutEnabled,false);assert.equal(PUBLIC_BILLING_POLICY.enforcementEnabled,true);
   assert.equal(PUBLIC_BILLING_POLICY.pricePhase,'founding');assert.equal(PUBLIC_BILLING_POLICY.publicFoundingCapacity,100);
   assert.throws(()=>getPublicBillingOffer('core','madeup'));assert.equal(getPublicBillingOffer('free'),null);
+  // Nothing new is offered at the removed tier: not Credential, not the offer list.
+  assert.throws(()=>getPublicBillingOffer('core','standard'),/Unknown Credential price phase/);
+  assert.throws(()=>getPublicBillingOffers('standard'),/Unknown Credential price phase/);
+  assert.equal(getPublicBillingOffer('core_locum','standard').unitAmount,24500);
+  // A membership bought at it before the removal is still read back for settlement and refunds, marked retired.
+  const old=getPublicBillingOffer('core','standard',{historical:true});
+  assert.deepEqual([old.unitAmount,old.retired,old.priceLockedWhileActive,old.lookupKey],[19900,true,false,'credentialdomd_core_standard_annual_v2']);
+  assert.equal(getPublicBillingOffer('core','earlybird',{historical:true}).retired,undefined);
 });
 test('cohort canonicalization binds immutable identity pairs and rejects duplicates or malformed data',()=>{
   const a={profileId:pid,clerkSubject:'user_a'},b={profileId:'10000000-0000-4000-8000-000000000002',clerkSubject:'user_b'};

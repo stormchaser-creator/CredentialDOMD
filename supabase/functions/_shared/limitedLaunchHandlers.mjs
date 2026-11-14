@@ -432,7 +432,8 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
       const profile = await deps.store.profile(account.profile_id);
       const q = await deps.store.quoteByAttempt(sub.metadata?.checkout_attempt_id);
       if (!profile || !q || q.profile_id !== profile.id || q.clerk_subject !== profile.auth_user_id || q.livemode !== live || q.offer_id !== sub.metadata.offer_id || q.price_phase !== sub.metadata.price_phase || q.policy_version !== config.policyVersion || sub.metadata.pricing_policy_version !== config.policyVersion || sub.metadata.clerk_user_id !== profile.auth_user_id || sub.metadata.profile_id !== profile.id || id(sub.customer) !== account.stripe_customer_id || sub.livemode !== live || sub.metadata.catalog_version !== config.version || sub.items?.data?.length !== 1 || sub.items.data[0].quantity !== 1 || sub.items.data[0].price.id !== q.price_id) refuse(409, 'subscription_owner_mismatch');
-      const offer = limitedOffer(q.offer_id, q.price_phase, { [q.offer_id]: q.product_id });
+      // An existing subscription's own quote: one bought at the removed $199 tier still settles.
+      const offer = limitedOffer(q.offer_id, q.price_phase, { [q.offer_id]: q.product_id }, { historical: true });
       assertLimitedPrice(sub.items.data[0].price, offer, live, { allowInactive: true, pinnedPriceId: q.price_id });
       const billingAnchor = assertDeferredSubscription(sub, q);
       const end = sub.current_period_end ?? sub.items.data[0].current_period_end;
@@ -832,7 +833,8 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     if (sub.status !== 'active' || !id(sub.latest_invoice)) refuse(409, 'no_refundable_payment');
     const q = await deps.store.quoteByAttempt(sub.metadata.checkout_attempt_id);
     if (!q || q.profile_id !== profile.id || q.clerk_subject !== profile.auth_user_id || q.livemode !== live || q.offer_id !== sub.metadata.offer_id || q.price_phase !== sub.metadata.price_phase) refuse(409, 'subscription_owner_mismatch');
-    const offer = limitedOffer(q.offer_id, q.price_phase, { [q.offer_id]: q.product_id });
+    // The refund follows the member's own quote, including one at the removed $199 tier.
+    const offer = limitedOffer(q.offer_id, q.price_phase, { [q.offer_id]: q.product_id }, { historical: true });
     let invoice = await stripe.invoices.retrieve(id(sub.latest_invoice), { expand: ['lines.data.price'] });
     let paidFor = sub, earlier = false;
     // The $0 or credit invoice of a classic mode anchor reset (a Dashboard

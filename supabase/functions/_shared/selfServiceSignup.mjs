@@ -20,7 +20,7 @@ function validEnrollment(enrollment) {
   const beta = enrollment.free_beta;
   if (!beta || beta.autoCharges !== false) return false;
   if (enrollment.kind === 'lifetime') return enrollment.price_phase === null && beta.state === 'none' && beta.startsAt === null && beta.endsAt === null;
-  if (!['founding', 'earlybird', 'standard'].includes(enrollment.price_phase)) return false;
+  if (!['founding', 'earlybird'].includes(enrollment.price_phase)) return false;
   if (enrollment.kind === 'paid') return beta.state === 'none' && beta.startsAt === null && beta.endsAt === null;
   return ['active', 'expired'].includes(beta.state) && typeof beta.startsAt === 'string' && typeof beta.endsAt === 'string'
     && Number.isFinite(Date.parse(beta.startsAt)) && Date.parse(beta.endsAt) - Date.parse(beta.startsAt) === 30 * 24 * 60 * 60 * 1000;

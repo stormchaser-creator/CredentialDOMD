@@ -60,10 +60,12 @@ test('paid home and locums expose static navigation and cannot submit a disguise
       assert.match(output, /data-membership-headline>Founder plan: \$99\/year, everything included<\/span>/);
       assert.match(output, /<b data-membership-price>\$99<\/b><span data-membership-price-label> \/ year<\/span>/);
       assert.match(output, /data-membership-phase>Founder plan<\/span>/);
-      assert.equal(output.split('<article class="price').length, 2, 'one plan card');
+      assert.equal(output.split('<div class="prices prices-one" data-founder-only>').length, 2, 'the Founder card');
+      assert.equal(output.split('<div class="prices" data-after-founders hidden>').length, 2, 'the two later plans, printed hidden');
     }
     // Owner decision 2026-11-13: one plan. No other tier, package or trial on a marketing page.
-    assert.doesNotMatch(output.replace(/<style\b[\s\S]*?<\/style>/gi, ''), /\$149|\$199|\$245|early[- ]?bird|Credential \+ Practice|Practice trial|Compare the plans|Optional Practice/i);
+    assert.doesNotMatch(output.replace(/<style\b[\s\S]*?<\/style>/gi, '').replace(/<div class="prices" data-after-founders hidden>[\s\S]*?<\/article><\/div>/, ''), /\$149|\$199|\$245|early[- ]?bird|Credential \+ Practice|Practice trial|Compare the plans|Optional Practice/i);
+    assert.doesNotMatch(output, /\$199|early[- ]?bird|standard Credential/i);
     assert.match(output, /less polished/);
     assert.match(output, /support tickets/);
     assert.match(output, /locked for life while membership remains continuously active/);
@@ -131,7 +133,7 @@ test('home signup and team FAQs use current offers in visible answers and struct
   const teams = faq.mainEntity.find(item => item.name.includes('practice manager')).acceptedAnswer.text;
   assert.match(teams, /on the roadmap and are not currently available/);
   assert.match(teams, /support@credentialdomd.com/);
-  assert.match(teams, /The Founder plan covers one clinician and does not provide team-wide account management/);
+  assert.match(teams, /A membership covers one clinician and does not provide team-wide account management/);
   assert.doesNotMatch(output, /field testing right now|waitlist first, in order|Leave your email above|when your spot is ready|earliest names on the list|practices get priority onboarding/i);
   for (const slot of ['faq-availability', 'faq-teams', 'home-faq-json']) {
     const missing = source.replace(new RegExp(`<!-- public-launch:${slot} -->[\\s\\S]*?<!-- /public-launch:${slot} -->`), '');
@@ -305,7 +307,7 @@ test('public and in-app legal documents use production defaults and retain an ex
   const on = getLegalDocuments(paid);
   assert.deepEqual(on, current, 'alternate reviewed signup route does not change legal terms');
   assert.equal(on.privacy.updated, 'September 25, 2026');
-  assert.equal(on.terms.updated, 'September 28, 2026');
+  assert.equal(on.terms.updated, 'November 13, 2026');
   const privacy = structuredClone(on.privacy);
   privacy.intro[1] = privacy.intro[1].replace('is in early release.', 'is in free beta.');
   privacy.updated = prior.privacy.updated;
@@ -320,7 +322,7 @@ test('public and in-app legal documents use production defaults and retain an ex
       assert.match(section.blocks[2], /opt in to \$99 per year Credential during the beta/);
       assert.match(section.blocks[2], /first charge is scheduled for your original beta end date, when your paid year starts/);
       assert.match(section.blocks[2], /If an unfinished checkout is completed after the original beta end date/);
-      assert.match(section.blocks[3], /\$99.*\$149.*\$199/);
+      assert.match(section.blocks[3], /\$99.*\$149.*\$245/);
       assert.match(section.blocks[3], /for life while their membership remains continuously active/);
       assert.equal(section.blocks[4], publicLaunchPresentation(paid).fullPackage.replaceAll('/year', ' per year'));
       assert.match(section.blocks[4], /at first purchase/);
@@ -331,7 +333,7 @@ test('public and in-app legal documents use production defaults and retain an ex
       assert.doesNotMatch(section.blocks[4], /no founding/);
       assert.equal(section.blocks[5], publicLaunchPresentation(paid).practiceTrial);
       assert.match(section.blocks[5], /first annual payment is confirmed/);
-      assert.match(section.blocks[5], /Early bird and standard members who want Practice after the trial can contact support@credentialdomd.com to review options/);
+      assert.match(section.blocks[5], /Members who want Practice after the trial can contact support@credentialdomd.com to review options/);
       assert.match(section.blocks[5], /no change or charge will occur without their agreement/);
       assert.match(section.blocks[5], /read and export/);
       assert.equal(section.blocks[6], old.blocks[5]);

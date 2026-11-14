@@ -43,12 +43,21 @@ The user-facing product/company name is CredentialDOMD, with this exact capitali
 
 ## Public founding launch correction approved September 20, 2026
 
-- The first 100 paid Credential/Core founding memberships are $99/year. After those 100, early-bird Credential is $149/year; standard Credential is later $199/year. Founding and early-bird annual rates remain locked while membership stays continuously active. Do not advertise $149 as the current founding offer or restrict all $99 offers to the waitlist.
+- (Price list superseded on November 13, 2026: see "Pricing approved November 13, 2026" below. There is no $199 standard tier.) The first 100 paid Credential/Core founding memberships are $99/year. After those 100, Credential is $149/year. Founding and $149 annual rates remain locked while membership stays continuously active. Do not advertise $149 as the current founding offer or restrict all $99 offers to the waitlist.
 - The four reviewed eligible historical $99 promises reserve places within the 100. Lifetime accounts and the $245/year Credential + Practice package do not consume paid $99 Core places. Legacy profile founding numbers are not a paid-member counter.
 - Use authoritative server pricing and capacity for the website, app and checkout. Viewing an offer or creating an account does not reserve a place. Never silently replace $99 consent with a $149 purchase. If all places are held but fewer than 100 are paid, show temporary unavailability. A paid founding place is not replenished after cancellation or refund.
 - Show the founding price and terms on the public website before sign-in. A checkout pause changes purchase availability, not the known price. Preserve the stated $99/first-100 policy when live availability cannot be confirmed, and label availability separately; never replace the price with a request to log in to see it.
 - Keep the owner's approved pause on new checkout until production identity and real-account acceptance checks pass. Source code, deployed code, enabled policy and verified customer behavior are separate states.
 - The owner chose to keep email login for now. Do not purchase Clerk Pro or enable paid SMS without a new owner instruction.
+
+## Pricing approved November 13, 2026 (supersedes the price list above)
+
+- Founders: the first 100 paid members get everything (Credential + Practice) for $99/year, locked for life while the membership stays continuously active. The capacity, hold and no-replenishment rules above are unchanged.
+- After the 100 founders: Credential is $149/year with one 30-day Practice trial (no automatic charge), and Credential + Practice is $245/year. The $149 rate keeps its existing lock while the membership stays active.
+- The $199 "standard" Credential tier is removed. Nothing quotes, previews, sells, publishes or displays it, in any fallback state. A returning buyer is offered $149 Credential or the $245 package. Stored rows and Stripe lookup keys still call the $149 phase `earlybird`, and `standard` survives only as the stored label of the $245 package (migration `20261113120000`); neither word is customer-facing.
+- A membership bought at $199 before the removal, if one exists, keeps renewing, settling and refunding against its own quote (`RETIRED_CREDENTIAL_PRICE_PHASES`, read only with `historical: true`).
+- Marketing site: while founder places remain it shows only the $99 Founder plan card. When `public/membership-offer.js` learns the founders are sold out it shows two cards, Credential $149 and Credential + Practice $245. With no usable answer it stays on the Founder card. Signup buttons say "Sign up today"; the header has "Log in" and "Sign up".
+- CredentialDOMD is for physicians (MD/DO), nurse practitioners and physician assistants. The state guides are physician-board guides; do not invent NP or PA board requirements.
 
 ## Sign-in experience approved September 20, 2026
 

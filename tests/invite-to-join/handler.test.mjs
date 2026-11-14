@@ -20,7 +20,6 @@ const OFFERS = [
   { ...FOUNDING, availability: 'temporarily_full' },
   { ...FOUNDING, availability: 'paused', checkoutEnabled: false },
   { schemaVersion: 1, phase: 'earlybird', annualCents: 14900, checkoutEnabled: true, availability: 'available', bundleAvailable: true },
-  { schemaVersion: 1, phase: 'standard', annualCents: 19900, checkoutEnabled: true, availability: 'available', bundleAvailable: true },
   { schemaVersion: 1, phase: 'earlybird', annualCents: 14900, checkoutEnabled: false, availability: 'paused', bundleAvailable: true },
 ];
 const READY = { state: 'ready', lastStatus: null, lastSentAt: null, cooldownUntil: null, sentInWindow: 3, dailyCap: 20, capResetsAt: null };
@@ -155,6 +154,8 @@ test('every live offer is quoted at its own price, and no phase says free, no ca
     for (const other of [99, 149, 199].filter(p => p !== offer.annualCents / 100)) assert.ok(!email.text.includes(`$${other}/`), `${offer.phase} never quotes $${other}`);
     assert.equal(email.text.includes('Practice included'), offer.phase === 'founding');
     assert.equal(email.text.includes('first 100 paid members'), offer.phase === 'founding');
+    assert.equal(email.text.includes('Credential + Practice is $245/year.'), offer.phase !== 'founding', 'the package is named once founders are sold out');
+    assert.doesNotMatch(email.text, /early bird|standard Credential/i);
     assert.ok(email.text.includes(MONEY_BACK_GUARANTEE));
     assert.ok(email.text.includes('https://credentialdomd.com/app/'));
     assert.match(email.text, /^Hello,$/m, 'no name, a plain greeting');
@@ -168,7 +169,7 @@ test('every live offer is quoted at its own price, and no phase says free, no ca
 
 test('an offer that cannot be read or does not validate stops the invitation before any send', async () => {
   for (const offer of [async () => { throw Error('down'); }, async () => null, async () => ({ ...FOUNDING, annualCents: 14900 }),
-    async () => ({ ...FOUNDING, phase: 'lifetime' }), async () => ({ ...FOUNDING, availability: 'paused' }),
+    async () => ({ ...FOUNDING, phase: 'lifetime' }), async () => ({ ...FOUNDING, phase: 'standard', annualCents: 19900, bundleAvailable: true }), async () => ({ ...FOUNDING, availability: 'paused' }),
     async () => ({ ...FOUNDING, phase: 'earlybird', annualCents: 14900, availability: 'temporarily_full' })]) {
     const h = make({ store: { offer } });
     assert.deepEqual(await read(await h.handler(post({ action: 'preview', email: 'a@example.com' }))), { status: 503, body: { error: 'offer_unavailable' } });

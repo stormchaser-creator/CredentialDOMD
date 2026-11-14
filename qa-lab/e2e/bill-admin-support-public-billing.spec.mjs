@@ -93,7 +93,7 @@ test('founding price: landing, in-app quote and Checkout agree; the cap moves al
 
   await qa.feature('BILL-004', 'The public offer, the landing hero, the in-app quote and the Checkout amount agree', async () => {
     offer = (await publicOffer()).body;
-    qa.check('public-membership-offer: schemaVersion 1, a phase, its price, checkout on and available', offer?.schemaVersion === 1 && { founding: 9900, earlybird: 14900, standard: 19900 }[offer.phase] === offer.annualCents && typeof offer.checkoutEnabled === 'boolean', offer);
+    qa.check('public-membership-offer: schemaVersion 1, a phase, its price, checkout on and available', offer?.schemaVersion === 1 && { founding: 9900, earlybird: 14900 }[offer.phase] === offer.annualCents && typeof offer.checkoutEnabled === 'boolean', offer);
     // Landing (a visitor's browser).
     const visitor = await browser.newContext({ viewport: { width: 1280, height: 900 } });
     await guardContext(visitor, qa.report);
@@ -434,8 +434,8 @@ test('membership ends: read-only archive, downloads, no edits; buying again', {
     qa.check('the app\'s isPro input (capabilities.credential.read) is true for every active account, so ProGate cannot render', snap?.capabilities?.credential?.read === true && snap?.accessStatus === 'active', snap?.capabilities);
   }, { soft: true });
 
-  // ── Buys again: outside the founding phase (standard price) ──────────────
-  await qa.feature('BILL-012', 'A member whose membership ended buys Credential again at the standard price', async () => {
+  // ── Buys again: outside the founding phase ($149 Credential; the $199 standard tier was removed 2026-11-13) ──
+  await qa.feature('BILL-012', 'A member whose membership ended buys Credential again at $149', async () => {
     await openMore(page, 'Profile & settings');
     const card = membership(page);
     await card.getByRole('button', { name: 'Review Credential offer' }).waitFor({ timeout: 30000 });
@@ -453,7 +453,7 @@ test('membership ends: read-only archive, downloads, no edits; buying again', {
       if (stored) quote = { pricePhase: stored.price_phase, annualCents: Number(stored.annual_cents), practiceTrialDays: trial ? Number(trial[1]) : null, read: 'stored row and review text' };
     }
     await qa.shot('returning buyer quote');
-    qa.check('the returning buyer\'s quote is the standard price, $199.00 per year, with a 30-day Practice trial', opened && quote?.pricePhase === 'standard' && quote?.annualCents === 19900 && quote?.practiceTrialDays === 30, quote && { phase: quote.pricePhase, cents: quote.annualCents, trialDays: quote.practiceTrialDays });
+    qa.check('the returning buyer\'s quote is Credential at $149.00 per year, with a 30-day Practice trial', opened && quote?.pricePhase === 'earlybird' && quote?.annualCents === 14900 && quote?.practiceTrialDays === 30, quote && { phase: quote.pricePhase, cents: quote.annualCents, trialDays: quote.practiceTrialDays });
     if (!opened) return;
     await card.getByRole('checkbox').check();
     const co = nextBilling(page, user, 'limited-checkout', [200, 401, 409]);

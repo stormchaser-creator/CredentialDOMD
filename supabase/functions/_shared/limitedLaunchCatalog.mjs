@@ -1,4 +1,4 @@
-import { PUBLIC_BILLING_POLICY, getPublicBillingOffer } from './accessPolicy.mjs';
+import { PUBLIC_BILLING_POLICY, CREDENTIAL_PRICE_PHASES, BUNDLE_PRICE_PHASE, getPublicBillingOffer } from './accessPolicy.mjs';
 
 /** Separate from historical v1 settlement. Nothing here enables a deployed route. */
 export const LIMITED_LAUNCH = Object.freeze({
@@ -6,16 +6,22 @@ export const LIMITED_LAUNCH = Object.freeze({
   billingEnabled: true, checkoutEnabled: true, invitationEnabled: false, enforcementEnabled: false,
   policyVersion: PUBLIC_BILLING_POLICY.version,
 });
-export function limitedOffer(offerId, phase, productIds = {}) {
-  const offer = getPublicBillingOffer(offerId, phase);
+/**
+ * `historical`: the offer of a quote that already exists (settlement, renewal,
+ * refund). Only then is the removed $199 Credential tier still recognised.
+ * A new preview or Checkout never passes it.
+ */
+export function limitedOffer(offerId, phase, productIds = {}, { historical = false } = {}) {
+  const offer = getPublicBillingOffer(offerId, phase, { historical });
   if (!offer) throw Error('Unknown limited launch offer');
   const productId = productIds[offerId];
   if (!/^prod_[A-Za-z0-9_]+$/.test(productId || '')) throw Error('Reviewed Stripe product ID is required');
   return Object.freeze({ ...offer, productId });
 }
 export function limitedOffers(productIds = {}) {
-  return ['founding', 'earlybird', 'standard'].map(phase => limitedOffer('core', phase, productIds))
-    .concat(limitedOffer('core_locum', 'standard', productIds));
+  // Everything on sale: $99 founding and $149 Credential, and the $245 package.
+  return Object.keys(CREDENTIAL_PRICE_PHASES).map(phase => limitedOffer('core', phase, productIds))
+    .concat(limitedOffer('core_locum', BUNDLE_PRICE_PHASE, productIds));
 }
 export function assertLimitedPrice(price, offer, livemode, { allowInactive = false, pinnedPriceId = null } = {}) {
   const product = price?.product;

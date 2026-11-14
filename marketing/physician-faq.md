@@ -24,7 +24,7 @@ The current workflow builds invoices from your reviewed contract terms and work 
 
 ## Can I use it now, and what will it cost?
 
-Access is by invitation. The beta is free, with no card required, and billing is not open. The **founding Credential offer has been lowered to $99/year** for eligible waitlist members, from the previously planned $149/year. Planned early-bird Credential is **$149/year**, and planned standard Credential is **$199/year**. Founding and early-bird annual rates stay the same while membership remains active. **Credential + Practice is $245/year total** for all new paid members. Your offer and eligibility will be shown before you choose to pay.
+Access is by invitation. The beta is free, with no card required, and billing is not open. The **founding Credential offer has been lowered to $99/year** for eligible waitlist members, from the previously planned $149/year. After the founding memberships, planned Credential is **$149/year**. Founding and $149 annual rates stay the same while membership remains active. **Credential + Practice is $245/year total** for all new paid members. Your offer and eligibility will be shown before you choose to pay.
 
 ## Will the Practice trial charge me automatically?
 

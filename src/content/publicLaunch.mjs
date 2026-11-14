@@ -75,25 +75,29 @@ export function publicLaunchPresentation(mode = PUBLIC_LAUNCH_MODE) {
     foundingRate: enabled
       ? 'Founding Credential: $99/year for the first 100 paid members, Practice included while you are a member. That annual rate stays locked for life while membership remains continuously active. The app confirms your available offer before you choose to pay.'
       : 'The planned founding Credential offer is $99/year for eligible founding members, with that annual rate locked for life while membership remains active.',
+    // Owner decision, 2026-11-13: after the 100 founders there are two prices,
+    // Credential at $149/year and Credential + Practice at $245/year. The
+    // $199 standard Credential tier is removed.
     rateComparison: enabled
-      ? 'After the 100 paid founding memberships, early bird Credential is $149/year, followed by standard Credential at $199/year.'
-      : 'Planned early-bird Credential is $149/year; planned standard Credential is $199/year. These are launch prices, not claims about a previous selling price.',
-    earlyBirdRateLock: 'The early bird annual rate also stays the same while membership remains active.',
+      ? 'After the 100 paid founding memberships, Credential is $149/year and Credential + Practice is $245/year.'
+      : 'After the founding memberships, planned Credential is $149/year and planned Credential + Practice is $245/year. These are launch prices, not claims about a previous selling price.',
+    // The $149 Credential rate (the server's 'earlybird' phase key).
+    earlyBirdRateLock: 'The $149 Credential annual rate also stays the same while membership remains active.',
     signupHeading: 'Create your account',
     publicRateHeadline: 'First 100 paid founding memberships: $99/year',
     publicPrice: '$99',
     publicPriceLabel: ' / year, founding rate for the first 100 paid members',
     // The $245 package as sold once a buyer's offer is no longer founding.
-    bundleOffer: 'Credential + Practice is $245/year total at first purchase, with no early bird discount.',
+    bundleOffer: 'Credential + Practice is $245/year total at first purchase.',
     // Every buyer whose offer is founding gets Practice in the $99 Credential,
     // so the package is not sold to them (20260928190000, all origins).
-    fullPackage: 'Credential + Practice is $245/year total at first purchase, with no early bird discount. It is not offered to founding buyers, because founding Credential at $99/year already includes Practice while you are a member.',
+    fullPackage: 'Credential + Practice is $245/year total at first purchase. It is not offered to founding buyers, because founding Credential at $99/year already includes Practice while you are a member.',
     refundGuarantee: 'No-hassle 100% money-back guarantee: request a full refund of your most recent annual membership payment, including a renewal payment, at any time. There is no request deadline or prorating. This covers your most recent annual payment, not all payments from past years. Request through Get help in the app or support@credentialdomd.com. You do not need to delete your account, saved records or reports to request a refund.',
     promisedBeta: enabled
       ? 'Eligible people who signed up under the earlier free-beta wording receive 30 days free with no card, starting when they first activate their account with a verified email address. The app shows the exact end date; signing in again does not restart those 30 days. You may opt in to $99/year Credential during the beta by adding a card and explicitly agreeing to the annual subscription. Your first charge is scheduled for your original beta end date, when your paid year starts. Choosing early does not charge you early or start a new trial. You keep the same account and saved records. If you never opt in, there is no automatic charge and nothing to cancel. Paid membership renews annually unless canceled.'
       : 'People who signed up under the earlier free-beta wording will receive 30 days free with no card. Their invitation will confirm eligibility and when those 30 days start. Continuing afterward requires an explicit $99/year Credential purchase; there is no automatic charge.',
     lifetimeException: 'Members whose accounts were already active before paid membership launched, and accounts the founder has personally gifted, keep Credential and Practice free for life. A waitlist entry, or an account that was created but never active before launch, does not qualify. People who signed up under the earlier no-card wording get 30 days free with no card, starting at first sign-in, and then choose whether to pay. There is no automatic charge.',
-    practiceTrial: 'Founding Credential members have Practice included for as long as their membership stays active. Early bird and standard Credential members receive a separate 30 day Practice trial when their first annual payment is confirmed. It ends without an added charge, and continuing Practice requires an explicit purchase. Early bird and standard members who want Practice after the trial can contact support@credentialdomd.com to review options; no change or charge will occur without their agreement. The paid Credential membership continues, and existing Practice records remain available to read and export.',
+    practiceTrial: 'Founding Credential members have Practice included for as long as their membership stays active. Members who join Credential at $149/year receive a separate 30 day Practice trial when their first annual payment is confirmed. It ends without an added charge, and continuing Practice requires an explicit purchase. Members who want Practice after the trial can contact support@credentialdomd.com to review options; no change or charge will occur without their agreement. The paid Credential membership continues, and existing Practice records remain available to read and export.',
     guideCapture: Object.freeze({
       purpose: 'requested-guide',
       submitLabel: 'Email me the guide',

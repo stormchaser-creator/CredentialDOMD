@@ -1,14 +1,15 @@
 import { PUBLIC_LAUNCH_MODE, publicLaunchPresentation } from '../src/content/publicLaunch.mjs';
 
-// Owner decision, 2026-11-13: the public site presents ONE plan, the Founder
-// plan: $99/year with everything included (credential tracking and the
-// Practice tools). This is site presentation only. The app, its checkout
-// policy (supabase/functions/_shared/accessPolicy.mjs) and its Terms still
-// decide what a buyer is offered, and src/content/publicLaunch.mjs, which the
-// app also reads, is unchanged. public/membership-offer.js repaints these
-// same sentences (pinned equal by tests/site-founder-plan.test.mjs) and, if
-// checkout is no longer selling the founding offer, says the plan is full
-// without stating any other price.
+// Owner decisions, 2026-11-13. While founder places remain the public site
+// presents ONE plan, the Founder plan: $99/year with everything included
+// (credential tracking and the Practice tools). Once the 100 founders are
+// sold out it presents TWO: Credential at $149/year, with one 30 day Practice
+// trial, and Credential + Practice at $245/year. There is no other price
+// (supabase/functions/_shared/accessPolicy.mjs). Every page is printed in
+// the Founder state and carries the two-plan cards hidden;
+// public/membership-offer.js repaints these same sentences (pinned equal by
+// tests/site-founder-plan.test.mjs) and switches the cards when the server
+// reports the founders are sold out.
 export const FOUNDER_PLAN = Object.freeze({
   name: 'Founder plan',
   headline: 'Founder plan: $99/year, everything included',
@@ -21,7 +22,7 @@ export const FOUNDER_PLAN = Object.freeze({
   reviewAction: 'See the Founder plan',
   phase: 'Founder plan',
   practice: 'The Practice tools (contracts, work logs, invoices and payment tracking) are included in the Founder plan.',
-  team: 'Group-management features are on the roadmap and are not currently available. The Founder plan covers one clinician and does not provide team-wide account management. Contact support@credentialdomd.com to discuss your group’s needs; no release date or priority onboarding is promised.',
+  team: 'Group-management features are on the roadmap and are not currently available. A membership covers one clinician and does not provide team-wide account management. Contact support@credentialdomd.com to discuss your group’s needs; no release date or priority onboarding is promised.',
   meta: 'Founder plan: $99/year, everything included. Check availability in the app. Early release; card required at checkout.',
 });
 // Owner decision, 2026-11-13: every signup button and link on the site says
@@ -29,6 +30,22 @@ export const FOUNDER_PLAN = Object.freeze({
 // about signing up, not creating an account. The destinations are unchanged.
 // src/content/publicLaunch.mjs, which the app also reads, keeps its own label.
 export const SIGNUP_LABEL = 'Sign up today';
+// What the site says once the founders are sold out (membership-offer.js AFTER).
+export const AFTER_FOUNDERS = Object.freeze({
+  headline: 'Credential: $149/year. Credential + Practice: $245/year',
+  heroNote: 'The 100 Founder places are taken. Credential includes a 30 day Practice trial.',
+  offer: 'Credential is $149/year with a 30 day Practice trial, and Credential + Practice is $245/year.',
+  rateLock: 'The $149 Credential rate stays locked for life while membership remains continuously active.',
+  rate: 'Credential is $149/year with one 30 day Practice trial when your first annual payment is confirmed. Credential + Practice is $245/year. The app confirms your offer before you choose to pay.',
+  plans: Object.freeze([
+    Object.freeze({ name: 'Credential', price: '$149', featured: true,
+      lines: ['Licenses, DEA, certifications, CME tracking, renewal reminders, documents, CV and credential packets.',
+        'Includes one 30 day Practice trial when your first annual payment is confirmed. It ends without an added charge.'] }),
+    Object.freeze({ name: 'Credential + Practice', price: '$245', featured: false,
+      lines: ['Everything in Credential, plus the Practice tools: contracts, work logs, invoices and payment tracking.',
+        '30 day Practice trial: join Credential first and try Practice for 30 days before you decide.'] }),
+  ]),
+});
 export const FOUNDER_AVAILABILITY = `Sign up to join. ${FOUNDER_PLAN.offer} Availability is confirmed before payment; signing up does not reserve a place. Paid membership requires a card at checkout and your explicit agreement.`;
 
 // Who the product is for. The app asks each member's profession (MD, DO, PA
@@ -51,16 +68,24 @@ const escapeHtml = value => String(value).replace(/[&<>"']/g, ch => ({ '&': '&am
  */
 export function markLiveOffer(html, view) {
   const marks = [[escapeHtml(FOUNDER_PLAN.offer), 'data-membership-availability'],
-    [escapeHtml(` ${FOUNDER_PLAN.rateLock}`), 'data-membership-rate-lock'], [escapeHtml(FOUNDER_PLAN.rate), 'data-membership-rate']];
+    [escapeHtml(` ${FOUNDER_PLAN.rateLock}`), 'data-membership-rate-lock']];
+  // The rate paragraph contains the rate lock sentence. It is marked whole and
+  // nothing inside it is marked again: membership-offer.js replaces the
+  // paragraph's text in one piece, and a span inside it would be lost.
+  const rate = escapeHtml(FOUNDER_PLAN.rate);
+  const mark = (text, sentence, attribute) => text.split(sentence).join(`<span ${attribute}>${sentence}</span>`);
   const body = html.search(/<body\b/);
   if (body < 0) return html;
   const tokens = html.slice(body).split(/(<script\b[\s\S]*?<\/script>|<!--[\s\S]*?-->|<[^>]+>)/);
   for (let i = 0; i < tokens.length; i += 2) {
     const opened = i > 0 ? tokens[i - 1] : '';
-    for (const [sentence, attribute] of marks) {
-      if (!tokens[i].includes(sentence) || opened === `<span ${attribute}>`) continue;
-      tokens[i] = tokens[i].split(sentence).join(`<span ${attribute}>${sentence}</span>`);
-    }
+    if (opened === '<span data-membership-rate>') continue;
+    tokens[i] = tokens[i].split(rate).map(part => {
+      for (const [sentence, attribute] of marks) {
+        if (part.includes(sentence) && opened !== `<span ${attribute}>`) part = mark(part, sentence, attribute);
+      }
+      return part;
+    }).join(`<span data-membership-rate>${rate}</span>`);
   }
   return html.slice(0, body) + tokens.join('');
 }
@@ -115,7 +140,7 @@ function signupInsteadOfForm(fallback, view) {
 const SIGNUP_NOTE = 'Card required at checkout. No-hassle 100% money-back guarantee: a full refund of your most recent annual payment, at any time.';
 
 const minimumSlots = {
-  home: { cta: 4, form: 2, 'hero-offer': 1, 'early-release': 1, participation: 1, 'faq-availability': 1, 'faq-teams': 1, 'home-faq-json': 1, 'refund-guarantee': 1 },
+  home: { cta: 4, form: 2, 'hero-offer': 1, 'early-release': 1, participation: 1, 'faq-availability': 1, 'faq-teams': 1, 'faq-np-pa': 1, 'home-faq-json': 1, 'after-founders-plans': 1, 'refund-guarantee': 1 },
   locums: { cta: 2, form: 2, 'early-release': 1, participation: 1, 'faq-cost': 1, 'faq-json': 1, 'signup-heading': 1, 'signup-eyebrow': 2, 'signup-card-heading': 1, 'refund-guarantee': 1 },
   help: { cta: 1, 'early-release': 1, participation: 1 },
   cme: { cta: 1, 'early-release': 1, participation: 1 },
@@ -124,7 +149,7 @@ const minimumSlots = {
   'watch-pages': { cta: 1, 'early-release': 1, participation: 1 },
   'legal-navigation': { cta: 1 },
   // /pricing shows the same membership cards as the home page's #planned-pricing.
-  pricing: { cta: 2, 'founding-headline': 1, availability: 1, 'founding-price': 1, 'founding-rate': 1, 'refund-guarantee': 1, 'early-release': 1 },
+  pricing: { cta: 2, 'founding-headline': 1, availability: 1, 'founding-price': 1, 'founding-rate': 1, 'after-founders-plans': 1, 'refund-guarantee': 1, 'early-release': 1 },
 };
 // Slots that described other tiers (early bird, standard, the $245 package,
 // the Practice trial). No page may carry them again.
@@ -187,6 +212,16 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
     // membership-offer.js replaces this paragraph if checkout is no longer
     // selling the founding offer, so a full plan never keeps its rate line.
     if (slot === 'founding-rate') return `<span data-membership-rate>${escapeHtml(FOUNDER_PLAN.rate)}</span>`;
+    // The two plan cards for after the founders: printed hidden, shown by
+    // membership-offer.js when the server reports the founders are sold out.
+    // Their prices are the only two that exist after founding, so they are
+    // written here once and nowhere else.
+    if (slot === 'after-founders-plans') return '<div class="prices" data-after-founders hidden>'
+      + AFTER_FOUNDERS.plans.map(plan => `<article class="price${plan.featured ? ' featured' : ''}"><h3 class="feature-title">${escapeHtml(plan.name)}</h3>`
+        + `<p class="amount"><b>${escapeHtml(plan.price)}</b><span> / year</span></p>`
+        + plan.lines.map(line => `<p>${escapeHtml(line)}</p>`).join('')
+        + `<p><a class="btn-primary" href="${escapeHtml(view.primaryAction.href)}"><span data-membership-action>${escapeHtml(SIGNUP_LABEL)}</span></a></p></article>`).join('')
+      + '</div>';
     // The guarantee covers every membership, so it stands on its own line
     // instead of inside the Credential + Practice card.
     if (slot === 'refund-guarantee') return surface === 'home'

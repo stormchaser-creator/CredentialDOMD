@@ -1,4 +1,6 @@
 import test from 'node:test';
+import { inState } from './helpers/site-states.mjs';
+
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { renderHelp } from '../scripts/build-help.mjs';
@@ -44,7 +46,9 @@ for (const page of ['index', 'locums']) {
     assert.match(html, /card (?:is )?required at checkout/i);
     assert.match(html, /The Founder plan is \$99\/year and includes everything: credential tracking and the Practice tools\./);
     assert.match(html, /One plan with everything included, for the first 100 paid members\./);
-    assert.doesNotMatch(unstyled(html), OTHER_TIERS);
+    // While founder places remain a visitor reads one plan; the two later plans are printed hidden.
+    assert.doesNotMatch(unstyled(inState(html, 'founding')), OTHER_TIERS);
+    assert.doesNotMatch(unstyled(html), /\$199|early[- ]?bird|standard Credential/i);
     assert.match(html, /30 days free with no card, starting when they first activate their account with a verified email address/);
     assert.match(html, /signing in again does not restart those 30 days/);
     assert.match(html, /opt in to \$99\/year Credential during the beta by adding a card and explicitly agreeing to the annual subscription/);

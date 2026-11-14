@@ -6,21 +6,23 @@ import { readFile } from 'node:fs/promises';
 
 const endpoint = 'https://synthetic.supabase.co/functions/v1/public-membership-offer';
 const offer = (phase = 'founding', availability = 'available') => ({schemaVersion:1, phase,
-  annualCents:{founding:9900,earlybird:14900,standard:19900}[phase], checkoutEnabled:availability !== 'paused', availability});
-// Owner decision 2026-11-13: the site shows one plan. Nothing it paints may
-// name another tier or another price, in any phase or failure.
-const OTHER_TIERS = /\$1\d\d|\$2\d\d|early ?bird|standard|Credential \+ Practice|Founding Credential|Practice trial/i;
+  annualCents:{founding:9900,earlybird:14900}[phase], checkoutEnabled:availability !== 'paused', availability});
+// Owner decisions 2026-11-13: $99 Founder plan while founder places remain,
+// then Credential $149 and Credential + Practice $245. Nothing the site
+// paints, in any phase or failure, names the removed $199 tier.
+const REMOVED_TIER = /\$199|standard|early ?bird/i;
+const SOLD_OUT = 'Credential: $149/year. Credential + Practice: $245/year';
 const deferred = () => { let resolve; return {promise:new Promise(done => {resolve=done;}),resolve}; };
 const root = () => {
   const actions = [{textContent:'Membership signup'}], statuses = [{textContent:'Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.'}];
   const nodes = Object.fromEntries(['headline','price','price-label','heading','phase','review-action','hero-headline','hero-note','rate','bundle-label'].map(key=>[key,[{textContent:''}]]));
-  const founderOnly = [{hidden:false}];
-  return {actions,statuses,nodes,founderOnly,querySelectorAll:selector=>selector === '[data-membership-action]' ? actions
-    : selector === '[data-founder-only]' ? founderOnly
+  const founderOnly = [{hidden:false}], afterFounders = [{hidden:true}];
+  return {actions,statuses,nodes,founderOnly,afterFounders,querySelectorAll:selector=>selector === '[data-membership-action]' ? actions
+    : selector === '[data-founder-only]' ? founderOnly : selector === '[data-after-founders]' ? afterFounders
     : selector === '[data-membership-status]' ? statuses : nodes[selector.slice(17,-1)] || []};
 };
 
-test('the site paints the Founder plan while it is sold, and "full" with no price once checkout moves on', async () => {
+test('the site paints the Founder plan while founder places remain, then the two plans; a later failure keeps them', async () => {
   const dom=root();let current=offer();
   const refresh=createOfferUpdater(dom,endpoint,{fetchImpl:async()=>Response.json(current)});
   await refresh();
@@ -31,27 +33,29 @@ test('the site paints the Founder plan while it is sold, and "full" with no pric
   assert.equal(dom.nodes.heading[0].textContent,'Sign up today');
   assert.equal(dom.nodes.phase[0].textContent,'Founder plan');
   assert.match(dom.nodes.rate[0].textContent,/^One plan with everything included, for the first 100 paid members\./);
-  assert.equal(dom.nodes['bundle-label'][0].textContent,'', 'no package price is painted any more');
-  assert.equal(dom.founderOnly[0].hidden,false,'the list of what the Founder plan includes shows');
-  assert.doesNotMatch(JSON.stringify(dom), OTHER_TIERS);
-  for (const phase of ['earlybird','standard']) {
-    current=offer(phase);await refresh();
-    assert.equal(dom.nodes.price[0].textContent,'');
-    assert.equal(dom.nodes['price-label'][0].textContent,'Founder places are filled');
-    assert.equal(dom.founderOnly[0].hidden,true,'Founder only wording is hidden once the plan is full');
-    assert.equal(dom.nodes.headline[0].textContent,'The Founder plan is full');
-    assert.equal(dom.nodes.phase[0].textContent,'Membership');
-    assert.match(dom.nodes.rate[0].textContent,/the app shows the current membership price before you choose to pay/);
-    assert.doesNotMatch(JSON.stringify(dom), /\$\d/, 'no price of any kind once the Founder plan is full');
-    assert.doesNotMatch(JSON.stringify(dom), OTHER_TIERS);
-  }
+  assert.equal(dom.nodes['bundle-label'][0].textContent,'', 'no package label is painted');
+  assert.deepEqual([dom.founderOnly[0].hidden,dom.afterFounders[0].hidden],[false,true],'the Founder card shows, the two plan cards stay hidden');
+  assert.doesNotMatch(JSON.stringify(dom), /\$149|\$245/, 'no later price while founder places remain');
+  assert.doesNotMatch(JSON.stringify(dom), REMOVED_TIER);
+  // The server reports the founders are sold out.
+  current=offer('earlybird');await refresh();
+  assert.deepEqual([dom.founderOnly[0].hidden,dom.afterFounders[0].hidden],[true,false],'the two plan cards replace the Founder card');
+  assert.equal(dom.nodes.headline[0].textContent,SOLD_OUT);
+  assert.equal(dom.nodes['hero-headline'][0].textContent,SOLD_OUT);
+  assert.equal(dom.nodes['hero-note'][0].textContent,'The 100 Founder places are taken. Credential includes a 30 day Practice trial.');
+  assert.equal(dom.nodes.phase[0].textContent,'Membership');
+  assert.equal(dom.nodes.rate[0].textContent,'Credential is $149/year with one 30 day Practice trial when your first annual payment is confirmed. Credential + Practice is $245/year. The app confirms your offer before you choose to pay.');
+  assert.doesNotMatch(JSON.stringify(dom), /\$99|first 100/, 'no sentence still offers the Founder price');
+  assert.doesNotMatch(JSON.stringify(dom), REMOVED_TIER);
+  assert.deepEqual([...new Set(JSON.stringify(dom).match(/\$\d+/g))].sort(), ['$149','$245'], 'the only two prices');
   current={};await refresh();
-  assert.equal(dom.nodes.headline[0].textContent,'The Founder plan is full', 'a later failure keeps the full state');
-  assert.doesNotMatch(JSON.stringify(dom), /\$\d/);
+  assert.equal(dom.nodes.headline[0].textContent,SOLD_OUT, 'a later failure keeps the sold-out state');
+  assert.deepEqual([dom.founderOnly[0].hidden,dom.afterFounders[0].hidden],[true,false]);
+  assert.doesNotMatch(JSON.stringify(dom), /\$99|\$199/);
 });
 
 test('public phase updates use only validated annual prices and distinguish capacity holds from a sales pause', () => {
-  for (const [phase,amount] of [['founding',99],['earlybird',149],['standard',199]]) {
+  for (const [phase,amount] of [['founding',99],['earlybird',149]]) {
     // Funnel 2026-10-14: the signup button names the live annual price.
     assert.equal(offerPresentation(offer(phase)).action, `Join for $${amount} a year`);
     assert.equal(offerPresentation(offer(phase)).renewal, `$${amount} at checkout, then $${amount} each year while this subscription remains active. Cancel before renewal to avoid the next annual charge.`);
@@ -63,15 +67,16 @@ test('public phase updates use only validated annual prices and distinguish capa
   assert.equal(offerPresentation(offer('founding','temporarily_full')).renewal, null);
   assert.equal(offerPresentation(offer('earlybird','paused')).renewal, null);
   assert.match(offerPresentation(offer('earlybird','paused')).status, /checkout is paused/);
-  for (const patch of [{schemaVersion:2},{phase:'<img src=x>'},{annualCents:1},{annualCents:14900},
+  // The removed $199 tier is refused by name and by amount: nothing is painted from it.
+  for (const patch of [{schemaVersion:2},{phase:'<img src=x>'},{annualCents:1},{annualCents:14900},{phase:'standard',annualCents:19900},{phase:'earlybird',annualCents:19900},{annualCents:19900},
     {checkoutEnabled:'true'},{availability:'unknown'},{checkoutEnabled:false},{availability:'paused'},
     {phase:'earlybird',annualCents:14900,availability:'temporarily_full'}]) {
     assert.throws(()=>offerPresentation({...offer(),...patch}));
   }
 });
 
-test('a verified pause keeps the Founder plan (or the full state) on the page and says checkout is paused', async () => {
-  for (const phase of ['founding', 'earlybird', 'standard']) {
+test('a verified pause keeps the right plans on the page and says checkout is paused', async () => {
+  for (const phase of ['founding', 'earlybird']) {
     const dom = root();
     await createOfferUpdater(dom, endpoint, { fetchImpl: async () => Response.json(offer(phase, 'paused')) })();
     assert.match(dom.statuses[0].textContent, /Paid checkout is paused/);
@@ -81,11 +86,13 @@ test('a verified pause keeps the Founder plan (or the full state) on the page an
     if (phase === 'founding') {
       assert.equal(dom.nodes.price[0].textContent, '$99');
       assert.equal(dom.nodes['review-action'][0].textContent, 'See the Founder plan');
+      assert.equal(dom.afterFounders[0].hidden, true);
     } else {
-      assert.equal(dom.nodes['hero-headline'][0].textContent, 'The Founder plan is full');
-      assert.doesNotMatch(JSON.stringify(dom), /\$\d/);
+      assert.equal(dom.nodes['hero-headline'][0].textContent, SOLD_OUT);
+      assert.equal(dom.afterFounders[0].hidden, false);
+      assert.doesNotMatch(JSON.stringify(dom), /\$99/);
     }
-    assert.doesNotMatch(JSON.stringify(dom), OTHER_TIERS);
+    assert.doesNotMatch(JSON.stringify(dom), REMOVED_TIER);
   }
   const held = offerPresentation(offer('founding', 'temporarily_full'));
   assert.equal(held.price, '$99');
@@ -118,44 +125,47 @@ test('fetch and stalled or oversized bodies are bounded, with no success from HT
   }
 });
 
-test('unknown configuration shows the Founder plan, while a later failure preserves a verified full state', async () => {
+test('unknown configuration shows the Founder plan, while a later failure preserves a verified sold-out state', async () => {
   const dom=root();let calls=0;
   const refresh=createOfferUpdater(dom,endpoint,{fetchImpl:async()=>{calls++;return calls===1?Response.json(offer('earlybird')):Response.json({}, {status:503});}});
-  await refresh();assert.equal(dom.nodes['review-action'][0].textContent,'See membership details');
+  await refresh();assert.equal(dom.nodes['review-action'][0].textContent,'See membership plans');
   await refresh();assert.equal(dom.actions[0].textContent,'Sign up today');
-  assert.equal(dom.nodes.price[0].textContent, '');
-  assert.equal(dom.nodes.headline[0].textContent, 'The Founder plan is full');
-  assert.match(dom.statuses[0].textContent,/^The Founder plan is full\. Your offer is confirmed in the app before payment/);
-  await createOfferUpdater(dom,undefined,{fetchImpl:()=>{throw Error('Must not fetch');}})();
+  assert.equal(dom.nodes.headline[0].textContent, SOLD_OUT);
+  assert.equal(dom.afterFounders[0].hidden, false);
   assert.equal(dom.statuses[0].textContent,'Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.');
-  assert.equal(dom.nodes.price[0].textContent, '$99');
-  assert.equal(dom.nodes.headline[0].textContent, 'Founder plan: $99/year, everything included');
-  assert.doesNotMatch(JSON.stringify(dom), OTHER_TIERS);
+  // No endpoint, a refused reply (the removed tier) or no network: the page stays as printed, the Founder plan.
+  for (const fetchImpl of [null, async()=>Response.json({...offer('earlybird'),phase:'standard',annualCents:19900}), async()=>{throw Error('offline');}]) {
+    const fresh=root();
+    await createOfferUpdater(fresh,fetchImpl?endpoint:undefined,{fetchImpl:fetchImpl||(()=>{throw Error('Must not fetch');})})();
+    assert.equal(fresh.statuses[0].textContent,'Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.');
+    assert.equal(fresh.nodes.price[0].textContent, '$99');
+    assert.equal(fresh.nodes.headline[0].textContent, 'Founder plan: $99/year, everything included');
+    assert.deepEqual([fresh.founderOnly[0].hidden,fresh.afterFounders[0].hidden],[false,true]);
+    assert.doesNotMatch(JSON.stringify(fresh), /\$149|\$199|\$245/);
+  }
 });
 
-test('a full Founder plan never flashes back to $99 during a slow or failed refresh', async () => {
-  for (const phase of ['earlybird', 'standard']) {
-    const dom = root(), waiting = deferred(); let calls = 0;
-    const refresh = createOfferUpdater(dom, endpoint, { fetchImpl: () => ++calls === 1 ? Promise.resolve(Response.json(offer(phase))) : waiting.promise });
-    await refresh();
-    const pending = refresh();
-    assert.equal(dom.nodes.headline[0].textContent, 'The Founder plan is full', 'the in-flight view retains the last validated state');
-    assert.match(dom.statuses[0].textContent, /confirmed in the app before payment/i);
-    assert.doesNotMatch(JSON.stringify(dom), /\$\d|first 100/);
-    waiting.resolve(Response.json({}, { status: 503 }));
-    await pending;
-    assert.equal(dom.nodes.headline[0].textContent, 'The Founder plan is full');
-    assert.match(dom.statuses[0].textContent, /confirmed in the app before payment/i);
-    assert.doesNotMatch(JSON.stringify(dom), /\$\d|first 100/);
-  }
+test('a sold-out Founder plan never flashes back to $99 during a slow or failed refresh', async () => {
+  const dom = root(), waiting = deferred(); let calls = 0;
+  const refresh = createOfferUpdater(dom, endpoint, { fetchImpl: () => ++calls === 1 ? Promise.resolve(Response.json(offer('earlybird'))) : waiting.promise });
+  await refresh();
+  const pending = refresh();
+  assert.equal(dom.nodes.headline[0].textContent, SOLD_OUT, 'the in-flight view retains the last validated state');
+  assert.match(dom.statuses[0].textContent, /confirmed before payment/i);
+  assert.doesNotMatch(JSON.stringify(dom), /\$99|first 100/);
+  waiting.resolve(Response.json({}, { status: 503 }));
+  await pending;
+  assert.equal(dom.nodes.headline[0].textContent, SOLD_OUT);
+  assert.equal(dom.afterFounders[0].hidden, false);
+  assert.doesNotMatch(JSON.stringify(dom), /\$99|first 100/);
 });
 
 test('a stale earlier public response cannot replace a later phase and all rendering uses text', async () => {
   const first=deferred(),dom=root();let count=0;
   const refresh=createOfferUpdater(dom,endpoint,{fetchImpl:()=>++count===1?first.promise:Promise.resolve(Response.json(offer('earlybird')))});
   const old=refresh();await refresh();first.resolve(Response.json(offer()));await old;
-  assert.equal(dom.nodes['review-action'][0].textContent,'See membership details');
-  assert.equal(dom.nodes.headline[0].textContent,'The Founder plan is full');
+  assert.equal(dom.nodes['review-action'][0].textContent,'See membership plans');
+  assert.equal(dom.nodes.headline[0].textContent,SOLD_OUT);
   assert.equal(Object.hasOwn(dom.actions[0],'innerHTML'),false);
 });
 
@@ -206,7 +216,7 @@ test('a page view asks for the offer once, and only a back forward cache restore
 test('every signup button on the site says "Sign up today" in every state, and never a price', async () => {
   const dom = root(); let current = offer();
   const refresh = createOfferUpdater(dom, endpoint, { fetchImpl: async () => { if (current instanceof Error) throw current; return Response.json(current); } });
-  for (const next of [offer(), Error('offline'), offer('founding', 'temporarily_full'), offer('earlybird'), Error('offline'), offer('standard', 'paused')]) {
+  for (const next of [offer(), Error('offline'), offer('founding', 'temporarily_full'), offer('earlybird'), Error('offline'), offer('earlybird', 'paused')]) {
     current = next; await refresh();
     assert.equal(dom.actions[0].textContent, 'Sign up today');
     assert.equal(dom.nodes.heading[0].textContent, 'Sign up today');

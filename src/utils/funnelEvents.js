@@ -21,6 +21,7 @@ export const FUNNEL_STEPS = Object.freeze({
   billing_return_canceled: "Funnel: back from Checkout, canceled",
 });
 const OFFERS = new Set(["core", "core_locum"]);
+// "standard" is the $245 package's stored label, not a Credential tier.
 const PHASES = new Set(["founding", "earlybird", "standard"]);
 
 const sent = new Set();

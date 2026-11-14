@@ -2,6 +2,8 @@
 // navigation for every marketing page, sign-in and signup both to the app,
 // and the pages that keep their own layout lose only their old chrome.
 import test from 'node:test';
+import { inState } from './helpers/site-states.mjs';
+
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { applySiteChrome, siteHeader, siteFooter } from '../scripts/site-chrome.mjs';
@@ -54,14 +56,17 @@ test('redesigned pages mark where the chrome goes and are indexable unless they 
   }
 });
 
-test('/pricing is one Founder card, repainted by the live offer, with signup going to the app', async () => {
+test('/pricing is one Founder card while founder places remain, with the two later plans printed hidden', async () => {
   const output = renderPublicLaunch(await read('landing/pricing.html'), 'pricing', undefined, { offerEndpoint: 'https://synthetic.supabase.co/functions/v1/public-membership-offer' });
   assert.match(output, /<b data-membership-price>\$99<\/b><span data-membership-price-label> \/ year<\/span>/);
-  assert.equal(output.split('<article class="price').length, 2, 'one card');
+  assert.equal(inState(output, 'founding').split('<article class="price').length, 2, 'one card while founder places remain');
+  assert.equal(inState(output, 'soldout').split('<article class="price').length, 3, 'two cards once the founders are sold out');
+  assert.match(output, /<h1><span data-founder-only>One plan\. Everything included\.<\/span><span data-after-founders hidden>Two plans\. Annual membership\.<\/span><\/h1>/);
   assert.match(output, /<h3 class="feature-title"><span data-membership-phase>Founder plan<\/span><\/h3>/);
   assert.match(output, /Everything is included:/);
   assert.doesNotMatch(output, /data-membership-bundle-label/);
-  assert.doesNotMatch(output.replace(/<style\b[\s\S]*?<\/style>/gi, ''), /\$149|\$199|\$245|early[- ]?bird|Credential \+ Practice|Practice trial|Compare the plans|optional Practice/i);
+  assert.doesNotMatch(inState(output, 'founding').replace(/<style\b[\s\S]*?<\/style>/gi, ''), /\$149|\$199|\$245|early[- ]?bird|Credential \+ Practice|Practice trial|Compare the plans|optional Practice/i);
+  assert.doesNotMatch(output, /\$199|early[- ]?bird|standard Credential/i, 'the removed tier is not in the page at all');
   assert.match(output, /<title>Pricing \| CredentialDOMD for physicians, NPs &amp; PAs<\/title>/);
   for (const hook of ['headline', 'availability', 'rate', 'status', 'action', 'phase']) assert.match(output, new RegExp(`data-membership-${hook}\\b`), hook);
   assert.match(output, /<script type="module" src="\/membership-offer\.js" data-membership-endpoint="https:\/\/synthetic\.supabase\.co\/functions\/v1\/public-membership-offer"><\/script>/);

@@ -1,16 +1,18 @@
-// BILL-004, restated for the one-plan site (owner decision 2026-11-13): the
-// site presents the Founder plan, $99/year with everything included. If
-// public-membership-offer answers a later phase, no sentence on a public page
-// may still offer $99, and none may name another tier or another price: the
-// page says the Founder plan is full and that the app shows the current price
-// before payment. The pages are rendered with the production defaults and
-// painted by the real public/membership-offer.js over a small text-only DOM
-// built from the rendered HTML. All data is synthetic.
+// BILL-004, restated for the pricing the owner set on 2026-11-13. While
+// founder places remain the site presents the Founder plan, $99/year with
+// everything included. Once public-membership-offer reports the founders are
+// sold out, no sentence on a public page may still offer $99: the pages show
+// Credential at $149/year and Credential + Practice at $245/year. No state
+// names the removed $199 tier. The pages are rendered with the production
+// defaults and painted by the real public/membership-offer.js over a small
+// text-only DOM built from the rendered HTML, then read as a visitor sees
+// them in that state (tests/helpers/site-states.mjs). All data is synthetic.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { renderPublicLaunch, publicLaunchHelp, markLiveOffer, FOUNDER_PLAN, FOUNDER_AVAILABILITY } from '../scripts/public-launch-render.mjs';
+import { renderPublicLaunch, publicLaunchHelp, markLiveOffer, FOUNDER_PLAN, FOUNDER_AVAILABILITY, AFTER_FOUNDERS } from '../scripts/public-launch-render.mjs';
+import { inState, stateOf } from './helpers/site-states.mjs';
 import { publicLaunchPresentation, FOUNDING_AVAILABILITY, FOUNDING_RATE_LOCK } from '../src/content/publicLaunch.mjs';
 import { offerPresentation, sitePresentation, createOfferUpdater, phaseStructuredData } from '../public/membership-offer.js';
 import { renderHelp } from '../scripts/build-help.mjs';
@@ -21,7 +23,7 @@ const root = fileURLToPath(new URL('../', import.meta.url));
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 const view = publicLaunchPresentation();
 const endpoint = 'https://synthetic.supabase.co/functions/v1/public-membership-offer';
-const CENTS = { founding: 9900, earlybird: 14900, standard: 19900 };
+const CENTS = { founding: 9900, earlybird: 14900 };
 const reply = phase => ({ schemaVersion: 1, phase, annualCents: CENTS[phase], checkoutEnabled: true, availability: 'available', bundleAvailable: phase !== 'founding' });
 const unescape = s => s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 const escape = s => String(s).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
@@ -51,12 +53,14 @@ function textDom(html) {
 }
 const visibleText = html => unescape(html.replace(/<script\b[\s\S]*?<\/script>/gi, '').replace(/<style\b[\s\S]*?<\/style>/gi, '').replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
 const structured = html => [...html.matchAll(/<script\b[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi)].map(m => JSON.stringify(JSON.parse(m[1]))).join(' ');
-// What may still name $99 once the Founder plan is full: the promise to the
+// What may still name $99 once the founders are sold out: the promise to the
 // earlier free-beta sign-ups, who keep their $99 opt-in.
 const ALLOWED = /signed up under the earlier free-beta wording|opt in to \$99\/year Credential during the beta/;
 const offering$99 = text => text.split(/(?<=[.!?])\s+/).filter(x => /\$99/.test(x) && !ALLOWED.test(x));
-// Nothing the site shows, in any state, names another tier or its price.
-const OTHER_TIERS = /\$149|\$199|\$245|early ?bird|standard Credential|Credential \+ Practice|Compare the plans|Founding Credential|Practice trial|free tier/i;
+// Never, in any state: the removed tier and the old multi-plan wording.
+const REMOVED = /\$199|early ?bird|standard Credential|Compare the plans|Founding Credential|free tier|Optional Practice/i;
+// While founder places remain a visitor reads one plan and one price.
+const LATER_PLANS = /\$149|\$245|Credential \+ Practice|Practice trial/i;
 
 async function pages() {
   const help = JSON.parse(await read('public/knowledge/credentialdo-help.json'));
@@ -72,19 +76,20 @@ async function pages() {
   return out;
 }
 
-test('the app view of the offer is unchanged: it still follows the checkout phase', () => {
+test('the app view of the offer follows the checkout phase: $99 founding, then $149 Credential', () => {
   const founding = offerPresentation(reply('founding'));
   assert.equal(founding.availabilityOffer, FOUNDING_AVAILABILITY);
   assert.equal(founding.rateLock, ` ${FOUNDING_RATE_LOCK}`);
   assert.equal(founding.rateNote, view.foundingRate);
-  for (const phase of ['earlybird', 'standard']) {
-    const later = offerPresentation(reply(phase));
-    assert.match(later.availabilityOffer, new RegExp(`\\$${CENTS[phase] / 100}/year`));
-    assert.equal(later.action, `Join for $${CENTS[phase] / 100} a year`);
-  }
+  const later = offerPresentation(reply('earlybird'));
+  assert.equal(later.availabilityOffer, 'Credential is $149/year.');
+  assert.equal(later.action, 'Join for $149 a year');
+  assert.equal(later.heroHeadline, 'Credential: $149/year');
+  assert.doesNotMatch(JSON.stringify(later), /early bird|standard|\$199|\$99/i);
+  assert.throws(() => offerPresentation({ ...reply('earlybird'), phase: 'standard', annualCents: 19900 }), /Unavailable/);
 });
 
-test('the Founder sentences membership-offer.js swaps are the ones the site prints', () => {
+test('the sentences membership-offer.js swaps are the ones the site prints, in both states', () => {
   const founder = sitePresentation(offerPresentation(reply('founding')));
   assert.equal(founder.availabilityOffer, FOUNDER_PLAN.offer);
   assert.equal(founder.rateLock, ` ${FOUNDER_PLAN.rateLock}`);
@@ -95,14 +100,22 @@ test('the Founder sentences membership-offer.js swaps are the ones the site prin
   assert.equal(founder.phase, FOUNDER_PLAN.phase);
   assert.equal(founder.reviewAction, FOUNDER_PLAN.reviewAction);
   assert.ok(FOUNDER_AVAILABILITY.includes(FOUNDER_PLAN.offer));
-  for (const phase of ['earlybird', 'standard']) {
-    const full = sitePresentation(offerPresentation(reply(phase)));
-    assert.doesNotMatch(JSON.stringify(full), /\$\d|first 100/, `${phase}: no price at all`);
-    assert.doesNotMatch(JSON.stringify(full), OTHER_TIERS, phase);
-    assert.doesNotMatch(`${full.availabilityOffer}${full.rateNote}${full.status}`, /[-–—]/, 'no hyphen or dash in public copy');
-    assert.equal(full.rateLock, '');
+  const soldOut = sitePresentation(offerPresentation(reply('earlybird')));
+  assert.equal(soldOut.phaseKey, 'soldout');
+  assert.equal(soldOut.headline, AFTER_FOUNDERS.headline);
+  assert.equal(soldOut.heroHeadline, AFTER_FOUNDERS.headline);
+  assert.equal(soldOut.heroNote, AFTER_FOUNDERS.heroNote);
+  assert.equal(soldOut.availabilityOffer, AFTER_FOUNDERS.offer);
+  assert.equal(soldOut.rateLock, ` ${AFTER_FOUNDERS.rateLock}`);
+  assert.equal(soldOut.rateNote, AFTER_FOUNDERS.rate);
+  assert.doesNotMatch(JSON.stringify(soldOut), /\$99|first 100/);
+  assert.doesNotMatch(JSON.stringify(soldOut), REMOVED);
+  assert.deepEqual([...new Set(JSON.stringify(soldOut).match(/\$\d+/g))].sort(), ['$149', '$245']);
+  assert.deepEqual(AFTER_FOUNDERS.plans.map(plan => [plan.name, plan.price]), [['Credential', '$149'], ['Credential + Practice', '$245']]);
+  for (const text of [AFTER_FOUNDERS.offer, AFTER_FOUNDERS.rate, AFTER_FOUNDERS.rateLock, AFTER_FOUNDERS.heroNote, ...AFTER_FOUNDERS.plans.flatMap(plan => plan.lines)]) {
+    assert.doesNotMatch(text, /[-–—]/, `no hyphen or dash in public copy: ${text}`);
   }
-  assert.throws(() => sitePresentation({ phaseKey: 'gold', status: 'x', action: 'y' }));
+  assert.throws(() => sitePresentation({ phaseKey: 'standard', status: 'x', action: 'y' }));
   assert.throws(() => sitePresentation(null));
 });
 
@@ -119,37 +132,75 @@ test('every visible Founder offer sentence is inside the span the live offer rep
   assert.ok(once.includes(`<meta content="${FOUNDER_PLAN.offer}">`) && once.includes(`<script>"${FOUNDER_PLAN.offer}"</script>`));
 });
 
-test('no public page names another tier or price: as printed, at founding, with no answer, or once the plan is full', async () => {
+const ANSWERS = {
+  printed: [null, 'founding'],
+  founding: [async () => Response.json(reply('founding')), 'founding'],
+  offline: [async () => { throw Error('offline'); }, 'founding'],
+  // A server still answering the removed tier is refused, so the page stays as printed.
+  'removed tier': [async () => Response.json({ ...reply('earlybird'), phase: 'standard', annualCents: 19900 }), 'founding'],
+  'sold out': [async () => Response.json(reply('earlybird')), 'soldout'],
+  'sold out, paused': [async () => Response.json({ ...reply('earlybird'), checkoutEnabled: false, availability: 'paused' }), 'soldout'],
+};
+/** The page as a visitor reads it after the offer script has run against `fetchImpl`. */
+async function seen(html, [fetchImpl, state]) {
+  const dom = textDom(html);
+  if (fetchImpl) await createOfferUpdater(dom, endpoint, { fetchImpl })();
+  return inState(dom.html(), state);
+}
+
+test('no state of any public page names the removed $199 tier or the old plan wording', async () => {
   const rendered = await pages();
-  const answers = { printed: null, founding: async () => Response.json(reply('founding')), offline: async () => { throw Error('offline'); },
-    earlybird: async () => Response.json(reply('earlybird')), standard: async () => Response.json(reply('standard')),
-    paused: async () => Response.json({ ...reply('standard'), checkoutEnabled: false, availability: 'paused' }) };
-  for (const [state, fetchImpl] of Object.entries(answers)) {
+  for (const [label, answer] of Object.entries(ANSWERS)) {
     for (const [name, html] of Object.entries(rendered)) {
-      const dom = textDom(html);
-      if (fetchImpl) await createOfferUpdater(dom, endpoint, { fetchImpl })();
-      const painted = dom.html();
-      assert.doesNotMatch(visibleText(painted), OTHER_TIERS, `${name} ${state}`);
-      assert.doesNotMatch(structured(painted), OTHER_TIERS, `${name} JSON-LD ${state}`);
-      assert.doesNotMatch(painted.match(/<head>[\s\S]*?<\/head>/)?.[0].replace(/<style\b[\s\S]*?<\/style>/gi, '') || '', OTHER_TIERS, `${name} head ${state}`);
+      const page = await seen(html, answer);
+      assert.doesNotMatch(visibleText(page), REMOVED, `${name}, ${label}`);
+      assert.doesNotMatch(structured(page), REMOVED, `${name} JSON-LD, ${label}`);
+      assert.doesNotMatch(page.match(/<head>[\s\S]*?<\/head>/)?.[0].replace(/<style\b[\s\S]*?<\/style>/gi, '') || '', REMOVED, `${name} head, ${label}`);
+      // Not even in markup a visitor does not see.
+      assert.doesNotMatch(html.replace(/<style\b[\s\S]*?<\/style>/gi, ''), /\$199|standard Credential/i, `${name} source`);
     }
   }
 });
 
-test('once checkout has left the founding phase no sentence on any public page still offers $99, visible or structured', async () => {
+test('while founder places remain, or with no usable answer, a visitor reads only the $99 Founder plan', async () => {
   const rendered = await pages();
-  for (const phase of ['earlybird', 'standard']) {
+  for (const label of ['printed', 'founding', 'offline', 'removed tier']) {
     for (const [name, html] of Object.entries(rendered)) {
-      const dom = textDom(html);
-      await createOfferUpdater(dom, endpoint, { fetchImpl: async () => Response.json(reply(phase)) })();
-      const painted = dom.html();
-      assert.deepEqual(offering$99(visibleText(painted)), [], `${name} at ${phase}`);
-      assert.deepEqual(offering$99(structured(painted)), [], `${name} JSON-LD at ${phase}`);
+      const page = await seen(html, ANSWERS[label]);
+      assert.doesNotMatch(visibleText(page), LATER_PLANS, `${name}, ${label}`);
+      assert.doesNotMatch(structured(page), LATER_PLANS, `${name} JSON-LD, ${label}`);
       if (name === 'home' || name === 'pricing') {
-        assert.ok(visibleText(painted).includes('The Founder plan is full'), `${name}: says the plan is full`);
-        assert.ok(visibleText(painted).includes('the app shows the current membership price before you choose to pay'), name);
+        assert.equal(page.split('<article class="price').length, 2, `${name}, ${label}: one card`);
+        assert.ok(visibleText(page).includes('Founder plan: $99/year, everything included'), `${name}, ${label}`);
       }
-      if (name === 'home') assert.ok(visibleText(painted).includes('Yes. Membership is open now.'));
+    }
+  }
+});
+
+test('once the founders are sold out the pages show Credential $149 and Credential + Practice $245, and nothing still offers $99', async () => {
+  const rendered = await pages();
+  for (const label of ['sold out', 'sold out, paused']) {
+    for (const [name, html] of Object.entries(rendered)) {
+      const page = await seen(html, ANSWERS[label]);
+      assert.deepEqual(offering$99(visibleText(page)), [], `${name}, ${label}`);
+      assert.deepEqual(offering$99(structured(page)), [], `${name} JSON-LD, ${label}`);
+      assert.doesNotMatch(visibleText(page), /Founder plan: \$99|everything included, for the first 100/, `${name}, ${label}`);
+      if (name === 'home' || name === 'pricing') {
+        const cards = [...page.matchAll(/<article class="price[^"]*">([\s\S]*?)<\/article>/g)].map(m => visibleText(m[1]).trim());
+        assert.equal(cards.length, 2, `${name}, ${label}: two cards`);
+        assert.match(cards[0], /^Credential \$149 \/ year /);
+        assert.match(cards[0], /30 day Practice trial/);
+        assert.match(cards[1], /^Credential \+ Practice \$245 \/ year /);
+        assert.match(cards[1], /30 day Practice trial/);
+        for (const card of cards) assert.match(card, /Sign up today$/, 'each card ends in its signup button');
+        assert.equal([...page.matchAll(/<article class="price[^"]*">[\s\S]*?<\/article>/g)].every(m => /<a class="btn-primary" href="\/app\/"><span data-membership-action>Sign up today<\/span><\/a>/.test(m[0])), true, 'to the app');
+        assert.ok(visibleText(page).includes(AFTER_FOUNDERS.headline), `${name}: the plans heading`);
+      }
+      if (name === 'home') {
+        assert.ok(visibleText(page).includes('Yes. Membership is open now.'));
+        assert.ok(visibleText(page).includes(AFTER_FOUNDERS.offer), 'the FAQ answer states the two prices');
+      }
+      if (name === 'locums') assert.ok(visibleText(page).includes(AFTER_FOUNDERS.rate), 'the membership card and cost answer');
     }
   }
 });
@@ -177,13 +228,11 @@ test('structured data follows the state from the page\'s original text, never fr
   const original = JSON.stringify({ '@type': 'FAQPage', mainEntity: [{ acceptedAnswer: { text: `Yes. Membership is open now. ${FOUNDER_AVAILABILITY} ${FOUNDER_PLAN.rateLock}` } }, { acceptedAnswer: { text: FOUNDER_PLAN.rate } }] });
   const at = phase => sitePresentation(offerPresentation(reply(phase)));
   assert.equal(phaseStructuredData(original, at('founding')), original);
-  for (const phase of ['earlybird', 'standard']) {
-    const full = JSON.parse(phaseStructuredData(original, at(phase)));
-    assert.match(full.mainEntity[0].acceptedAnswer.text, /The Founder plan is full; the app shows the current membership price before you choose to pay\./);
-    assert.match(full.mainEntity[1].acceptedAnswer.text, /^All 100 Founder places have been taken\./);
-    assert.doesNotMatch(JSON.stringify(full), /\$\d|locked for life/);
-    // Painting twice from the original gives the same text.
-    assert.equal(phaseStructuredData(original, at(phase)), phaseStructuredData(original, at(phase)));
-  }
+  const later = JSON.parse(phaseStructuredData(original, at('earlybird')));
+  assert.equal(later.mainEntity[0].acceptedAnswer.text, `Yes. Membership is open now. ${FOUNDER_AVAILABILITY.replace(FOUNDER_PLAN.offer, AFTER_FOUNDERS.offer)} ${AFTER_FOUNDERS.rateLock}`);
+  assert.equal(later.mainEntity[1].acceptedAnswer.text, AFTER_FOUNDERS.rate);
+  assert.doesNotMatch(JSON.stringify(later), /\$99|\$199/);
+  // Painting twice from the original gives the same text.
+  assert.equal(phaseStructuredData(original, at('earlybird')), phaseStructuredData(original, at('earlybird')));
   assert.equal(phaseStructuredData('not json', at('earlybird')), 'not json');
 });

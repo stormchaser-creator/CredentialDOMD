@@ -9,10 +9,10 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { offerPresentation } from '../public/membership-offer.js';
 
-const offer = (phase, availability) => ({ schemaVersion: 1, phase, annualCents: { founding: 9900, earlybird: 14900, standard: 19900 }[phase],
+const offer = (phase, availability) => ({ schemaVersion: 1, phase, annualCents: { founding: 9900, earlybird: 14900 }[phase],
   checkoutEnabled: availability !== 'paused', availability });
 
-for (const phase of ['founding', 'earlybird', 'standard']) {
+for (const phase of ['founding', 'earlybird']) {
   test(`${phase}, paused: the status and the button say the account opens when checkout reopens`, () => {
     const view = offerPresentation(offer(phase, 'paused'));
     assert.match(view.status, /opens when checkout reopens/);

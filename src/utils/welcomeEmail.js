@@ -14,7 +14,7 @@
 // Which version a member gets is decided by the database from the verified
 // first payment (limited_paid_purchase_history), never by this module:
 //   founding    $99 founding Credential: Credential and Practice while a member
-//   trial       early bird or standard Credential: Credential plus the 30-day
+//   trial       $149 Credential: Credential plus the 30-day
 //               Practice trial that payment started
 //   bundle      Credential + Practice
 //   credential  Credential whose payment started no Practice trial (one per
@@ -43,7 +43,7 @@ const MEMBERSHIP = Object.freeze({
     includes: "Your membership includes Credential and Practice for as long as you remain a member.",
   }),
   trial: Object.freeze({
-    label: "Early bird or standard Credential, $149 or $199 a year",
+    label: "Credential, $149 a year",
     thanks: "Thank you for joining.",
     includes: "Your membership includes Credential, plus a 30-day Practice trial that started with your payment. The trial never charges you or upgrades on its own, and anything you save in Practice stays yours to read and export after it ends.",
   }),

@@ -11,9 +11,9 @@
 //     and read and export stay open for an active account (the Privacy
 //     Policy, section 9: "Canceling a paid membership does not delete
 //     anything.");
-//   - a later purchase is at the standard price (has_limited_paid_purchase:
-//     a paid purchase consumes founding and early bird pricing), and a paid
-//     founding place is not given back.
+//   - a later purchase is at the price then on offer, $149 Credential or
+//     $245 Credential + Practice (has_limited_paid_purchase: a paid purchase
+//     consumes the founding price), and a paid founding place is not given back.
 import { membershipDate, membershipPrice } from "../utils/membershipTiming.js";
 
 export const REFUND_COPY = Object.freeze({
@@ -24,7 +24,7 @@ export const REFUND_COPY = Object.freeze({
   heading: "Cancel and get a refund",
   endsNow: "Your membership ends now. The subscription is cancelled today and will not renew, and you can no longer add or change records.",
   recordsKept: "Nothing is deleted. Your saved records and documents stay available to view and export until you delete them yourself. You can export a copy first.",
-  rejoin: "If you join again later, you pay the standard price at that time.",
+  rejoin: "If you join again later, you pay the price offered at that time.",
   confirm: "I understand my membership ends now and I want this payment refunded.",
   // An unfinished request whose cancellation is recorded (subscriptionCanceled).
   // The refund sweep (20260930072000) keeps finishing it in the background.

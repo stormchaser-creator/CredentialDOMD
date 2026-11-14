@@ -1,15 +1,16 @@
 #!/usr/bin/env node
 import { pathToFileURL } from 'node:url';
 import { LIMITED_LAUNCH, limitedOffer, assertLimitedPrice } from '../supabase/functions/_shared/limitedLaunchCatalog.mjs';
-import { getPublicBillingOffers } from '../supabase/functions/_shared/accessPolicy.mjs';
+import { getPublicBillingOffers, CREDENTIAL_PRICE_PHASES, BUNDLE_PRICE_PHASE } from '../supabase/functions/_shared/accessPolicy.mjs';
 import { stripeRequest } from './create-stripe-products.mjs';
 
 /** Additive sandbox preparation, never changes or archives historical products. */
 export async function prepareLimitedCatalog({ apply = false, mode = 'test', secretKey, productIds = {}, request }) {
   if (mode !== 'test') throw Error('Limited launch catalog preparation is sandbox-only');
   const plan = { applied: false, mode, catalogVersion: LIMITED_LAUNCH.version, billingEnabled: false, checkoutEnabled: false,
-    offers: ['founding', 'earlybird', 'standard'].map(p => getPublicBillingOffers(p)[0]).concat(getPublicBillingOffers('standard')[1]).map(({ productId: _futurePlaceholder, ...o }) => ({ ...o, productId: productIds[o.id] || null })),
-    defaultPricePhases: { core: 'standard', core_locum: 'standard' } };
+    offers: Object.keys(CREDENTIAL_PRICE_PHASES).map(p => getPublicBillingOffers(p)[0]).concat(getPublicBillingOffers('earlybird')[1]).map(({ productId: _futurePlaceholder, ...o }) => ({ ...o, productId: productIds[o.id] || null })),
+    // A product's default price is its ongoing one: $149 Credential, $245 package.
+    defaultPricePhases: { core: 'earlybird', core_locum: BUNDLE_PRICE_PHASE } };
   if (!apply) return plan;
   if (!/^(sk|rk)_test_/.test(secretKey || '')) throw Error('A matching sandbox Stripe key is required');
   const results = [], configured = { ...productIds };
@@ -20,14 +21,14 @@ export async function prepareLimitedCatalog({ apply = false, mode = 'test', secr
     else product = await request('POST', '/products', { name: offerId === 'core' ? 'Credential' : 'Credential + Practice', ...Object.fromEntries(Object.entries(metadata).map(([k,v]) => [`metadata[${k}]`,v])) }, `${LIMITED_LAUNCH.version}:test:product:${offerId}`);
     if (!/^prod_[A-Za-z0-9_]+$/.test(product?.id || '') || product.deleted || !product.active || product.livemode !== false || Object.entries(metadata).some(([k,v]) => product.metadata?.[k] !== v)) throw Error('Existing product differs from the reviewed limited launch metadata');
     configured[offerId] = product.id;
-    for (const phase of offerId === 'core' ? ['founding','earlybird','standard'] : ['standard']) {
+    for (const phase of offerId === 'core' ? Object.keys(CREDENTIAL_PRICE_PHASES) : [BUNDLE_PRICE_PHASE]) {
       const offer = limitedOffer(offerId, phase, configured);
       const list = await request('GET', `/prices?lookup_keys[]=${encodeURIComponent(offer.lookupKey)}&limit=100&expand[]=data.product`);
       if (!Array.isArray(list?.data) || list.has_more || list.data.length > 1) throw Error('Ambiguous catalog price');
       let price = list.data[0];
       if (!price) price = await request('POST', '/prices', { product: product.id, currency: 'usd', unit_amount: String(offer.unitAmount), 'recurring[interval]': 'year', 'recurring[interval_count]': '1', lookup_key: offer.lookupKey, 'metadata[app]': LIMITED_LAUNCH.app, 'metadata[price_phase]': phase }, `${LIMITED_LAUNCH.version}:test:price:${offer.lookupKey}`);
       assertLimitedPrice({ ...price, product }, offer, false);
-      if (phase === 'standard' && product.default_price !== price.id) {
+      if (phase === plan.defaultPricePhases[offerId] && product.default_price !== price.id) {
         if (product.default_price) throw Error('Review existing product default price before changing it');
         await request('POST', `/products/${product.id}`, { default_price: price.id }, `${LIMITED_LAUNCH.version}:test:default:${offerId}`);
       }

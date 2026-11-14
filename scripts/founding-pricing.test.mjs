@@ -28,9 +28,10 @@ test('only two canonical annual founding offers are ever public', () => {
   }
   assert.deepEqual(getPublicTiers().map(o => o.annualCents), [9900, 24500]);
   assert.deepEqual(getPublicTiers('earlybird').map(o => o.annualCents), [14900, 24500]);
-  assert.deepEqual(getPublicTiers('standard').map(o => o.annualCents), [19900, 24500]);
-  // Early-bird and standard Credential keep the one 30-day Practice trial.
-  for (const phase of ['earlybird', 'standard']) {
+  // Owner decision 2026-11-13: no $199 standard tier.
+  assert.throws(() => getPublicTiers('standard'), /Unknown Credential price phase/);
+  // $149 Credential keeps the one 30-day Practice trial.
+  for (const phase of ['earlybird']) {
     const [core, bundle] = getPublicTiers(phase);
     assert.deepEqual([core.practiceIncluded, core.practiceTrialDays, bundle.practiceIncluded, bundle.practiceTrialDays], [false, 30, true, 0]);
     assert.ok(core.bullets.includes('30-day Practice trial; no automatic charge'));

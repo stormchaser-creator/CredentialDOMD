@@ -167,8 +167,8 @@ const CURRENT_TERMS = {
       blocks: [
         "CredentialDOMD is in an invite-only beta and billing is off. Paid membership has not launched. You will receive the applicable price and terms before choosing a paid membership; nothing will be charged without your agreement.",
         "Members whose accounts were already active before paid membership launched, and accounts the founder has personally gifted, receive Credential and Practice free for life. A waitlist entry, or an account that was registered but never active before launch, does not qualify for lifetime membership. People who signed up under the earlier free-beta wording receive the 30 free days described in the next paragraph instead.",
-        "The planned Credential founding offer for eligible waitlist members has been lowered to $99 per year. The planned early-bird price is $149 per year and the standard price is $199 per year. Founding and early-bird members keep their annual rate while their membership stays active. We will identify the available offer and eligibility before purchase; these phases do not create a published deadline or reservation by themselves.",
-        "The full Credential + Practice package is $245 per year, with no founding or early-bird discount on that package.",
+        "The planned Credential founding offer for eligible waitlist members has been lowered to $99 per year. After the founding memberships, the planned Credential price is $149 per year. Founding members and members who join Credential at $149 per year keep their annual rate while their membership stays active. We will identify the available offer and eligibility before purchase; these phases do not create a published deadline or reservation by themselves.",
+        "The full Credential + Practice package is $245 per year, with no founding discount on that package.",
         "At paid launch, a new Credential membership will include 30 days of Practice access at no additional cost. That Practice access ends unless you explicitly choose to purchase the full package. The trial never converts into a paid Practice membership automatically, and there is no Practice charge to cancel or opt out of. Trial expiry does not cancel your Credential membership or delete your Practice records; existing records remain available to read and export.",
         "Features may change, be renamed, or be removed. There is no uptime guarantee and no service-level commitment; export a backup regularly."
       ],
@@ -264,12 +264,14 @@ export function getLegalDocuments(mode = PUBLIC_LAUNCH_MODE) {
   const terms = structuredClone(CURRENT_TERMS);
   privacy.updated = 'September 25, 2026';
   // Founding members keep Practice while they are members (owner, 2026-09-28).
-  terms.updated = 'September 28, 2026';
+  // Two prices after the founders, $149 Credential and $245 Credential +
+  // Practice; the $199 standard tier is removed (owner, 2026-11-13).
+  terms.updated = 'November 13, 2026';
   privacy.intro[1] = privacy.intro[1].replace('is in free beta.', 'is in early release.');
   const membership = terms.sections[0];
   membership.title = '1. Membership, early release and pricing';
   membership.blocks[0] = 'CredentialDOMD offers paid membership in an early release. Features and workflows are still being refined. You will see the applicable price and renewal terms before choosing a membership, and a card is required at paid checkout. Nothing will be charged without your agreement.';
-  membership.blocks[2] = 'The first 100 paid founding members get Credential for $99 per year. After those founding memberships, the early bird price is $149 per year, followed by the standard price of $199 per year. Founding and early bird members keep their annual rate for life while their membership remains continuously active. The available offer and eligibility are confirmed before purchase; creating an account or viewing an offer does not reserve a founding place. Protected historical founding offers remain honored within the 100 member founding allocation.';
+  membership.blocks[2] = 'The first 100 paid founding members get Credential, with Practice included, for $99 per year. After those 100 founding memberships, Credential is $149 per year and Credential + Practice is $245 per year. Founding members and members who join Credential at $149 per year keep their annual rate for life while their membership remains continuously active. The available offer and eligibility are confirmed before purchase; creating an account or viewing an offer does not reserve a founding place. Protected historical founding offers remain honored within the 100 member founding allocation.';
   membership.blocks[3] = view.fullPackage.replaceAll('/year', ' per year');
   membership.blocks[4] = view.practiceTrial;
   membership.blocks.splice(2, 0, view.promisedBeta.replace('$99/year', '$99 per year') + ' If an unfinished checkout is completed after the original beta end date, the first charge is collected when checkout completes; the paid year still starts at that original beta end date. Beta expiry does not delete your account or records; saved records remain available to read and export.');

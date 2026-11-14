@@ -46,28 +46,34 @@ test('explicitly disabled routes fail closed before identity, database, provider
   for(const fn of Object.values(createLimitedLaunchHandlers(f.deps, {...config,billingEnabled:false,checkoutEnabled:false,invitationEnabled:false})))assert.equal((await fn(request())).status,503);
   assert.deepEqual(f.calls,[]);
 });
-test('offline preview has three annual Credential amounts plus full-price bundle; IDs never guessed',async()=>{
+test('offline preview has the two annual Credential amounts plus the full-price bundle; IDs never guessed',async()=>{
   const plan=await prepareLimitedCatalog({request:async()=>{throw Error('unexpected');}});
-  assert.deepEqual(plan.offers.map(o=>o.unitAmount),[9900,14900,19900,24500]);assert.ok(plan.offers.every(o=>o.productId===null));
-  assert.deepEqual(limitedOffers(config.productIds).map(o=>o.unitAmount),[9900,14900,19900,24500]);
+  // Owner decision 2026-11-13: $99 founding, $149 Credential, $245 package. No $199 tier.
+  assert.deepEqual(plan.offers.map(o=>o.unitAmount),[9900,14900,24500]);assert.ok(plan.offers.every(o=>o.productId===null));
+  assert.deepEqual(plan.defaultPricePhases,{core:'earlybird',core_locum:'standard'});
+  assert.deepEqual(limitedOffers(config.productIds).map(o=>o.unitAmount),[9900,14900,24500]);
+  assert.throws(()=>limitedOffer('core','standard',config.productIds),/Unknown Credential price phase/);
+  assert.equal(limitedOffer('core','standard',config.productIds,{historical:true}).unitAmount,19900,'only an existing quote is read back');
   await assert.rejects(prepareLimitedCatalog({mode:'live',apply:true}),/sandbox/);
 });
 test('matching sandbox bootstrap is repeatable and never modifies legacy objects',async()=>{
   const output=await prepareLimitedCatalog({apply:true,secretKey:'sk_test_synthetic',productIds:config.productIds,request:async(method,path)=>{
     assert.equal(method,'GET');assert.ok(!path.includes('_v1'));
     const bundle=path.includes('Bundle')||path.includes('core_locum');
-    const phase=path.includes('_earlybird_')?'earlybird':path.includes('_founding_')?'founding':'standard';
+    assert.ok(!path.includes('core_standard'),'no $199 Credential price is looked up or created');
+    const phase=bundle?'standard':path.includes('_earlybird_')?'earlybird':'founding';
     const f=fixture(bundle?'core_locum':'core',phase);
     const pid=bundle?'prod_Bundle':'prod_Credential';
     if(path.startsWith('/products/'))return {...f.price.product,id:pid,default_price:'price_Annual'};
     return{data:[f.price],has_more:false};
   }});
-  assert.equal(output.stripe.length,4);
+  assert.equal(output.stripe.length,3);
+  assert.deepEqual(output.stripe.map(s=>[s.offerId,s.phase,s.annualCents]),[['core','founding',9900],['core','earlybird',14900],['core_locum','standard',24500]]);
 });
 test('quote price comes from protected eligibility; bundle is never discounted',async()=>{
-  for(const [phase,cents]of[['founding',9900],['earlybird',14900],['standard',19900]]){
+  for(const [phase,cents]of[['founding',9900],['earlybird',14900]]){
     const f=fixture('core',phase);const h=createLimitedLaunchHandlers(f.deps,config);
-    // Founding Credential includes Practice while active (owner, 2026-09-28); early-bird and standard keep the 30-day trial.
+    // Founding Credential includes Practice while active (owner, 2026-09-28); $149 Credential keeps the 30-day trial.
     const quote=await (await h.quote(request())).json();assert.equal(quote.annualCents,cents);assert.equal(quote.trialAutoCharges,false);
     assert.equal(quote.practiceIncluded,phase==='founding');assert.equal(quote.practiceTrialDays,phase==='founding'?0:30);
     const bundle=await(await h.quote(request({offerId:'core_locum'}))).json();assert.equal(bundle.annualCents,24500);assert.equal(bundle.practiceTrialDays,0);assert.equal(bundle.practiceIncluded,true);
@@ -120,7 +126,7 @@ test('a cancelled membership whose refund is unfinished is finished before a new
   assert.equal((await createLimitedLaunchHandlers(f.deps,config).checkout(paidRequest())).status,200,'with none open, the purchase goes ahead');
 });
 test('durable price and quote keep exact same Checkout parameters across retries',async()=>{
-  const f=fixture();const h=createLimitedLaunchHandlers(f.deps,config);await h.checkout(paidRequest());f.eligibility.price_phase='standard';await h.checkout(paidRequest());
+  const f=fixture();const h=createLimitedLaunchHandlers(f.deps,config);await h.checkout(paidRequest());f.eligibility.price_phase='earlybird';await h.checkout(paidRequest());
   const attempts=f.calls.filter(c=>c[0]==='checkout');assert.equal(attempts.length,2);assert.deepEqual(attempts[0],attempts[1]);assert.equal(attempts[1][1].metadata.price_phase,'founding');
 });
 test('webhook uses fresh paid invoice and atomically settles first paid proof',async()=>{
@@ -816,7 +822,7 @@ test('a recovery link is asked for only when the Checkout holds no founding plac
   const founding=fixture();founding.q.public_founding_slot=7;
   assert.equal((await createLimitedLaunchHandlers(founding.deps,config).checkout(paidRequest())).status,200);
   assert.equal(founding.calls.find(c=>c[0]==='checkout')[1].after_expiration,undefined,'a founding place is released at expiry: no link that pays $99 past it');
-  for(const phase of['earlybird','standard']){
+  for(const phase of['earlybird']){
     const f=fixture('core',phase);f.q.public_founding_slot=null;
     assert.equal((await createLimitedLaunchHandlers(f.deps,config).checkout(paidRequest())).status,200);
     assert.deepEqual(f.calls.find(c=>c[0]==='checkout')[1].after_expiration,{recovery:{enabled:true,allow_promotion_codes:false}});
