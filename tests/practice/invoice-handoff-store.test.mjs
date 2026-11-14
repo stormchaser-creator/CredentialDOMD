@@ -84,7 +84,12 @@ function fresh(opts) {
   return device(opts);
 }
 const handoffKeys = (store) => [...store.map.keys()].filter(k => k.startsWith('credentialdomd-invoice-handoff') && k !== 'credentialdomd-invoice-handoff-v1-generation');
-const note = (number, total) => ({ number, sentAt: '2026-09-30T15:00:00.000Z', kind: number.slice(0, 3), contractId: number.startsWith('INV') ? 'c-synthetic' : null, total, periodStart: '2026-09-28', periodEnd: '2026-09-29' });
+// Notes are kept HANDOFF_KEPT_DAYS (45) on the device, so a fixed date aged
+// out of the window on 2026-11-14 and these tests began failing. Dates are now
+// two days before the run; the minutes keep the original order.
+const BASE_AT = Date.now() - 2 * 86400000;
+const at = (minutes) => new Date(BASE_AT + minutes * 60000).toISOString();
+const note = (number, total) => ({ number, sentAt: at(0), kind: number.slice(0, 3), contractId: number.startsWith('INV') ? 'c-synthetic' : null, total, periodStart: '2026-09-28', periodEnd: '2026-09-29' });
 
 test('Sign out and Delete All My Data remove the hand-off notes from every store and the page; a session that merely ended keeps them', async () => {
   assert.match(MAIN, /^sweepHandoffPurges\(\)\.catch/m, 'launch completes any stored handoff purge');
@@ -117,7 +122,7 @@ test('Sign out and Delete All My Data remove the hand-off notes from every store
 test('an IndexedDB whose open never answers neither holds back the server\'s list nor the "not kept" report', async () => {
   fresh({ full: true, hang: true });
   let listed = 0;
-  globalThis.__screen.listShared = () => { listed += 1; return Promise.resolve({ data: [{ number: 'INV-20260930-03', shared_at: '2026-09-30T15:00:00.000Z', contract_id: 'c-synthetic' }], error: null }); };
+  globalThis.__screen.listShared = () => { listed += 1; return Promise.resolve({ data: [{ number: 'INV-20260930-03', shared_at: at(0), contract_id: 'c-synthetic' }], error: null }); };
   const done = await Promise.race([S.refreshInvoiceNotes(ACCOUNT).then(() => 'done'), new Promise(r => setTimeout(() => r('stuck'), 1000))]);
   assert.equal(done, 'done', 'the refresh settles');
   assert.equal(listed, 1, 'the server was asked');
@@ -158,7 +163,7 @@ test('a page away in the full Mail app for longer than the wait is released and 
   fresh();
   const listeners = new Map();
   const doc = { visibilityState: 'visible', addEventListener: (t, fn) => listeners.set(t, fn), removeEventListener: (t) => listeners.delete(t) };
-  S.handOffInvoice(ACCOUNT, { ...note('INV-20260930-11', 1000), sentAt: '2026-09-30T16:00:00.000Z' });
+  S.handOffInvoice(ACCOUNT, { ...note('INV-20260930-11', 1000), sentAt: at(60) });
   assert.equal(S.shareInFlight('INV-20260930-11'), true);
   let said = 0;
   S.watchUnanswered(() => { said += 1; }, { number: 'INV-20260930-11', graceMs: 30, waitMs: 20, doc, win: null });
@@ -171,7 +176,7 @@ test('a page away in the full Mail app for longer than the wait is released and 
   assert.deepEqual(reports.filter(e => e === 'invoice_share_unanswered'), ['invoice_share_unanswered'], 'reported');
 
   // The page never left the front: the Mail sheet over the app keeps it.
-  S.handOffInvoice(ACCOUNT, { ...note('INV-20260930-12', 2000), sentAt: '2026-09-30T16:05:00.000Z' });
+  S.handOffInvoice(ACCOUNT, { ...note('INV-20260930-12', 2000), sentAt: at(65) });
   const stop = S.watchUnanswered(() => { said += 1; }, { number: 'INV-20260930-12', graceMs: 30, waitMs: 20, doc, win: null });
   await new Promise(r => setTimeout(r, 40));
   assert.equal(said, 2);
@@ -189,7 +194,7 @@ test('a note kept only in IndexedDB survives a page whose first open timed out: 
   await S.refreshInvoiceNotes(ACCOUNT);
   assert.deepEqual(S.invoiceNotes(ACCOUNT), [], 'the timed-out read brought nothing');
 
-  assert.equal(await S.handOffInvoice(ACCOUNT, { ...note('INV-20260930-02', 2000), sentAt: '2026-09-30T16:00:00.000Z' }).durable, true);
+  assert.equal(await S.handOffInvoice(ACCOUNT, { ...note('INV-20260930-02', 2000), sentAt: at(60) }).durable, true);
   assert.deepEqual(JSON.parse(dev.idb.rows.get(key)).map(n => n.number), ['INV-20260930-01', 'INV-20260930-02'], 'INV-01 is not overwritten');
   assert.deepEqual(S.invoiceNotes(ACCOUNT).map(n => n.number), ['INV-20260930-01', 'INV-20260930-02'], 'and this page shows it');
 
@@ -325,7 +330,7 @@ test('a note written while a purge is still owed replaces the purged entry, neve
   // Signed in again on a page whose IndexedDB now answers.
   S._resetInvoiceHandoff();
   dev.idb.hangNow = false;
-  assert.equal(await S.handOffInvoice(ACCOUNT, { ...note('INV-20260930-05', 5000), sentAt: '2026-09-30T16:00:00.000Z' }).durable, true);
+  assert.equal(await S.handOffInvoice(ACCOUNT, { ...note('INV-20260930-05', 5000), sentAt: at(60) }).durable, true);
   assert.deepEqual(JSON.parse(dev.idb.rows.get(key)).map(n => n.number), ['INV-20260930-05'], 'the purged INV-01 is not merged back');
   assert.deepEqual([...dev.local.map.keys()].filter(k => k.startsWith(S.HANDOFF_PURGE_BASE)), [], 'the write completed the purge');
   assert.deepEqual(S.invoiceNotes(ACCOUNT).map(n => n.number), ['INV-20260930-05']);
