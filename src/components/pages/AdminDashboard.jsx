@@ -4,7 +4,7 @@ import { copyToClipboard } from "../../utils/helpers";
 import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
 import { useIsAdmin } from "../../lib/admin";
-import { ADMIN_SOURCES, adminTabSources, readAdminSource, readAdminAttention, readArchivedTicketCount, filterAdminTickets, filterAdminUsers } from "../../utils/adminData";
+import { ADMIN_SOURCES, adminTabSources, readAdminSource, readAdminAttention, readArchivedTicketCount, filterAdminTickets, filterAdminUsers, readAccountMemberships, groupAdminAccounts, accountMembershipNote, isFoundingAccount, ACCOUNT_GROUPS } from "../../utils/adminData";
 import AdminOperationsReport from "./AdminOperationsReport";
 import AdminErrorReports from "./AdminErrorReports";
 import AdminAccessChange from "./AdminAccessChange";
@@ -889,6 +889,18 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
     return () => { active = false; };
   }, [grantsRevision]);
 
+  // Who has paid, who has free access, who only signed in: read from the
+  // billing and grant tables by admin_account_memberships(). null = the
+  // server does not have it yet; { error } = the read failed. Either way the
+  // list stays unsorted rather than calling everyone unpaid.
+  const [memberships, setMemberships] = useState(null);
+  useEffect(() => {
+    let active = true;
+    readAccountMemberships(supabase).then(result => { if (active) setMemberships(result); });
+    return () => { active = false; };
+  }, [grantsRevision, users]);
+  const membershipMap = memberships instanceof Map ? memberships : null;
+
   const refresh = async () => { onRefresh(); setGrantsRevision(n => n + 1); };
 
   const setInviteStatus = (inv, status) => setAccessChange({ kind: "invite", row: inv, action: "set_status", status });
@@ -897,9 +909,10 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
 
   const isTest = (u) => !u.email && !u.name && !u.npi && !u.last_seen_at;
   const shown = filterAdminUsers(users, { query: search, access: accessFilter, showEmpty: showTest });
-  // Founding members: numbered by Postgres when a physician signs up and
-  // is activated (profiles.founding_number). An invitation alone never counts.
-  const foundingCount = users.filter(u => u.founding_number != null && u.access_status === "active").length;
+  // Founding members: pre-launch founders (profiles.founding_number) and
+  // members who paid for a founding place. An invitation alone never counts.
+  const foundingCount = users.filter(u => !u.deleted_at && isFoundingAccount(u, membershipMap?.get(u.id))).length;
+  const groups = membershipMap ? groupAdminAccounts(shown, membershipMap) : null;
   const hiddenCount = users.filter(isTest).length;
   const inviteByEmail = Object.fromEntries(invites.map(i => [i.email.toLowerCase(), i]));
   const accountEmails = new Set(users.map(u => (u.email || "").toLowerCase()).filter(Boolean));
@@ -910,6 +923,69 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
   const chip = (label, color, onClick, active) => (
     <button key={label} onClick={onClick} style={{ fontSize: 11, fontWeight: 700, padding: "4px 9px", borderRadius: 10, cursor: "pointer", border: `1px solid ${active ? color : T.border}`, backgroundColor: active ? color : "transparent", color: active ? "#fff" : T.textDim }}>{label}</button>
   );
+
+  const renderAccount = u => {
+    const facts = membershipMap?.get(u.id);
+    const note = accountMembershipNote(u, facts);
+    const inv = u.email ? inviteByEmail[u.email.toLowerCase()] : null;
+    return (
+      <div key={u.id} style={card}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name || u.email || "(no name yet)"}</div>
+            <div style={{ fontSize: 12, color: T.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name && u.email ? u.email : ""}{u.degree_type ? ` · ${u.degree_type}` : ""}{u.primary_state ? ` · ${u.primary_state}` : ""}</div>
+            {note && <div style={{ fontSize: 12, color: facts?.paid_active ? T.success : T.textMuted, marginTop: 2 }}>{note}</div>}
+            <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>joined {timeAgo(u.created_at)} · last seen {timeAgo(u.last_seen_at)}{inv ? " · invited " + timeAgo(inv.invited_at) : u.access_status === "active" ? "" : " · not on invite list"}</div>
+            {/* Where they are in setup. Read from their own setup_state
+                stamps, which sync; the percentage itself is derived from
+                records RLS keeps owner-scoped, so it is not shown and not
+                guessed at. */}
+            {(() => {
+              const p = setupProgressSummary(u.setup_state);
+              const tint = { complete: T.success, started: T.accent, none: T.textDim }[p.tone] || T.textDim;
+              return (
+                <div style={{ marginTop: 4 }}>
+                  <div style={{ fontSize: 11, display: "flex", gap: 6, alignItems: "baseline", flexWrap: "wrap" }}>
+                    <span style={{ fontWeight: 800, color: tint, whiteSpace: "nowrap" }}>{p.label}</span>
+                    {p.detail && <span style={{ color: T.textDim }}>{p.detail}</span>}
+                  </div>
+                  {p.pct !== null && (
+                    <div style={{ height: 4, borderRadius: 3, backgroundColor: T.neutralDim, marginTop: 4, maxWidth: 220, overflow: "hidden" }}>
+                      <div style={{ height: "100%", width: `${p.pct}%`, backgroundColor: tint, borderRadius: 3 }} />
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
+            {isFoundingAccount(u, facts) && (
+              <span title="Founding member" style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, color: "#6ee7b7", backgroundColor: "#065f46", border: "1px solid #10b981", whiteSpace: "nowrap" }}>{foundingText()}</span>
+            )}
+            <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, color: "#fff", backgroundColor: accessColor(u.access_status) }}>{accessStateLabel("profile", u.access_status)}</span>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
+          {!u.deleted_at && u.id !== myProfileId && u.access_status !== "active" && chip("Approve", "#10b981", () => setAccess(u, "active"), false)}
+          {!u.deleted_at && u.id !== myProfileId && u.access_status === "active" && chip("Pause access", "#ef4444", () => setAccess(u, "revoked"), false)}
+          {!u.deleted_at && ["active", "pending"].includes(u.access_status) && /^user_[A-Za-z0-9]+$/.test(u.auth_user_id || "")
+            && chip("Give free lifetime access", T.accent, () => setLifetimeTarget(u), false)}
+          {(() => {
+            const view = memberViewAvailability(memberGrants, u, myProfileId, grantsError);
+            if (!view.show) return null;
+            return <button key="view-as-member" type="button" disabled={!view.enabled} title={view.note} onClick={() => setMemberViewTarget(u)} style={{
+              fontSize: 11, fontWeight: 700, padding: "4px 9px", borderRadius: 10, border: `1px solid ${view.enabled ? "#a78bfa" : T.border}`,
+              backgroundColor: "transparent", color: view.enabled ? "#a78bfa" : T.textDim, cursor: view.enabled ? "pointer" : "not-allowed",
+            }}>View as member</button>;
+          })()}
+        </div>
+        {(() => {
+          const view = memberViewAvailability(memberGrants, u, myProfileId, grantsError);
+          return view.show && (view.enabled || view.unchecked) ? <div style={{ fontSize: 11, color: T.textDim, marginTop: 4 }}>{view.note}</div> : null;
+        })()}
+      </div>
+    );
+  };
 
   return (
     <div>
@@ -953,7 +1029,7 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
 
       <AdminMailboxRepair />
       <div style={{ fontSize: 12, color: T.textMuted, margin: "14px 0 0" }}>
-        Legacy founding badges: {foundingCount} (separate from paid founding memberships)
+        Founding members: {foundingCount}
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
         <label>Search loaded accounts <input aria-label="Search loaded accounts" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Name, email, NPI or state" style={FORM_CONTROL} /></label>
@@ -962,65 +1038,17 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
       <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "8px 0 6px" }}>
         Accounts ({shown.length}){hiddenCount > 0 && <button onClick={() => setShowTest(v => !v)} style={{ marginLeft: 8, fontSize: 11, border: "none", background: "transparent", color: T.accent, cursor: "pointer" }}>{showTest ? "hide" : "show"} {hiddenCount} empty account record{hiddenCount === 1 ? "" : "s"}</button>}
       </div>
-      {shown.map(u => {
-        const inv = u.email ? inviteByEmail[u.email.toLowerCase()] : null;
-        return (
-          <div key={u.id} style={card}>
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", gap: 8 }}>
-              <div style={{ minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 700, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name || u.email || "(no name yet)"}</div>
-                <div style={{ fontSize: 12, color: T.textMuted, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{u.name && u.email ? u.email : ""}{u.degree_type ? ` · ${u.degree_type}` : ""}{u.primary_state ? ` · ${u.primary_state}` : ""}</div>
-                <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>joined {timeAgo(u.created_at)} · last seen {timeAgo(u.last_seen_at)}{inv ? " · invited " + timeAgo(inv.invited_at) : u.access_status === "active" ? "" : " · not on invite list"}</div>
-                {/* Where they are in setup. Read from their own setup_state
-                    stamps, which sync; the percentage itself is derived from
-                    records RLS keeps owner-scoped, so it is not shown and not
-                    guessed at. */}
-                {(() => {
-                  const p = setupProgressSummary(u.setup_state);
-                  const tint = { complete: T.success, started: T.accent, none: T.textDim }[p.tone] || T.textDim;
-                  return (
-                    <div style={{ marginTop: 4 }}>
-                      <div style={{ fontSize: 11, display: "flex", gap: 6, alignItems: "baseline", flexWrap: "wrap" }}>
-                        <span style={{ fontWeight: 800, color: tint, whiteSpace: "nowrap" }}>{p.label}</span>
-                        {p.detail && <span style={{ color: T.textDim }}>{p.detail}</span>}
-                      </div>
-                      {p.pct !== null && (
-                        <div style={{ height: 4, borderRadius: 3, backgroundColor: T.neutralDim, marginTop: 4, maxWidth: 220, overflow: "hidden" }}>
-                          <div style={{ height: "100%", width: `${p.pct}%`, backgroundColor: tint, borderRadius: 3 }} />
-                        </div>
-                      )}
-                    </div>
-                  );
-                })()}
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 6, flexShrink: 0 }}>
-                {u.founding_number != null && (
-                  <span title="Signed up and activated" style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, color: "#6ee7b7", backgroundColor: "#065f46", border: "1px solid #10b981", whiteSpace: "nowrap" }}>{foundingText(u.founding_number)}</span>
-                )}
-                <span style={{ fontSize: 10, fontWeight: 700, padding: "2px 8px", borderRadius: 10, color: "#fff", backgroundColor: accessColor(u.access_status) }}>{accessStateLabel("profile", u.access_status)}</span>
-              </div>
-            </div>
-            <div style={{ display: "flex", gap: 6, marginTop: 8, flexWrap: "wrap" }}>
-              {!u.deleted_at && u.id !== myProfileId && u.access_status !== "active" && chip("Approve", "#10b981", () => setAccess(u, "active"), false)}
-              {!u.deleted_at && u.id !== myProfileId && u.access_status === "active" && chip("Pause access", "#ef4444", () => setAccess(u, "revoked"), false)}
-              {!u.deleted_at && ["active", "pending"].includes(u.access_status) && /^user_[A-Za-z0-9]+$/.test(u.auth_user_id || "")
-                && chip("Give free lifetime access", T.accent, () => setLifetimeTarget(u), false)}
-              {(() => {
-                const view = memberViewAvailability(memberGrants, u, myProfileId, grantsError);
-                if (!view.show) return null;
-                return <button key="view-as-member" type="button" disabled={!view.enabled} title={view.note} onClick={() => setMemberViewTarget(u)} style={{
-                  fontSize: 11, fontWeight: 700, padding: "4px 9px", borderRadius: 10, border: `1px solid ${view.enabled ? "#a78bfa" : T.border}`,
-                  backgroundColor: "transparent", color: view.enabled ? "#a78bfa" : T.textDim, cursor: view.enabled ? "pointer" : "not-allowed",
-                }}>View as member</button>;
-              })()}
-            </div>
-            {(() => {
-              const view = memberViewAvailability(memberGrants, u, myProfileId, grantsError);
-              return view.show && (view.enabled || view.unchecked) ? <div style={{ fontSize: 11, color: T.textDim, marginTop: 4 }}>{view.note}</div> : null;
-            })()}
-          </div>
-        );
-      })}
+      <div style={{ fontSize: 12, color: T.textMuted, margin: "0 0 8px", lineHeight: 1.5 }}>
+        Everyone here signed in with an emailed code. People who only asked for a state guide are on the Waitlist tab, not here.
+        {groups && ` ${groups.paying.length} paying, ${groups.free.length} free access, ${groups.unpaid.length} signed in without paying${groups.closed.length ? `, ${groups.closed.length} closed` : ""}.`}
+      </div>
+      {memberships?.error && <div role="status" style={{ fontSize: 12, color: T.textMuted, margin: "0 0 8px" }}>Payment details could not be loaded, so accounts are not sorted by membership. Refresh to try again.</div>}
+      {groups ? ACCOUNT_GROUPS.filter(g => g.id !== "closed" || groups.closed.length).map(g => (
+        <div key={g.id}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: T.text, margin: "14px 0 6px" }}>{g.label} ({groups[g.id].length})</div>
+          {groups[g.id].length ? groups[g.id].map(renderAccount) : <div style={{ fontSize: 12, color: T.textDim, marginBottom: 8 }}>{g.empty}</div>}
+        </div>
+      )) : shown.map(renderAccount)}
       {!shown.length && <Empty T={T} text="No loaded accounts match these filters. Load more records above to widen the search." />}
       {grantsError && <div role="status" style={{ fontSize: 12, color: T.textMuted, marginTop: 6 }}>Support access grants could not be loaded, so View as member is off. Refresh to try again.</div>}
       {memberViewTarget && <AdminMemberView target={memberViewTarget} grant={memberGrants.get(memberViewTarget.id) || null}

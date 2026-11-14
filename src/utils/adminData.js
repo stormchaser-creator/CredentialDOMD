@@ -13,7 +13,7 @@ export const ADMIN_SOURCES = {
   waitlist: { table: 'early_access_leads', label: 'Waitlist', order: 'created_at', size: 500, columns: 'id,name,email,source,note,status,invited_at,created_at,waitlist,guide_sent_at,guide_attempts' },
   attempts: { table: 'waitlist_attempts', label: 'Signup attempts', order: 'created_at', size: 200, columns: 'id,name,email,stage,created_at' },
   fields: { table: 'field_proposals', label: 'Field proposals', order: 'created_at', size: 200 },
-  users: { table: 'profiles', label: 'Account records', order: 'created_at', size: 500, columns: 'id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi,founding_number,setup_state,deleted_at,updated_at' },
+  users: { table: 'profiles', label: 'Account records', order: 'created_at', size: 500, columns: 'id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi,founding_number,is_founding_member,setup_state,deleted_at,updated_at' },
   invites: { table: 'beta_access', label: 'Invitations', order: 'created_at', size: 500 },
   errors: { table: 'client_errors', label: 'Error reports', order: 'created_at', size: 50, columns: 'id,created_at,kind,message,stack,url,user_agent,build,auth_user_id,profile_id,extra' },
   messages: { table: 'admin_messages_overview', label: 'Messages', order: 'created_at', size: 200 },
@@ -91,6 +91,80 @@ export function filterAdminUsers(rows, { query = '', access = 'all', showEmpty =
   return rows.filter(row => (showEmpty || !!(row.email || row.name || row.npi || row.last_seen_at))
     && (!needle || [row.name, row.email, row.npi, row.primary_state].some(value => String(value || '').toLocaleLowerCase().includes(needle)))
     && (access === 'all' || row.access_status === access));
+}
+
+/**
+ * Membership facts per profile for Admin > Accounts, from
+ * admin_account_memberships() (migration 20261114120000). Returns a Map of
+ * profile id to facts, null when the server does not have the function yet,
+ * or { error } when the read failed, so a failure never reads as "nobody paid".
+ */
+export async function readAccountMemberships(client) {
+  try {
+    const { data, error } = await client.rpc('admin_account_memberships');
+    if (error) return ADMIN_ATTENTION_NOT_DEPLOYED.includes(error.code) ? null : { error: error.message || 'Membership details could not be read.' };
+    if (!Array.isArray(data)) return { error: 'The server sent unreadable membership details.' };
+    return new Map(data.filter(row => row && row.profile_id).map(row => [row.profile_id, row]));
+  } catch (failure) {
+    return { error: failure?.message || 'Membership details could not be read.' };
+  }
+}
+
+/** A paid founding place, or the pre-launch activation badge. */
+export function isFoundingAccount(user, facts) {
+  return !!(facts?.founding || user?.is_founding_member === true || user?.founding_number != null);
+}
+
+/**
+ * Which section of Admin > Accounts a profile belongs in. Everyone listed
+ * there signed in with an emailed code; a guide request alone never makes a
+ * profile (guide-only people are on the Waitlist tab).
+ *   paying: an active paid membership.
+ *   free:   lifetime access, or a beta grant that has not ended.
+ *   unpaid: signed in, no paid membership and no free access.
+ *   closed: the account was deleted or closed.
+ * Without membership facts nobody can be placed in paying or free, so the
+ * caller shows one unsorted list instead.
+ */
+export function accountGroup(user, facts, now = Date.now()) {
+  if (user?.deleted_at) return 'closed';
+  if (facts?.paid_active) return 'paying';
+  if (facts?.lifetime) return 'free';
+  if (facts?.beta_until && new Date(facts.beta_until).getTime() > now) return 'free';
+  return 'unpaid';
+}
+
+export const ACCOUNT_GROUPS = [
+  { id: 'paying', label: 'Paying members', empty: 'Nobody has an active paid membership.' },
+  { id: 'free', label: 'Free access', empty: 'Nobody has lifetime or beta access.' },
+  { id: 'unpaid', label: 'Signed in, not paid', empty: 'Everyone who signed in has paid or has free access.' },
+  { id: 'closed', label: 'Closed accounts', empty: '' },
+];
+
+export function groupAdminAccounts(rows, memberships, now = Date.now()) {
+  const groups = Object.fromEntries(ACCOUNT_GROUPS.map(g => [g.id, []]));
+  for (const row of rows) groups[accountGroup(row, memberships?.get?.(row.id), now)].push(row);
+  return groups;
+}
+
+/** One line under a name: what the membership facts say, in plain words. */
+export function accountMembershipNote(user, facts, now = Date.now()) {
+  if (!facts) return '';
+  const day = iso => new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  const parts = [];
+  if (facts.paid_active) {
+    parts.push(facts.paid_through ? `Paid, ${facts.cancel_at_period_end ? 'ends' : 'renews'} ${day(facts.paid_through)}` : 'Paid');
+  } else if (facts.paid_status) {
+    parts.push(`Membership ${String(facts.paid_status).replace(/_/g, ' ')}`);
+  } else if (facts.lifetime) {
+    parts.push('Lifetime access');
+  } else if (facts.beta_until) {
+    parts.push(new Date(facts.beta_until).getTime() > now ? `Beta access until ${day(facts.beta_until)}` : `Beta access ended ${day(facts.beta_until)}`);
+  }
+  if (facts.checkout_expired) parts.push('started checkout, did not finish');
+  if (!facts.paid_active && !facts.paid_status && !facts.lifetime && !facts.beta_until && !facts.checkout_expired) parts.push('No payment on record');
+  if (facts.guide_requests > 0) parts.push('also requested a state guide');
+  return parts.join(' · ');
 }
 
 /**

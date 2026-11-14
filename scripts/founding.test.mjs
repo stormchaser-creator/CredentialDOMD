@@ -21,12 +21,12 @@ const eq = (name, got, want) => {
 };
 
 // Label
-eq("label carries the number", foundingLabel(7), "Founding member #7");
-eq("label accepts a numeric string", foundingLabel("12"), "Founding member #12");
+eq("label never shows the number", foundingLabel(7), "Founding member");
+eq("label ignores a numeric string", foundingLabel("12"), "Founding member");
 eq("label without a number", foundingLabel(null), "Founding member");
 eq("label ignores zero", foundingLabel(0), "Founding member");
 eq("label ignores a fraction", foundingLabel(2.5), "Founding member");
-eq("text is emoji, space, label", foundingText(3), `${FOUNDING_EMOJI} Founding member #3`);
+eq("text is emoji, space, label", foundingText(3), `${FOUNDING_EMOJI} Founding member`);
 ok("one emoji, non-empty", typeof FOUNDING_EMOJI === "string" && FOUNDING_EMOJI.length > 0);
 ok("no em dash in the label", !foundingLabel(1).includes("—") && !foundingLabel(null).includes("—"));
 

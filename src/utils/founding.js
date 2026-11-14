@@ -2,19 +2,23 @@
  * Founding member helpers. Pure (no React, no Supabase) so the badge label
  * and the profile mapping can be checked from node (scripts/founding.test.mjs).
  *
- * A founding member is a physician who signed up and was activated; the
- * number is assigned by Postgres in activation order (migration
- * 20260902g_founding_members.sql) and only ever read here. Invites and
- * waitlist rows never carry a number.
+ * A founding member is either a physician activated before launch (the
+ * number Postgres assigned in activation order, migration
+ * 20260902g_founding_members.sql) or one who paid for a founding place
+ * (profiles.is_founding_member, set from limited_founding_slots by migration
+ * 20261114120000). Invites and waitlist rows never carry either.
  */
 
 /** The one emoji for founding members: badge, Settings profile, Admin. */
 export const FOUNDING_EMOJI = "\u{1F3C5}"; // 🏅
 
-/** "Founding member #7"; "Founding member" when the number is not known. */
-export function foundingLabel(number) {
-  const n = Number(number);
-  return Number.isInteger(n) && n > 0 ? `Founding member #${n}` : "Founding member";
+/**
+ * Always "Founding member". The owner decided (2026-11-14) that the badge
+ * recognises the member without telling them their number; the argument is
+ * kept so existing callers need no change.
+ */
+export function foundingLabel(_number) {
+  return "Founding member";
 }
 
 /** Emoji plus label, for text-only surfaces (Admin pill, titles). */

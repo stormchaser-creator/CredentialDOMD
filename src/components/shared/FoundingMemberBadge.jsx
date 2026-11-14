@@ -2,10 +2,10 @@ import { memo } from "react";
 import { FOUNDING_EMOJI, foundingLabel } from "../../utils/founding";
 
 /**
- * The founding member badge: one emoji plus "Founding member #N". The number
- * comes from profiles.founding_number, assigned by Postgres when the
- * physician signs up and is activated (never from an invitation). Shown on
- * Home, under the name in Settings > Physician Profile, and in Admin > Users.
+ * The founding member badge: one emoji plus "Founding member" (no number, by
+ * the owner's choice). Shown under the name in Settings > Physician Profile
+ * for pre-launch founders and for members who paid for a founding place, and
+ * as a pill in Admin > Accounts.
  */
 function FoundingMemberBadge({ size = "default", number = null }) {
   const isSmall = size === "small";
