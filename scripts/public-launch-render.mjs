@@ -24,7 +24,12 @@ export const FOUNDER_PLAN = Object.freeze({
   team: 'Group-management features are on the roadmap and are not currently available. The Founder plan covers one clinician and does not provide team-wide account management. Contact support@credentialdomd.com to discuss your group’s needs; no release date or priority onboarding is promised.',
   meta: 'Founder plan: $99/year, everything included. Check availability in the app. Early release; card required at checkout.',
 });
-export const FOUNDER_AVAILABILITY = `Create your account to join. ${FOUNDER_PLAN.offer} Availability is confirmed before payment; creating an account does not reserve a place. Paid membership requires a card at checkout and your explicit agreement.`;
+// Owner decision, 2026-11-13: every signup button and link on the site says
+// "Sign up today" (the header: "Sign up" and "Log in"), and site copy talks
+// about signing up, not creating an account. The destinations are unchanged.
+// src/content/publicLaunch.mjs, which the app also reads, keeps its own label.
+export const SIGNUP_LABEL = 'Sign up today';
+export const FOUNDER_AVAILABILITY = `Sign up to join. ${FOUNDER_PLAN.offer} Availability is confirmed before payment; signing up does not reserve a place. Paid membership requires a card at checkout and your explicit agreement.`;
 
 // Who the product is for. The app asks each member's profession (MD, DO, PA
 // or NP: src/constants/professions.js) and tracks that profession's licence
@@ -95,7 +100,7 @@ function navigation(fallback, view) {
   const attrs = anchor[2].replace(/\s+href="[^"]*"/, '').replace(/\s+aria-label="[^"]*"/, '');
   const icon = anchor[3].match(/<svg\b[\s\S]*?<\/svg>/)?.[0] || '';
   if (/\bdata-public-offer-link\b/.test(attrs)) return `${anchor[1]}<a${attrs} href="#planned-pricing"><span data-membership-review-action>${FOUNDER_PLAN.reviewAction}</span>${icon ? ` ${icon}` : ''}</a>${anchor[4]}`;
-  return `${anchor[1]}<a${attrs} href="${escapeHtml(view.primaryAction.href)}"><span data-membership-action>${escapeHtml(view.primaryAction.shortLabel)}</span>${icon ? ` ${icon}` : ''}</a>${anchor[4]}`;
+  return `${anchor[1]}<a${attrs} href="${escapeHtml(view.primaryAction.href)}"><span data-membership-action>${escapeHtml(SIGNUP_LABEL)}</span>${icon ? ` ${icon}` : ''}</a>${anchor[4]}`;
 }
 
 function signupInsteadOfForm(fallback, view) {
@@ -104,7 +109,7 @@ function signupInsteadOfForm(fallback, view) {
   const id = form[1].match(/\bid="([^"]*)"/)?.[1];
   const style = form[1].match(/\bstyle="([^"]*)"/)?.[1];
   if (/\bdata-public-offer-link\b/.test(form[1])) return `<div${id ? ` id="${escapeHtml(id)}"` : ''}${style ? ` style="${escapeHtml(style)}"` : ''}><a class="btn-primary" href="#planned-pricing" style="padding:15px 24px;font-size:16px;text-align:center;"><span data-membership-review-action>${FOUNDER_PLAN.reviewAction}</span></a></div>`;
-  return `<div${id ? ` id="${escapeHtml(id)}"` : ''}${style ? ` style="${escapeHtml(style)}"` : ''}><a class="btn-primary" href="${escapeHtml(view.primaryAction.href)}" style="padding:15px 24px;font-size:16px;text-align:center;"><span data-membership-action>${escapeHtml(view.primaryAction.label)}</span></a></div>`;
+  return `<div${id ? ` id="${escapeHtml(id)}"` : ''}${style ? ` style="${escapeHtml(style)}"` : ''}><a class="btn-primary" href="${escapeHtml(view.primaryAction.href)}" style="padding:15px 24px;font-size:16px;text-align:center;"><span data-membership-action>${escapeHtml(SIGNUP_LABEL)}</span></a></div>`;
 }
 
 const SIGNUP_NOTE = 'Card required at checkout. No-hassle 100% money-back guarantee: a full refund of your most recent annual payment, at any time.';
@@ -146,9 +151,9 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
       + `<p data-membership-hero-note style="font-size:14px;line-height:1.5;margin:0;">${escapeHtml(FOUNDER_PLAN.heroNote)}</p></div>`
       // The signup button right under the offer (signup review 2026-10-07: a
       // phone's first screen of the home page had no way to sign up; the
-      // first "Create your account" was 16,000 px down). The same button and
+      // first signup button was 16,000 px down). The same button and
       // guarantee sentence as every other signup button (33363fee).
-      + (surface === 'home' ? `<div data-hero-signup style="margin:0 0 20px;"><a class="btn-primary" href="${escapeHtml(view.primaryAction.href)}" style="display:inline-block;padding:15px 24px;font-size:16px;text-align:center;"><span data-membership-action>${escapeHtml(view.primaryAction.label)}</span></a>`
+      + (surface === 'home' ? `<div data-hero-signup style="margin:0 0 20px;"><a class="btn-primary" href="${escapeHtml(view.primaryAction.href)}" style="display:inline-block;padding:15px 24px;font-size:16px;text-align:center;"><span data-membership-action>${escapeHtml(SIGNUP_LABEL)}</span></a>`
         + `<p style="font-size:12.5px;line-height:1.5;margin:10px 0 0;color:var(--text-secondary);">${escapeHtml(SIGNUP_NOTE)}</p></div>` : '');
     // Same approved strings and data attributes as the home hero, so membership-offer.js
     // repaints this block when the live phase changes. No new claims, no new price.
@@ -156,11 +161,11 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
       + `<p data-membership-hero-headline style="font-size:19px;font-weight:750;line-height:1.3;margin:0 0 6px;">${escapeHtml(FOUNDER_PLAN.headline)}</p>`
       + '<p style="font-size:14.5px;line-height:1.55;margin:0 0 6px;color:var(--text-secondary);">Use CredentialDOMD to organize your saved licenses, renewal dates and CME alongside your professional documents.</p>'
       + `<p data-membership-hero-note style="font-size:13.5px;line-height:1.5;margin:0 0 14px;color:var(--text-secondary);">${escapeHtml(FOUNDER_PLAN.heroNote)}</p>`
-      + `<a href="${escapeHtml(view.primaryAction.href)}" style="display:inline-block;background:var(--emerald);color:#0d0d1a;border-radius:10px;padding:12px 22px;font-weight:700;font-size:15px;text-decoration:none;"><span data-membership-action>${escapeHtml(view.primaryAction.label)}</span></a>`
+      + `<a href="${escapeHtml(view.primaryAction.href)}" style="display:inline-block;background:var(--emerald);color:#0d0d1a;border-radius:10px;padding:12px 22px;font-weight:700;font-size:15px;text-decoration:none;"><span data-membership-action>${escapeHtml(SIGNUP_LABEL)}</span></a>`
       // Every signup button states the guarantee (33363fee). Same sentence, one source.
       + `<p style="font-size:12.5px;line-height:1.5;margin:10px 0 0;color:var(--text-secondary);">${escapeHtml(SIGNUP_NOTE)}</p>`
       + '</div>';
-    if (slot === 'guide-consent') return `<p class="guide-choice-sub">${escapeHtml(view.guideCapture.note)} <a href="${escapeHtml(view.primaryAction.href)}"><span data-membership-action>${escapeHtml(view.primaryAction.shortLabel)}</span></a></p>`;
+    if (slot === 'guide-consent') return `<p class="guide-choice-sub">${escapeHtml(view.guideCapture.note.replace('It does not create an account,', 'It does not sign you up,'))} <a href="${escapeHtml(view.primaryAction.href)}"><span data-membership-action>${escapeHtml(SIGNUP_LABEL)}</span></a></p>`;
     if (slot === 'home-faq-json') {
       const schema = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: homeFaq.map(answer => ({
         '@type': 'Question', name: answer.name, acceptedAnswer: { '@type': 'Answer', text: answer.text },
@@ -193,11 +198,11 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
       'faq-availability': homeFaq[0].text,
       'faq-teams': homeFaq[1].text,
       'invitation-copy': FOUNDER_AVAILABILITY,
-      'signup-heading': view.signupHeading,
+      'signup-heading': SIGNUP_LABEL,
       'signup-eyebrow': 'Membership',
       'signup-card-heading': 'Membership is open',
       'signup-note': SIGNUP_NOTE,
-      'signup-label': view.primaryAction.label,
+      'signup-label': SIGNUP_LABEL,
       'signup-trust': 'Early release · Card required at checkout',
       'audience-badge': `For ${AUDIENCE} · ${FOUNDER_PLAN.phase}`,
       'founding-headline': FOUNDER_PLAN.headline,

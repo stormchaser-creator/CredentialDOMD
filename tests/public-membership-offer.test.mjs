@@ -28,7 +28,7 @@ test('the site paints the Founder plan while it is sold, and "full" with no pric
   assert.equal(dom.nodes['price-label'][0].textContent,' / year');
   assert.equal(dom.nodes.headline[0].textContent,'Founder plan: $99/year, everything included');
   assert.equal(dom.nodes['hero-headline'][0].textContent,'Founder plan: $99/year, everything included');
-  assert.equal(dom.nodes.heading[0].textContent,'Create your account');
+  assert.equal(dom.nodes.heading[0].textContent,'Sign up today');
   assert.equal(dom.nodes.phase[0].textContent,'Founder plan');
   assert.match(dom.nodes.rate[0].textContent,/^One plan with everything included, for the first 100 paid members\./);
   assert.equal(dom.nodes['bundle-label'][0].textContent,'', 'no package price is painted any more');
@@ -76,8 +76,8 @@ test('a verified pause keeps the Founder plan (or the full state) on the page an
     await createOfferUpdater(dom, endpoint, { fetchImpl: async () => Response.json(offer(phase, 'paused')) })();
     assert.match(dom.statuses[0].textContent, /Paid checkout is paused/);
     // PUBLIC-001: a paused account is held until checkout reopens, and the page says so.
-    assert.match(dom.statuses[0].textContent, /An account you create today opens when checkout reopens and your payment completes\./);
-    assert.equal(dom.actions[0].textContent, 'Create your account for later');
+    assert.match(dom.statuses[0].textContent, /If you sign up today, your account opens when checkout reopens and your payment completes\./);
+    assert.equal(dom.actions[0].textContent, 'Sign up today');
     if (phase === 'founding') {
       assert.equal(dom.nodes.price[0].textContent, '$99');
       assert.equal(dom.nodes['review-action'][0].textContent, 'See the Founder plan');
@@ -93,8 +93,8 @@ test('a verified pause keeps the Founder plan (or the full state) on the page an
   assert.match(held.status, /does not reserve/);
   assert.doesNotMatch(held.status, /spots left|places remaining|available now/i);
   const site = sitePresentation(held);
-  assert.equal(site.status, 'Founder plan checkout is temporarily unavailable. Creating an account does not reserve a place.');
-  assert.equal(site.action, 'Create your account');
+  assert.equal(site.status, 'Founder plan checkout is temporarily unavailable. Signing up does not reserve a place.');
+  assert.equal(site.action, 'Sign up today');
 });
 
 test('public GET sends no identity or authorization and never caches or redirects', async () => {
@@ -122,7 +122,7 @@ test('unknown configuration shows the Founder plan, while a later failure preser
   const dom=root();let calls=0;
   const refresh=createOfferUpdater(dom,endpoint,{fetchImpl:async()=>{calls++;return calls===1?Response.json(offer('earlybird')):Response.json({}, {status:503});}});
   await refresh();assert.equal(dom.nodes['review-action'][0].textContent,'See membership details');
-  await refresh();assert.equal(dom.actions[0].textContent,'Create your account');
+  await refresh();assert.equal(dom.actions[0].textContent,'Sign up today');
   assert.equal(dom.nodes.price[0].textContent, '');
   assert.equal(dom.nodes.headline[0].textContent, 'The Founder plan is full');
   assert.match(dom.statuses[0].textContent,/^The Founder plan is full\. Your offer is confirmed in the app before payment/);
@@ -203,20 +203,15 @@ test('a page view asks for the offer once, and only a back forward cache restore
   }
 });
 
-test('the signup button names $99 only while the Founder plan is confirmed on sale, and is plain otherwise', async () => {
+test('every signup button on the site says "Sign up today" in every state, and never a price', async () => {
   const dom = root(); let current = offer();
   const refresh = createOfferUpdater(dom, endpoint, { fetchImpl: async () => { if (current instanceof Error) throw current; return Response.json(current); } });
-  await refresh();
-  assert.equal(dom.actions[0].textContent, 'Join for $99 a year');
-  // Unconfirmed: the Founder plan stays on the card, the price leaves the button.
-  current = Error('offline'); await refresh();
-  assert.equal(dom.actions[0].textContent, 'Create your account');
-  assert.equal(dom.nodes.price[0].textContent, '$99');
-  current = offer('earlybird'); await refresh();
-  assert.equal(dom.actions[0].textContent, 'Create your account', 'no other price is ever put on a button');
-  current = Error('offline'); await refresh();
-  assert.equal(dom.actions[0].textContent, 'Create your account');
-  assert.equal(dom.nodes.price[0].textContent, '');
+  for (const next of [offer(), Error('offline'), offer('founding', 'temporarily_full'), offer('earlybird'), Error('offline'), offer('standard', 'paused')]) {
+    current = next; await refresh();
+    assert.equal(dom.actions[0].textContent, 'Sign up today');
+    assert.equal(dom.nodes.heading[0].textContent, 'Sign up today');
+    assert.doesNotMatch(dom.statuses[0].textContent, /[Cc]reat(?:e|ing) (?:an|your) account|account you create/);
+  }
   // The app's sign up screen still reads the live price from the same module (src/utils/authOffer.js).
   assert.equal(offerPresentation(offer('earlybird')).action, 'Join for $149 a year');
   // The static page's own label before any answer (scripts/public-launch-render.mjs) is the plain one.

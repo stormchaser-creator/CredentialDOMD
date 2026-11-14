@@ -39,7 +39,8 @@ for (const page of ['index', 'locums']) {
     assert.equal(PUBLIC_LAUNCH_MODE.enabled, true);
     const html = renderPublicLaunch(await read(`landing/${page}.html`), page === 'index' ? 'home' : 'locums');
     assert.match(html, /href="\/app\/"/);
-    assert.match(html, /Create your account/);
+    assert.match(html, /Sign up today/);
+    assert.doesNotMatch(html.replace(/<script\b[\s\S]*?<\/script>/gi, '').replace(/<!--[\s\S]*?-->/g, ''), /Create your account|[Cc]reat(?:e|ing) an account/);
     assert.match(html, /card (?:is )?required at checkout/i);
     assert.match(html, /The Founder plan is \$99\/year and includes everything: credential tracking and the Practice tools\./);
     assert.match(html, /One plan with everything included, for the first 100 paid members\./);

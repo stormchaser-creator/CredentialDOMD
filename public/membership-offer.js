@@ -101,12 +101,17 @@ const FULL = Object.freeze({
   headline: 'The Founder plan is full',
   note: 'The app shows the current membership price before you choose to pay.',
   offer: 'The Founder plan is full; the app shows the current membership price before you choose to pay.',
-  rate: 'All 100 Founder places have been taken. Create your account and the app shows the current membership price before you choose to pay.',
+  rate: 'All 100 Founder places have been taken. Sign up and the app shows the current membership price before you choose to pay.',
   status: 'The Founder plan is full. Your offer is confirmed in the app before payment, with our 100% money back guarantee.',
 });
-const SITE_FALLBACK = Object.freeze({ action: 'Create your account', reviewAction: 'See the Founder plan',
+// Every signup button on the site says "Sign up today" (owner decision
+// 2026-11-13) in every state; the price is on the plan card, not the button.
+// The app's sign up screen still reads the priced label from offerPresentation.
+const SIGN_UP = 'Sign up today';
+const PAUSED_STATUS = 'Paid checkout is paused, so no payment is taken now. If you sign up today, your account opens when checkout reopens and your payment completes.';
+const SITE_FALLBACK = Object.freeze({ action: SIGN_UP, reviewAction: 'See the Founder plan',
   status: FALLBACK.status, headline: FOUNDER.headline, price: '$99', priceLabel: ' / year',
-  heroHeadline: FOUNDER.headline, heroNote: FOUNDER.heroNote, heading: 'Create your account', phase: 'Founder plan',
+  heroHeadline: FOUNDER.headline, heroNote: FOUNDER.heroNote, heading: SIGN_UP, phase: 'Founder plan',
   rateNote: FOUNDER.rate, availabilityOffer: FOUNDER.offer, rateLock: FOUNDER.rateLock, phaseKey: 'founding' });
 
 /** The single-plan view of a validated offer (the value offerPresentation returned). */
@@ -114,13 +119,13 @@ export function sitePresentation(view) {
   if (!view || !Object.hasOwn(PRICES, view.phaseKey) || typeof view.status !== 'string' || typeof view.action !== 'string') throw Error('Unavailable');
   const paused = view.offerAvailability === 'paused';
   if (view.phaseKey === 'founding') {
-    return { ...SITE_FALLBACK, action: view.action,
+    return { ...SITE_FALLBACK,
       status: view.offerAvailability === 'temporarily_full'
-        ? 'Founder plan checkout is temporarily unavailable. Creating an account does not reserve a place.' : view.status };
+        ? 'Founder plan checkout is temporarily unavailable. Signing up does not reserve a place.' : paused ? PAUSED_STATUS : view.status };
   }
-  return { action: paused ? view.action : 'Create your account', reviewAction: 'See membership details',
-    status: paused ? view.status : FULL.status, headline: FULL.headline, price: '', priceLabel: 'Founder places are filled',
-    heroHeadline: FULL.headline, heroNote: FULL.note, heading: 'Create your account', phase: 'Membership',
+  return { action: SIGN_UP, reviewAction: 'See membership details',
+    status: paused ? PAUSED_STATUS : FULL.status, headline: FULL.headline, price: '', priceLabel: 'Founder places are filled',
+    heroHeadline: FULL.headline, heroNote: FULL.note, heading: SIGN_UP, phase: 'Membership',
     rateNote: FULL.rate, availabilityOffer: FULL.offer, rateLock: '', phaseKey: 'full' };
 }
 

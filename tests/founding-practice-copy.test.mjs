@@ -37,7 +37,7 @@ test('the landing hero and the one Founder card say everything is included, Prac
   assert.ok(card.includes('<b data-membership-price>$99</b><span data-membership-price-label> / year</span>'));
   assert.match(visible(card), /Everything is included:/);
   assert.match(visible(card), /Practice tools: contracts, work logs, invoices and payment tracking/);
-  assert.match(card, /<a [^>]*href="\/app\/"[^>]*><span data-membership-action>Create your account<\/span><\/a>/);
+  assert.match(card, /<a [^>]*href="\/app\/"[^>]*><span data-membership-action>Sign up today<\/span><\/a>/);
   assert.doesNotMatch(visible(output), OTHER_TIERS);
   assert.doesNotMatch(visible(output), /New paid Credential members receive a separate|Existing Credential members should contact support/);
   assert.match(visible(output), /Practice tools\s*, included/);

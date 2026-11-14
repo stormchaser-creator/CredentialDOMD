@@ -16,13 +16,14 @@ const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 const OFF = Object.freeze({ enabled: false, signupHref: null });
 const links = html => [...html.matchAll(/<a\b[^>]*href="([^"]*)"[^>]*>([\s\S]*?)<\/a>/g)].map(match => [match[1], match[2].replace(/<[^>]+>/g, '').trim()]);
 
-test('the header sends Sign in and Create your account to the app, and keeps the approved navigation', () => {
+test('the header has two actions, Log in and Sign up, both to the app, and keeps the approved navigation', () => {
   const header = siteHeader({ current: 'pricing' });
   assert.deepEqual(links(header), [['/', 'CredentialDOMD'], ['/', 'Home'], ['/#how-it-works', 'How it works'], ['/states/', 'State guides'],
-    ['/pricing', 'Pricing'], ['/#faq', 'FAQ'], ['/app/', 'Sign in'], ['/app/', 'Create your account']]);
+    ['/pricing', 'Pricing'], ['/#faq', 'FAQ'], ['/app/', 'Log in'], ['/app/', 'Sign up']]);
   assert.match(header, /<a href="\/pricing" aria-current="page">Pricing<\/a>/);
-  // The signup label is the one public/membership-offer.js repaints for the live phase.
-  assert.match(header, /<a class="cdm-cta" href="\/app\/"><span data-membership-action>Create your account<\/span><\/a>/);
+  // Owner decision 2026-11-13: the header label is fixed. membership-offer.js does not repaint it.
+  assert.match(header, /<a class="cdm-cta" href="\/app\/">Sign up<\/a>/);
+  assert.doesNotMatch(header, /data-membership-action|Sign in|Create your account/);
   assert.doesNotMatch(header, /\$\d/, 'no price is written into the header');
   // No inline styles (the CME page forbids them) and no element the older page styles select.
   assert.doesNotMatch(header + siteFooter(), /\sstyle=|<(?:nav|header|footer|ul|li|h[1-6])\b/);
@@ -31,7 +32,7 @@ test('the header sends Sign in and Create your account to the app, and keeps the
 test('waitlist mode keeps the waitlist request in the header', () => {
   const header = siteHeader({ mode: OFF });
   assert.match(header, /<a class="cdm-cta" href="\/#join">Join the waitlist<\/a>/);
-  assert.match(header, /<a href="\/app\/">Sign in<\/a>/);
+  assert.match(header, /<a href="\/app\/">Log in<\/a>/);
 });
 
 test('the footer links the public resources, the policies and support', () => {
@@ -70,7 +71,8 @@ test('/pricing is one Founder card, repainted by the live offer, with signup goi
   const own = (await read('landing/pricing.html')).replace(/<!-- public-launch:([a-z-]+) -->[\s\S]*?<!-- \/public-launch:\1 -->/g, '');
   assert.doesNotMatch(own.slice(own.indexOf('<body')), /\$\d/, 'no price in the body outside a launch slot');
   assert.deepEqual([...new Set(own.match(/\$\d+/g))], ['$99']);
-  assert.ok(links(output).filter(([href, text]) => href === '/app/' && text === 'Create your account').length >= 2);
+  assert.ok(links(output).filter(([href, text]) => href === '/app/' && text === 'Sign up today').length >= 2);
+  assert.doesNotMatch(output, /Create your account|[Cc]reating an account/);
 });
 
 test('pages that keep their layout lose only their old navigation and footer', async () => {

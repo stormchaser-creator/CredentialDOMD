@@ -53,7 +53,7 @@ test('paid home and locums expose static navigation and cannot submit a disguise
     assert.doesNotMatch(output, /<form\b[^>]*\bclass="[^"]*wl-form/);
     assert.doesNotMatch(output, /type="email"/);
     assert.ok((output.match(/href="\/signup\/"/g) || []).length >= (surface === 'home' ? 3 : 4));
-    assert.match(output, />Create your account<\/span><\/a>/);
+    assert.match(output, />Sign up today<\/span><\/a>/);
     assert.match(output, /The Founder plan is \$99\/year and includes everything: credential tracking and the Practice tools\./);
     assert.doesNotMatch(output, /Their invitation will confirm eligibility|Your invitation will confirm eligibility/);
     if (surface === 'home') {
@@ -91,7 +91,7 @@ test('home shows founding policy before sign-in and its offer buttons lead to pu
   const core = plans.slice(plans.indexOf('<article'), plans.indexOf('</article>'));
   assert.match(core, /data-membership-price>\$99/);
   assert.match(core, /data-membership-status/);
-  assert.match(core, /href="\/app\/"[^>]*><span data-membership-action>Create your account/);
+  assert.match(core, /href="\/app\/"[^>]*><span data-membership-action>Sign up today/);
   assert.ok(core.indexOf('data-membership-price') < core.indexOf('href="/app/"'));
 });
 
@@ -124,7 +124,7 @@ test('home signup and team FAQs use current offers in visible answers and struct
     assert.ok(visible.includes(answer.acceptedAnswer.text), `${answer.name}: same answer in HTML and JSON-LD`);
   }
   const available = faq.mainEntity.find(item => item.name === 'Can I sign up now?').acceptedAnswer.text;
-  assert.match(available, /^Yes\. Membership is open now\. Create your account to join\./);
+  assert.match(available, /^Yes\. Membership is open now\. Sign up to join\./);
   assert.match(available, /\$99\/year/);
   assert.match(available, /The Founder plan is \$99\/year and includes everything: credential tracking and the Practice tools\./);
   assert.doesNotMatch(available, /Compare the plans/);
@@ -386,7 +386,7 @@ test('home: the signup button and its guarantee sit right under the hero offer; 
   assert.ok(box > 0 && signup > box, 'after the offer box');
   assert.ok(signup < hero.indexOf('data-membership-review-action'), 'before the plans link');
   const block = hero.slice(signup, hero.indexOf('</div>', signup) + 6);
-  assert.match(block, /<a class="btn-primary" href="\/app\/"[^>]*><span data-membership-action>Create your account<\/span><\/a>/);
+  assert.match(block, /<a class="btn-primary" href="\/app\/"[^>]*><span data-membership-action>Sign up today<\/span><\/a>/);
   assert.match(block, /Card required at checkout\. No-hassle 100% money-back guarantee: a full refund of your most recent annual payment, at any time\./);
   // Only the home hero: the locums page has no such block, and off mode is byte for byte the source.
   assert.doesNotMatch(renderPublicLaunch(await read('landing/locums.html'), 'locums'), /data-hero-signup/);

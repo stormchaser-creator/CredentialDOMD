@@ -27,20 +27,23 @@ const NAV_LINKS = Object.freeze([
   { id: 'faq', label: 'FAQ', href: '/#faq' },
 ]);
 
+export const HEADER_SIGNUP = 'Sign up';
+export const HEADER_LOGIN = 'Log in';
 const brand = '<a class="cdm-brand" href="/"><img src="/images/logo-64.png" alt="" width="40" height="40"><span>Credential<b>DOMD</b></span></a>';
 
 export function siteHeader({ current = null, mode = PUBLIC_LAUNCH_MODE } = {}) {
   const view = publicLaunchPresentation(mode);
   const links = NAV_LINKS.map(link => `<a href="${link.href}"${link.id === current ? ' aria-current="page"' : ''}>${link.label}</a>`).join('');
-  // Paid mode: the same signup destination and repaintable label as every
-  // other signup button. Waitlist mode keeps the waitlist request.
+  // Two actions (owner decision 2026-11-13): "Log in" and "Sign up", both to
+  // the app as before. The header label is fixed; membership-offer.js does
+  // not repaint it. Waitlist mode keeps the waitlist request.
   const cta = mode.enabled
-    ? `<a class="cdm-cta" href="${escapeHtml(view.primaryAction.href)}"><span data-membership-action>${escapeHtml(view.primaryAction.shortLabel)}</span></a>`
+    ? `<a class="cdm-cta" href="${escapeHtml(view.primaryAction.href)}">${HEADER_SIGNUP}</a>`
     : `<a class="cdm-cta" href="${escapeHtml(view.primaryAction.href)}">${escapeHtml(view.primaryAction.shortLabel)}</a>`;
   return '<div class="cdm-header" role="banner"><div class="cdm-wrap cdm-nav" role="navigation" aria-label="Main">'
     + brand
     + '<button class="cdm-menu-btn" type="button" aria-expanded="false" aria-controls="cdm-menu">Menu</button>'
-    + `<div class="cdm-links" id="cdm-menu">${links}<a href="${SIGN_IN_HREF}">Sign in</a>${cta}</div>`
+    + `<div class="cdm-links" id="cdm-menu">${links}<a href="${SIGN_IN_HREF}">${HEADER_LOGIN}</a>${cta}</div>`
     + '</div></div>';
 }
 
