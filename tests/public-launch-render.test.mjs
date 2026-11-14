@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
 import vm from 'node:vm';
-import { renderPublicLaunch, publicLaunchHelp, publicLaunchCostAnswer } from '../scripts/public-launch-render.mjs';
+import { renderPublicLaunch, publicLaunchHelp, publicLaunchCostAnswer, FOUNDER_PLAN, FOUNDER_AVAILABILITY } from '../scripts/public-launch-render.mjs';
 import { PUBLIC_LAUNCH_MODE, publicLaunchPresentation } from '../src/content/publicLaunch.mjs';
 import { renderHelp } from '../scripts/build-help.mjs';
 import { renderWatchPages } from '../scripts/watch-pages.mjs';
@@ -54,22 +54,22 @@ test('paid home and locums expose static navigation and cannot submit a disguise
     assert.doesNotMatch(output, /type="email"/);
     assert.ok((output.match(/href="\/signup\/"/g) || []).length >= (surface === 'home' ? 3 : 4));
     assert.match(output, />Create your account<\/span><\/a>/);
-    assert.match(output, /Founding Credential is \$99\/year for the first 100 paid founding members/);
+    assert.match(output, /The Founder plan is \$99\/year and includes everything: credential tracking and the Practice tools\./);
     assert.doesNotMatch(output, /Their invitation will confirm eligibility|Your invitation will confirm eligibility/);
     if (surface === 'home') {
-      assert.match(output, /data-membership-headline>First 100 paid founding memberships: \$99\/year<\/span>/);
-      assert.match(output, /<b data-membership-price>\$99<\/b><span data-membership-price-label> \/ year, founding rate for the first 100 paid members<\/span>/);
-      assert.match(output, /data-membership-phase>Membership options<\/span>/);
-      assert.doesNotMatch(output, /\$149<span>/);
+      assert.match(output, /data-membership-headline>Founder plan: \$99\/year, everything included<\/span>/);
+      assert.match(output, /<b data-membership-price>\$99<\/b><span data-membership-price-label> \/ year<\/span>/);
+      assert.match(output, /data-membership-phase>Founder plan<\/span>/);
+      assert.equal(output.split('<article class="price').length, 2, 'one plan card');
     }
+    // Owner decision 2026-11-13: one plan. No other tier, package or trial on a marketing page.
+    assert.doesNotMatch(output.replace(/<style\b[\s\S]*?<\/style>/gi, ''), /\$149|\$199|\$245|early[- ]?bird|Credential \+ Practice|Practice trial|Compare the plans|Optional Practice/i);
     assert.match(output, /less polished/);
     assert.match(output, /support tickets/);
     assert.match(output, /locked for life while membership remains continuously active/);
-    assert.match(output, /Credential \+ Practice is \$245\/year total at first purchase, with no early bird discount\. It is not offered to founding buyers/);
     assert.doesNotMatch(output, /no founding (?:or early.bird )?discount/);
     assert.match(output, /earlier free-beta wording/);
     assert.match(output, /30 days free with no card/);
-    assert.match(output, /Founding Credential members have Practice included for as long as their membership stays active\. Early bird and standard Credential members receive a separate 30 day Practice trial/);
     assert.deepEqual(assets(output), assets(source), 'preserve physician photos and all runtime sources');
     assert.match(output, /href="\/app\/"/, 'existing sign-in remains available');
   }
@@ -83,10 +83,12 @@ test('home shows founding policy before sign-in and its offer buttons lead to pu
     assert.match(html, /href="#planned-pricing"[^>]*><span data-membership-review-action>/);
     assert.doesNotMatch(html, /Review membership offers|Check membership offers/);
   }
-  assert.match(hero, /Founding Credential: \$99\/year for the first 100 paid members, Practice included while you are a member/);
+  assert.match(hero, /Founder plan: \$99\/year, everything included/);
+  assert.match(hero, /For MDs, DOs, NPs and PAs/);
   assert.match(hero, /locked for life while membership remains active/);
   assert.match(hero, /confirmed before payment/);
-  const core = output.slice(output.indexOf('<h3 class="feature-title">Credential</h3>'), output.indexOf('<h3 class="feature-title">Credential + Practice</h3>'));
+  const plans = output.slice(output.indexOf('<section id="planned-pricing"'), output.indexOf('<!-- ============ GUARANTEE'));
+  const core = plans.slice(plans.indexOf('<article'), plans.indexOf('</article>'));
   assert.match(core, /data-membership-price>\$99/);
   assert.match(core, /data-membership-status/);
   assert.match(core, /href="\/app\/"[^>]*><span data-membership-action>Create your account/);
@@ -110,7 +112,10 @@ test('home signup and team FAQs use current offers in visible answers and struct
   assert.match(source, /Early access opens to the waitlist first, in order/);
   const output = renderPublicLaunch(source, 'home');
   const faq = jsonLd(output).find(item => item['@type'] === 'FAQPage');
-  assert.equal(faq.mainEntity.length, 2);
+  assert.equal(faq.mainEntity.length, 3);
+  const audience = faq.mainEntity.find(item => item.name === 'Is CredentialDOMD for NPs and PAs?').acceptedAnswer.text;
+  assert.match(audience, /^Yes\. CredentialDOMD is for physicians \(MD and DO\), nurse practitioners and physician assistants\./);
+  assert.match(audience, /NP and PA requirements differ by board\.$/);
   // The founding offer sentences sit in spans membership-offer.js repaints
   // for the live phase (BILL-004); the words are the JSON-LD's.
   const visible = output.replace(/<script\b[\s\S]*?<\/script>/g, '').replace(/<span data-membership-[a-z-]+>|<\/span>/g, '');
@@ -119,13 +124,14 @@ test('home signup and team FAQs use current offers in visible answers and struct
     assert.ok(visible.includes(answer.acceptedAnswer.text), `${answer.name}: same answer in HTML and JSON-LD`);
   }
   const available = faq.mainEntity.find(item => item.name === 'Can I sign up now?').acceptedAnswer.text;
-  assert.match(available, /Compare the plans here, then create your account/);
+  assert.match(available, /^Yes\. Membership is open now\. Create your account to join\./);
   assert.match(available, /\$99\/year/);
-  assert.match(available, /Founding Credential is \$99\/year for the first 100 paid founding members/);
+  assert.match(available, /The Founder plan is \$99\/year and includes everything: credential tracking and the Practice tools\./);
+  assert.doesNotMatch(available, /Compare the plans/);
   const teams = faq.mainEntity.find(item => item.name.includes('practice manager')).acceptedAnswer.text;
   assert.match(teams, /on the roadmap and are not currently available/);
   assert.match(teams, /support@credentialdomd.com/);
-  assert.match(teams, /individual Practice package does not provide team-wide account management/);
+  assert.match(teams, /The Founder plan covers one clinician and does not provide team-wide account management/);
   assert.doesNotMatch(output, /field testing right now|waitlist first, in order|Leave your email above|when your spot is ready|earliest names on the list|practices get priority onboarding/i);
   for (const slot of ['faq-availability', 'faq-teams', 'home-faq-json']) {
     const missing = source.replace(new RegExp(`<!-- public-launch:${slot} -->[\\s\\S]*?<!-- /public-launch:${slot} -->`), '');
@@ -163,7 +169,9 @@ test('all 51 guides keep four requested-guide forms and facts while removing wai
     // The guides carry most of the traffic: each must state the founding offer once,
     // above the guide form, and point locums physicians at the practice tools.
     assert.equal((output.match(/class="guide-offer"/g) || []).length, 1, file);
-    assert.match(output, /Founding Credential: \$99\/year for the first 100 paid members, Practice included while you are a member/, file);
+    assert.match(output, /Founder plan: \$99\/year, everything included/, file);
+    // One line tells NPs and PAs these are physician guides; no NP or PA board rule is stated.
+    assert.equal(output.split('NP and PA requirements differ by board; the CredentialDOMD app tracks NP and PA licenses too.').length, 2, file);
     assert.ok(output.indexOf('class="guide-offer"') < output.indexOf('class="guide-form"'), `${file}: offer sits above the guide form`);
     assert.match(output, /href="\/locums"/, file);
     assert.match(output.slice(output.indexOf('class="guide-offer"'), output.indexOf('class="guide-form"')), /No-hassle 100% money-back guarantee/, `${file}: the offer button states the guarantee`);
@@ -231,15 +239,15 @@ test('help compilation adds refund request terms and updates Practice availabili
   for (const article of output.articles) {
     const old = original.articles.find(item => item.id === article.id);
     if (article.id === 'first-license') {
-      assert.deepEqual(article.audience, ['physicians with active Credential access']);
-      assert.match(article.availability, /signed-in account with active Credential access/);
+      assert.deepEqual(article.audience, ['physicians, NPs and PAs with an active membership']);
+      assert.match(article.availability, /signed-in account with an active membership/);
       assert.match(article.availability, /NPI lookup needs a connection/);
-      assert.deepEqual(article.notes.slice(0, -2), old.notes);
-      assert.equal(article.notes.at(-2), publicLaunchPresentation(paid).availability);
-      assert.equal(article.notes.at(-1), publicLaunchPresentation(paid).rateComparison);
+      assert.deepEqual(article.notes.slice(0, -1), old.notes);
+      assert.equal(article.notes.at(-1), FOUNDER_AVAILABILITY);
       assert.deepEqual({ ...article, notes: old.notes, availability: old.availability, audience: old.audience }, old);
     } else if (article.id === 'locum-contract') {
-      assert.match(article.availability, /Founding Credential members have Practice included for as long as their membership stays active\. Early bird and standard Credential members receive a separate 30 day Practice trial/);
+      assert.ok(article.availability.startsWith(FOUNDER_PLAN.practice));
+      assert.doesNotMatch(article.availability, /Practice trial|early bird|\$245/i);
       assert.deepEqual({ ...article, availability: old.availability }, old);
     } else if (article.id === 'get-help') {
       assert.deepEqual(article.notes.slice(0, -1), old.notes);

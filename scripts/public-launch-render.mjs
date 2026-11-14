@@ -1,4 +1,37 @@
-import { PUBLIC_LAUNCH_MODE, publicLaunchPresentation, FOUNDING_AVAILABILITY, FOUNDING_RATE_LOCK } from '../src/content/publicLaunch.mjs';
+import { PUBLIC_LAUNCH_MODE, publicLaunchPresentation } from '../src/content/publicLaunch.mjs';
+
+// Owner decision, 2026-11-13: the public site presents ONE plan, the Founder
+// plan: $99/year with everything included (credential tracking and the
+// Practice tools). This is site presentation only. The app, its checkout
+// policy (supabase/functions/_shared/accessPolicy.mjs) and its Terms still
+// decide what a buyer is offered, and src/content/publicLaunch.mjs, which the
+// app also reads, is unchanged. public/membership-offer.js repaints these
+// same sentences (pinned equal by tests/site-founder-plan.test.mjs) and, if
+// checkout is no longer selling the founding offer, says the plan is full
+// without stating any other price.
+export const FOUNDER_PLAN = Object.freeze({
+  name: 'Founder plan',
+  headline: 'Founder plan: $99/year, everything included',
+  price: '$99',
+  priceLabel: ' / year',
+  offer: 'The Founder plan is $99/year and includes everything: credential tracking and the Practice tools.',
+  rateLock: 'That annual rate stays locked for life while membership remains continuously active.',
+  rate: 'One plan with everything included, for the first 100 paid members. That annual rate stays locked for life while membership remains continuously active. The app confirms your offer before you choose to pay.',
+  heroNote: 'The annual rate stays locked for life while membership remains active.',
+  reviewAction: 'See the Founder plan',
+  phase: 'Founder plan',
+  practice: 'The Practice tools (contracts, work logs, invoices and payment tracking) are included in the Founder plan.',
+  team: 'Group-management features are on the roadmap and are not currently available. The Founder plan covers one clinician and does not provide team-wide account management. Contact support@credentialdomd.com to discuss your group’s needs; no release date or priority onboarding is promised.',
+  meta: 'Founder plan: $99/year, everything included. Check availability in the app. Early release; card required at checkout.',
+});
+export const FOUNDER_AVAILABILITY = `Create your account to join. ${FOUNDER_PLAN.offer} Availability is confirmed before payment; creating an account does not reserve a place. Paid membership requires a card at checkout and your explicit agreement.`;
+
+// Who the product is for. The app asks each member's profession (MD, DO, PA
+// or NP: src/constants/professions.js) and tracks that profession's licence
+// types and national certifications.
+export const AUDIENCE = 'MDs, DOs, NPs and PAs';
+export const NP_PA_QUESTION = 'Is CredentialDOMD for NPs and PAs?';
+export const NP_PA_ANSWER = 'Yes. CredentialDOMD is for physicians (MD and DO), nurse practitioners and physician assistants. You choose your profession when you set up your account, and the app tracks the licenses and certifications that go with it: PA licenses and NCCPA certification for PAs, and APRN and RN licenses and national certification (such as AANPCB or ANCC) for NPs. The free state renewal guides on this site cover physician licenses; NP and PA requirements differ by board.';
 
 const escapeHtml = value => String(value).replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
 /**
@@ -12,8 +45,8 @@ const escapeHtml = value => String(value).replace(/[&<>"']/g, ch => ({ '&': '&am
  * static words are unchanged; the markers are all that is added.
  */
 export function markLiveOffer(html, view) {
-  const marks = [[escapeHtml(FOUNDING_AVAILABILITY), 'data-membership-availability'],
-    [escapeHtml(` ${FOUNDING_RATE_LOCK}`), 'data-membership-rate-lock'], [escapeHtml(view.foundingRate), 'data-membership-rate']];
+  const marks = [[escapeHtml(FOUNDER_PLAN.offer), 'data-membership-availability'],
+    [escapeHtml(` ${FOUNDER_PLAN.rateLock}`), 'data-membership-rate-lock'], [escapeHtml(FOUNDER_PLAN.rate), 'data-membership-rate']];
   const body = html.search(/<body\b/);
   if (body < 0) return html;
   const tokens = html.slice(body).split(/(<script\b[\s\S]*?<\/script>|<!--[\s\S]*?-->|<[^>]+>)/);
@@ -35,8 +68,8 @@ export function publicMembershipEndpoint(supabaseUrl) {
   }
   return `${url.origin}/functions/v1/public-membership-offer`;
 }
-export const publicLaunchCostAnswer = view => [view.availability, view.foundingRate, view.rateComparison, view.earlyBirdRateLock,
-  view.fullPackage, view.promisedBeta, view.practiceTrial, view.lifetimeException, view.refundGuarantee].join(' ');
+export const publicLaunchCostAnswer = view => [FOUNDER_AVAILABILITY, FOUNDER_PLAN.rate,
+  view.promisedBeta, view.lifetimeException, view.refundGuarantee].join(' ');
 
 export function publicLaunchHelp(help, mode = PUBLIC_LAUNCH_MODE) {
   if (!mode.enabled) return help;
@@ -44,12 +77,12 @@ export function publicLaunchHelp(help, mode = PUBLIC_LAUNCH_MODE) {
   const copy = structuredClone(help);
   const setup = copy.articles.find(article => article.id === 'first-license');
   if (!setup) throw Error('Missing signup availability in public help');
-  setup.audience = ['physicians with active Credential access'];
-  setup.availability = 'A signed-in account with active Credential access. NPI lookup needs a connection.';
-  setup.notes.push(view.availability, view.rateComparison);
+  setup.audience = ['physicians, NPs and PAs with an active membership'];
+  setup.availability = 'A signed-in account with an active membership. NPI lookup needs a connection.';
+  setup.notes.push(FOUNDER_AVAILABILITY);
   const practice = copy.articles.find(article => article.id === 'locum-contract');
   if (!practice) throw Error('Missing Practice availability in public help');
-  practice.availability = [view.practiceTrial, view.promisedBeta, view.lifetimeException].join(' ');
+  practice.availability = [FOUNDER_PLAN.practice, view.promisedBeta, view.lifetimeException].join(' ');
   const support = copy.articles.find(article => article.id === 'get-help');
   if (!support || !Array.isArray(support.notes)) throw Error('Missing refund request location in public help');
   support.notes.push(view.refundGuarantee);
@@ -61,7 +94,7 @@ function navigation(fallback, view) {
   if (!anchor) throw Error('A launch CTA slot must contain exactly one anchor');
   const attrs = anchor[2].replace(/\s+href="[^"]*"/, '').replace(/\s+aria-label="[^"]*"/, '');
   const icon = anchor[3].match(/<svg\b[\s\S]*?<\/svg>/)?.[0] || '';
-  if (/\bdata-public-offer-link\b/.test(attrs)) return `${anchor[1]}<a${attrs} href="#planned-pricing"><span data-membership-review-action>See membership plans</span>${icon ? ` ${icon}` : ''}</a>${anchor[4]}`;
+  if (/\bdata-public-offer-link\b/.test(attrs)) return `${anchor[1]}<a${attrs} href="#planned-pricing"><span data-membership-review-action>${FOUNDER_PLAN.reviewAction}</span>${icon ? ` ${icon}` : ''}</a>${anchor[4]}`;
   return `${anchor[1]}<a${attrs} href="${escapeHtml(view.primaryAction.href)}"><span data-membership-action>${escapeHtml(view.primaryAction.shortLabel)}</span>${icon ? ` ${icon}` : ''}</a>${anchor[4]}`;
 }
 
@@ -70,7 +103,7 @@ function signupInsteadOfForm(fallback, view) {
   if (!form || !/class="[^"]*\bwl-form\b/.test(form[1])) throw Error('A signup slot must contain a waitlist form');
   const id = form[1].match(/\bid="([^"]*)"/)?.[1];
   const style = form[1].match(/\bstyle="([^"]*)"/)?.[1];
-  if (/\bdata-public-offer-link\b/.test(form[1])) return `<div${id ? ` id="${escapeHtml(id)}"` : ''}${style ? ` style="${escapeHtml(style)}"` : ''}><a class="btn-primary" href="#planned-pricing" style="padding:15px 24px;font-size:16px;text-align:center;"><span data-membership-review-action>See membership plans</span></a></div>`;
+  if (/\bdata-public-offer-link\b/.test(form[1])) return `<div${id ? ` id="${escapeHtml(id)}"` : ''}${style ? ` style="${escapeHtml(style)}"` : ''}><a class="btn-primary" href="#planned-pricing" style="padding:15px 24px;font-size:16px;text-align:center;"><span data-membership-review-action>${FOUNDER_PLAN.reviewAction}</span></a></div>`;
   return `<div${id ? ` id="${escapeHtml(id)}"` : ''}${style ? ` style="${escapeHtml(style)}"` : ''}><a class="btn-primary" href="${escapeHtml(view.primaryAction.href)}" style="padding:15px 24px;font-size:16px;text-align:center;"><span data-membership-action>${escapeHtml(view.primaryAction.label)}</span></a></div>`;
 }
 
@@ -86,8 +119,11 @@ const minimumSlots = {
   'watch-pages': { cta: 1, 'early-release': 1, participation: 1 },
   'legal-navigation': { cta: 1 },
   // /pricing shows the same membership cards as the home page's #planned-pricing.
-  pricing: { cta: 2, 'founding-headline': 1, availability: 1, 'founding-price': 1, 'founding-rate': 1, 'rate-comparison': 1, 'full-price': 1, 'full-package': 1, 'practice-trial': 1, 'refund-guarantee': 1, 'early-release': 1 },
+  pricing: { cta: 2, 'founding-headline': 1, availability: 1, 'founding-price': 1, 'founding-rate': 1, 'refund-guarantee': 1, 'early-release': 1 },
 };
+// Slots that described other tiers (early bird, standard, the $245 package,
+// the Practice trial). No page may carry them again.
+const retiredSlots = new Set(['rate-comparison', 'full-price', 'full-package', 'practice-trial']);
 
 /** Only explicit marketing slots change. Off mode is byte-for-byte unchanged. */
 export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { offerEndpoint = null } = {}) {
@@ -95,17 +131,19 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
   if (!mode.enabled) return html;
   if (!minimumSlots[surface]) throw Error(`Unknown public launch surface: ${surface}`);
   const homeFaq = [
-    { name: 'Can I sign up now?', text: `Yes. Membership is open now. ${view.availability} ${FOUNDING_RATE_LOCK}` },
-    { name: 'Can my practice manager use this for our whole group?', text: view.teamAvailability },
+    { name: 'Can I sign up now?', text: `Yes. Membership is open now. ${FOUNDER_AVAILABILITY} ${FOUNDER_PLAN.rateLock}` },
+    { name: 'Can my practice manager use this for our whole group?', text: FOUNDER_PLAN.team },
+    { name: NP_PA_QUESTION, text: NP_PA_ANSWER },
   ];
   const counts = {};
   const output = html.replace(/<!-- public-launch:([a-z-]+) -->([\s\S]*?)<!-- \/public-launch:\1 -->/g, (_whole, slot, fallback) => {
     counts[slot] = (counts[slot] || 0) + 1;
     if (fallback.includes('<!-- public-launch:')) throw Error('Nested public launch slots are not allowed');
+    if (retiredSlots.has(slot)) throw Error(`Retired public launch slot in ${surface}: ${slot}. The site presents one plan.`);
     if (slot === 'cta') return navigation(fallback, view);
     if (slot === 'form') return signupInsteadOfForm(fallback, view);
-    if (slot === 'hero-offer') return `<div style="margin:20px 0;padding:18px 20px;border:1px solid var(--emerald);border-radius:14px;background:var(--emerald-glow);"><p data-membership-hero-headline style="font-size:23px;font-weight:750;line-height:1.3;margin:0 0 8px;">${escapeHtml(view.foundingOffer)}</p>`
-      + '<p data-membership-hero-note style="font-size:14px;line-height:1.5;margin:0;">The founding annual rate stays locked for life while membership remains active.</p></div>'
+    if (slot === 'hero-offer') return `<div style="margin:20px 0;padding:18px 20px;border:1px solid var(--emerald);border-radius:14px;background:var(--emerald-glow);"><p data-membership-hero-headline style="font-size:23px;font-weight:750;line-height:1.3;margin:0 0 8px;">${escapeHtml(FOUNDER_PLAN.headline)}</p>`
+      + `<p data-membership-hero-note style="font-size:14px;line-height:1.5;margin:0;">${escapeHtml(FOUNDER_PLAN.heroNote)}</p></div>`
       // The signup button right under the offer (signup review 2026-10-07: a
       // phone's first screen of the home page had no way to sign up; the
       // first "Create your account" was 16,000 px down). The same button and
@@ -115,9 +153,9 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
     // Same approved strings and data attributes as the home hero, so membership-offer.js
     // repaints this block when the live phase changes. No new claims, no new price.
     if (slot === 'guide-offer') return '<div class="guide-offer" style="margin:18px 0 0;padding:18px 20px;border:1px solid var(--emerald);border-radius:14px;background:var(--emerald-glow);max-width:600px;">'
-      + `<p data-membership-hero-headline style="font-size:19px;font-weight:750;line-height:1.3;margin:0 0 6px;">${escapeHtml(view.foundingOffer)}</p>`
+      + `<p data-membership-hero-headline style="font-size:19px;font-weight:750;line-height:1.3;margin:0 0 6px;">${escapeHtml(FOUNDER_PLAN.headline)}</p>`
       + '<p style="font-size:14.5px;line-height:1.55;margin:0 0 6px;color:var(--text-secondary);">Use CredentialDOMD to organize your saved licenses, renewal dates and CME alongside your professional documents.</p>'
-      + '<p data-membership-hero-note style="font-size:13.5px;line-height:1.5;margin:0 0 14px;color:var(--text-secondary);">The founding annual rate stays locked for life while membership remains active.</p>'
+      + `<p data-membership-hero-note style="font-size:13.5px;line-height:1.5;margin:0 0 14px;color:var(--text-secondary);">${escapeHtml(FOUNDER_PLAN.heroNote)}</p>`
       + `<a href="${escapeHtml(view.primaryAction.href)}" style="display:inline-block;background:var(--emerald);color:#0d0d1a;border-radius:10px;padding:12px 22px;font-weight:700;font-size:15px;text-decoration:none;"><span data-membership-action>${escapeHtml(view.primaryAction.label)}</span></a>`
       // Every signup button states the guarantee (33363fee). Same sentence, one source.
       + `<p style="font-size:12.5px;line-height:1.5;margin:10px 0 0;color:var(--text-secondary);">${escapeHtml(SIGNUP_NOTE)}</p>`
@@ -139,15 +177,11 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
       return `${match[1]}\n${JSON.stringify(json, null, 2).replace(/</g, '\\u003c')}\n${match[3]}`;
     }
     if (slot === 'faq-cost') return escapeHtml(publicLaunchCostAnswer(view));
-    if (slot === 'meta') return fallback.replace(/Membership opens by invitation\.|Paid membership opens by invitation; card required at checkout\./g, 'Credential: $99/year for the first 100 paid founding members, then $149 early bird and $199 standard. Check availability in the app. Early release; card required at checkout.');
-    if (slot === 'founding-price') return `<b data-membership-price>${escapeHtml(view.publicPrice)}</b><span data-membership-price-label>${escapeHtml(view.publicPriceLabel)}</span>`;
-    // Founding Credential includes Practice, so while founding lasts $245 is a
-    // later price, not a plan beside $99; membership-offer.js says " / year
-    // total" once the live phase has moved on.
-    if (slot === 'full-price') return '$245<span data-membership-bundle-label> / year, after founding</span>';
-    // A later phase replaces this paragraph (membership-offer.js), so a $149
-    // or $199 card never keeps the founding "Practice included" line.
-    if (slot === 'founding-rate') return `<span data-membership-rate>${escapeHtml(view.foundingRate)}</span>`;
+    if (slot === 'meta') return fallback.replace(/Membership opens by invitation\.|Paid membership opens by invitation; card required at checkout\./g, FOUNDER_PLAN.meta);
+    if (slot === 'founding-price') return `<b data-membership-price>${escapeHtml(FOUNDER_PLAN.price)}</b><span data-membership-price-label>${escapeHtml(FOUNDER_PLAN.priceLabel)}</span>`;
+    // membership-offer.js replaces this paragraph if checkout is no longer
+    // selling the founding offer, so a full plan never keeps its rate line.
+    if (slot === 'founding-rate') return `<span data-membership-rate>${escapeHtml(FOUNDER_PLAN.rate)}</span>`;
     // The guarantee covers every membership, so it stands on its own line
     // instead of inside the Credential + Practice card.
     if (slot === 'refund-guarantee') return surface === 'home'
@@ -155,32 +189,30 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
       : `<p style="margin-bottom: 16px;">${escapeHtml(view.refundGuarantee)}</p>`;
     if (slot === 'brand') return fallback.replace(/Credential<span>(?:DoMD|DOMD)<\/span>/g, 'Credential<span>DOMD</span>').replace(/\bCredential(?:DOMD|DoMD|DO)\b/g, view.brand);
     const text = {
-      'availability': view.availability,
+      'availability': FOUNDER_AVAILABILITY,
       'faq-availability': homeFaq[0].text,
       'faq-teams': homeFaq[1].text,
-      'invitation-copy': `${view.availability} ${view.fullPackage}`,
+      'invitation-copy': FOUNDER_AVAILABILITY,
       'signup-heading': view.signupHeading,
       'signup-eyebrow': 'Membership',
       'signup-card-heading': 'Membership is open',
       'signup-note': SIGNUP_NOTE,
       'signup-label': view.primaryAction.label,
       'signup-trust': 'Early release · Card required at checkout',
-      'audience-badge': 'For MDs and DOs · Membership options',
-      'founding-headline': view.publicRateHeadline,
-      'rate-comparison': `${view.rateComparison} ${view.earlyBirdRateLock}`,
-      'full-package': view.fullPackage,
-      'practice-trial': view.practiceTrial,
+      'audience-badge': `For ${AUDIENCE} · ${FOUNDER_PLAN.phase}`,
+      'founding-headline': FOUNDER_PLAN.headline,
+      'faq-np-pa': NP_PA_ANSWER,
       'promised-beta': view.promisedBeta,
       'lifetime-exception': view.lifetimeException,
       'early-release': view.earlyRelease,
       'participation': view.founderParticipation,
-      'footer-mode': `${view.brand} · Early release. ${view.availability}`,
+      'footer-mode': `${view.brand} · Early release. ${FOUNDER_AVAILABILITY}`,
       'guide-product': 'Use CredentialDOMD to organize your saved licenses, renewal dates and CME alongside your professional documents. Review your records and confirm requirements with the licensing board.',
     }[slot];
     if (text === undefined) throw Error(`Unknown public launch slot: ${slot}`);
     if (slot === 'signup-heading') return `<span data-membership-heading>${escapeHtml(text)}</span>`;
     if (slot === 'founding-headline') return `<span data-membership-headline>${escapeHtml(text)}</span>`;
-    if (slot === 'audience-badge') return 'For MDs and DOs · <span data-membership-phase>Membership options</span>';
+    if (slot === 'audience-badge') return `For ${AUDIENCE} · <span data-membership-phase>${FOUNDER_PLAN.phase}</span>`;
     return escapeHtml(text) + (slot === 'early-release' ? ' <span data-membership-status role="status" aria-live="polite">Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.</span>' : '');
   });
   for (const [slot, count] of Object.entries(minimumSlots[surface])) {

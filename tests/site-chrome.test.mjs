@@ -53,16 +53,23 @@ test('redesigned pages mark where the chrome goes and are indexable unless they 
   }
 });
 
-test('/pricing repaints every price for the live phase and sends signup to the app', async () => {
+test('/pricing is one Founder card, repainted by the live offer, with signup going to the app', async () => {
   const output = renderPublicLaunch(await read('landing/pricing.html'), 'pricing', undefined, { offerEndpoint: 'https://synthetic.supabase.co/functions/v1/public-membership-offer' });
-  assert.match(output, /<b data-membership-price>\$99<\/b><span data-membership-price-label>/);
-  assert.match(output, /\$245<span data-membership-bundle-label>/);
-  for (const hook of ['headline', 'availability', 'rate', 'status', 'action']) assert.match(output, new RegExp(`data-membership-${hook}\\b`), hook);
+  assert.match(output, /<b data-membership-price>\$99<\/b><span data-membership-price-label> \/ year<\/span>/);
+  assert.equal(output.split('<article class="price').length, 2, 'one card');
+  assert.match(output, /<h3 class="feature-title"><span data-membership-phase>Founder plan<\/span><\/h3>/);
+  assert.match(output, /Everything is included:/);
+  assert.doesNotMatch(output, /data-membership-bundle-label/);
+  assert.doesNotMatch(output.replace(/<style\b[\s\S]*?<\/style>/gi, ''), /\$149|\$199|\$245|early[- ]?bird|Credential \+ Practice|Practice trial|Compare the plans|optional Practice/i);
+  assert.match(output, /<title>Pricing \| CredentialDOMD for physicians, NPs &amp; PAs<\/title>/);
+  for (const hook of ['headline', 'availability', 'rate', 'status', 'action', 'phase']) assert.match(output, new RegExp(`data-membership-${hook}\\b`), hook);
   assert.match(output, /<script type="module" src="\/membership-offer\.js" data-membership-endpoint="https:\/\/synthetic\.supabase\.co\/functions\/v1\/public-membership-offer"><\/script>/);
-  // Every amount on the page comes from a launch slot (the same reviewed
-  // strings as the home page's plans); the page itself writes no price.
+  // Every amount in the page body comes from a launch slot (the same reviewed
+  // strings as the home page's plan card). The only price the page writes
+  // itself is the Founder plan's, in its description metadata.
   const own = (await read('landing/pricing.html')).replace(/<!-- public-launch:([a-z-]+) -->[\s\S]*?<!-- \/public-launch:\1 -->/g, '');
-  assert.doesNotMatch(own, /\$\d/, 'no price outside a launch slot');
+  assert.doesNotMatch(own.slice(own.indexOf('<body')), /\$\d/, 'no price in the body outside a launch slot');
+  assert.deepEqual([...new Set(own.match(/\$\d+/g))], ['$99']);
   assert.ok(links(output).filter(([href, text]) => href === '/app/' && text === 'Create your account').length >= 2);
 });
 

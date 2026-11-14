@@ -426,8 +426,14 @@ function lastVerifiedNote(state) {
   const more = open
     ? ` ${open === 1 ? 'One item is' : `${open} items are`} still being confirmed with the board; see &ldquo;Required training and audits&rdquo; below.`
     : '';
-  return `<p class="last-verified" style="margin:16px 0 0;font-size:14px;color:var(--text-secondary);"><strong>Last verified:</strong> ${escapeHtml(verifiedLabel(state))}.${more}</p>`;
+  return `<p class="last-verified" style="margin:16px 0 0;font-size:14px;color:var(--text-secondary);"><strong>Last verified:</strong> ${escapeHtml(verifiedLabel(state))}.${more}</p>`
+    + `\n    ${NP_PA_GUIDE_NOTE}`;
 }
+
+// The guides cover physician boards only. One line says so and points NPs and
+// PAs to the app, which tracks their licenses (src/constants/professions.js).
+// No NP or PA board requirement is stated anywhere in a guide.
+const NP_PA_GUIDE_NOTE = '<p class="np-pa-note" style="margin:10px 0 0;font-size:14px;color:var(--text-secondary);">This is a physician (MD and DO) guide. NP and PA requirements differ by board; the CredentialDOMD app tracks NP and PA licenses too.</p>';
 
 const MATE_ACT_LINE = 'Federal: one-time 8 hours on opioid/substance use disorder treatment for all DEA registrants (MATE Act), attested on the first DEA registration or renewal on or after June 27, 2023';
 

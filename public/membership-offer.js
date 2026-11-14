@@ -75,22 +75,68 @@ export function offerPresentation(value) {
     price: `$${value.annualCents / 100}`, priceLabel: ` / year, ${phase.toLowerCase()} Credential`,
     heading: 'Create your account', phase: `${phase} membership`,
     rateNote: RATES[value.phase], bundleLabel: value.phase === 'founding' ? BUNDLE_LABELS.founding : BUNDLE_LABELS.later,
-    availabilityOffer: AVAILABILITY[value.phase], rateLock: RATE_LOCKS[value.phase], phaseKey: value.phase };
+    availabilityOffer: AVAILABILITY[value.phase], rateLock: RATE_LOCKS[value.phase], phaseKey: value.phase,
+    offerAvailability: value.availability };
+}
+
+// ── What the public site paints ──────────────────────────────────────
+// Owner decision, 2026-11-13: the site presents ONE plan, the Founder plan,
+// $99/year with everything included. offerPresentation above is unchanged:
+// the app's sign up screen reads it (src/utils/authOffer.js) and the app
+// still follows the checkout policy. The site paints sitePresentation
+// instead. While checkout sells the founding offer it shows the Founder plan
+// at the validated price. If checkout has moved to a later phase, the site
+// says the Founder plan is full and that the app shows the current price
+// before payment; it never states another tier or another price.
+// The Founder sentences equal scripts/public-launch-render.mjs FOUNDER_PLAN
+// (pinned by tests/site-founder-plan.test.mjs).
+const FOUNDER = Object.freeze({
+  headline: 'Founder plan: $99/year, everything included',
+  offer: 'The Founder plan is $99/year and includes everything: credential tracking and the Practice tools.',
+  rateLock: ' That annual rate stays locked for life while membership remains continuously active.',
+  rate: `One plan with everything included, for the first 100 paid members. That annual rate stays locked for life while membership remains continuously active. The app confirms your offer before you choose to pay.`,
+  heroNote: 'The annual rate stays locked for life while membership remains active.',
+});
+const FULL = Object.freeze({
+  headline: 'The Founder plan is full',
+  note: 'The app shows the current membership price before you choose to pay.',
+  offer: 'The Founder plan is full; the app shows the current membership price before you choose to pay.',
+  rate: 'All 100 Founder places have been taken. Create your account and the app shows the current membership price before you choose to pay.',
+  status: 'The Founder plan is full. Your offer is confirmed in the app before payment, with our 100% money back guarantee.',
+});
+const SITE_FALLBACK = Object.freeze({ action: 'Create your account', reviewAction: 'See the Founder plan',
+  status: FALLBACK.status, headline: FOUNDER.headline, price: '$99', priceLabel: ' / year',
+  heroHeadline: FOUNDER.headline, heroNote: FOUNDER.heroNote, heading: 'Create your account', phase: 'Founder plan',
+  rateNote: FOUNDER.rate, availabilityOffer: FOUNDER.offer, rateLock: FOUNDER.rateLock, phaseKey: 'founding' });
+
+/** The single-plan view of a validated offer (the value offerPresentation returned). */
+export function sitePresentation(view) {
+  if (!view || !Object.hasOwn(PRICES, view.phaseKey) || typeof view.status !== 'string' || typeof view.action !== 'string') throw Error('Unavailable');
+  const paused = view.offerAvailability === 'paused';
+  if (view.phaseKey === 'founding') {
+    return { ...SITE_FALLBACK, action: view.action,
+      status: view.offerAvailability === 'temporarily_full'
+        ? 'Founder plan checkout is temporarily unavailable. Creating an account does not reserve a place.' : view.status };
+  }
+  return { action: paused ? view.action : 'Create your account', reviewAction: 'See membership details',
+    status: paused ? view.status : FULL.status, headline: FULL.headline, price: '', priceLabel: 'Founder places are filled',
+    heroHeadline: FULL.headline, heroNote: FULL.note, heading: 'Create your account', phase: 'Membership',
+    rateNote: FULL.rate, availabilityOffer: FULL.offer, rateLock: '', phaseKey: 'full' };
 }
 
 /**
- * Structured data (JSON-LD) text with every founding offer sentence swapped
- * for the phase's own. Always from the page's original text, so a later
- * phase replaces an earlier one's words too. Unparseable text is left alone.
+ * Structured data (JSON-LD) text for the site view. While the Founder plan is
+ * on sale the page's own text stands. Once it is full, every Founder offer
+ * sentence is swapped for the "full" one, always from the page's original
+ * text. No other price is ever written. Unparseable text is left alone.
  */
 export function phaseStructuredData(original, value) {
-  const phase = Object.hasOwn(AVAILABILITY, value?.phaseKey) ? value.phaseKey : 'founding';
-  if (phase === 'founding') return original;
+  if (value?.phaseKey !== 'full') return original;
   let data;
   try { data = JSON.parse(original); } catch { return original; }
-  const swap = text => text.split(RATES.founding).join(RATES[phase])
-    .split(AVAILABILITY.founding).join(AVAILABILITY[phase])
-    .split(RATE_LOCKS.founding).join(RATE_LOCKS[phase]);
+  const swap = text => text.split(FOUNDER.rate).join(FULL.rate)
+    .split(FOUNDER.offer).join(FULL.offer)
+    .split(FOUNDER.rateLock).join('');
   const walk = node => typeof node === 'string' ? swap(node)
     : Array.isArray(node) ? node.map(walk)
       : node && typeof node === 'object' ? Object.fromEntries(Object.entries(node).map(([k, v]) => [k, walk(v)])) : node;
@@ -141,10 +187,14 @@ export function createOfferUpdater(root, endpoint, options) {
   const structuredOriginals = new WeakMap();
   const paint = value => {
     for (const [attribute, key] of [['action','action'], ['review-action','reviewAction'], ['hero-headline','heroHeadline'], ['hero-note','heroNote'], ['status','status'], ['headline','headline'], ['price','price'],
-      ['price-label','priceLabel'], ['heading','heading'], ['phase','phase'], ['rate','rateNote'], ['bundle-label','bundleLabel'],
+      ['price-label','priceLabel'], ['heading','heading'], ['phase','phase'], ['rate','rateNote'],
       ['availability','availabilityOffer'], ['rate-lock','rateLock']]) {
       for (const node of root.querySelectorAll(`[data-membership-${attribute}]`)) node.textContent = value[key];
     }
+    // Words that are only true of the Founder plan ("everything included", the
+    // list of what it includes) are marked data-founder-only in the page and
+    // hidden once the plan is full, so the page claims nothing about a later offer.
+    for (const node of root.querySelectorAll('[data-founder-only]')) node.hidden = value.phaseKey === 'full';
     for (const node of root.querySelectorAll('script[type="application/ld+json"]')) {
       if (!structuredOriginals.has(node)) structuredOriginals.set(node, node.textContent);
       const next = phaseStructuredData(structuredOriginals.get(node), value);
@@ -153,13 +203,15 @@ export function createOfferUpdater(root, endpoint, options) {
   };
   return async () => {
     const turn = ++generation;
-    // Keep a known later phase on this page; a network failure must not turn
-    // an observed $149/$199 offer back into the initial $99 founding policy.
-    const unconfirmed = () => lastValidated ? { ...lastValidated, status: FALLBACK.status, action: FALLBACK.action } : FALLBACK;
+    // Keep a known "full" state on this page; a network failure must not turn
+    // an observed later phase back into the $99 Founder offer.
+    const unconfirmed = () => !lastValidated ? SITE_FALLBACK
+      : { ...lastValidated, action: SITE_FALLBACK.action, status: lastValidated.phaseKey === 'founding' ? SITE_FALLBACK.status : lastValidated.status };
     paint(unconfirmed());
     try {
       const value = await fetchPublicOffer(endpoint, options);
-      if (turn === generation) { lastValidated = value; paint(value); }
+      const site = sitePresentation(value);
+      if (turn === generation) { lastValidated = site; paint(site); }
     } catch { if (turn === generation) paint(unconfirmed()); }
   };
 }

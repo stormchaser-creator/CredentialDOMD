@@ -150,3 +150,9 @@ section[id]{scroll-margin-top:84px}
 .fine-print{margin-top:28px}
 #planned-pricing .wrap>p,.plans-section .wrap>p{max-width:52em;margin-left:auto;margin-right:auto;font-size:1rem}
 .hero-offer-gap{margin-top:8px}
+/* One plan: a single centred membership card. */
+@media (min-width:860px){.prices.prices-one{grid-template-columns:minmax(0,600px);justify-content:center}}
+.includes-label{font-weight:700;color:var(--navy);margin:18px 0 10px}
+.price ul.includes{padding-left:0;color:inherit}
+.price ul.includes li{margin-bottom:9px}
+[hidden]{display:none!important}

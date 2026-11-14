@@ -1,17 +1,18 @@
-// BILL-004: past the founding cap (public-membership-offer answers early bird
-// or standard) no sentence on a public page may still offer "Founding
-// Credential is $99/year". The hero and price were repainted, but the
-// availability sentence (plans subtitle, home FAQ, membership cards, footers,
-// help notes) and its JSON-LD were static. The pages are rendered with the
-// production defaults and painted by the real public/membership-offer.js over
-// a small text-only DOM built from the rendered HTML. All data is synthetic.
+// BILL-004, restated for the one-plan site (owner decision 2026-11-13): the
+// site presents the Founder plan, $99/year with everything included. If
+// public-membership-offer answers a later phase, no sentence on a public page
+// may still offer $99, and none may name another tier or another price: the
+// page says the Founder plan is full and that the app shows the current price
+// before payment. The pages are rendered with the production defaults and
+// painted by the real public/membership-offer.js over a small text-only DOM
+// built from the rendered HTML. All data is synthetic.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { fileURLToPath } from 'node:url';
-import { renderPublicLaunch, publicLaunchHelp, markLiveOffer } from '../scripts/public-launch-render.mjs';
+import { renderPublicLaunch, publicLaunchHelp, markLiveOffer, FOUNDER_PLAN, FOUNDER_AVAILABILITY } from '../scripts/public-launch-render.mjs';
 import { publicLaunchPresentation, FOUNDING_AVAILABILITY, FOUNDING_RATE_LOCK } from '../src/content/publicLaunch.mjs';
-import { offerPresentation, createOfferUpdater, phaseStructuredData } from '../public/membership-offer.js';
+import { offerPresentation, sitePresentation, createOfferUpdater, phaseStructuredData } from '../public/membership-offer.js';
 import { renderHelp } from '../scripts/build-help.mjs';
 import { loadVideoCatalog } from '../scripts/help-videos.mjs';
 import { renderWatchPages } from '../scripts/watch-pages.mjs';
@@ -50,17 +51,18 @@ function textDom(html) {
 }
 const visibleText = html => unescape(html.replace(/<script\b[\s\S]*?<\/script>/gi, '').replace(/<style\b[\s\S]*?<\/style>/gi, '').replace(/<!--[\s\S]*?-->/g, '').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ');
 const structured = html => [...html.matchAll(/<script\b[^>]*type="application\/ld\+json"[^>]*>([\s\S]*?)<\/script>/gi)].map(m => JSON.stringify(JSON.parse(m[1]))).join(' ');
-// What may still name $99 after the cap: the promised free-beta holders' opt-in
-// (they keep founding), the package card's reason it is not sold to founding
-// buyers, the price schedule, and the comparison grid's founding cell. The
-// same list the QA journey allows.
-const ALLOWED = /signed up under the earlier free-beta wording|opt in to \$99\/year Credential during the beta|not offered to founding buyers|After the 100 paid founding memberships|^\$99 a year for the first 100 paid founding members, Practice included|then \$149 early bird and \$199 standard/;
+// What may still name $99 once the Founder plan is full: the promise to the
+// earlier free-beta sign-ups, who keep their $99 opt-in.
+const ALLOWED = /signed up under the earlier free-beta wording|opt in to \$99\/year Credential during the beta/;
 const offering$99 = text => text.split(/(?<=[.!?])\s+/).filter(x => /\$99/.test(x) && !ALLOWED.test(x));
+// Nothing the site shows, in any state, names another tier or its price.
+const OTHER_TIERS = /\$149|\$199|\$245|early ?bird|standard Credential|Credential \+ Practice|Compare the plans|Founding Credential|Practice trial|free tier/i;
 
 async function pages() {
   const help = JSON.parse(await read('public/knowledge/credentialdo-help.json'));
   const out = {
     home: renderPublicLaunch(await read('landing/index.html'), 'home'),
+    pricing: renderPublicLaunch(await read('landing/pricing.html'), 'pricing'),
     locums: renderPublicLaunch(await read('landing/locums.html'), 'locums'),
     security: renderPublicLaunch(await read('landing/security.html'), 'legal-navigation'),
     cme: renderPublicLaunch(await read('landing/cme.html'), 'cme'),
@@ -70,35 +72,71 @@ async function pages() {
   return out;
 }
 
-test('the founding sentences membership-offer.js swaps are the ones the site prints', () => {
+test('the app view of the offer is unchanged: it still follows the checkout phase', () => {
   const founding = offerPresentation(reply('founding'));
   assert.equal(founding.availabilityOffer, FOUNDING_AVAILABILITY);
   assert.equal(founding.rateLock, ` ${FOUNDING_RATE_LOCK}`);
   assert.equal(founding.rateNote, view.foundingRate);
-  assert.ok(view.availability.includes(FOUNDING_AVAILABILITY));
   for (const phase of ['earlybird', 'standard']) {
     const later = offerPresentation(reply(phase));
-    assert.doesNotMatch(`${later.availabilityOffer}${later.rateLock}${later.rateNote}`, /\$99|first 100|founding/i, phase);
     assert.match(later.availabilityOffer, new RegExp(`\\$${CENTS[phase] / 100}/year`));
-    assert.doesNotMatch(`${later.availabilityOffer}${later.rateLock}`, /[-–—]/, 'no hyphen or dash in public copy');
+    assert.equal(later.action, `Join for $${CENTS[phase] / 100} a year`);
   }
-  assert.equal(offerPresentation(reply('standard')).rateLock, '', 'the standard rate is not locked');
 });
 
-test('every visible founding availability sentence is inside the span the live offer repaints', async () => {
+test('the Founder sentences membership-offer.js swaps are the ones the site prints', () => {
+  const founder = sitePresentation(offerPresentation(reply('founding')));
+  assert.equal(founder.availabilityOffer, FOUNDER_PLAN.offer);
+  assert.equal(founder.rateLock, ` ${FOUNDER_PLAN.rateLock}`);
+  assert.equal(founder.rateNote, FOUNDER_PLAN.rate);
+  assert.equal(founder.headline, FOUNDER_PLAN.headline);
+  assert.equal(founder.heroNote, FOUNDER_PLAN.heroNote);
+  assert.equal(founder.price + founder.priceLabel, FOUNDER_PLAN.price + FOUNDER_PLAN.priceLabel);
+  assert.equal(founder.phase, FOUNDER_PLAN.phase);
+  assert.equal(founder.reviewAction, FOUNDER_PLAN.reviewAction);
+  assert.ok(FOUNDER_AVAILABILITY.includes(FOUNDER_PLAN.offer));
+  for (const phase of ['earlybird', 'standard']) {
+    const full = sitePresentation(offerPresentation(reply(phase)));
+    assert.doesNotMatch(JSON.stringify(full), /\$\d|first 100/, `${phase}: no price at all`);
+    assert.doesNotMatch(JSON.stringify(full), OTHER_TIERS, phase);
+    assert.doesNotMatch(`${full.availabilityOffer}${full.rateNote}${full.status}`, /[-–—]/, 'no hyphen or dash in public copy');
+    assert.equal(full.rateLock, '');
+  }
+  assert.throws(() => sitePresentation({ phaseKey: 'gold', status: 'x', action: 'y' }));
+  assert.throws(() => sitePresentation(null));
+});
+
+test('every visible Founder offer sentence is inside the span the live offer repaints', async () => {
   for (const [name, html] of Object.entries(await pages())) {
-    const bare = html.replace(/<script\b[\s\S]*?<\/script>/gi, '').split(`<span data-membership-availability>${FOUNDING_AVAILABILITY}</span>`).join('');
-    assert.ok(!bare.includes(FOUNDING_AVAILABILITY), `${name}: an unmarked "${FOUNDING_AVAILABILITY}"`);
+    const bare = html.replace(/<script\b[\s\S]*?<\/script>/gi, '').split(`<span data-membership-availability>${FOUNDER_PLAN.offer}</span>`).join('');
+    assert.ok(!bare.replace(/<head>[\s\S]*?<\/head>/, '').includes(FOUNDER_PLAN.offer), `${name}: an unmarked "${FOUNDER_PLAN.offer}"`);
   }
   // Marking is idempotent and never touches a tag, an attribute or a script.
-  const html = '<html><head><meta content="' + FOUNDING_AVAILABILITY + '"></head><body><p>' + FOUNDING_AVAILABILITY + '</p><script>"' + FOUNDING_AVAILABILITY + '"</script></body></html>';
+  const html = '<html><head><meta content="' + FOUNDER_PLAN.offer + '"></head><body><p>' + FOUNDER_PLAN.offer + '</p><script>"' + FOUNDER_PLAN.offer + '"</script></body></html>';
   const once = markLiveOffer(html, view);
   assert.equal(markLiveOffer(once, view), once);
   assert.equal(once.split('data-membership-availability').length, 2);
-  assert.ok(once.includes(`<meta content="${FOUNDING_AVAILABILITY}">`) && once.includes(`<script>"${FOUNDING_AVAILABILITY}"</script>`));
+  assert.ok(once.includes(`<meta content="${FOUNDER_PLAN.offer}">`) && once.includes(`<script>"${FOUNDER_PLAN.offer}"</script>`));
 });
 
-test('at early bird and standard no sentence on any public page still offers $99, visible or structured', async () => {
+test('no public page names another tier or price: as printed, at founding, with no answer, or once the plan is full', async () => {
+  const rendered = await pages();
+  const answers = { printed: null, founding: async () => Response.json(reply('founding')), offline: async () => { throw Error('offline'); },
+    earlybird: async () => Response.json(reply('earlybird')), standard: async () => Response.json(reply('standard')),
+    paused: async () => Response.json({ ...reply('standard'), checkoutEnabled: false, availability: 'paused' }) };
+  for (const [state, fetchImpl] of Object.entries(answers)) {
+    for (const [name, html] of Object.entries(rendered)) {
+      const dom = textDom(html);
+      if (fetchImpl) await createOfferUpdater(dom, endpoint, { fetchImpl })();
+      const painted = dom.html();
+      assert.doesNotMatch(visibleText(painted), OTHER_TIERS, `${name} ${state}`);
+      assert.doesNotMatch(structured(painted), OTHER_TIERS, `${name} JSON-LD ${state}`);
+      assert.doesNotMatch(painted.match(/<head>[\s\S]*?<\/head>/)?.[0].replace(/<style\b[\s\S]*?<\/style>/gi, '') || '', OTHER_TIERS, `${name} head ${state}`);
+    }
+  }
+});
+
+test('once checkout has left the founding phase no sentence on any public page still offers $99, visible or structured', async () => {
   const rendered = await pages();
   for (const phase of ['earlybird', 'standard']) {
     for (const [name, html] of Object.entries(rendered)) {
@@ -107,40 +145,45 @@ test('at early bird and standard no sentence on any public page still offers $99
       const painted = dom.html();
       assert.deepEqual(offering$99(visibleText(painted)), [], `${name} at ${phase}`);
       assert.deepEqual(offering$99(structured(painted)), [], `${name} JSON-LD at ${phase}`);
-      if (name === 'home') {
-        const label = phase === 'earlybird' ? 'Early bird' : 'Standard';
-        assert.ok(visibleText(painted).includes(`${label} Credential is $${CENTS[phase] / 100}/year.`), 'the live rate is stated instead');
-        assert.ok(visibleText(painted).includes(`Yes. Membership is open now.`));
+      if (name === 'home' || name === 'pricing') {
+        assert.ok(visibleText(painted).includes('The Founder plan is full'), `${name}: says the plan is full`);
+        assert.ok(visibleText(painted).includes('the app shows the current membership price before you choose to pay'), name);
       }
+      if (name === 'home') assert.ok(visibleText(painted).includes('Yes. Membership is open now.'));
     }
   }
 });
 
-test('at founding, or with no answer, the stated $99 policy sentences and structured data stay as printed', async () => {
+test('at founding, or with no answer, the stated $99 Founder sentences and structured data stay as printed', async () => {
   const rendered = await pages();
   for (const [name, html] of Object.entries(rendered)) {
     for (const fetchImpl of [async () => Response.json(reply('founding')), async () => { throw Error('offline'); }]) {
       const dom = textDom(html);
-      const before = ['availability', 'rate-lock'].flatMap(a => dom.querySelectorAll(`[data-membership-${a}]`).map(n => n.textContent));
+      const marked = ['availability', 'rate-lock', 'rate', 'headline', 'hero-headline', 'hero-note', 'price', 'price-label', 'phase'];
+      const before = marked.flatMap(a => dom.querySelectorAll(`[data-membership-${a}]`).map(n => n.textContent));
       await createOfferUpdater(dom, endpoint, { fetchImpl })();
-      const after = ['availability', 'rate-lock'].flatMap(a => dom.querySelectorAll(`[data-membership-${a}]`).map(n => n.textContent));
+      const after = marked.flatMap(a => dom.querySelectorAll(`[data-membership-${a}]`).map(n => n.textContent));
       assert.deepEqual(after, before, name);
       assert.equal(structured(dom.html()), structured(html), `${name} JSON-LD`);
     }
   }
   const home = textDom(rendered.home);
   await createOfferUpdater(home, endpoint, { fetchImpl: async () => Response.json(reply('founding')) })();
-  assert.match(visibleText(home.html()), /Founding Credential is \$99\/year for the first 100 paid founding members\./);
-  assert.match(visibleText(home.html()), /That founding annual rate stays locked for life while membership remains continuously active\./);
+  assert.ok(visibleText(home.html()).includes('The Founder plan is $99/year and includes everything: credential tracking and the Practice tools.'));
+  assert.ok(visibleText(home.html()).includes('That annual rate stays locked for life while membership remains continuously active.'));
 });
 
-test('structured data follows each phase from the page\'s original text, never from a painted one', () => {
-  const original = JSON.stringify({ '@type': 'FAQPage', mainEntity: [{ acceptedAnswer: { text: `Yes. ${view.availability} ${FOUNDING_RATE_LOCK}` } }, { acceptedAnswer: { text: view.foundingRate } }] });
-  assert.equal(phaseStructuredData(original, offerPresentation(reply('founding'))), original);
-  const early = JSON.parse(phaseStructuredData(original, offerPresentation(reply('earlybird'))));
-  assert.match(early.mainEntity[0].acceptedAnswer.text, /Early bird Credential is \$149\/year\. .* That early bird annual rate stays locked/);
-  assert.match(early.mainEntity[1].acceptedAnswer.text, /^Early bird Credential: \$149\/year/);
-  const standard = JSON.parse(phaseStructuredData(original, offerPresentation(reply('standard'))));
-  assert.doesNotMatch(JSON.stringify(standard), /\$99|\$149|locked for life|founding/i);
-  assert.equal(phaseStructuredData('not json', offerPresentation(reply('earlybird'))), 'not json');
+test('structured data follows the state from the page\'s original text, never from a painted one', () => {
+  const original = JSON.stringify({ '@type': 'FAQPage', mainEntity: [{ acceptedAnswer: { text: `Yes. Membership is open now. ${FOUNDER_AVAILABILITY} ${FOUNDER_PLAN.rateLock}` } }, { acceptedAnswer: { text: FOUNDER_PLAN.rate } }] });
+  const at = phase => sitePresentation(offerPresentation(reply(phase)));
+  assert.equal(phaseStructuredData(original, at('founding')), original);
+  for (const phase of ['earlybird', 'standard']) {
+    const full = JSON.parse(phaseStructuredData(original, at(phase)));
+    assert.match(full.mainEntity[0].acceptedAnswer.text, /The Founder plan is full; the app shows the current membership price before you choose to pay\./);
+    assert.match(full.mainEntity[1].acceptedAnswer.text, /^All 100 Founder places have been taken\./);
+    assert.doesNotMatch(JSON.stringify(full), /\$\d|locked for life/);
+    // Painting twice from the original gives the same text.
+    assert.equal(phaseStructuredData(original, at(phase)), phaseStructuredData(original, at(phase)));
+  }
+  assert.equal(phaseStructuredData('not json', at('earlybird')), 'not json');
 });
