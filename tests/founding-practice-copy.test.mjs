@@ -140,7 +140,7 @@ test('the rendered price blocks carry no hyphen or dash, and neither do the app 
   assert.doesNotMatch(card.replace(view.refundGuarantee, ''), NO_HYPHEN, card);
   // Every string the site paints, in every state, and every string the app reads.
   for (const phase of Object.keys(PHASES)) {
-    for (const [key, text] of Object.entries(offerPresentation(reply(phase)))) assert.doesNotMatch(text, NO_HYPHEN, `${phase} ${key}: ${text}`);
+    for (const [key, text] of Object.entries(offerPresentation(reply(phase)))) if (typeof text === 'string') assert.doesNotMatch(text, NO_HYPHEN, `${phase} ${key}: ${text}`);
     for (const [key, text] of Object.entries(sitePresentation(offerPresentation(reply(phase))))) assert.doesNotMatch(text, NO_HYPHEN, `site ${phase} ${key}: ${text}`);
   }
   for (const text of Object.values(FOUNDER_PLAN)) if (text !== FOUNDER_PLAN.team) assert.doesNotMatch(text, NO_HYPHEN, text);

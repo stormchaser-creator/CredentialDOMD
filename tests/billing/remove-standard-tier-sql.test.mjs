@@ -182,5 +182,16 @@ test('after the migration no Credential is offered at $199: public offer, return
       await sql(MIGRATION);
       assert.equal((await db.preview(3, 'core')).annual_cents, 14900);
     });
+
+    await t.test('the founder countdown migration applies on top, in either order, and the offer still names two prices only', async () => {
+      const spots = readMigration('20261113130000_public_founder_spots.sql');
+      await sql(spots);
+      await sql(MIGRATION);
+      const founding = await offer();
+      assert.deepEqual([founding.phase, founding.annualCents, founding.founderSpotsLeft], ['founding', 9900, 97], 'three founding places were paid in this run');
+      await sql("update access_policy_settings set limited_self_service_price_phase='earlybird'");
+      assert.deepEqual([(await offer()).annualCents, (await offer()).founderSpotsLeft], [14900, 0]);
+      await sql("update access_policy_settings set limited_self_service_price_phase='founding'");
+    });
   } finally { await db.close(); }
 });

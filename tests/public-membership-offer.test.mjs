@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { fetchPublicOffer, offerPresentation, sitePresentation, createOfferUpdater } from '../public/membership-offer.js';
+import { fetchPublicOffer, offerPresentation, sitePresentation, createOfferUpdater, founderSpotsText } from '../public/membership-offer.js';
 import { publicMembershipEndpoint, renderPublicLaunch } from '../scripts/public-launch-render.mjs';
 import { readFile } from 'node:fs/promises';
 
@@ -17,7 +17,10 @@ const root = () => {
   const actions = [{textContent:'Membership signup'}], statuses = [{textContent:'Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.'}];
   const nodes = Object.fromEntries(['headline','price','price-label','heading','phase','review-action','hero-headline','hero-note','rate','bundle-label'].map(key=>[key,[{textContent:''}]]));
   const founderOnly = [{hidden:false}], afterFounders = [{hidden:true}];
-  return {actions,statuses,nodes,founderOnly,afterFounders,querySelectorAll:selector=>selector === '[data-membership-action]' ? actions
+  // The founder countdown as printed: two places on the home page, both empty and hidden.
+  const spots = [{textContent:'',hidden:true},{textContent:'',hidden:true}];
+  return {actions,statuses,nodes,founderOnly,afterFounders,spots,querySelectorAll:selector=>selector === '[data-membership-action]' ? actions
+    : selector === '[data-membership-spots]' ? spots
     : selector === '[data-founder-only]' ? founderOnly : selector === '[data-after-founders]' ? afterFounders
     : selector === '[data-membership-status]' ? statuses : nodes[selector.slice(17,-1)] || []};
 };
@@ -102,6 +105,53 @@ test('a verified pause keeps the right plans on the page and says checkout is pa
   const site = sitePresentation(held);
   assert.equal(site.status, 'Founder plan checkout is temporarily unavailable. Signing up does not reserve a place.');
   assert.equal(site.action, 'Sign up today');
+});
+
+test('the founder countdown shows the server\'s number, hides when it cannot be confirmed, and ends in the two plans', async () => {
+  const dom = root(); let current = { ...offer(), founderSpotsLeft: 63 };
+  const refresh = createOfferUpdater(dom, endpoint, { fetchImpl: async () => { if (current instanceof Error) throw current; return current instanceof Response ? current.clone() : Response.json(current); } });
+  const shown = () => dom.spots.map(node => node.hidden ? null : node.textContent);
+  assert.deepEqual(shown(), [null, null], 'as printed: no number');
+  await refresh();
+  assert.deepEqual(shown(), ['63 of 100 founder spots left', '63 of 100 founder spots left']);
+  current = { ...offer(), founderSpotsLeft: 1 }; await refresh();
+  assert.deepEqual(shown(), ['1 of 100 founder spots left', '1 of 100 founder spots left']);
+  // The endpoint fails, times out or answers nonsense: the Founder plan stays, the number goes.
+  for (const failure of [Error('offline'), Response.json({}, { status: 503 }), new Response('<html>OK</html>'),
+    { ...offer(), founderSpotsLeft: 0 }, { ...offer(), founderSpotsLeft: 101 }, { ...offer(), founderSpotsLeft: 12.5 }, { ...offer(), founderSpotsLeft: '12' },
+    { ...offer('earlybird'), founderSpotsLeft: 4 }]) {
+    current = { ...offer(), founderSpotsLeft: 40 }; await refresh();
+    assert.deepEqual(shown(), ['40 of 100 founder spots left', '40 of 100 founder spots left']);
+    current = failure; await refresh();
+    assert.deepEqual(shown(), [null, null], `hidden after ${failure instanceof Error ? 'a network error' : JSON.stringify(failure)}`);
+    assert.deepEqual(dom.spots.map(node => node.textContent), ['', ''], 'and not left in the page');
+    assert.equal(dom.nodes.headline[0].textContent, 'Founder plan: $99/year, everything included');
+    assert.equal(dom.afterFounders[0].hidden, true);
+  }
+  // A server that does not send the count (before the migration): the plan with no number.
+  current = offer(); await refresh();
+  assert.deepEqual(shown(), [null, null]);
+  current = { ...offer(), founderSpotsLeft: null }; await refresh();
+  assert.deepEqual(shown(), [null, null]);
+  // Every remaining place held by an open checkout: no number beside "temporarily unavailable".
+  current = { ...offer('founding', 'temporarily_full'), founderSpotsLeft: 3 }; await refresh();
+  assert.deepEqual(shown(), [null, null]);
+  // Paused checkout: the count is still true and still shown.
+  current = { ...offer('founding', 'paused'), founderSpotsLeft: 3 }; await refresh();
+  assert.deepEqual(shown(), ['3 of 100 founder spots left', '3 of 100 founder spots left']);
+  // Zero left: the two plan view, and no countdown.
+  current = { ...offer('earlybird'), founderSpotsLeft: 0 }; await refresh();
+  assert.deepEqual(shown(), [null, null]);
+  assert.deepEqual([dom.founderOnly[0].hidden, dom.afterFounders[0].hidden], [true, false]);
+  assert.equal(dom.nodes.headline[0].textContent, SOLD_OUT);
+  assert.doesNotMatch(JSON.stringify(dom), /spots left/);
+  // The words, and what is never a count.
+  assert.equal(founderSpotsText(100), '100 of 100 founder spots left');
+  for (const bad of [0, 101, -3, 2.5, '7', null, undefined, NaN]) assert.equal(founderSpotsText(bad), '');
+  // The app view carries the number too, and nothing else new.
+  assert.equal(offerPresentation({ ...offer(), founderSpotsLeft: 63 }).spotsLeft, 63);
+  assert.equal(offerPresentation(offer()).spotsLeft, null);
+  assert.equal(offerPresentation({ ...offer('earlybird'), founderSpotsLeft: 0 }).spotsLeft, null);
 });
 
 test('public GET sends no identity or authorization and never caches or redirects', async () => {

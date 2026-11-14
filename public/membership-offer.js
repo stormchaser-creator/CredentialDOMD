@@ -43,6 +43,10 @@ export function offerPresentation(value) {
     || (value.availability === 'temporarily_full' && value.phase !== 'founding')
     // Founding Credential includes Practice, so the bundle waits for founding to end.
     || (value.bundleAvailable !== undefined && value.bundleAvailable !== (value.phase !== 'founding'))) throw Error('Unavailable');
+  // Founder places left out of 100, when the server says: 1 to 100 while
+  // founding is sold, 0 once it is not. Anything else is not believed.
+  const left = value.founderSpotsLeft;
+  if (left !== undefined && left !== null && (!Number.isInteger(left) || left < 0 || left > 100 || (value.phase === 'founding') !== (left > 0))) throw Error('Unavailable');
   const founding = value.phase === 'founding';
   const name = founding ? 'Founding Credential' : 'Credential';
   const rate = `$${value.annualCents / 100}/year`;
@@ -75,7 +79,7 @@ export function offerPresentation(value) {
     heading: 'Create your account', phase: founding ? 'Founding membership' : 'Credential membership',
     rateNote: RATES[value.phase], bundleLabel: founding ? BUNDLE_LABELS.founding : BUNDLE_LABELS.later,
     availabilityOffer: AVAILABILITY[value.phase], rateLock: RATE_LOCKS[value.phase], phaseKey: value.phase,
-    offerAvailability: value.availability };
+    offerAvailability: value.availability, spotsLeft: founding && Number.isInteger(left) ? left : null };
 }
 
 // ── What the public site paints ──────────────────────────────────────
@@ -112,7 +116,11 @@ const PAUSED_STATUS = 'Paid checkout is paused, so no payment is taken now. If y
 const SITE_FALLBACK = Object.freeze({ action: SIGN_UP, reviewAction: 'See the Founder plan',
   status: FALLBACK.status, headline: FOUNDER.headline, price: '$99', priceLabel: ' / year',
   heroHeadline: FOUNDER.headline, heroNote: FOUNDER.heroNote, heading: SIGN_UP, phase: 'Founder plan',
-  rateNote: FOUNDER.rate, availabilityOffer: FOUNDER.offer, rateLock: FOUNDER.rateLock, phaseKey: 'founding' });
+  rateNote: FOUNDER.rate, availabilityOffer: FOUNDER.offer, rateLock: FOUNDER.rateLock, phaseKey: 'founding',
+  // The founder countdown is never printed or guessed: no number without a live answer.
+  spots: '' });
+/** "N of 100 founder spots left", from the server's count of paid founder places. */
+export const founderSpotsText = left => Number.isInteger(left) && left >= 1 && left <= 100 ? `${left} of 100 founder spots left` : '';
 
 /** The site's view of a validated offer (the value offerPresentation returned). */
 export function sitePresentation(view) {
@@ -120,13 +128,16 @@ export function sitePresentation(view) {
   const paused = view.offerAvailability === 'paused';
   if (view.phaseKey === 'founding') {
     return { ...SITE_FALLBACK,
+      // Not while every remaining place is held by an open checkout: "N left"
+      // beside "temporarily unavailable" would read as a contradiction.
+      spots: view.offerAvailability === 'temporarily_full' ? '' : founderSpotsText(view.spotsLeft),
       status: view.offerAvailability === 'temporarily_full'
         ? 'Founder plan checkout is temporarily unavailable. Signing up does not reserve a place.' : paused ? PAUSED_STATUS : view.status };
   }
   return { action: SIGN_UP, reviewAction: 'See membership plans',
     status: paused ? PAUSED_STATUS : view.status, headline: AFTER.headline, price: '$149', priceLabel: ' / year',
     heroHeadline: AFTER.headline, heroNote: AFTER.heroNote, heading: SIGN_UP, phase: 'Membership',
-    rateNote: AFTER.rate, availabilityOffer: AFTER.offer, rateLock: AFTER.rateLock, phaseKey: 'soldout' };
+    rateNote: AFTER.rate, availabilityOffer: AFTER.offer, rateLock: AFTER.rateLock, phaseKey: 'soldout', spots: '' };
 }
 
 /**
@@ -196,6 +207,8 @@ export function createOfferUpdater(root, endpoint, options) {
       ['availability','availabilityOffer'], ['rate-lock','rateLock']]) {
       for (const node of root.querySelectorAll(`[data-membership-${attribute}]`)) node.textContent = value[key];
     }
+    // The founder countdown: shown only with a number the server just gave.
+    for (const node of root.querySelectorAll('[data-membership-spots]')) { node.textContent = value.spots || ''; node.hidden = !value.spots; }
     // The two layouts the page carries: the Founder card and its wording while
     // founding lasts, the two plan cards once the founders are sold out.
     const founding = value.phaseKey === 'founding';
@@ -211,8 +224,9 @@ export function createOfferUpdater(root, endpoint, options) {
     const turn = ++generation;
     // Keep a known sold-out state on this page; a network failure must not turn
     // an observed later phase back into the $99 Founder offer.
+    // An unconfirmed view never keeps a count: an old number may be wrong.
     const unconfirmed = () => !lastValidated ? SITE_FALLBACK
-      : { ...lastValidated, action: SITE_FALLBACK.action, status: lastValidated.phaseKey === 'founding' ? SITE_FALLBACK.status : lastValidated.status };
+      : { ...lastValidated, spots: '', action: SITE_FALLBACK.action, status: lastValidated.phaseKey === 'founding' ? SITE_FALLBACK.status : lastValidated.status };
     paint(unconfirmed());
     try {
       const value = await fetchPublicOffer(endpoint, options);

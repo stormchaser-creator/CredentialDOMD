@@ -30,6 +30,7 @@ export const FOUNDER_PLAN = Object.freeze({
 // about signing up, not creating an account. The destinations are unchanged.
 // src/content/publicLaunch.mjs, which the app also reads, keeps its own label.
 export const SIGNUP_LABEL = 'Sign up today';
+const FOUNDER_SPOTS = '<p class="spots" data-membership-spots role="status" aria-live="polite" hidden></p>';
 // What the site says once the founders are sold out (membership-offer.js AFTER).
 export const AFTER_FOUNDERS = Object.freeze({
   headline: 'Credential: $149/year. Credential + Practice: $245/year',
@@ -140,7 +141,7 @@ function signupInsteadOfForm(fallback, view) {
 const SIGNUP_NOTE = 'Card required at checkout. No-hassle 100% money-back guarantee: a full refund of your most recent annual payment, at any time.';
 
 const minimumSlots = {
-  home: { cta: 4, form: 2, 'hero-offer': 1, 'early-release': 1, participation: 1, 'faq-availability': 1, 'faq-teams': 1, 'faq-np-pa': 1, 'home-faq-json': 1, 'after-founders-plans': 1, 'refund-guarantee': 1 },
+  home: { cta: 4, form: 2, 'hero-offer': 1, 'early-release': 1, participation: 1, 'faq-availability': 1, 'faq-teams': 1, 'faq-np-pa': 1, 'home-faq-json': 1, 'founder-spots': 1, 'after-founders-plans': 1, 'refund-guarantee': 1 },
   locums: { cta: 2, form: 2, 'early-release': 1, participation: 1, 'faq-cost': 1, 'faq-json': 1, 'signup-heading': 1, 'signup-eyebrow': 2, 'signup-card-heading': 1, 'refund-guarantee': 1 },
   help: { cta: 1, 'early-release': 1, participation: 1 },
   cme: { cta: 1, 'early-release': 1, participation: 1 },
@@ -149,7 +150,7 @@ const minimumSlots = {
   'watch-pages': { cta: 1, 'early-release': 1, participation: 1 },
   'legal-navigation': { cta: 1 },
   // /pricing shows the same membership cards as the home page's #planned-pricing.
-  pricing: { cta: 2, 'founding-headline': 1, availability: 1, 'founding-price': 1, 'founding-rate': 1, 'after-founders-plans': 1, 'refund-guarantee': 1, 'early-release': 1 },
+  pricing: { cta: 2, 'founding-headline': 1, availability: 1, 'founding-price': 1, 'founding-rate': 1, 'founder-spots': 1, 'after-founders-plans': 1, 'refund-guarantee': 1, 'early-release': 1 },
 };
 // Slots that described other tiers (early bird, standard, the $245 package,
 // the Practice trial). No page may carry them again.
@@ -178,7 +179,7 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
       // phone's first screen of the home page had no way to sign up; the
       // first signup button was 16,000 px down). The same button and
       // guarantee sentence as every other signup button (33363fee).
-      + (surface === 'home' ? `<div data-hero-signup style="margin:0 0 20px;"><a class="btn-primary" href="${escapeHtml(view.primaryAction.href)}" style="display:inline-block;padding:15px 24px;font-size:16px;text-align:center;"><span data-membership-action>${escapeHtml(SIGNUP_LABEL)}</span></a>`
+      + (surface === 'home' ? `<div data-hero-signup style="margin:0 0 20px;">${FOUNDER_SPOTS}<a class="btn-primary" href="${escapeHtml(view.primaryAction.href)}" style="display:inline-block;padding:15px 24px;font-size:16px;text-align:center;"><span data-membership-action>${escapeHtml(SIGNUP_LABEL)}</span></a>`
         + `<p style="font-size:12.5px;line-height:1.5;margin:10px 0 0;color:var(--text-secondary);">${escapeHtml(SIGNUP_NOTE)}</p></div>` : '');
     // Same approved strings and data attributes as the home hero, so membership-offer.js
     // repaints this block when the live phase changes. No new claims, no new price.
@@ -212,6 +213,10 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
     // membership-offer.js replaces this paragraph if checkout is no longer
     // selling the founding offer, so a full plan never keeps its rate line.
     if (slot === 'founding-rate') return `<span data-membership-rate>${escapeHtml(FOUNDER_PLAN.rate)}</span>`;
+    // The founder countdown ("N of 100 founder spots left"). Printed empty and
+    // hidden: membership-offer.js fills it from the server's count of paid
+    // founder places and hides it again whenever that count is not confirmed.
+    if (slot === 'founder-spots') return FOUNDER_SPOTS;
     // The two plan cards for after the founders: printed hidden, shown by
     // membership-offer.js when the server reports the founders are sold out.
     // Their prices are the only two that exist after founding, so they are

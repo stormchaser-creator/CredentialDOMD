@@ -30,6 +30,27 @@ test('the removed $199 standard tier, or any amount that is not $99 or $149, is 
     assert.deepEqual(await response.json(),{error:'membership_offer_unavailable'});
   }
 });
+test('the founder countdown is one validated aggregate: 1 to 100 while founding is sold, 0 after, nothing when unknown',async()=>{
+  const read=async value=>{const r=await createPublicMembershipOfferHandler({readOffer:async()=>value})(request());return [r.status,await r.json()];};
+  // Published as given, beside the same fields as before and nothing else from the row.
+  for(const left of [100,57,1]){
+    const [status,body]=await read({...offer,bundleAvailable:false,founderSpotsLeft:left,paidCount:100-left,emails:['private@example.invalid'],slots:[{profile_id:'x'}]});
+    assert.equal(status,200);
+    assert.deepEqual(body,{...offer,bundleAvailable:false,founderSpotsLeft:left});
+  }
+  assert.deepEqual((await read({...offer,phase:'earlybird',annualCents:14900,bundleAvailable:true,founderSpotsLeft:0}))[1].founderSpotsLeft,0);
+  // Unknown (founding program not prepared, or a database before the migration): no number at all.
+  for(const left of [null,undefined]){
+    const [status,body]=await read({...offer,founderSpotsLeft:left});
+    assert.equal(status,200);assert.equal(Object.hasOwn(body,'founderSpotsLeft'),false);
+  }
+  // A count that disagrees with the phase, or is not a whole number from 0 to 100, publishes nothing.
+  for(const bad of [{founderSpotsLeft:0},{founderSpotsLeft:101},{founderSpotsLeft:-1},{founderSpotsLeft:57.5},{founderSpotsLeft:'57'},{founderSpotsLeft:[57]},
+    {phase:'earlybird',annualCents:14900,bundleAvailable:true,founderSpotsLeft:3}]){
+    const [status,body]=await read({...offer,...bad});
+    assert.equal(status,503,JSON.stringify(bad));assert.deepEqual(body,{error:'membership_offer_unavailable'});
+  }
+});
 test('foreign origins and writes never read policy; OPTIONS is bounded and authentication is unnecessary',async()=>{
   let reads=0;const h=createPublicMembershipOfferHandler({readOffer:async()=>{reads++;return offer;}});
   assert.equal((await h(request('GET','https://foreign.example'))).status,403);

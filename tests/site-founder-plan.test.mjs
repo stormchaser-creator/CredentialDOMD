@@ -10,6 +10,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile, readdir } from 'node:fs/promises';
+import { readFileSync } from 'node:fs';
+const readFileSyncSafe = path => readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
 import { renderPublicLaunch, FOUNDER_PLAN, AUDIENCE, NP_PA_QUESTION, NP_PA_ANSWER } from '../scripts/public-launch-render.mjs';
 import { offerPresentation, sitePresentation } from '../public/membership-offer.js';
 import { DEGREES } from '../src/constants/professions.js';
@@ -65,6 +67,21 @@ test('the home page names physicians, NPs and PAs in its copy, metadata and stru
   // The founder wording is the live site's, not the draft.
   assert.match(text, /Built by Dr\. Eric Whitney, DO, a practicing neurosurgeon who uses it for his own credentials\./);
   assert.doesNotMatch(text, /licensed in several states/i);
+});
+
+test('the founder countdown is printed empty and hidden: on the home hero by the signup button, on the home card and on /pricing', async () => {
+  const HOOK = '<p class="spots" data-membership-spots role="status" aria-live="polite" hidden></p>';
+  const home = renderPublicLaunch(await read('landing/index.html'), 'home');
+  assert.equal(home.split(HOOK).length, 3, 'two places on the home page');
+  assert.match(home, new RegExp(`<div data-hero-signup[^>]*>${HOOK.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}<a class="btn-primary" href="/app/"`), 'right above the hero signup button');
+  const card = home.slice(home.indexOf('<div class="prices prices-one" data-founder-only>'), home.indexOf('<div class="prices" data-after-founders hidden>'));
+  assert.equal(card.split(HOOK).length, 2, 'in the Founder card');
+  const pricing = renderPublicLaunch(await read('landing/pricing.html'), 'pricing');
+  assert.equal(pricing.split(HOOK).length, 2, 'once on /pricing, in the Founder card');
+  // No number, and no count wording, is ever written into a page: only the server's answer fills it.
+  for (const page of [home, pricing]) assert.doesNotMatch(page.replace(/<script\b[\s\S]*?<\/script>/gi, ''), /\d+ of 100|spots left|places left/i);
+  const without = readFileSyncSafe('landing/pricing.html').replace(/<!-- public-launch:founder-spots -->[\s\S]*?<!-- \/public-launch:founder-spots -->/, '');
+  assert.throws(() => renderPublicLaunch(without, 'pricing'), /Incomplete pricing migration: founder-spots/);
 });
 
 test('the professions the site names are the ones the app lets a member choose', () => {

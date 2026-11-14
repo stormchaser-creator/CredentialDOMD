@@ -156,3 +156,5 @@ section[id]{scroll-margin-top:84px}
 .price ul.includes{padding-left:0;color:inherit}
 .price ul.includes li{margin-bottom:9px}
 [hidden]{display:none!important}
+/* The founder countdown, filled in by membership-offer.js from the server's count. */
+.spots{display:block;width:fit-content;margin:0 0 12px;padding:5px 12px;border-radius:999px;background:var(--mint);color:#065f46;font-weight:700;font-size:.95rem}
