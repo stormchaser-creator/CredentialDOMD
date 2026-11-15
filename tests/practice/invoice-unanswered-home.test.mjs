@@ -6,9 +6,12 @@
 // and LocumDashboard with a synthetic account. Synthetic data only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { loadScreens, renderScreen } from '../harness/component-harness.mjs';
+import { loadScreens, renderScreen, pinClock } from '../harness/component-harness.mjs';
 import { DEFAULT_DATA } from '../../src/constants/defaults.js';
 import { THEMES } from '../../src/constants/themes.js';
+
+// Keep the September 30 handoff within its 45-day retention window.
+pinClock(test, 'America/Chicago', '2026-10-01T12:00:00-05:00');
 
 const stored = new Map([['credentialdomd-ai-shared', JSON.stringify({ shared: true, anthropicShared: true, limit: 200, checkedAt: 1, unlimited: false })]]);
 globalThis.localStorage = { getItem: k => stored.get(k) ?? null, setItem: (k, v) => stored.set(k, String(v)), removeItem: k => stored.delete(k) };
