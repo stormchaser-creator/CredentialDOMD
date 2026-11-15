@@ -22,7 +22,7 @@ const read = path => readFile(path, "utf8");
 const sha256 = bytes => createHash("sha256").update(bytes).digest("hex");
 // Include default images and responsive candidates advertised by the real
 // homepage, independently of the packager's asset allowlist.
-const homepageImagePaths = html => [...new Set(html.match(/\/images\/[a-zA-Z0-9._-]+\.webp/g) || [])];
+const homepageImagePaths = html => [...new Set(html.match(/\/images\/[a-zA-Z0-9._-]+\.(?:webp|jpg|png)/g) || [])];
 
 async function siteFixture(t) {
   const root = await mkdtemp(resolve(tmpdir(), "credentialdo-packaging-"));
@@ -40,11 +40,12 @@ async function siteFixture(t) {
   await writeFile(resolve(root, "landing/states/example.html"), `<!doctype html><meta charset="utf-8">${HTTPS_REDIRECT_SCRIPT}<title>Synthetic state guide</title>`);
   await Promise.all([
     ...pages.map(page => cp(resolve(sourceRoot, `landing/${page}.html`), resolve(root, `landing/${page}.html`))),
-    ...["robots.txt", "sitemap.xml", "organization-logo.svg", "support-nav.css", "support-nav.js", "waitlist-signup.js", "membership-offer.js", "credential-access", "knowledge", "cme-assets"].map(path => cp(resolve(sourceRoot, "public", path), resolve(root, "public", path), { recursive: true })),
+    ...["robots.txt", "sitemap.xml", "organization-logo.svg", "support-nav.css", "support-nav.js", "waitlist-signup.js", "membership-offer.js", "unified.css", "unified-menu.js", "credential-access", "knowledge", "cme-assets"].map(path => cp(resolve(sourceRoot, "public", path), resolve(root, "public", path), { recursive: true })),
     ...["root-sw-retirement.js", "build-credential-portal.mjs"].map(path => cp(resolve(sourceRoot, "scripts", path), resolve(root, "scripts", path))),
     cp(resolve(sourceRoot, "package.json"), resolve(root, "package.json")),
     cp(resolve(sourceRoot, "landing/states/states-data.json"), resolve(root, "landing/states/states-data.json")),
     cp(resolve(sourceRoot, "landing/images"), resolve(root, "landing/images"), { recursive: true }),
+    cp(resolve(sourceRoot, "landing/fonts"), resolve(root, "landing/fonts"), { recursive: true }),
   ]);
   await writeFile(resolve(root, "landing/images/unreviewed.webp"), "not a reviewed runtime image");
   await writeFile(resolve(root, "landing/images/source-original.png"), "source originals must not ship");
@@ -108,17 +109,22 @@ test("site package keeps public help/CME, private routes, declared assets and di
   }
   for (const page of ["index.html", "locums.html"]) {
     const html = await read(resolve(output, page));
-    assert.equal((html.match(/<script type="module" src="\/waitlist-signup\.js"><\/script>/g) || []).length, 1);
+    // The unified home page (2026-11-15) has no waitlist form, so no controller.
+    assert.equal((html.match(/<script type="module" src="\/waitlist-signup\.js"><\/script>/g) || []).length, page === "index.html" ? 0 : 1);
     assert.doesNotMatch(html, /var postSignup =|postSignup\('\/api\/waitlist'/);
   }
+  for (const file of ["unified.css", "unified-menu.js"]) assert.equal(await read(resolve(output, file)), await read(resolve(root, "public", file)));
+  assert.deepEqual(await readFile(resolve(output, "fonts/figtree.woff")), await readFile(resolve(root, "landing/fonts/figtree.woff")));
   const imagePaths = homepageImagePaths(await read(resolve(output, "index.html")));
-  assert.equal(imagePaths.length, 9, "all reviewed responsive homepage images must be advertised");
+  assert.equal(imagePaths.length, 11, "all reviewed responsive homepage images must be advertised");
   assert.deepEqual((await readdir(resolve(output, "images"))).sort(), imagePaths.map(path => path.slice("/images/".length)).sort(),
     "package only referenced runtime images, excluding unreviewed files and source originals");
   for (const path of imagePaths) {
     const source = await readFile(resolve(root, "landing", path.slice(1)));
-    assert.equal(source.subarray(0, 4).toString(), "RIFF");
-    assert.equal(source.subarray(8, 12).toString(), "WEBP");
+    if (path.endsWith(".webp")) {
+      assert.equal(source.subarray(0, 4).toString(), "RIFF");
+      assert.equal(source.subarray(8, 12).toString(), "WEBP");
+    }
     assert.deepEqual(await readFile(resolve(output, path.slice(1))), source, `preserve exact reviewed image bytes: ${path}`);
   }
   for (const { id } of WATCH_PAGES) {
@@ -190,7 +196,7 @@ test('packaged watch pages resolve their media, canonical, related guides and si
   }
   const home = await read(resolve(output, 'index.html'));
   const organization = [...home.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)]
-    .map(match => JSON.parse(match[1])).find(item => item['@type'] === 'Organization');
+    .flatMap(match => { const data = JSON.parse(match[1]); return data['@graph'] || [data]; }).find(item => item['@type'] === 'Organization');
   const logo = new URL(organization.logo);
   assert.equal(logo.origin, 'https://credentialdomd.com');
   assert.equal(logo.pathname, '/organization-logo.svg');

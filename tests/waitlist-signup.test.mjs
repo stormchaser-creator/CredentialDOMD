@@ -261,8 +261,10 @@ test('separate forms keep their own busy states and result messages', async () =
   assert.match(a.msg.textContent, /first@example\.invalid/);
 });
 
-test('both landing pages expose live results and preserve native email validation', async () => {
-  for (const page of ['index', 'locums']) {
+test('the locums waitlist forms expose live results and preserve native email validation; the home page has no form', async () => {
+  // The unified home page (2026-11-15) links to signup and collects nothing.
+  assert.doesNotMatch(await readFile(new URL('../landing/index.html', import.meta.url), 'utf8'), /<form\b|<input\b|wl-msg/);
+  for (const page of ['locums']) {
     const html = await readFile(new URL(`../landing/${page}.html`, import.meta.url), 'utf8');
     const statuses = [...html.matchAll(/<div\b[^>]*class="wl-msg"[^>]*>/g)].map(match => match[0]);
     assert.equal(statuses.length, 2);

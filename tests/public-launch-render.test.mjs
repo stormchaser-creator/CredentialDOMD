@@ -39,58 +39,78 @@ test('production defaults render every packaged surface with the real app signup
     assert.equal(output, renderPublicLaunch(html, surface, { enabled: true, signupHref: '/app/' }), path);
     assert.match(output, /data-public-launch="founding-signup"/, path);
     assert.equal((output.match(/src="\/membership-offer\.js"/g) || []).length, 1, path);
-    assert.match(output, /data-membership-action/, path);
+    // The unified home page's signup links are its own ("Sign up today"); the
+    // other surfaces keep the label the live offer repaints.
+    assert.match(output, surface === 'home' ? />Sign up today<\/a>/ : /data-membership-action/, path);
     assert.match(output, /href="\/app\/"/, path);
     assert.doesNotMatch(output, /href="\/signup\/"|href="\/#join"|<!-- public-launch:/, path);
     assert.doesNotMatch(output, /<form\b[^>]*class="[^"]*\bwl-form\b|<fieldset\b[^>]*class="guide-choice"/, path);
   }
 });
 
-test('paid home and locums expose static navigation and cannot submit a disguised waitlist form', async () => {
-  for (const [path, surface] of [['index', 'home'], ['locums', 'locums']]) {
-    const source = await read(`landing/${path}.html`);
-    const output = renderPublicLaunch(source, surface, paid);
-    assert.doesNotMatch(output, /<form\b[^>]*\bclass="[^"]*wl-form/);
-    assert.doesNotMatch(output, /type="email"/);
-    assert.ok((output.match(/href="\/signup\/"/g) || []).length >= (surface === 'home' ? 3 : 4));
-    assert.match(output, />Create your account<\/span><\/a>/);
-    assert.match(output, /Founding Credential is \$99\/year for the first 100 paid founding members/);
-    assert.doesNotMatch(output, /Their invitation will confirm eligibility|Your invitation will confirm eligibility/);
-    if (surface === 'home') {
-      assert.match(output, /data-membership-headline>First 100 paid founding memberships: \$99\/year<\/span>/);
-      assert.match(output, /<b data-membership-price>\$99<\/b><span data-membership-price-label> \/ year, founding rate for the first 100 paid members<\/span>/);
-      assert.match(output, /data-membership-phase>Membership options<\/span>/);
-      assert.doesNotMatch(output, /\$149<span>/);
-    }
-    assert.match(output, /less polished/);
-    assert.match(output, /support tickets/);
-    assert.match(output, /locked for life while membership remains continuously active/);
-    assert.match(output, /Credential \+ Practice is \$245\/year total at first purchase, with no early bird discount\. It is not offered to founding buyers/);
-    assert.doesNotMatch(output, /no founding (?:or early.bird )?discount/);
-    assert.match(output, /earlier free-beta wording/);
-    assert.match(output, /30 days free with no card/);
-    assert.match(output, /Founding Credential members have Practice included for as long as their membership stays active\. Early bird and standard Credential members receive a separate 30 day Practice trial/);
-    assert.deepEqual(assets(output), assets(source), 'preserve physician photos and all runtime sources');
-    assert.match(output, /href="\/app\/"/, 'existing sign-in remains available');
-  }
+test('paid locums exposes static navigation and cannot submit a disguised waitlist form', async () => {
+  const source = await read('landing/locums.html');
+  const output = renderPublicLaunch(source, 'locums', paid);
+  assert.doesNotMatch(output, /<form\b[^>]*\bclass="[^"]*wl-form/);
+  assert.doesNotMatch(output, /type="email"/);
+  assert.ok((output.match(/href="\/signup\/"/g) || []).length >= 4);
+  assert.match(output, />Create your account<\/span><\/a>/);
+  assert.match(output, /Founding Credential is \$99\/year for the first 100 paid founding members/);
+  assert.doesNotMatch(output, /Their invitation will confirm eligibility|Your invitation will confirm eligibility/);
+  assert.match(output, /less polished/);
+  assert.match(output, /support tickets/);
+  assert.match(output, /locked for life while membership remains continuously active/);
+  assert.match(output, /Credential \+ Practice is \$245\/year total at first purchase, with no early bird discount\. It is not offered to founding buyers/);
+  assert.doesNotMatch(output, /no founding (?:or early.bird )?discount/);
+  assert.match(output, /earlier free-beta wording/);
+  assert.match(output, /30 days free with no card/);
+  assert.match(output, /Founding Credential members have Practice included for as long as their membership stays active\. Early bird and standard Credential members receive a separate 30 day Practice trial/);
+  assert.deepEqual(assets(output), assets(source), 'preserve physician photos and all runtime sources');
+  assert.match(output, /href="\/app\/"/, 'existing sign-in remains available');
 });
 
-test('home shows founding policy before sign-in and its offer buttons lead to public pricing', async () => {
+// Unified home page (owner approval 2026-11-15). Its signup links are plain
+// links that say "Sign up today" ("Sign up" in the header and footer); the
+// mode only supplies where they lead.
+test('paid home exposes static signup links, keeps sign-in, and submits no form', async () => {
+  const source = await read('landing/index.html');
+  const output = renderPublicLaunch(source, 'home', paid);
+  assert.doesNotMatch(output, /<form\b|type="email"/);
+  assert.equal((output.match(/<a\b[^>]*href="\/signup\/"[^>]*>Sign up today<\/a>/g) || []).length, 5);
+  assert.equal((output.match(/<a\b[^>]*href="\/signup\/"[^>]*>Sign up<\/a>/g) || []).length, 2, 'header and footer');
+  assert.equal((output.match(/href="\/signup\/"/g) || []).length, 7, 'nothing else points at signup');
+  assert.ok((output.match(/<a\b[^>]*href="\/app\/"[^>]*>Log in<\/a>/g) || []).length >= 3, 'existing sign-in remains available');
+  assert.doesNotMatch(output, /Create your account|data-membership-action|Join for \$/);
+  assert.match(output, /less polished/);
+  assert.match(output, /support tickets/);
+  assert.match(output, /earlier free-beta wording/);
+  assert.match(output, /30 days free with no card/);
+  assert.match(output, /keep Credential and Practice free for life/);
+  assert.deepEqual(assets(output), assets(source), 'preserve photographs and all runtime sources');
+  // The beacon and the https switch are the page's own, untouched by rendering.
+  assert.deepEqual(scripts(output), scripts(source));
+});
+
+test('home shows the Founder plan before sign-in, with its signup link right under the offer', async () => {
   const output = renderPublicLaunch(await read('landing/index.html'), 'home');
-  const hero = output.slice(output.indexOf('<section class="hero"'), output.indexOf('<!-- ============ PROBLEM'));
-  const nav = output.slice(output.indexOf('<nav>'), output.indexOf('</nav>'));
-  for (const html of [hero, nav]) {
-    assert.match(html, /href="#planned-pricing"[^>]*><span data-membership-review-action>/);
-    assert.doesNotMatch(html, /Review membership offers|Check membership offers/);
-  }
-  assert.match(hero, /Founding Credential: \$99\/year for the first 100 paid members, Practice included while you are a member/);
-  assert.match(hero, /locked for life while membership remains active/);
-  assert.match(hero, /confirmed before payment/);
-  const core = output.slice(output.indexOf('<h3 class="feature-title">Credential</h3>'), output.indexOf('<h3 class="feature-title">Credential + Practice</h3>'));
-  assert.match(core, /data-membership-price>\$99/);
-  assert.match(core, /data-membership-status/);
-  assert.match(core, /href="\/app\/"[^>]*><span data-membership-action>Create your account/);
-  assert.ok(core.indexOf('data-membership-price') < core.indexOf('href="/app/"'));
+  const hero = output.slice(output.indexOf('<section class="hero"'), output.indexOf('<section id="how">'));
+  assert.match(hero, /<div class="offer" data-founder-only>\s*<strong>Founder plan: \$99\/year, everything included<\/strong>/);
+  assert.match(hero, /Your rate stays locked for life while your membership is active/);
+  assert.match(hero, /<span class="spots" data-founder-spots>Limited to the first 100 founders<\/span>/, 'no number is printed');
+  const offer = hero.indexOf('data-founder-spots');
+  const signup = hero.indexOf('<a class="btn" href="/app/">Sign up today</a>');
+  assert.ok(offer > 0 && signup > offer && signup < hero.indexOf('Take a look inside'), 'after the offer box, before the tour link');
+  assert.match(hero, /100% money-back guarantee, any time/);
+  const header = output.slice(output.indexOf('<header'), output.indexOf('</header>'));
+  assert.match(header, /<a class="login" href="\/app\/">Log in<\/a>\s*<a class="btn sm" href="\/app\/">Sign up<\/a>/);
+  assert.match(header, /<a href="#pricing">Pricing<\/a>/);
+  // Links to the previous home page's sections still land.
+  for (const id of ['planned-pricing', 'how-it-works', 'features', 'founder', 'faq', 'join', 'early-access']) assert.match(output, new RegExp(`\\bid="${id}"`), id);
+  const card = output.slice(output.indexOf('<div class="price-card" data-founder-only>'), output.indexOf('<div class="terms">'));
+  assert.match(card, /<div class="price">\$99<small>\/year<\/small><\/div>/);
+  assert.ok(card.indexOf('class="price"') < card.indexOf('href="/app/"'), 'the price is above the signup link');
+  assert.match(output, /<span data-home-status role="status" aria-live="polite">Your offer is confirmed before payment\./);
+  assert.doesNotMatch(output, /data-membership-(?!endpoint)/, 'none of the hooks that repaint the older wording');
 });
 
 test('locums visible cost and structured data share the same active offer and exceptions', async () => {
@@ -104,33 +124,42 @@ test('locums visible cost and structured data share the same active offer and ex
   assert.deepEqual(faq.mainEntity.filter(item => item.name !== 'What does it cost?'), before.mainEntity.filter(item => item.name !== 'What does it cost?'));
 });
 
-test('home signup and team FAQs use current offers in visible answers and structured data', async () => {
+test('home FAQ answers are the same in the page and its structured data', async () => {
   const source = await read('landing/index.html');
   assert.equal(renderPublicLaunch(source, 'home', off), source);
-  assert.match(source, /Early access opens to the waitlist first, in order/);
   const output = renderPublicLaunch(source, 'home');
-  const faq = jsonLd(output).find(item => item['@type'] === 'FAQPage');
-  assert.equal(faq.mainEntity.length, 2);
-  // The founding offer sentences sit in spans membership-offer.js repaints
-  // for the live phase (BILL-004); the words are the JSON-LD's.
-  const visible = output.replace(/<script\b[\s\S]*?<\/script>/g, '').replace(/<span data-membership-[a-z-]+>|<\/span>/g, '');
+  const graph = jsonLd(output).flatMap(item => item['@graph'] || [item]);
+  const faq = graph.find(item => item['@type'] === 'FAQPage');
+  assert.equal(faq.mainEntity.length, 5);
+  const visible = output.replace(/<script\b[\s\S]*?<\/script>/g, '').replace(/<[^>]+>/g, '');
   for (const answer of faq.mainEntity) {
     assert.ok(visible.includes(answer.name));
     assert.ok(visible.includes(answer.acceptedAnswer.text), `${answer.name}: same answer in HTML and JSON-LD`);
   }
-  const available = faq.mainEntity.find(item => item.name === 'Can I sign up now?').acceptedAnswer.text;
-  assert.match(available, /Compare the plans here, then create your account/);
-  assert.match(available, /\$99\/year/);
-  assert.match(available, /Founding Credential is \$99\/year for the first 100 paid founding members/);
-  const teams = faq.mainEntity.find(item => item.name.includes('practice manager')).acceptedAnswer.text;
-  assert.match(teams, /on the roadmap and are not currently available/);
-  assert.match(teams, /support@credentialdomd.com/);
-  assert.match(teams, /individual Practice package does not provide team-wide account management/);
+  assert.equal(faq.mainEntity.find(item => item.name === 'Who is CredentialDOMD for?').acceptedAnswer.text, 'DOs, MDs, NPs and PAs. It tracks licenses and certifications for all four.');
+  const cost = faq.mainEntity.find(item => item.name === 'How much does it cost?').acceptedAnswer.text;
+  assert.match(cost, /^The Founder plan is \$99 a year for the first 100 paid members/);
+  assert.match(cost, /Card required at checkout; the app confirms your offer before you pay\.$/);
+  const offer = graph.find(item => item['@type'] === 'SoftwareApplication').offers;
+  assert.deepEqual([offer.name, offer.price, offer.priceCurrency], ['Founder plan', '99', 'USD']);
+  assert.match(visible, /Can my group use it\?Not yet\. Group features are on the roadmap\. Email support@credentialdomd\.com/);
   assert.doesNotMatch(output, /field testing right now|waitlist first, in order|Leave your email above|when your spot is ready|earliest names on the list|practices get priority onboarding/i);
-  for (const slot of ['faq-availability', 'faq-teams', 'home-faq-json']) {
+  for (const slot of ['early-release', 'participation', 'promised-beta', 'lifetime-exception', 'practice-trial', 'refund-guarantee']) {
     const missing = source.replace(new RegExp(`<!-- public-launch:${slot} -->[\\s\\S]*?<!-- /public-launch:${slot} -->`), '');
-    assert.throws(() => renderPublicLaunch(missing, 'home'), /Incomplete home migration/);
+    assert.throws(() => renderPublicLaunch(missing, 'home'), /Incomplete home migration/, slot);
   }
+});
+
+test('the home page cannot be printed with an older label, a later price or a reordered credential list', async () => {
+  const source = await read('landing/index.html');
+  const withText = text => source.replace('</main>', `<p>${text}</p></main>`);
+  for (const text of ['Create your account', 'Create an account to begin', 'Then $149 a year', '$199/year', 'Credential + Practice is $245/year', 'For MDs and DOs', 'For DOS, MDS, NPS and PAS']) {
+    assert.throws(() => renderPublicLaunch(withText(text), 'home'), /Founder home page must not print/, text);
+  }
+  assert.throws(() => renderPublicLaunch(source.replace('</main>', '<a href="/pricing">Sign up today</a></main>'), 'home'), /Sign up today link must open the app/);
+  assert.throws(() => renderPublicLaunch(source.replace('<!-- public-launch:signup-link --><a class="btn" href="/app/">Sign up today</a>', '<!-- public-launch:signup-link --><a class="btn" href="/app/">Join now</a>'), 'home'), /signup link slot/);
+  // The price in a structured answer is checked too, not only visible text.
+  assert.throws(() => renderPublicLaunch(source.replace('</head>', '<script type="application/ld+json">{"@type":"Offer","price":"$149"}</script></head>'), 'home'), /Founder home page must not print/);
 });
 
 test('launch render rejects observed stale promises in visible copy and JSON-LD', async () => {
@@ -277,7 +306,7 @@ test('CME search, filters, source register, public facts and resource destinatio
 
 test('paid rendering rejects missing or stray slots and current legal contradictions', async () => {
   const home = await read('landing/index.html');
-  assert.throws(() => renderPublicLaunch(home.replace(/<!-- public-launch:form -->[\s\S]*?<!-- \/public-launch:form -->/, ''), 'home', paid), /Incomplete home migration: form/);
+  assert.throws(() => renderPublicLaunch(home.replace(/<!-- public-launch:signup-link -->[\s\S]*?<!-- \/public-launch:signup-link -->/g, ''), 'home', paid), /Incomplete home migration: signup-link/);
   assert.throws(() => renderPublicLaunch(home + '<a href="/#join">Join the waitlist</a>', 'home', paid), /Unmigrated public launch wording/);
   assert.throws(() => renderPublicLaunch(home + '<!-- public-launch:unknown -->x<!-- /public-launch:unknown -->', 'home', paid), /Unknown public launch slot/);
   const staleTerms = renderLegalPages(off)['terms.html'];
@@ -365,40 +394,15 @@ test('both legal modes retain factual device-storage and AI-provider disclosures
 });
 
 // Signup review 2026-10-07: on a phone the home page's first screen had no
-// signup button (the first "Create your account" was about 16,700 px down on
-// an iPhone 15). The same button and guarantee sentence now sit right under
-// the hero offer, and the sticky bar shows while that button is out of view,
-// so a short screen has one before it is reached.
-test('home: the signup button and its guarantee sit right under the hero offer; other pages unchanged', async () => {
+// signup button. The unified home page (2026-11-15) keeps one in the hero,
+// right under the offer (asserted above), and "Sign up" in its header, which
+// stays on screen; the older page's separate sticky bar is gone with it.
+test('home: a signup link is in the header and the hero; other pages unchanged', async () => {
   const source = await read('landing/index.html');
   const output = renderPublicLaunch(source, 'home');
-  const hero = output.slice(output.indexOf('<section class="hero"'), output.indexOf('<!-- ============ PROBLEM'));
-  const box = hero.indexOf('data-membership-hero-note');
-  const signup = hero.indexOf('<div data-hero-signup');
-  assert.ok(box > 0 && signup > box, 'after the offer box');
-  assert.ok(signup < hero.indexOf('data-membership-review-action'), 'before the plans link');
-  const block = hero.slice(signup, hero.indexOf('</div>', signup) + 6);
-  assert.match(block, /<a class="btn-primary" href="\/app\/"[^>]*><span data-membership-action>Create your account<\/span><\/a>/);
-  assert.match(block, /Card required at checkout\. No-hassle 100% money-back guarantee: a full refund of your most recent annual payment, at any time\./);
-  // Only the home hero: the locums page has no such block, and off mode is byte for byte the source.
+  assert.match(await read('public/unified.css'), /header\.site\{position:sticky;top:0/);
+  assert.match(output.slice(output.indexOf('<header'), output.indexOf('</header>')), />Sign up<\/a>/);
+  assert.match(output.slice(output.indexOf('<section class="hero"'), output.indexOf('<section id="how">')), />Sign up today<\/a>/);
   assert.doesNotMatch(renderPublicLaunch(await read('landing/locums.html'), 'locums'), /data-hero-signup/);
   assert.equal(renderPublicLaunch(source, 'home', { enabled: false }), source);
-});
-
-test('home: the sticky bar follows the hero signup button when there is one, else the whole hero', async () => {
-  const source = await read('landing/index.html');
-  const script = source.slice(source.indexOf('// Sticky mobile CTA bar'), source.indexOf('// Nav scroll effect'));
-  const run = (withButton) => {
-    const observed = [];
-    const button = { id: 'hero-signup' }, hero = { id: 'hero' };
-    const bar = { classList: { toggle() {} }, querySelector: () => ({ addEventListener() {} }) };
-    vm.runInNewContext(script, {
-      document: { getElementById: id => (id === 'sticky-cta' ? bar : id === 'hero' ? hero : null), querySelector: sel => (sel === '[data-hero-signup]' && withButton ? button : null) },
-      window: { IntersectionObserver: true },
-      IntersectionObserver: function (cb) { this.observe = el => observed.push(el.id); },
-    });
-    return observed;
-  };
-  assert.deepEqual(run(true), ['hero-signup']);
-  assert.deepEqual(run(false), ['hero']);
 });

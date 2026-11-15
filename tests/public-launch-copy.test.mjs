@@ -16,6 +16,9 @@ for (const page of ['index', 'locums']) {
     const source = await read(`landing/${page}.html`);
     const html = renderPublicLaunch(source, page === 'index' ? 'home' : 'locums', off);
     assert.equal(html, source);
+    // The unified home page (2026-11-15) has no waitlist template: off mode
+    // leaves its bytes alone, and the waitlist wording lives on /locums only.
+    if (page === 'index') return;
     assert.match(html, /Checkout is not open/);
     assert.match(html, /card required at checkout/);
     assert.match(html, /Joining the waitlist does not (?:create a paid account or charge you|charge you or create a paid account)/);
@@ -36,9 +39,17 @@ for (const page of ['index', 'locums']) {
     assert.equal(PUBLIC_LAUNCH_MODE.enabled, true);
     const html = renderPublicLaunch(await read(`landing/${page}.html`), page === 'index' ? 'home' : 'locums');
     assert.match(html, /href="\/app\/"/);
-    assert.match(html, /Create your account/);
     assert.match(html, /card (?:is )?required at checkout/i);
-    assert.match(html, /Founding Credential is \$99\/year for the first 100 paid founding members/);
+    if (page === 'index') {
+      // Owner decisions 2026-11-13 and 2026-11-15: the home page shows only the
+      // $99 Founder plan while founder places remain, and says "Sign up today".
+      assert.match(html, />Sign up today<\/a>/);
+      assert.doesNotMatch(html, /Create your account/);
+      assert.match(html, /The Founder plan is \$99 a year for the first 100 paid members, with everything included: Credential and Practice/);
+    } else {
+      assert.match(html, /Create your account/);
+      assert.match(html, /Founding Credential is \$99\/year for the first 100 paid founding members/);
+    }
     assert.match(html, /30 days free with no card, starting when they first activate their account with a verified email address/);
     assert.match(html, /signing in again does not restart those 30 days/);
     assert.match(html, /opt in to \$99\/year Credential during the beta by adding a card and explicitly agreeing to the annual subscription/);
@@ -57,7 +68,8 @@ for (const page of ['index', 'locums']) {
     assert.match(html, /Practice records remain available to read and export/);
     assert.match(html, /keep Credential and Practice free for life/);
     assert.match(html, /waitlist entry, or an account that was created but never active before launch, does not qualify/);
-    assert.match(html, /\$245\/year total at first purchase/);
+    if (page === 'index') assert.doesNotMatch(html.replace(/<script type="module"[^>]*><\/script>/, ''), /\$\s?(?:149|199|245)\b/, 'no later price is printed while founding lasts');
+    else assert.match(html, /\$245\/year total at first purchase/);
     assert.doesNotMatch(html, /Checkout is not open|invitation will confirm eligibility|<form\b[^>]*class="[^"]*wl-form/i);
     assert.doesNotMatch(html, /Founding invitations/i);
   });

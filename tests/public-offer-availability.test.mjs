@@ -59,8 +59,9 @@ const offering$99 = text => text.split(/(?<=[.!?])\s+/).filter(x => /\$99/.test(
 
 async function pages() {
   const help = JSON.parse(await read('public/knowledge/credentialdo-help.json'));
+  // The unified home page prints none of these sentences and switches plans by
+  // its own hooks: tests/unified-home.test.mjs paints it at every phase.
   const out = {
-    home: renderPublicLaunch(await read('landing/index.html'), 'home'),
     locums: renderPublicLaunch(await read('landing/locums.html'), 'locums'),
     security: renderPublicLaunch(await read('landing/security.html'), 'legal-navigation'),
     cme: renderPublicLaunch(await read('landing/cme.html'), 'cme'),
@@ -107,11 +108,6 @@ test('at early bird and standard no sentence on any public page still offers $99
       const painted = dom.html();
       assert.deepEqual(offering$99(visibleText(painted)), [], `${name} at ${phase}`);
       assert.deepEqual(offering$99(structured(painted)), [], `${name} JSON-LD at ${phase}`);
-      if (name === 'home') {
-        const label = phase === 'earlybird' ? 'Early bird' : 'Standard';
-        assert.ok(visibleText(painted).includes(`${label} Credential is $${CENTS[phase] / 100}/year.`), 'the live rate is stated instead');
-        assert.ok(visibleText(painted).includes(`Yes. Membership is open now.`));
-      }
     }
   }
 });
@@ -128,10 +124,6 @@ test('at founding, or with no answer, the stated $99 policy sentences and struct
       assert.equal(structured(dom.html()), structured(html), `${name} JSON-LD`);
     }
   }
-  const home = textDom(rendered.home);
-  await createOfferUpdater(home, endpoint, { fetchImpl: async () => Response.json(reply('founding')) })();
-  assert.match(visibleText(home.html()), /Founding Credential is \$99\/year for the first 100 paid founding members\./);
-  assert.match(visibleText(home.html()), /That founding annual rate stays locked for life while membership remains continuously active\./);
 });
 
 test('structured data follows each phase from the page\'s original text, never from a painted one', () => {

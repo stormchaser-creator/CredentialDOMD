@@ -14,13 +14,20 @@ import { HTTPS_REDIRECT_SCRIPT, assertHttpsRedirect } from './https-redirect.mjs
 
 const publicPages = ['index', 'locums', 'security', 'privacy', 'terms', 'help', 'cme', 'credential-access'];
 const cmeAssets = ['cme.css', 'cme.mjs'];
-const publicSiteAssets = ['support-nav.css', 'support-nav.js', 'waitlist-signup.js', 'membership-offer.js'];
+const publicSiteAssets = ['support-nav.css', 'support-nav.js', 'waitlist-signup.js', 'membership-offer.js',
+  // The unified home page's stylesheet and menu (2026-11-15).
+  'unified.css', 'unified-menu.js'];
+const landingFonts = ['figtree.woff'];
 // Reviewed runtime images only; source originals and provenance stay out of the site.
+// The unified home page (2026-11-15) references exactly these: the founder
+// portrait (webp and its jpg fallback), two real app screens with sample
+// records, the logo, and two licensed photographs. The previous home page's
+// photographs are no longer referenced by any page and are not published.
 const landingImages = [
-  'physician-life-v3-600.webp', 'physician-life-v3-1200.webp',
-  'physician-colleagues-v3-600.webp', 'physician-colleagues-v3-1200.webp',
-  'physician-learning-v3-600.webp', 'eric-whitney-120.webp', 'eric-whitney-400.webp',
   'eric-whitney-formal-square-400.webp', 'eric-whitney-formal-square-800.webp',
+  'eric-whitney-formal-square-400.jpg', 'eric-whitney-formal-square-800.jpg',
+  'app-dashboard.webp', 'app-practice.webp', 'logo-64.png',
+  'hero-two-doctors-640.webp', 'hero-two-doctors-1200.webp', 'doctor-white-coat-640.webp', 'doctor-white-coat-1200.webp',
 ];
 
 // The recipient page ships disabled in source (tests pin that). The deploy
@@ -48,6 +55,7 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
     await access(resolve(root, `landing/${page}.html`));
   }
   for (const name of landingImages) await access(resolve(root, 'landing/images', name));
+  for (const name of landingFonts) await access(resolve(root, 'landing/fonts', name));
   await access(resolve(root, 'scripts/root-sw-retirement.js'));
   const videoCatalog = await loadVideoCatalog(root);
   const help = JSON.parse(await readFile(resolve(root, 'public/knowledge/credentialdo-help.json'), 'utf8'));
@@ -120,6 +128,8 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
   for (const name of publicSiteAssets) await cp(resolve(root, 'public', name), resolve(output, name));
   await mkdir(resolve(output, 'images'), { recursive: true });
   for (const name of landingImages) await cp(resolve(root, 'landing/images', name), resolve(output, 'images', name));
+  await mkdir(resolve(output, 'fonts'), { recursive: true });
+  for (const name of landingFonts) await cp(resolve(root, 'landing/fonts', name), resolve(output, 'fonts', name));
   // Never publish the vendor .gitignore ("*"): the deploy's git add -A would
   // then drop every PDF.js file from gh-pages and previews fall back to Download.
   await cp(resolve(root, 'public/credential-access'), resolve(output, 'credential-access'), { recursive: true, filter: source => basename(source) !== '.gitignore' });

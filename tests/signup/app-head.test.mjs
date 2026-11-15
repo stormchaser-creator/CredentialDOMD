@@ -11,8 +11,16 @@ const app = await readFile(new URL('../../index.html', import.meta.url), 'utf8')
 const home = await readFile(new URL('../../landing/index.html', import.meta.url), 'utf8');
 const orgOf = html => JSON.parse(html.match(/<script type="application\/ld\+json">\s*([\s\S]*?"@type": "Organization"[\s\S]*?)\s*<\/script>/)[1]);
 
+// The unified home page (2026-11-15) keeps its structured data in one @graph,
+// where the Organization names its founder by @id.
+function homeOrg(html) {
+  const graph = JSON.parse(html.match(/<script type="application\/ld\+json">\s*([\s\S]*?)\s*<\/script>/)[1])['@graph'];
+  const org = graph.find(node => node['@type'] === 'Organization');
+  return { ...org, founder: graph.find(node => node['@id'] === org.founder['@id']) };
+}
+
 test('the app head: founder DO, the published organization logo, no em dash', () => {
-  const org = orgOf(app), reference = orgOf(home);
+  const org = orgOf(app), reference = homeOrg(home);
   assert.equal(org.founder.honorificSuffix, 'DO');
   assert.equal(org.founder.honorificSuffix, reference.founder.honorificSuffix);
   assert.equal(org.founder.url, reference.founder.url);

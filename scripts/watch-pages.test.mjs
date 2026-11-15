@@ -89,11 +89,12 @@ test('sitemap adds actual watch pages once and keeps source dates unchanged', as
   }
 });
 
-test('homepage uses saved-record status and illustrative generic CME examples', async () => {
+test('homepage labels its app screens as sample records and states what the app does not do', async () => {
   const html = await read('landing/index.html');
-  assert.match(html, /80&ndash;100: On track/);
-  assert.match(html, /does not confirm board approval/);
-  assert.match(html, /Illustrative demos of app workflows/);
+  // Unified home page (2026-11-15): two real app screens, each labelled.
+  assert.equal(html.split('The real app, with sample records').length, 3);
+  assert.match(html, /App screenshots show sample records/);
+  assert.match(html, /You still complete board renewals, hospital applications and attestations yourself\. It is not primary source verification\./);
   assert.doesNotMatch(html, /Colorado's 30-hour|Substance Use: 0\/2h|Fully Compliant|Not concept art|30 hrs to go/);
   assert.match(html, /id="join"/);
   assert.equal(WATCH_PAGES.length, 3);

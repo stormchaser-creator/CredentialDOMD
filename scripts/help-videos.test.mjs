@@ -60,6 +60,7 @@ test('packaging refuses modified video bytes or stale advertised players before 
  // Satisfy the independent reviewed-image prerequisite so this test reaches
  // the video hash and help freshness checks it is intended to exercise.
  await cp(new URL('../landing/images/',import.meta.url),resolve(root,'landing/images'),{recursive:true});
+ await cp(new URL('../landing/fonts/',import.meta.url),resolve(root,'landing/fonts'),{recursive:true});
  await writeFile(resolve(root,'scripts/root-sw-retirement.js'),'synthetic');
  await writeFile(resolve(root,'public/knowledge/credentialdo-help.json'),JSON.stringify(help));
  await writeFile(resolve(root,'site-dist/keep.txt'),'previous package');

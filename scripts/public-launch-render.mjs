@@ -76,8 +76,38 @@ function signupInsteadOfForm(fallback, view) {
 
 const SIGNUP_NOTE = 'Card required at checkout. No-hassle 100% money-back guarantee: a full refund of your most recent annual payment, at any time.';
 
+// The home page's own sign up links (unified home, 2026-11-15): the label is
+// the page's ("Sign up today", "Sign up"); only the destination is the mode's.
+function signupLink(fallback, view) {
+  const anchor = fallback.match(/^(\s*)<a\b([^>]*)>(Sign up(?: today)?)<\/a>(\s*)$/);
+  if (!anchor || !/\shref="[^"]*"/.test(anchor[2])) throw Error('A signup link slot must contain exactly one "Sign up" or "Sign up today" anchor');
+  return `${anchor[1]}<a${anchor[2].replace(/\shref="[^"]*"/, ` href="${escapeHtml(view.primaryAction.href)}"`)}>${anchor[3]}</a>${anchor[4]}`;
+}
+
+/**
+ * The unified home page is printed in the Founder state: one $99 plan, every
+ * signup link "Sign up today" (header "Sign up" and "Log in"). A later price
+ * or the app's "Create your account" label may only arrive from the live
+ * offer (public/membership-offer.js fills the hidden data-after-founders
+ * elements); it must never be printed into the page.
+ */
+export function assertFounderHome(html) {
+  const visible = html.replace(/<script\b[\s\S]*?<\/script>/gi, m => /type="application\/ld\+json"/.test(m) ? m : '')
+    .replace(/<style\b[\s\S]*?<\/style>/gi, '').replace(/<!--[^]*?-->/g, '');
+  const banned = visible.match(/create (?:your |an )?account|\$\s?(?:149|199|245)\b|\bMDs,? (?:and )?DOs\b/i)
+    // Credential plurals keep a lowercase s ("DOs", never "DOS").
+    || visible.match(/\b(?:DOS|MDS|NPS|PAS)\b/) || visible.match(/text-transform:\s*uppercase/i);
+  if (banned) throw Error(`Founder home page must not print: ${banned[0]}`);
+  if (!visible.includes('DOs, MDs, NPs and PAs')) throw Error('Founder home page must name DOs, MDs, NPs and PAs');
+  for (const [, attrs, label] of visible.matchAll(/<a\b([^>]*)>\s*(Sign up today|Sign up|Log in)\s*<\/a>/g)) {
+    if (!/\shref="\/(?:app|signup|join)\/"/.test(attrs)) throw Error(`Founder home page ${label} link must open the app`);
+  }
+  if (!/>Sign up today<\/a>/.test(visible) || !/>Sign up<\/a>/.test(visible) || !/>Log in<\/a>/.test(visible)) throw Error('Founder home page needs Sign up today, Sign up and Log in links');
+  return html;
+}
+
 const minimumSlots = {
-  home: { cta: 4, form: 2, 'hero-offer': 1, 'early-release': 1, participation: 1, 'faq-availability': 1, 'faq-teams': 1, 'home-faq-json': 1, 'refund-guarantee': 1 },
+  home: { 'signup-link': 6, 'early-release': 1, participation: 1, 'promised-beta': 1, 'lifetime-exception': 1, 'practice-trial': 1, 'refund-guarantee': 1 },
   locums: { cta: 2, form: 2, 'early-release': 1, participation: 1, 'faq-cost': 1, 'faq-json': 1, 'signup-heading': 1, 'signup-eyebrow': 2, 'signup-card-heading': 1, 'refund-guarantee': 1 },
   help: { cta: 1, 'early-release': 1, participation: 1 },
   cme: { cta: 1, 'early-release': 1, participation: 1 },
@@ -101,6 +131,7 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
     counts[slot] = (counts[slot] || 0) + 1;
     if (fallback.includes('<!-- public-launch:')) throw Error('Nested public launch slots are not allowed');
     if (slot === 'cta') return navigation(fallback, view);
+    if (slot === 'signup-link') return signupLink(fallback, view);
     if (slot === 'form') return signupInsteadOfForm(fallback, view);
     if (slot === 'hero-offer') return `<div style="margin:20px 0;padding:18px 20px;border:1px solid var(--emerald);border-radius:14px;background:var(--emerald-glow);"><p data-membership-hero-headline style="font-size:23px;font-weight:750;line-height:1.3;margin:0 0 8px;">${escapeHtml(view.foundingOffer)}</p>`
       + '<p data-membership-hero-note style="font-size:14px;line-height:1.5;margin:0;">The founding annual rate stays locked for life while membership remains active.</p></div>'
@@ -149,7 +180,7 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
     // The guarantee covers every membership, so it stands on its own line
     // instead of inside the Credential + Practice card.
     if (slot === 'refund-guarantee') return surface === 'home'
-      ? `<p style="text-align: center; margin-top: 24px; color: var(--text-secondary);">${escapeHtml(view.refundGuarantee)}</p>`
+      ? `<p>${escapeHtml(view.refundGuarantee)}</p>`
       : `<p style="margin-bottom: 16px;">${escapeHtml(view.refundGuarantee)}</p>`;
     if (slot === 'brand') return fallback.replace(/Credential<span>(?:DoMD|DOMD)<\/span>/g, 'Credential<span>DOMD</span>').replace(/\bCredential(?:DOMD|DoMD|DO)\b/g, view.brand);
     const text = {
@@ -179,7 +210,9 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
     if (slot === 'signup-heading') return `<span data-membership-heading>${escapeHtml(text)}</span>`;
     if (slot === 'founding-headline') return `<span data-membership-headline>${escapeHtml(text)}</span>`;
     if (slot === 'audience-badge') return 'For MDs and DOs · <span data-membership-phase>Membership options</span>';
-    return escapeHtml(text) + (slot === 'early-release' ? ' <span data-membership-status role="status" aria-live="polite">Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.</span>' : '');
+    // The home page's status line has its own attribute: membership-offer.js
+    // gives it the same facts in the site's "sign up" wording.
+    return escapeHtml(text) + (slot === 'early-release' ? ` <span data-${surface === 'home' ? 'home' : 'membership'}-status role="status" aria-live="polite">Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.</span>` : '');
   });
   for (const [slot, count] of Object.entries(minimumSlots[surface])) {
     if ((counts[slot] || 0) < count) throw Error(`Incomplete ${surface} migration: ${slot} needs ${count} slots`);
@@ -196,6 +229,7 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
   if (/<form\b[^>]*class="[^"]*\bwl-form\b/.test(output) || /<fieldset\b[^>]*class="[^"]*\bguide-choice\b/.test(output)) {
     throw Error(`Unmigrated waitlist form/consent in ${surface}`);
   }
+  if (surface === 'home') assertFounderHome(output);
   return markLiveOffer(output, view).replace(/<html\b/, '<html data-public-launch="founding-signup"')
     .replace(/aria-label="Join the waitlist"/g, 'aria-label="Membership signup"')
     // A page whose policy already allows its own origin (the CME page, for

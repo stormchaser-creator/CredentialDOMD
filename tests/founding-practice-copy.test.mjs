@@ -10,7 +10,7 @@ import { readFile } from 'node:fs/promises';
 import { renderPublicLaunch, publicLaunchHelp } from '../scripts/public-launch-render.mjs';
 import { publicLaunchPresentation } from '../src/content/publicLaunch.mjs';
 import { renderLegalPages } from '../scripts/generate-legal-pages.mjs';
-import { offerPresentation } from '../public/membership-offer.js';
+import { offerPresentation, homePresentation } from '../public/membership-offer.js';
 import { getLegalDocuments } from '../src/content/legalText.js';
 import { MEMBERSHIP_COPY } from '../src/content/membershipCopy.js';
 
@@ -22,44 +22,51 @@ const PHASES = { founding: 9900, earlybird: 14900, standard: 19900 };
 const reply = (phase, patch = {}) => ({ schemaVersion: 1, phase, annualCents: PHASES[phase], checkoutEnabled: true, availability: 'available', bundleAvailable: phase !== 'founding', ...patch });
 const between = (html, start, end) => html.slice(html.indexOf(start), html.indexOf(end, html.indexOf(start)));
 
+// Unified home page (2026-11-15): while founder places remain the page prints
+// one plan, the $99 Founder plan with Credential and Practice, and no later
+// price. The later plan's words arrive only from a validated live offer.
 test('the landing hero and the $99 card say Practice is included while a member', async () => {
   const output = renderPublicLaunch(await read('landing/index.html'), 'home');
-  const hero = output.slice(output.indexOf('<section class="hero"'), output.indexOf('<!-- ============ PROBLEM'));
-  assert.ok(hero.includes(`data-membership-hero-headline style="font-size:23px;font-weight:750;line-height:1.3;margin:0 0 8px;">${HEADLINE}</p>`));
-  const card = output.slice(output.indexOf('<h3 class="feature-title">Credential</h3>'), output.indexOf('<h3 class="feature-title">Credential + Practice</h3>'));
-  assert.ok(card.includes(HEADLINE), 'the $99 card');
-  const bundle = output.slice(output.indexOf('<h3 class="feature-title">Credential + Practice</h3>'), output.indexOf('</article>', output.indexOf('<h3 class="feature-title">Credential + Practice</h3>')));
-  // While founding lasts, $245 reads as the later price, not a plan beside $99.
-  assert.ok(bundle.includes('$245<span data-membership-bundle-label> / year, after founding</span>'));
-  assert.doesNotMatch(visible(bundle), /\$245\s+\/ year total/);
-  assert.match(visible(bundle), /Credential \+ Practice is \$245\/year total at first purchase, with no early bird discount\. It is not offered to founding buyers, because founding Credential at \$99\/year already includes Practice while you are a member\./);
-  assert.doesNotMatch(visible(bundle), /no founding|money.back/i, 'no founding discount claim, and the guarantee is not inside a card that is not sold');
-  assert.match(visible(bundle), /Founding Credential members have Practice included for as long as their membership stays active\./);
-  assert.match(visible(bundle), /Early bird and standard Credential members receive a separate 30 day Practice trial/);
+  const hero = between(output, '<section class="hero"', '</section>');
+  assert.match(visible(hero), /Founder plan: \$99\/year, everything included/);
+  assert.match(visible(hero), /Your rate stays locked for life while your membership is active/);
+  const card = between(output, '<div class="price-card" data-founder-only>', '<div class="terms">');
+  assert.match(visible(card), /\$99\s*\/year/);
+  assert.match(visible(card), /Practice: locums contracts, invoices and payments/);
+  assert.match(visible(card), /Your \$99 rate locked for life while your membership is active/);
+  // No later price is printed anywhere in the page: not $245 as a plan beside $99, nor $149 or $199.
+  assert.doesNotMatch(output.replace(/<script type="module"[^>]*><\/script>/, ''), /\$\s?(?:149|199|245)\b/);
   assert.doesNotMatch(visible(output), /New paid Credential members receive a separate|Existing Credential members should contact support/);
+  // The later phases' Practice trial paragraph is part of the plan shown after the founders.
+  const later = between(output, '<div class="price-card" data-after-founders hidden>', '<div class="price-card" data-founder-only>');
+  assert.ok(visible(later).includes(view.practiceTrial));
+  assert.equal(output.split(view.practiceTrial).length, 2, 'once, and not in the Founder card');
   // The guarantee covers every membership: its own line under the plan cards.
-  const plans = between(output, '<section id="planned-pricing"', '<!-- ============ GUARANTEE');
-  const grid = plans.indexOf('</article>', plans.indexOf('<h3 class="feature-title">Credential + Practice</h3>'));
-  assert.ok(plans.indexOf(view.refundGuarantee) > grid, 'after both cards');
-  assert.equal(plans.split(view.refundGuarantee).length, 2, 'once');
+  const plans = between(output, '<section class="alt" id="pricing">', '<section id="resources">');
+  assert.ok(plans.indexOf(view.refundGuarantee) > plans.indexOf('<div class="terms">'), 'after the plan cards');
+  assert.equal(output.split(view.refundGuarantee).length, 2, 'once');
 });
 
 test('the $99 card\'s rate paragraph is replaced once the live phase is no longer founding', async () => {
   const output = renderPublicLaunch(await read('landing/index.html'), 'home');
-  const card = output.slice(output.indexOf('<h3 class="feature-title">Credential</h3>'), output.indexOf('<h3 class="feature-title">Credential + Practice</h3>'));
-  assert.ok(card.includes(`<span data-membership-rate>${view.foundingRate}</span>`), 'the static paragraph is the one membership-offer.js repaints');
+  // The later plan's card is printed empty and hidden; the live offer fills it.
+  assert.match(output, /<div class="price-card" data-after-founders hidden>\s*<span class="badge" data-home-plan><\/span>\s*<div class="price"><span data-home-price><\/span><small>\/year<\/small><\/div>\s*<p data-home-rate><\/p>\s*<p data-home-bundle><\/p>/);
   assert.equal(offerPresentation(reply('founding')).rateNote, view.foundingRate, 'no flicker at founding');
+  assert.deepEqual(homePresentation(offerPresentation(reply('founding'))), { founding: true, spots: '', plan: '', price: '', headline: '', note: '', rate: '', bundle: '',
+    status: 'Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.' });
   for (const phase of ['earlybird', 'standard']) {
     const later = offerPresentation(reply(phase));
     assert.match(later.rateNote, new RegExp(`^${phase === 'earlybird' ? 'Early bird' : 'Standard'} Credential: \\$${PHASES[phase] / 100}/year, with one 30 day Practice trial`));
     assert.doesNotMatch(later.rateNote, /Practice included|\$99|first 100|founding/i, phase);
     assert.equal(later.bundleLabel, ' / year total');
+    const home = homePresentation(later);
+    assert.equal(home.founding, false);
+    assert.equal(home.rate, later.rateNote);
+    assert.equal(home.price, `$${PHASES[phase] / 100}`);
+    assert.equal(home.bundle, view.bundleOffer);
+    assert.doesNotMatch(Object.values(home).join(' '), /Practice included|\$99|first 100|founding/i, phase);
   }
   assert.equal(offerPresentation(reply('founding')).bundleLabel, ' / year, after founding');
-  // A later phase painted over the page leaves no founding Practice claim in either card.
-  const painted = output.replace(/(<span data-membership-rate>)[^<]*(<\/span>)/, `$1${offerPresentation(reply('earlybird')).rateNote}$2`);
-  const earlyCard = painted.slice(painted.indexOf('<h3 class="feature-title">Credential</h3>'), painted.indexOf('<h3 class="feature-title">Credential + Practice</h3>'));
-  assert.doesNotMatch(visible(earlyCard).replace(/<[^>]+>/g, ''), /Practice included while you are a member/);
 });
 
 test('the /locums membership card leads with the $99 founding offer, then the package, and keeps the guarantee', async () => {
@@ -72,11 +79,9 @@ test('the /locums membership card leads with the $99 founding offer, then the pa
   assert.ok(between(output, '<div class="beta-card', '</div>').includes('<span data-membership-rate>'));
 });
 
-test('the competitor grid no longer says "No free trial" against the Practice trial', async () => {
-  const source = await read('landing/index.html');
-  assert.doesNotMatch(source, /No free trial/);
-  const cell = source.match(/<td class="us">(\$99 a year[^<]*)<\/td>/)[1];
-  assert.equal(cell, '$99 a year for the first 100 paid founding members, Practice included while you are a member. Then $149, then $199, each with a 30 day Practice trial. You pay up front, and you can ask for that year back in full at any time.');
+test('the home page no longer says "No free trial" against the Practice trial', async () => {
+  // The competitor grid left with the unified home page; the claim must not come back in any form.
+  assert.doesNotMatch(await read('landing/index.html'), /No free trial/);
 });
 
 test('the Practice paragraph is the same on /locums, /help and /terms, and the terms date moved', async () => {
@@ -104,8 +109,7 @@ test('the public offer module paints the same headline, and refuses a reply that
 });
 
 test('no hyphen or dash in the public copy written for this change', async () => {
-  const cell = (await read('landing/index.html')).match(/<td class="us">(\$99 a year[^<]*)<\/td>/)[1];
-  for (const text of [view.foundingOffer, view.foundingRate, view.fullPackage, view.practiceTrial, cell, offerPresentation({ schemaVersion: 1, phase: 'founding', annualCents: 9900, checkoutEnabled: true, availability: 'available' }).heroHeadline]) {
+  for (const text of [view.foundingOffer, view.foundingRate, view.fullPackage, view.practiceTrial, offerPresentation({ schemaVersion: 1, phase: 'founding', annualCents: 9900, checkoutEnabled: true, availability: 'available' }).heroHeadline]) {
     assert.doesNotMatch(text, /[-–—]/, text);
   }
 });
@@ -113,13 +117,10 @@ test('no hyphen or dash in the public copy written for this change', async () =>
 test('the rendered price blocks spell "early bird" one way and carry no hyphen or dash', async () => {
   const NO_HYPHEN = /[-–—]/;
   const home = renderPublicLaunch(await read('landing/index.html'), 'home');
-  // The pricing heading and both plan cards, as a visitor reads them.
-  const plans = visible(between(home, '<section id="planned-pricing"', view.refundGuarantee));
-  assert.match(plans, /early bird Credential is \$149\/year/);
-  assert.doesNotMatch(plans, NO_HYPHEN, plans);
+  // The home page prints no later price while founding lasts, in the page or its description.
+  assert.doesNotMatch(home.replace(/<script type="module"[^>]*><\/script>/, ''), /\$\s?(?:149|199|245)\b/);
   const meta = home.match(/<meta name="description" content="([^"]*)">/)[1];
-  assert.match(meta, /then \$149 early bird and \$199 standard/);
-  assert.doesNotMatch(meta, NO_HYPHEN, meta);
+  assert.match(meta, /\$99\/yr Founder plan/);
   // The /locums card's price paragraphs.
   const locums = renderPublicLaunch(await read('landing/locums.html'), 'locums');
   const card = visible(between(locums, '<div class="beta-card', view.promisedBeta.slice(0, 40)));
