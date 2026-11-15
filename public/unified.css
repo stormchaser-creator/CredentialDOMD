@@ -142,3 +142,11 @@ footer .legal{border-top:1px solid #1f3a5b;margin-top:36px;padding-top:20px;disp
 .terms{max-width:640px;margin:22px auto 0;font-size:.9rem;color:#475569}
 .terms p{margin:0 0 10px}
 .terms summary{cursor:pointer;font-weight:600;color:#0f2a4a;margin-bottom:10px}
+
+/* Keep every mobile header action readable without squeezing the brand. */
+@media(max-width:520px){
+  .bar{height:auto;min-height:70px;flex-wrap:wrap;gap:8px 16px;padding-top:12px;padding-bottom:12px}
+  header.site .brand,.acts{flex-shrink:0}
+  .acts{margin-left:auto}
+  nav.main.open{top:100%}
+}
