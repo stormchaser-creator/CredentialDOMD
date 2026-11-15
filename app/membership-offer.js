@@ -35,7 +35,8 @@ const FALLBACK = Object.freeze({ action: 'Create your account', renewal: null, r
   heroHeadline: 'Founding Credential: $99/year for the first 100 paid members, Practice included while you are a member',
   heroNote: 'The founding annual rate stays locked for life while membership remains active.',
   heading: 'Create your account', phase: 'Membership options', rateNote: RATES.founding, bundleLabel: BUNDLE_LABELS.founding,
-  availabilityOffer: AVAILABILITY.founding, rateLock: RATE_LOCKS.founding, phaseKey: 'founding' });
+  availabilityOffer: AVAILABILITY.founding, rateLock: RATE_LOCKS.founding, phaseKey: 'founding',
+  offerAvailability: 'available', spots: '' });
 
 export function offerPresentation(value) {
   if (value?.schemaVersion !== 1 || !Object.hasOwn(PRICES, value.phase)
@@ -75,7 +76,61 @@ export function offerPresentation(value) {
     price: `$${value.annualCents / 100}`, priceLabel: ` / year, ${phase.toLowerCase()} Credential`,
     heading: 'Create your account', phase: `${phase} membership`,
     rateNote: RATES[value.phase], bundleLabel: value.phase === 'founding' ? BUNDLE_LABELS.founding : BUNDLE_LABELS.later,
-    availabilityOffer: AVAILABILITY[value.phase], rateLock: RATE_LOCKS[value.phase], phaseKey: value.phase };
+    availabilityOffer: AVAILABILITY[value.phase], rateLock: RATE_LOCKS[value.phase], phaseKey: value.phase,
+    // For the home page (homePresentation below). The count is used only when
+    // the server sends a whole number from 1 to 100 while founding is open;
+    // a reply without one (the server does not send it today) shows no number.
+    offerAvailability: value.availability,
+    spots: value.phase === 'founding' && open ? founderSpotsText(value.founderSpotsLeft) : '' };
+}
+
+// ── The unified home page (landing/index.html, 2026-11-15) ───────────
+// The page is printed in the Founder state: one plan, $99/year, and every
+// signup link says "Sign up today". It carries none of the data-membership-*
+// elements above, so nothing here can put "Create your account" or a later
+// price back while founding lasts. Its own hooks:
+//   data-founder-spots    "N of 100 founder spots left" with a live count,
+//                         otherwise the page's own static line
+//   data-founder-only     shown while the validated phase is founding
+//   data-after-founders   shown once a validated reply says founding is over,
+//                         and filled from that reply (data-home-*), never
+//                         from text printed in the page
+//   data-home-status      the availability line, in "sign up" wording
+const BUNDLE_OFFER = 'Credential + Practice is $245/year total at first purchase, with no early bird discount.';
+const HOME_PAUSED = 'Paid checkout is paused, so no payment is taken now. If you sign up today, your account opens when checkout reopens and your payment completes.';
+const HOME_FULL = 'Founder plan checkout is temporarily unavailable. Signing up does not reserve a place.';
+export const founderSpotsText = left => Number.isInteger(left) && left >= 1 && left <= 100 ? `${left} of 100 founder spots left` : '';
+
+/** The home page's view of a validated offer, or of FALLBACK when there is none. */
+export function homePresentation(view) {
+  const founding = view.phaseKey === 'founding';
+  const status = view.offerAvailability === 'paused' ? HOME_PAUSED
+    : view.offerAvailability === 'temporarily_full' ? HOME_FULL : FALLBACK.status;
+  if (founding) return { founding, status, spots: view.spots || '', plan: '', price: '', headline: '', note: '', rate: '', bundle: '' };
+  return { founding, status, spots: '', plan: view.phase, price: view.price, headline: view.heroHeadline,
+    note: view.heroNote, rate: view.rateNote, bundle: BUNDLE_OFFER };
+}
+
+/**
+ * The home page's structured data once founding is over: the Founder offer
+ * and the cost answer are replaced by the validated plan, always from the
+ * page's original text. While founding lasts the text is returned untouched.
+ */
+export function homeStructuredData(original, view) {
+  if (view.phaseKey === 'founding' || !Object.hasOwn(RATES, view.phaseKey)) return original;
+  let data;
+  try { data = JSON.parse(original); } catch { return original; }
+  if (!Array.isArray(data?.['@graph'])) return original;
+  for (const node of data['@graph']) {
+    if (node?.['@type'] === 'SoftwareApplication' && node.offers?.name === 'Founder plan') {
+      node.offers = { ...node.offers, name: view.heroHeadline.split(':')[0], price: view.price.replace('$', ''), description: view.rateNote };
+    }
+    if (node?.['@type'] === 'FAQPage' && Array.isArray(node.mainEntity)) {
+      const cost = node.mainEntity.find(item => item?.name === 'How much does it cost?');
+      if (cost?.acceptedAnswer) cost.acceptedAnswer.text = `${view.rateNote} Card required at checkout.`;
+    }
+  }
+  return JSON.stringify(data).replace(/</g, '\\u003c');
 }
 
 /**
@@ -139,15 +194,26 @@ export function createOfferUpdater(root, endpoint, options) {
   let generation = 0;
   let lastValidated = null;
   const structuredOriginals = new WeakMap();
+  const staticSpots = new WeakMap();
   const paint = value => {
     for (const [attribute, key] of [['action','action'], ['review-action','reviewAction'], ['hero-headline','heroHeadline'], ['hero-note','heroNote'], ['status','status'], ['headline','headline'], ['price','price'],
       ['price-label','priceLabel'], ['heading','heading'], ['phase','phase'], ['rate','rateNote'], ['bundle-label','bundleLabel'],
       ['availability','availabilityOffer'], ['rate-lock','rateLock']]) {
       for (const node of root.querySelectorAll(`[data-membership-${attribute}]`)) node.textContent = value[key];
     }
+    const home = homePresentation(value);
+    for (const node of root.querySelectorAll('[data-founder-spots]')) {
+      if (!staticSpots.has(node)) staticSpots.set(node, node.textContent);
+      node.textContent = home.spots || staticSpots.get(node);
+    }
+    for (const node of root.querySelectorAll('[data-founder-only]')) node.hidden = !home.founding;
+    for (const node of root.querySelectorAll('[data-after-founders]')) node.hidden = home.founding;
+    for (const key of ['status', 'plan', 'price', 'headline', 'note', 'rate', 'bundle']) {
+      for (const node of root.querySelectorAll(`[data-home-${key}]`)) node.textContent = home[key];
+    }
     for (const node of root.querySelectorAll('script[type="application/ld+json"]')) {
       if (!structuredOriginals.has(node)) structuredOriginals.set(node, node.textContent);
-      const next = phaseStructuredData(structuredOriginals.get(node), value);
+      const next = homeStructuredData(phaseStructuredData(structuredOriginals.get(node), value), value);
       if (node.textContent !== next) node.textContent = next;
     }
   };
@@ -155,7 +221,7 @@ export function createOfferUpdater(root, endpoint, options) {
     const turn = ++generation;
     // Keep a known later phase on this page; a network failure must not turn
     // an observed $149/$199 offer back into the initial $99 founding policy.
-    const unconfirmed = () => lastValidated ? { ...lastValidated, status: FALLBACK.status, action: FALLBACK.action } : FALLBACK;
+    const unconfirmed = () => lastValidated ? { ...lastValidated, status: FALLBACK.status, action: FALLBACK.action, offerAvailability: 'available', spots: '' } : FALLBACK;
     paint(unconfirmed());
     try {
       const value = await fetchPublicOffer(endpoint, options);
