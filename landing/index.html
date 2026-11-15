@@ -2026,6 +2026,37 @@ table.cmp thead th:first-child { background: var(--bg-elevated); z-index: 3; }
   table.cmp td.job, table.cmp th:first-child { width: 150px; min-width: 150px; }
 }
 
+.founder-meet { background: var(--bg-elevated); padding: 90px 0; }
+.founder-meet-inner {
+  display: grid;
+  gap: 28px 40px;
+  align-items: center;
+  justify-items: center;
+  text-align: center;
+}
+@media (min-width: 768px) {
+  .founder-meet-inner {
+    grid-template-columns: 200px 1fr;
+    justify-items: start;
+    text-align: left;
+  }
+  .founder-meet .section-title,
+  .founder-meet .section-label { justify-content: flex-start; text-align: left; }
+  .founder-meet .section-subtitle { margin-left: 0; }
+}
+.founder-meet .founder-photo { display: block; width: 200px; max-width: 200px; margin: 0; }
+.founder-meet .founder-photo img {
+  display: block;
+  width: 200px;
+  height: 200px;
+  aspect-ratio: 1 / 1;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: center 18%;
+  box-shadow: var(--shadow-md);
+  background: #fff;
+  border: 1px solid var(--border);
+}
 </style>
 <link rel="stylesheet" href="/support-nav.css">
 <script src="/support-nav.js" defer></script>
@@ -2658,6 +2689,22 @@ table.cmp thead th:first-child { background: var(--bg-elevated); z-index: 3; }
           <img class="founder-portrait" src="/images/eric-whitney-120.webp" srcset="/images/eric-whitney-120.webp 120w, /images/eric-whitney-400.webp 400w" sizes="80px" alt="Dr. Eric Whitney" width="400" height="600" loading="lazy" decoding="async">
           <p>"I work these contracts myself. A week of call (stipends, call backs, orientation) becomes <strong>one accurate PDF invoice in two taps.</strong>"<br><span style="font-size: 13px; color: var(--text-muted);"><a href="https://drericwhitney.com" style="text-decoration: underline; text-underline-offset: 3px;">Dr. Eric Whitney, DO</a>, neurosurgeon and founder</span></p>
         </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ============ MEET THE FOUNDER ============ -->
+<section class="founder-meet" id="founder" aria-labelledby="founder-title">
+  <div class="container">
+    <div class="founder-meet-inner animate-on-scroll">
+      <picture class="founder-photo">
+        <img src="/images/eric-whitney-formal-square-400.webp" srcset="/images/eric-whitney-formal-square-400.webp 400w, /images/eric-whitney-formal-square-800.webp 800w" sizes="200px" alt="Dr. Eric Whitney, DO" width="400" height="400" loading="lazy" decoding="async">
+      </picture>
+      <div>
+        <div class="section-label">Meet the founder</div>
+        <h2 class="section-title" id="founder-title">Dr. Eric Whitney, DO</h2>
+        <p class="section-subtitle">Dr. Eric Whitney, DO, is a practicing neurosurgeon and the founder of CredentialDOMD. He uses it for his own credentials.</p>
       </div>
     </div>
   </div>

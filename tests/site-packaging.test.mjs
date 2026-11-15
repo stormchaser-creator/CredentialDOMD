@@ -112,7 +112,7 @@ test("site package keeps public help/CME, private routes, declared assets and di
     assert.doesNotMatch(html, /var postSignup =|postSignup\('\/api\/waitlist'/);
   }
   const imagePaths = homepageImagePaths(await read(resolve(output, "index.html")));
-  assert.equal(imagePaths.length, 7, "all reviewed responsive homepage images must be advertised");
+  assert.equal(imagePaths.length, 9, "all reviewed responsive homepage images must be advertised");
   assert.deepEqual((await readdir(resolve(output, "images"))).sort(), imagePaths.map(path => path.slice("/images/".length)).sort(),
     "package only referenced runtime images, excluding unreviewed files and source originals");
   for (const path of imagePaths) {

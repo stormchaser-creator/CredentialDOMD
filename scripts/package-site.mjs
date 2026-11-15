@@ -20,6 +20,7 @@ const landingImages = [
   'physician-life-v3-600.webp', 'physician-life-v3-1200.webp',
   'physician-colleagues-v3-600.webp', 'physician-colleagues-v3-1200.webp',
   'physician-learning-v3-600.webp', 'eric-whitney-120.webp', 'eric-whitney-400.webp',
+  'eric-whitney-formal-square-400.webp', 'eric-whitney-formal-square-800.webp',
 ];
 
 // The recipient page ships disabled in source (tests pin that). The deploy
