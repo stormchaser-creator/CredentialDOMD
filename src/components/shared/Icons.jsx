@@ -1,5 +1,4 @@
 import { memo } from "react";
-import brandMarkUrl from "../../assets/brand-mark.png";
 
 const svg = (children, size = 22) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -46,10 +45,11 @@ export const DollarIcon = memo(() => svg(<><line x1="12" y1="1" x2="12" y2="23"/
 export const UndoIcon = memo(() => svg(<><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></>, 14));
 export const GraduationIcon = memo(() => svg(<><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5"/></>, 18));
 
-// Brand mark — the unified navy leaf-wing caduceus. The illustrated mark
-// is a raster (src/assets/brand-mark.png); color/bg are kept so existing
-// call sites compile, but the badge is already full color.
+// Brand mark — the unified navy leaf-wing caduceus (public/icons/icon-192.png).
+// Referenced by URL so test esbuild builds do not need a PNG loader. color/bg
+// are kept so existing call sites compile, but the badge is already full color.
 // Kept under the old AsclepiusIcon export name so every call site keeps working.
+const brandMarkUrl = `${(import.meta.env && import.meta.env.BASE_URL) || "/"}icons/icon-192.png`;
 export const DragonflyIcon = memo(({ size = 28, color, bg = "transparent", alt = "" }) => (
   <img
     src={brandMarkUrl}
