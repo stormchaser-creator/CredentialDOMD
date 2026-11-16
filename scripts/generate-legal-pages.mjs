@@ -42,8 +42,8 @@ ${HTTPS_REDIRECT_SCRIPT}
 <meta name="description" content="${esc(doc.title)} for CredentialDOMD, the physician credential tracker. Last updated ${esc(doc.updated)}.">
 <meta name="robots" content="index,follow">
 <link rel="canonical" href="https://credentialdomd.com/${doc.slug}">
-<link rel="icon" type="image/svg+xml" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'><rect width='32' height='32' rx='8' fill='%2310b981'/><rect x='12.2' y='6' width='7.7' height='20' rx='2' fill='white'/><rect x='6' y='12.2' width='20' height='7.7' rx='2' fill='white'/></svg>">
-<link rel="apple-touch-icon" href="/app/apple-touch-icon.png">
+<link rel="icon" href="/favicon.ico?v=20261116" sizes="any">
+<link rel="apple-touch-icon" href="/apple-touch-icon.png?v=20261116">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -75,7 +75,7 @@ a:hover { color: var(--emerald-light); }
 nav { position: fixed; top: 0; left: 0; right: 0; z-index: 1000; backdrop-filter: blur(20px); -webkit-backdrop-filter: blur(20px); background: rgba(13, 13, 26, 0.8); border-bottom: 1px solid var(--border-subtle); }
 .nav-inner { display: flex; align-items: center; justify-content: space-between; max-width: 1200px; margin: 0 auto; padding: 16px 24px; }
 .logo { display: flex; align-items: center; gap: 10px; font-size: 18px; font-weight: 800; letter-spacing: -0.5px; color: var(--text); }
-.logo-mark { width: 36px; height: 36px; background: linear-gradient(135deg, var(--emerald), #059669); border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; font-weight: 900; color: white; }
+.logo-mark { width: 36px; height: 36px; border-radius: 10px; display: block; object-fit: cover; }
 .logo-text span { color: var(--emerald); }
 .nav-links { display: flex; gap: 32px; align-items: center; }
 .nav-links a { color: var(--text-secondary); font-size: 14px; font-weight: 500; }
@@ -125,7 +125,7 @@ ${VISIT_BEACON_SCRIPT}
 <nav>
   <div class="nav-inner">
     <a href="/" class="logo">
-      <div class="logo-mark">D</div>
+      <img class="logo-mark" src="/images/logo-64.png" width="36" height="36" alt="">
       <div class="logo-text">Credential<span>DOMD</span></div>
     </a>
     <div class="nav-links">

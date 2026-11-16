@@ -185,14 +185,8 @@ function AuthPage() {
       <div className="cmd-fade-in" style={{ width: "100%", maxWidth: 440 }}>
         {/* Logo + App Name */}
         <div style={{ textAlign: "center", marginBottom: 24 }}>
-          <div style={{
-            width: 64, height: 64, borderRadius: 20,
-            background: "linear-gradient(135deg, #10b981, #059669)",
-            display: "flex", alignItems: "center", justifyContent: "center",
-            margin: "0 auto 16px",
-            boxShadow: "0 8px 24px rgba(16,185,129,0.25)",
-          }}>
-            <AsclepiusIcon size={34} color="#FFFFFF" />
+          <div style={{ margin: "0 auto 16px", width: 64, height: 64 }}>
+            <AsclepiusIcon size={64} alt="" />
           </div>
           <h1 style={{
             fontSize: 24, fontWeight: 800, color: T.text,
@@ -201,7 +195,7 @@ function AuthPage() {
             Credential<span style={{ color: T.accent }}>DOMD</span>
           </h1>
           <p style={{ fontSize: 14, color: T.textMuted, margin: 0, fontWeight: 500 }}>
-            Physician Credential Management
+            Credentials for DOs, MDs, NPs and PAs
           </p>
         </div>
 

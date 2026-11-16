@@ -22,11 +22,13 @@ async function tagline(degreeType) {
   return m.pageText();
 }
 
-test('the sidebar names the member\'s own credentials (D-5); MD, DO and blank keep "Physician Credentials"', async () => {
-  assert.match(await tagline('PA'), /PA Credentials/);
-  assert.match(await tagline('NP'), /NP Credentials/);
-  for (const d of ['MD', 'DO', '']) assert.match(await tagline(d), /Physician Credentials/);
-  assert.doesNotMatch(await tagline('PA'), /Physician Credentials/);
+test('the sidebar uses one equal tagline for DOs, MDs, NPs and PAs', async () => {
+  for (const d of ['MD', 'DO', 'PA', 'NP', '']) assert.match(await tagline(d), /Clinician Credentials/);
+  for (const d of ['MD', 'DO', 'PA', 'NP', '']) {
+    assert.doesNotMatch(await tagline(d), /Physician Credentials/);
+    assert.doesNotMatch(await tagline(d), /PA Credentials/);
+    assert.doesNotMatch(await tagline(d), /NP Credentials/);
+  }
 });
 
 const matrixModules = async () => ({

@@ -1,4 +1,5 @@
 import { memo } from "react";
+import brandMarkUrl from "../../assets/brand-mark.png";
 
 const svg = (children, size = 22) => (
   <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -45,57 +46,42 @@ export const DollarIcon = memo(() => svg(<><line x1="12" y1="1" x2="12" y2="23"/
 export const UndoIcon = memo(() => svg(<><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></>, 14));
 export const GraduationIcon = memo(() => svg(<><path d="M22 10v6M2 10l10-5 10 5-10 5z"/><path d="M6 12v5c0 1.66 2.69 3 6 3s6-1.34 6-3v-5"/></>, 18));
 
-// Brand mark — caduceus (matches the PWA icons in public/icons/):
-// winged staff with twin serpents, scaled from the same glyph.
-// The app mark: a dragonfly (agile, watchful, universally readable). Kept
-// under the old AsclepiusIcon export name so every call site keeps working.
-export const DragonflyIcon = memo(({ size = 28, color, bg = "transparent" }) => {
-  const c = color || "currentColor";
-  return (
-    <svg width={size} height={size} viewBox="0 0 32 32" fill="none" xmlns="http://www.w3.org/2000/svg">
-      <g fill={c}>
-        <circle cx="16" cy="6.4" r="2"/>
-        <circle cx="14.55" cy="6.55" r="0.7" fill={bg}/><circle cx="17.45" cy="6.55" r="0.7" fill={bg}/>
-        <rect x="14.6" y="8.5" width="2.8" height="4.4" rx="1.4"/>
-        <rect x="15.3" y="12.6" width="1.4" height="14.6" rx="0.7"/>
-        <rect x="15" y="15.6" width="2" height="0.7" rx="0.35" fill={bg}/><rect x="15" y="18.2" width="2" height="0.7" rx="0.35" fill={bg}/><rect x="15" y="20.8" width="2" height="0.7" rx="0.35" fill={bg}/><rect x="15" y="23.4" width="2" height="0.7" rx="0.35" fill={bg}/>
-        <ellipse cx="9.2" cy="10.6" rx="7.4" ry="2.1" transform="rotate(-24 9.2 10.6)"/>
-        <ellipse cx="22.8" cy="10.6" rx="7.4" ry="2.1" transform="rotate(24 22.8 10.6)"/>
-        <ellipse cx="10" cy="17.4" rx="6.1" ry="1.9" transform="rotate(8 10 17.4)"/>
-        <ellipse cx="22" cy="17.4" rx="6.1" ry="1.9" transform="rotate(-8 22 17.4)"/>
-      </g>
-    </svg>
-  );
-});
+// Brand mark — the unified navy leaf-wing caduceus. The illustrated mark
+// is a raster (src/assets/brand-mark.png); color/bg are kept so existing
+// call sites compile, but the badge is already full color.
+// Kept under the old AsclepiusIcon export name so every call site keeps working.
+export const DragonflyIcon = memo(({ size = 28, color, bg = "transparent", alt = "" }) => (
+  <img
+    src={brandMarkUrl}
+    width={size}
+    height={size}
+    alt={alt}
+    draggable={false}
+    style={{ display: "block", width: size, height: size, borderRadius: Math.round(size * 0.22), flexShrink: 0 }}
+  />
+));
 export const AsclepiusIcon = DragonflyIcon;
 
-// Logo lockup — Rod of Asclepius + CREDENTIALMD text
+// Logo lockup — brand mark + CredentialDOMD text
 export const LogoMark = memo(({ color = "#fff", accentColor, size = "default" }) => {
-  const iconSize = size === "small" ? 22 : 28;
+  const iconSize = size === "small" ? 28 : 36;
   const fontSize = size === "small" ? 16 : 22;
   const subSize = size === "small" ? 8 : 9;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: size === "small" ? 8 : 10 }}>
-      <div style={{
-        width: iconSize + 8, height: iconSize + 8, borderRadius: iconSize / 2.5,
-        background: accentColor || "rgba(255,255,255,0.12)",
-        display: "flex", alignItems: "center", justifyContent: "center",
-        boxShadow: `0 0 20px ${accentColor || "rgba(255,255,255,0.08)"}`,
-      }}>
-        <AsclepiusIcon size={iconSize} color={color} />
-      </div>
+      <AsclepiusIcon size={iconSize} alt="" />
       <div>
         <div style={{
-          fontSize, fontWeight: 800, color, letterSpacing: 1.5,
-          lineHeight: 1, fontFamily: "'DM Sans', sans-serif",
+          fontSize, fontWeight: 800, color, letterSpacing: 0.2,
+          lineHeight: 1, fontFamily: "inherit",
         }}>
-          CREDENTIAL<span style={{ opacity: 0.7 }}>MD</span>
+          Credential<span style={{ color: accentColor || color, opacity: accentColor ? 1 : 0.85 }}>DOMD</span>
         </div>
         <div style={{
-          fontSize: subSize, fontWeight: 600, color, opacity: 0.5,
-          letterSpacing: 2, textTransform: "uppercase", marginTop: 2,
+          fontSize: subSize, fontWeight: 600, color, opacity: 0.6,
+          letterSpacing: 0.6, marginTop: 2,
         }}>
-          Physician Credentials
+          Clinician Credentials
         </div>
       </div>
     </div>

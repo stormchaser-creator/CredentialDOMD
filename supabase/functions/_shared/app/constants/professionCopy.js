@@ -10,22 +10,22 @@ import { professionOf } from "./professions.js";
 
 const PHYSICIAN = Object.freeze({
   noun: "physician", nounCap: "Physician", licenseNoun: "medical license", ceNoun: "CME", unit: "hours",
-  servicesPhrase: "physician services", profileHeading: "Physician Profile", tagline: "Physician Credentials",
+  servicesPhrase: "physician services", profileHeading: "Physician Profile", tagline: "Clinician Credentials",
   honorific: "Dr.", fallbackName: "Physician",
 });
 const PA = Object.freeze({
   noun: "physician assistant", nounCap: "Physician Assistant", licenseNoun: "physician assistant license", ceNoun: "CME", unit: "hours",
-  servicesPhrase: "physician assistant services", profileHeading: "Profile", tagline: "PA Credentials",
+  servicesPhrase: "physician assistant services", profileHeading: "Profile", tagline: "Clinician Credentials",
   honorific: "", fallbackName: "Clinician",
 });
 const NP = Object.freeze({
   noun: "nurse practitioner", nounCap: "Nurse Practitioner", licenseNoun: "APRN or RN license", ceNoun: "CE", unit: "contact hours",
-  servicesPhrase: "nurse practitioner services", profileHeading: "Profile", tagline: "NP Credentials",
+  servicesPhrase: "nurse practitioner services", profileHeading: "Profile", tagline: "Clinician Credentials",
   honorific: "", fallbackName: "Clinician",
 });
 const NEUTRAL = Object.freeze({
   noun: "clinician", nounCap: "Clinician", licenseNoun: "license", ceNoun: "CME", unit: "hours",
-  servicesPhrase: "clinical services", profileHeading: "Profile", tagline: "Credentials",
+  servicesPhrase: "clinical services", profileHeading: "Profile", tagline: "Clinician Credentials",
   honorific: "", fallbackName: "Clinician",
 });
 

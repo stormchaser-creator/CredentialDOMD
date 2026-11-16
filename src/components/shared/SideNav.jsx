@@ -31,17 +31,10 @@ export default function SideNav({ items, active, onChange, fabItem }) {
         padding: "20px 16px 16px", display: "flex", alignItems: "center", gap: 10,
         borderBottom: `1px solid ${T.border}`, marginBottom: 8,
       }}>
-        <div style={{
-          width: 36, height: 36, borderRadius: 10,
-          background: T.pillGradient,
-          display: "flex", alignItems: "center", justifyContent: "center",
-          boxShadow: `0 2px 8px ${T.accentGlow}`,
-        }}>
-          <AsclepiusIcon size={20} color="#fff" />
-        </div>
+        <AsclepiusIcon size={36} alt="" />
         <div>
           <div style={{ fontSize: 15, fontWeight: 800, color: T.text, letterSpacing: -0.3 }}>CredentialDOMD</div>
-          <div style={{ fontSize: 11, color: T.textDim, fontWeight: 500 }}>{data?.settings?.degreeType === "PA" ? "PA Credentials" : data?.settings?.degreeType === "NP" ? "NP Credentials" : "Physician Credentials"}</div>
+          <div style={{ fontSize: 11, color: T.textDim, fontWeight: 500 }}>Clinician Credentials</div>
         </div>
       </div>
 
