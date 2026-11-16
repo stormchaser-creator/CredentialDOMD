@@ -336,7 +336,7 @@ function FAQSection() {
       }}>
         <div style={{ fontSize: 13, fontWeight: 600, color: T.text, marginBottom: 4 }}>Still have questions?</div>
         <div style={{ fontSize: 12, color: T.textDim }}>
-          CredentialDOMD is built for physicians, by a physician. Email support@credentialdomd.com or use Get help in the app.
+          CredentialDOMD is built by a neurosurgeon for DOs, MDs, NPs and PAs. Email support@credentialdomd.com or use Get help in the app.
         </div>
       </div>
     </div>

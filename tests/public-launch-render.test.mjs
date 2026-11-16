@@ -39,9 +39,12 @@ test('production defaults render every packaged surface with the real app signup
     assert.equal(output, renderPublicLaunch(html, surface, { enabled: true, signupHref: '/app/' }), path);
     assert.match(output, /data-public-launch="founding-signup"/, path);
     assert.equal((output.match(/src="\/membership-offer\.js"/g) || []).length, 1, path);
-    // The unified home page's signup links are its own ("Sign up today"); the
-    // other surfaces keep the label the live offer repaints.
-    assert.match(output, surface === 'home' ? />Sign up today<\/a>/ : /data-membership-action/, path);
+    // Owner, 2026-11-16: every surface's signup links are printed as plain
+    // "Sign up" or "Sign up today"; the live offer repaints none of them, and
+    // no surface prints a later price while founding lasts.
+    assert.match(output, />Sign up(?: today)?(?: <svg\b[\s\S]*?<\/svg>)?<\/a>/, path);
+    assert.doesNotMatch(output, /Create your account|data-membership-action|Join for \$|>Sign in</, path);
+    assert.doesNotMatch(output.replace(/\$149&ndash;\$1,206/, ''), /\$\s?(?:149|199|245)\b/, path);
     assert.match(output, /href="\/app\/"/, path);
     assert.doesNotMatch(output, /href="\/signup\/"|href="\/#join"|<!-- public-launch:/, path);
     assert.doesNotMatch(output, /<form\b[^>]*class="[^"]*\bwl-form\b|<fieldset\b[^>]*class="guide-choice"/, path);
@@ -54,17 +57,19 @@ test('paid locums exposes static navigation and cannot submit a disguised waitli
   assert.doesNotMatch(output, /<form\b[^>]*\bclass="[^"]*wl-form/);
   assert.doesNotMatch(output, /type="email"/);
   assert.ok((output.match(/href="\/signup\/"/g) || []).length >= 4);
-  assert.match(output, />Create your account<\/span><\/a>/);
+  assert.match(output, /class="btn-primary nav-cta" href="\/signup\/">Sign up<\/a>/);
+  assert.match(output, /<a class="btn-primary" href="\/signup\/"[^>]*>Sign up today<\/a>/);
+  assert.doesNotMatch(output, /Create your account|data-membership-action/);
   assert.match(output, /Founding Credential is \$99\/year for the first 100 paid founding members/);
   assert.doesNotMatch(output, /Their invitation will confirm eligibility|Your invitation will confirm eligibility/);
   assert.match(output, /less polished/);
   assert.match(output, /support tickets/);
   assert.match(output, /locked for life while membership remains continuously active/);
-  assert.match(output, /Credential \+ Practice is \$245\/year total at first purchase, with no early bird discount\. It is not offered to founding buyers/);
+  assert.doesNotMatch(output, /\$\s?(?:149|199|245)\b|early bird|Credential \+ Practice is/i, 'the Founder plan is the only plan printed');
   assert.doesNotMatch(output, /no founding (?:or early.bird )?discount/);
   assert.match(output, /earlier free-beta wording/);
   assert.match(output, /30 days free with no card/);
-  assert.match(output, /Founding Credential members have Practice included for as long as their membership stays active\. Early bird and standard Credential members receive a separate 30 day Practice trial/);
+  assert.match(output, /Founding Credential members have Practice included for as long as their membership stays active\./);
   assert.deepEqual(assets(output), assets(source), 'preserve physician photos and all runtime sources');
   assert.match(output, /href="\/app\/"/, 'existing sign-in remains available');
 });
@@ -263,12 +268,12 @@ test('help compilation adds refund request terms and updates Practice availabili
       assert.deepEqual(article.audience, ['physicians with active Credential access']);
       assert.match(article.availability, /signed-in account with active Credential access/);
       assert.match(article.availability, /NPI lookup needs a connection/);
-      assert.deepEqual(article.notes.slice(0, -2), old.notes);
-      assert.equal(article.notes.at(-2), publicLaunchPresentation(paid).availability);
-      assert.equal(article.notes.at(-1), publicLaunchPresentation(paid).rateComparison);
+      assert.deepEqual(article.notes.slice(0, -1), old.notes);
+      assert.equal(article.notes.at(-1), publicLaunchPresentation(paid).availability);
       assert.deepEqual({ ...article, notes: old.notes, availability: old.availability, audience: old.audience }, old);
     } else if (article.id === 'locum-contract') {
-      assert.match(article.availability, /Founding Credential members have Practice included for as long as their membership stays active\. Early bird and standard Credential members receive a separate 30 day Practice trial/);
+      assert.match(article.availability, /^Founding Credential members have Practice included for as long as their membership stays active\. Eligible people/);
+      assert.doesNotMatch(article.availability, /early bird/i);
       assert.deepEqual({ ...article, availability: old.availability }, old);
     } else if (article.id === 'get-help') {
       assert.deepEqual(article.notes.slice(0, -1), old.notes);
@@ -341,11 +346,12 @@ test('public and in-app legal documents use production defaults and retain an ex
       assert.match(section.blocks[2], /opt in to \$99 per year Credential during the beta/);
       assert.match(section.blocks[2], /first charge is scheduled for your original beta end date, when your paid year starts/);
       assert.match(section.blocks[2], /If an unfinished checkout is completed after the original beta end date/);
-      assert.match(section.blocks[3], /\$99.*\$149.*\$199/);
+      // Owner approved, 2026-11-16: the $99 founding terms, and no later price.
+      assert.match(section.blocks[3], /^The first 100 paid founding members get Credential for \$99 per year\. Founding members keep their annual rate/);
       assert.match(section.blocks[3], /for life while their membership remains continuously active/);
-      assert.equal(section.blocks[4], publicLaunchPresentation(paid).fullPackage.replaceAll('/year', ' per year'));
-      assert.match(section.blocks[4], /at first purchase/);
-      // One price style per block: no "$99/year" beside "$245 per year".
+      assert.equal(section.blocks[4], 'Founding Credential at $99 per year includes Practice while you are a member.');
+      assert.doesNotMatch(JSON.stringify(on.terms), /\$\s?(?:149|199|245)\b/);
+      // One price style per block: "per year", never "/year".
       assert.doesNotMatch(section.blocks[4], /\/year/);
       // Founding Credential includes Practice, so the terms never also say the
       // package has "no founding discount".

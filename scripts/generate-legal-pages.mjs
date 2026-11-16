@@ -131,7 +131,7 @@ ${VISIT_BEACON_SCRIPT}
     <div class="nav-links">
       <a href="/#features">Features</a>
       <a href="/#faq">FAQ</a>
-      <a href="/app/">Sign in</a>
+      <a href="/app/">Log in</a>
       <!-- public-launch:cta --><a href="/#join" class="btn-primary">Get Early Access</a><!-- /public-launch:cta -->
     </div>
   </div>

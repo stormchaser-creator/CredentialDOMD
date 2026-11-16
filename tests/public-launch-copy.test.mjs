@@ -47,8 +47,13 @@ for (const page of ['index', 'locums']) {
       assert.doesNotMatch(html, /Create your account/);
       assert.match(html, /The Founder plan is \$99 a year for the first 100 paid members, with everything included: Credential and Practice/);
     } else {
-      assert.match(html, /Create your account/);
+      // Owner, 2026-11-16: every page says "Sign up" or "Sign up today".
+      assert.match(html, />Sign up today<\/a>/);
+      assert.match(html, />Sign up<\/a>/);
+      assert.match(html, />Log in<\/a>/);
+      assert.doesNotMatch(html, /Create your account|>Sign in</);
       assert.match(html, /Founding Credential is \$99\/year for the first 100 paid founding members/);
+      assert.match(html, /<meta name="description" content="[^"]*\$99\/yr Founder plan for the first 100 paid members\. Early release; card required at checkout\.">/);
     }
     assert.match(html, /30 days free with no card, starting when they first activate their account with a verified email address/);
     assert.match(html, /signing in again does not restart those 30 days/);
@@ -60,16 +65,21 @@ for (const page of ['index', 'locums']) {
     assert.match(html, /no request deadline or prorating/);
     assert.match(html, /not all payments from past years/);
     // Owner decision 2026-09-28: founding members keep Practice while members; later phases keep the trial.
-    assert.match(html, /Founding Credential members have Practice included for as long as their membership stays active\. Early bird and standard Credential members receive a separate 30 day Practice trial/);
-    assert.match(html, /continuing Practice requires an explicit purchase/);
-    assert.match(html, /Early bird and standard members who want Practice after the trial can contact support@credentialdomd.com to review options/);
+    assert.match(html, /Founding Credential members have Practice included for as long as their membership stays active\./);
     assert.doesNotMatch(html, /Existing Credential members should contact support/);
-    assert.match(html, /no change or charge will occur without their agreement/);
-    assert.match(html, /Practice records remain available to read and export/);
+    if (page === 'index') {
+      // In the card that stays hidden until a validated reply says founding is over.
+      assert.match(html, /Early bird and standard Credential members receive a separate 30 day Practice trial/);
+      assert.match(html, /continuing Practice requires an explicit purchase/);
+      assert.match(html, /Early bird and standard members who want Practice after the trial can contact support@credentialdomd.com to review options/);
+      assert.match(html, /no change or charge will occur without their agreement/);
+      assert.match(html, /Practice records remain available to read and export/);
+    } else {
+      assert.doesNotMatch(html, /early bird/i, 'no later plan on /locums while founding lasts');
+    }
     assert.match(html, /keep Credential and Practice free for life/);
     assert.match(html, /waitlist entry, or an account that was created but never active before launch, does not qualify/);
-    if (page === 'index') assert.doesNotMatch(html.replace(/<script type="module"[^>]*><\/script>/, ''), /\$\s?(?:149|199|245)\b/, 'no later price is printed while founding lasts');
-    else assert.match(html, /\$245\/year total at first purchase/);
+    assert.doesNotMatch(html.replace(/<script type="module"[^>]*><\/script>/, ''), /\$\s?(?:149|199|245)\b/, 'no later price is printed while founding lasts');
     assert.doesNotMatch(html, /Checkout is not open|invitation will confirm eligibility|<form\b[^>]*class="[^"]*wl-form/i);
     assert.doesNotMatch(html, /Founding invitations/i);
   });
@@ -84,7 +94,7 @@ test('locums visible cost answer and FAQ structured data are identical', async (
   assert.match(cost, /earlier free-beta offer/);
   assert.match(cost, /card required at checkout/);
 });
-test('OFF help fixture is unchanged and production help presents verified beta and separate Practice trial', async () => {
+test('OFF help fixture is unchanged and production help presents verified beta and the Founder plan\'s Practice', async () => {
   const help = JSON.parse(await read('public/knowledge/credentialdo-help.json'));
   const html = await read('landing/help.html');
   const videos = await loadVideoCatalog(root);
@@ -101,7 +111,8 @@ test('OFF help fixture is unchanged and production help presents verified beta a
   const active = renderPublicLaunch(renderHelp(activeHelp, videos), 'help');
   assert.match(activeHelp.articles.find(article => article.id === 'locum-contract').availability, /first activate their account with a verified email address/);
   assert.match(active, /href="\/app\/"/);
-  assert.match(active, /Founding Credential members have Practice included for as long as their membership stays active\. Early bird and standard Credential members receive a separate 30 day Practice trial/);
+  assert.match(active, /Founding Credential members have Practice included for as long as their membership stays active\./);
+  assert.doesNotMatch(active, /early bird|\$\s?(?:149|199|245)\b|Create your account/i);
   assert.match(active, /most recent annual membership payment, including a renewal payment, at any time/);
   assert.match(active, /Request through Get help in the app or support@credentialdomd.com/);
   assert.doesNotMatch(active, /An invited, signed-in account|new invited physicians/);

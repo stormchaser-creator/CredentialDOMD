@@ -38,17 +38,17 @@ export const WELCOME_SAMPLE_NAME = "Jordan";
 
 const MEMBERSHIP = Object.freeze({
   founding: Object.freeze({
-    label: "Founding Credential, $99 a year",
+    label: "Founder plan, $99 a year",
     thanks: "Thank you for becoming a founding member.",
     includes: "Your membership includes Credential and Practice for as long as you remain a member.",
   }),
   trial: Object.freeze({
-    label: "Early bird or standard Credential, $149 or $199 a year",
+    label: "Credential with a Practice trial, after the Founder plan",
     thanks: "Thank you for joining.",
     includes: "Your membership includes Credential, plus a 30-day Practice trial that started with your payment. The trial never charges you or upgrades on its own, and anything you save in Practice stays yours to read and export after it ends.",
   }),
   bundle: Object.freeze({
-    label: "Credential + Practice, $245 a year",
+    label: "Credential + Practice, after the Founder plan",
     thanks: "Thank you for joining.",
     includes: "Your membership includes both Credential and Practice.",
   }),

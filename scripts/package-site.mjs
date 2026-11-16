@@ -30,6 +30,40 @@ const landingImages = [
   'hero-two-doctors-640.webp', 'hero-two-doctors-1200.webp', 'doctor-white-coat-640.webp', 'doctor-white-coat-1200.webp',
 ];
 
+// Short addresses people type or that older links use. Cloudflare Pages
+// applies these from _redirects as real 301s. GitHub Pages, which serves the
+// site today, ignores _redirects, so each one is also published as a small
+// page that sends the browser on and names the destination as canonical.
+export const SHORT_ROUTES = Object.freeze([['pricing', '/#pricing'], ['ca', '/states/california']]);
+
+/**
+ * A page that only forwards. The canonical link tells search engines which
+ * address is the real one; the script keeps a #fragment (a 301 would too),
+ * and the refresh covers a browser without scripts.
+ */
+export function forwardingPage(to) {
+  const keep = to.includes('#') ? '' : '+location.search+location.hash';
+  return `<!doctype html><html lang="en"><meta charset="utf-8">${HTTPS_REDIRECT_SCRIPT}<title>CredentialDOMD</title>`
+    + `<link rel="canonical" href="https://credentialdomd.com${to.split('#')[0]}"><meta http-equiv="refresh" content="0; url=${to}">`
+    + `<script>location.replace(${JSON.stringify(to)}${keep})</script><p><a href="${to}">Continue to CredentialDOMD</a></p></html>\n`;
+}
+
+/** '/cme/' or '/help': the form a page's own canonical link names, or null. */
+export function canonicalRoute(html, page) {
+  const path = html.match(/<link rel="canonical" href="https:\/\/credentialdomd\.com(\/[^"]*)"/)?.[1];
+  return path === `/${page}` || path === `/${page}/` ? path : null;
+}
+
+/** Links to a page's other spelling, rewritten to the canonical one. `routes` maps page to route. */
+export function canonicalLinks(html, routes) {
+  let out = html;
+  for (const [page, route] of routes) {
+    const other = route.endsWith('/') ? `/${page}` : `/${page}/`;
+    out = out.split(`href="${other}"`).join(`href="${route}"`).split(`href="${other}#`).join(`href="${route}#`);
+  }
+  return out;
+}
+
 // The recipient page ships disabled in source (tests pin that). The deploy
 // flag that turns on the owner UI, VITE_CREDENTIAL_PORTAL_ENABLED, turns on the
 // packaged recipient page too, so activation is one workflow flag rather than
@@ -80,6 +114,15 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
     const html = legalOutput[`${page}.html`] || (page === 'help' && launchMode.enabled ? renderHelp(publishedHelp, videoCatalog) : source);
     pageOutput.set(page, surfaces[page] ? renderPublicLaunch(html, surfaces[page], launchMode, liveOffer) : html);
   }
+  // Each public page has one address, the one its canonical link names. The
+  // other spelling (with or without the trailing slash) forwards to it, and
+  // links between pages use the canonical spelling so nobody is forwarded twice.
+  const canonical = new Map();
+  for (const page of publicPages) {
+    const route = page === 'index' ? null : canonicalRoute(pageOutput.get(page), page);
+    if (route) canonical.set(page, route);
+  }
+  for (const [page, html] of pageOutput) pageOutput.set(page, canonicalLinks(html, canonical));
   const stateOutput = new Map();
   for (const name of await readdir(resolve(root, 'landing/states'))) {
     if (name.endsWith('.html')) stateOutput.set(name, renderPublicLaunch(await readFile(resolve(root, 'landing/states', name), 'utf8'), name === 'index.html' ? 'state-index' : 'state-guides', launchMode, liveOffer));
@@ -90,7 +133,8 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
       throw Error('Paid launch requires the state index and all 51 state guides');
     }
   }
-  const watchOutput = watchPages.map(page => ({ ...page, html: renderPublicLaunch(page.html, 'watch-pages', launchMode, liveOffer) }));
+  for (const [name, html] of stateOutput) stateOutput.set(name, canonicalLinks(html, canonical));
+  const watchOutput = watchPages.map(page => ({ ...page, html: canonicalLinks(renderPublicLaunch(page.html, 'watch-pages', launchMode, liveOffer), canonical) }));
   // Plain http://credentialdomd.com/app/ loaded and every signup call from it
   // was refused. Every page must switch itself to https before anything else.
   assertHttpsRedirect(entryHtml, 'dist/index.html');
@@ -119,11 +163,19 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
   }
   for (const page of publicPages) {
     const html = pageOutput.get(page);
-    await writeFile(resolve(output, `${page}.html`), html);
+    // The canonical spelling gets the page; the other one forwards to it. A
+    // page with no canonical link (the private access page) keeps both.
+    const route = canonical.get(page);
+    await writeFile(resolve(output, `${page}.html`), route?.endsWith('/') ? forwardingPage(route) : html);
     if (page !== 'index') {
       await mkdir(resolve(output, page), { recursive: true });
-      await writeFile(resolve(output, page, 'index.html'), html);
+      await writeFile(resolve(output, page, 'index.html'), route && !route.endsWith('/') ? forwardingPage(route) : html);
     }
+  }
+  for (const [name, to] of SHORT_ROUTES) {
+    await writeFile(resolve(output, `${name}.html`), forwardingPage(to));
+    await mkdir(resolve(output, name), { recursive: true });
+    await writeFile(resolve(output, name, 'index.html'), forwardingPage(to));
   }
   for (const name of publicSiteAssets) await cp(resolve(root, 'public', name), resolve(output, name));
   await mkdir(resolve(output, 'images'), { recursive: true });
@@ -174,7 +226,10 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
   await writeFile(resolve(output, '404.html'), notFound);
   // Pages applies redirects even when a static file exists. A wildcard /app/*
   // rewrite would turn JS, sw.js and version.json into HTML and break the PWA.
-  await writeFile(resolve(output, '_redirects'), '/app/privacy /privacy 302\n/app/terms /terms 302\n');
+  const redirects = ['/app/privacy /privacy 302', '/app/terms /terms 302',
+    ...SHORT_ROUTES.flatMap(([name, to]) => [`/${name} ${to} 301`, `/${name}/ ${to} 301`]),
+    ...[...canonical].map(([page, route]) => `${route.endsWith('/') ? `/${page}` : `/${page}/`} ${route} 301`)];
+  await writeFile(resolve(output, '_redirects'), redirects.join('\n') + '\n');
   const privatePage = await readFile(resolve(root, 'landing/credential-access.html'), 'utf8');
   const portalCsp = privatePage.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)?.[1];
   if (!portalCsp) throw new Error('Private access page must declare its content security policy');

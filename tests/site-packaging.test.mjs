@@ -7,7 +7,7 @@ import { dirname, resolve } from "node:path";
 import { tmpdir } from "node:os";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import vm from "node:vm";
-import { packageSite, enablePortalConfig } from "../scripts/package-site.mjs";
+import { packageSite, enablePortalConfig, canonicalRoute, canonicalLinks, forwardingPage } from "../scripts/package-site.mjs";
 import { renderHelp } from "../scripts/build-help.mjs";
 import { renderCme } from "../scripts/build-cme.mjs";
 import { renderLegalPages } from "../scripts/generate-legal-pages.mjs";
@@ -86,10 +86,23 @@ test("site package keeps public help/CME, private routes, declared assets and di
   // Legal pages are generated for the requested mode; committed source may
   // describe the active paid release even in this baseline fixture.
   const baselineLegal = renderLegalPages(BASELINE_LAUNCH_MODE);
+  // Each page is published once, at the address its canonical link names; the
+  // other spelling forwards there, and links between pages use the canonical
+  // spelling. Nothing else in a page changes.
+  const sources = new Map();
+  for (const page of pages) sources.set(page, baselineLegal[`${page}.html`] || await read(resolve(root, `landing/${page}.html`)));
+  const routes = new Map(pages.filter(page => page !== "index").map(page => [page, canonicalRoute(sources.get(page), page)]).filter(([, route]) => route));
+  assert.deepEqual(Object.fromEntries(routes), { locums: "/locums", security: "/security", privacy: "/privacy", terms: "/terms", help: "/help", cme: "/cme/" });
   for (const page of pages) {
-    const expected = baselineLegal[`${page}.html`] || await read(resolve(root, `landing/${page}.html`));
-    assert.equal(await read(resolve(output, `${page}.html`)), expected);
-    if (page !== "index") assert.equal(await read(resolve(output, page, "index.html")), expected);
+    const expected = canonicalLinks(sources.get(page), routes);
+    const route = routes.get(page);
+    assert.equal(await read(resolve(output, `${page}.html`)), route?.endsWith("/") ? forwardingPage(route) : expected, `${page}.html`);
+    if (page !== "index") assert.equal(await read(resolve(output, page, "index.html")), route && !route.endsWith("/") ? forwardingPage(route) : expected, `${page}/index.html`);
+  }
+  assert.match(forwardingPage("/help"), /<link rel="canonical" href="https:\/\/credentialdomd\.com\/help"><meta http-equiv="refresh" content="0; url=\/help"><script>location\.replace\("\/help"\+location\.search\+location\.hash\)<\/script>/);
+  for (const [name, to] of [["pricing", "/#pricing"], ["ca", "/states/california"]]) {
+    assert.equal(await read(resolve(output, `${name}.html`)), forwardingPage(to));
+    assert.equal(await read(resolve(output, name, "index.html")), forwardingPage(to));
   }
   for (const page of ['privacy', 'terms']) assert.equal(await read(resolve(output, `app/${page}.html`)), await read(resolve(output, `${page}.html`)));
   assert.equal(await read(resolve(output, "app/assets/synthetic.js")), "// synthetic app asset\n");
@@ -99,11 +112,16 @@ test("site package keeps public help/CME, private routes, declared assets and di
   assert.equal(await read(resolve(output, ".nojekyll")), "");
   assert.equal(await read(resolve(output, "CNAME")), "credentialdomd.com\n");
   assert.match(await read(resolve(output, "404.html")), /Page not found/);
-  assert.equal(await read(resolve(output, "_redirects")), "/app/privacy /privacy 302\n/app/terms /terms 302\n");
+  assert.equal(await read(resolve(output, "_redirects")), "/app/privacy /privacy 302\n/app/terms /terms 302\n"
+    + "/pricing /#pricing 301\n/pricing/ /#pricing 301\n/ca /states/california 301\n/ca/ /states/california 301\n"
+    + "/locums/ /locums 301\n/security/ /security 301\n/privacy/ /privacy 301\n/terms/ /terms 301\n/help/ /help 301\n/cme /cme/ 301\n");
   assert.doesNotMatch(await read(resolve(output, "sitemap.xml")), /credential-access/);
   assert.match(await read(resolve(output, "sitemap.xml")), /<loc>https:\/\/credentialdomd\.com\/cme\/<\/loc>/);
   assert.match(await read(resolve(output, "sitemap.xml")), /<loc>https:\/\/credentialdomd\.com\/help<\/loc>/);
   assert.equal(await read(resolve(output, "organization-logo.svg")), await read(resolve(root, "public/organization-logo.svg")));
+  // The Organization logo in the structured data of / and /app/ is the navy
+  // mark (a05db20); the retired teal badge (#10b981) must not be published again.
+  assert.doesNotMatch(await read(resolve(sourceRoot, "public/organization-logo.svg")), /10b981/i);
   for (const file of ["support-nav.css", "support-nav.js", "waitlist-signup.js", "membership-offer.js"]) {
     assert.equal(await read(resolve(output, file)), await read(resolve(root, "public", file)));
   }
@@ -191,7 +209,7 @@ test('packaged watch pages resolve their media, canonical, related guides and si
     for (const [, path] of html.matchAll(/href="(\/help\/[a-z-]+\/)"/g)) {
       await read(resolve(output, path.slice(1), 'index.html'));
     }
-    assert.ok((await read(resolve(output, 'help/index.html'))).includes(`href="/help/${id}/"`));
+    assert.ok((await read(resolve(output, 'help.html'))).includes(`href="/help/${id}/"`));
     assert.match(html, /id="main"/);
   }
   const home = await read(resolve(output, 'index.html'));
@@ -272,7 +290,8 @@ test('paid mode packages all public signup surfaces while retaining guide-only r
   const before = new Map(await Promise.all(pages.map(async page => [page, await read(resolve(root, `landing/${page}.html`))])));
   const output = await packageSite(root, undefined, { enabled: true, signupHref: '/signup/' }, {supabaseUrl:'https://synthetic.supabase.co'});
   for (const page of ['index', 'locums', 'help', 'cme', 'privacy', 'terms', 'security']) {
-    const html = await read(resolve(output, `${page}.html`));
+    // The CME page's canonical address is /cme/, so cme.html only forwards there.
+    const html = await read(resolve(output, page === 'cme' ? 'cme/index.html' : `${page}.html`));
     assert.match(html, /data-public-launch="founding-signup"/);
     assert.ok(html.includes('data-membership-endpoint="https://synthetic.supabase.co/functions/v1/public-membership-offer"'));
     assert.match(html, /href="\/signup\/"/);
@@ -289,7 +308,7 @@ test('paid mode packages all public signup surfaces while retaining guide-only r
   }
   for (const page of ['privacy', 'terms']) {
     const html = await read(resolve(output, `${page}.html`));
-    assert.equal(await read(resolve(output, page, 'index.html')), html);
+    assert.equal(await read(resolve(output, page, 'index.html')), forwardingPage(`/${page}`));
     assert.equal(await read(resolve(output, `app/${page}.html`)), html);
   }
   assert.match(await read(resolve(output, 'terms.html')), /Membership, early release and pricing/);
@@ -297,7 +316,7 @@ test('paid mode packages all public signup surfaces while retaining guide-only r
   assert.equal(await read(resolve(output, 'app/knowledge/credentialdo-help.json')), await read(resolve(output, 'knowledge/credentialdo-help.json')));
   assert.match(knowledge.articles.find(article => article.id === 'first-license').availability, /signed-in account with active Credential access/);
   assert.doesNotMatch(JSON.stringify(knowledge), /An invited, signed-in account|new invited physicians|billing is off/i);
-  assert.match(knowledge.articles.find(article => article.id === 'locum-contract').availability, /Founding Credential members have Practice included for as long as their membership stays active\. Early bird and standard Credential members receive a separate 30 day Practice trial/);
+  assert.match(knowledge.articles.find(article => article.id === 'locum-contract').availability, /^Founding Credential members have Practice included for as long as their membership stays active\. Eligible people/);
   assert.equal(await read(resolve(output, 'knowledge/credentialdo-cme.json')), await read(resolve(root, 'public/knowledge/credentialdo-cme.json')));
 });
 

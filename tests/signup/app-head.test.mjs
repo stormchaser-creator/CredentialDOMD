@@ -27,5 +27,5 @@ test('the app head: founder DO, the published organization logo, no em dash', ()
   assert.equal(org.logo, 'https://credentialdomd.com/organization-logo.svg');
   assert.equal(org.logo, reference.logo);
   assert.doesNotMatch(app, /—/, 'no em dash anywhere in the app page');
-  assert.match(app, /<title>CredentialDOMD \| Credential tracking for physicians, by a physician<\/title>/);
+  assert.match(app, /<title>CredentialDOMD \| Credential tracking for DOs, MDs, NPs and PAs<\/title>/);
 });
