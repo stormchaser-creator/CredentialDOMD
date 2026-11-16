@@ -1,2 +1,12 @@
 /app/privacy /privacy 302
 /app/terms /terms 302
+/pricing /#pricing 301
+/pricing/ /#pricing 301
+/ca /states/california 301
+/ca/ /states/california 301
+/locums/ /locums 301
+/security/ /security 301
+/privacy/ /privacy 301
+/terms/ /terms 301
+/help/ /help 301
+/cme /cme/ 301
