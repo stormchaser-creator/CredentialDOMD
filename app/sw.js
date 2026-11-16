@@ -1,7 +1,7 @@
-// 20261116T1414-f5b5f4f is replaced at build time (see stampBuildId in vite.config.js).
+// 20261116T1541-7d61984 is replaced at build time (see stampBuildId in vite.config.js).
 // Because the id changes every deploy, this file's bytes change every deploy,
 // which is what makes the browser fire `updatefound` and install the new SW.
-const BUILD_ID = "20261116T1414-f5b5f4f";
+const BUILD_ID = "20261116T1541-7d61984";
 const CACHE_NAME = `credentialdomd-${BUILD_ID}`;
 
 // All URLs are relative to the SW's own location so the same file works at
@@ -16,9 +16,9 @@ const PRECACHE_URLS = [
   "./manifest.json",
   "./icons/icon-192.svg",
   "./icons/icon-512.svg",
-  "./assets/App-B2xPPznB.js",
-  "./assets/index-DnESJmeq.css",
-  "./assets/index-EXCNmFuM.js"
+  "./assets/App-BXsAOK6X.js",
+  "./assets/index-BzdDbCT3.js",
+  "./assets/index-DnESJmeq.css"
 ];
 
 // The PA and NP rule data's own chunk (src/utils/appRules.js), stamped at
