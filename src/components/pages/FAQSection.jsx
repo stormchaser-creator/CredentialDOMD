@@ -27,11 +27,11 @@ const FAQ_DATA = [
       },
       {
         q: "What are the annual membership prices?",
-        a: `${MEMBERSHIP_COPY.credentialPrices} ${MEMBERSHIP_COPY.rateLock} ${MEMBERSHIP_COPY.fullPackage}`,
+        a: `${MEMBERSHIP_COPY.credentialPrices} ${MEMBERSHIP_COPY.rateLock} ${MEMBERSHIP_COPY.bundleDuringFounding}`,
       },
       {
         q: "What does Practice add?",
-        a: "Credential covers credentials, CME tracking, document scans, credential packets, CVs and the assistant. Practice adds contracts, work logs, invoices, payment tracking and locums finance tools. Review extracted contract rates before using them, and record payments to track the remaining balance.",
+        a: "Credential covers credentials, CME tracking, document scans, credential packets, CVs and the assistant. Practice is for every practicing clinician, employed or locum. It adds a work log for procedures, shifts and call, an RVU log with work RVU totals, your contracts, and invoices, payment tracking and expense tools if you bill for your work. Review extracted contract rates before using them, and record payments to track the remaining balance.",
       },
       {
         q: "Will the Practice trial charge me automatically?",
@@ -208,10 +208,10 @@ const FAQ_DATA = [
     ],
   },
   {
-    category: "Locum Work & Support",
+    category: "Practice & Support",
     items: [
       {
-        q: "Where do I start with locum invoices?",
+        q: "Where do I start with invoices in Practice?",
         a: "Open Practice > Contracts and add or review an agreement. Its rates and increment drive the work log. In Work, select that agreement, log work and review the billed amount. Use Invoice to select days and inspect the preview. Sending or Copy records the invoice and marks entries billed; Copy alone does not deliver it to the recipient. In Invoices, record full or partial payments yourself to track the remaining balance.",
       },
       {

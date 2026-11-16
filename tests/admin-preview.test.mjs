@@ -56,7 +56,7 @@ const EXPECTED = {
 
 test('the six presets are the ones the ticket names', () => {
   assert.deepEqual(ADMIN_PREVIEW_PRESETS.map(p => p.id), Object.keys(EXPECTED));
-  assert.deepEqual(ADMIN_PREVIEW_PRESETS.map(p => p.label), ['Credential only', 'Credential + Locums', 'Practice trial active', 'Practice trial expired', 'Pending', 'Paused']);
+  assert.deepEqual(ADMIN_PREVIEW_PRESETS.map(p => p.label), ['Credential only', 'Credential + Practice', 'Practice trial active', 'Practice trial expired', 'Pending', 'Paused']);
 });
 
 for (const preset of ADMIN_PREVIEW_PRESETS) {

@@ -31,7 +31,7 @@ const OPERATIONS = ["read", "write", "export"];
 
 export const ADMIN_PREVIEW_PRESETS = Object.freeze([
   { id: "credential", label: "Credential only", detail: "Paid Credential member. Practice records can be read and exported but not changed." },
-  { id: "credential_practice", label: "Credential + Locums", detail: "Paid Credential + Practice member. Everything can be changed." },
+  { id: "credential_practice", label: "Credential + Practice", detail: "Paid Credential + Practice member. Everything can be changed." },
   { id: "practice_trial", label: "Practice trial active", detail: "Credential member inside the included Practice trial." },
   { id: "practice_trial_expired", label: "Practice trial expired", detail: "Credential member after the Practice trial ended. Practice is read-only." },
   { id: "pending", label: "Pending", detail: "Signed in with no membership yet. Sees the membership screen." },

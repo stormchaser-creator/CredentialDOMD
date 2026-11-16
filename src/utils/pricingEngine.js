@@ -115,7 +115,7 @@ export const TIERS = {
     id: "solo",
     name: "Core",
     displayPrice: "$15",
-    audience: "One physician, unlimited credentials, full toolkit. $149 a year, or month to month.",
+    audience: "One clinician, unlimited credentials, full toolkit.",
     monthlyCents: 1500,
     annualCents: 14900,
     monthlyEquivalentAnnualCents: 1242,
@@ -141,7 +141,7 @@ export const TIERS = {
     id: "locum",
     name: "Core + Locum",
     displayPrice: "$25",
-    audience: "Core plus the locums business engine. $245 a year, or month to month.",
+    audience: "Core plus Practice: your work, RVUs, contracts and pay.",
     monthlyCents: 2500,
     annualCents: 24500,
     monthlyEquivalentAnnualCents: 2042,
@@ -265,7 +265,7 @@ export function getPublicTiers(phase = PUBLIC_BILLING_POLICY.pricePhase) {
     membership: "annual",
     audience: offer.id === "core"
       ? "Credential management for one physician."
-      : "Credential management plus tools for your locum work.",
+      : "Credential management plus Practice: your work, RVUs, contracts and pay, employed or locum.",
     features: TIERS[offer.tier].features,
     bullets: offer.id === "core" ? [
       "Unlimited credentials, licenses and certifications",
@@ -275,11 +275,11 @@ export function getPublicTiers(phase = PUBLIC_BILLING_POLICY.pricePhase) {
       offer.practiceIncluded ? "Practice included while you are a member" : "30-day Practice trial; no automatic charge",
     ] : [
       "Everything in Credential",
+      "Work log, RVU coding with wRVU totals, and case logs",
       "Contracts, scheduling and invoices",
-      "Agency remittance reconciliation",
+      "Agency remittance reconciliation and billing forecasts",
       "Travel expenses and receipts",
-      "RVU coding, case logs and billing forecasts",
-      "Full package at $245/year; no discount",
+      "Credential and Practice in one membership",
     ],
     cta: "Choose this annual plan",
   }));

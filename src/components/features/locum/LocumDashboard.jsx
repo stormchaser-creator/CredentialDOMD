@@ -1,5 +1,6 @@
 /**
- * LocumDashboard — top-level Locum tier view.
+ * LocumDashboard — the Practice tab (the tier is still named "locum" in code).
+ * Practice is for every practicing clinician, employed or locum.
  *
  * Work, RVUs, schedule, invoices, contracts, expenses and to-do tools.
  * The multi-state license matrix lives under Credentials.
@@ -146,22 +147,23 @@ function UpgradeCard({ T }) {
           Practice tools
         </div>
         <p style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5, margin: "0 0 12px" }}>
-          {MEMBERSHIP_COPY.fullPackage} Practice includes contracts, work logs, invoices,
-          payment tracking and expenses. {MEMBERSHIP_COPY.practiceTrial}
+          Practice is for every practicing clinician, employed or locum. It keeps your own record of
+          your work: procedures, shifts and call, work RVUs, your contracts, and invoices, payments and
+          expenses if you bill for your work. {MEMBERSHIP_COPY.foundingOffer}.
         </p>
         <p style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5, margin: "0 0 12px" }}>
           Billing is off. Invited beta accounts have access; if these tools are missing
           from your beta account, use Get help.
         </p>
         <a
-          href="/locums"
+          href="/#practice"
           style={{
             padding: "10px 16px", borderRadius: 10, border: "none",
             backgroundColor: T.accent, color: "#fff",
             fontSize: 12, fontWeight: 700, cursor: "pointer", display: "inline-block", textDecoration: "none",
           }}
         >
-          See the locum workflow
+          See what Practice does
         </a>
       </div>
     </div>

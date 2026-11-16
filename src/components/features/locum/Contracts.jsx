@@ -531,7 +531,7 @@ function Contracts() {
           <div style={{ fontSize: 13.5, color: T.textMuted, padding: "24px 0", textAlign: "center" }}>No archived agreements.</div>
         ) : (
           <EmptyState icon={"📝"} title="No agreements yet"
-            subtitle="Add your locum contract with its facility, rates, and billing increment, and attach the signed agreement."
+            subtitle="Add your contract, employed or locum, with its facility and rates, and attach the signed agreement. Work, RVUs and invoices roll up under it."
             onAction={openAdd} actionLabel="Add Agreement" />
         )
       ) : (
