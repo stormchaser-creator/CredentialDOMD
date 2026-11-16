@@ -32,7 +32,7 @@ test('the landing hero and the $99 card say Practice is included while a member'
   assert.match(visible(hero), /Your rate stays locked for life while your membership is active/);
   const card = between(output, '<div class="price-card" data-founder-only>', '<div class="terms">');
   assert.match(visible(card), /\$99\s*\/year/);
-  assert.match(visible(card), /Practice: locums contracts, invoices and payments/);
+  assert.match(visible(card), /Practice: work log, RVUs, contracts, invoices and payments/);
   assert.match(visible(card), /Your \$99 rate locked for life while your membership is active/);
   // No later price is printed anywhere in the page: not $245 as a plan beside $99, nor $149 or $199.
   assert.doesNotMatch(output.replace(/<script type="module"[^>]*><\/script>/, ''), /\$\s?(?:149|199|245)\b/);
