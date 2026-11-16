@@ -96,7 +96,7 @@ test('the Founder plan\'s Practice sentence is the same on /locums, /help and /t
   assert.ok(help.articles.find(article => article.id === 'locum-contract').availability.includes(view.foundingPractice), '/help');
   const terms = renderLegalPages()['terms.html'];
   assert.ok(visible(terms).includes(view.practiceTrial), '/terms');
-  assert.match(terms, /Last updated September 28, 2026/);
+  assert.match(terms, /Last updated November 16, 2026/);
   // The committed pages are the generator's output.
   assert.equal(await read('landing/terms.html'), terms);
   assert.equal(await read('public/terms.html'), terms);

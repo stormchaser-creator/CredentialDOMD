@@ -331,7 +331,7 @@ test('public and in-app legal documents use production defaults and retain an ex
   const on = getLegalDocuments(paid);
   assert.deepEqual(on, current, 'alternate reviewed signup route does not change legal terms');
   assert.equal(on.privacy.updated, 'September 25, 2026');
-  assert.equal(on.terms.updated, 'September 28, 2026');
+  assert.equal(on.terms.updated, 'November 16, 2026');
   const privacy = structuredClone(on.privacy);
   privacy.intro[1] = privacy.intro[1].replace('is in early release.', 'is in free beta.');
   privacy.updated = prior.privacy.updated;

@@ -264,7 +264,7 @@ export function getLegalDocuments(mode = PUBLIC_LAUNCH_MODE) {
   const terms = structuredClone(CURRENT_TERMS);
   privacy.updated = 'September 25, 2026';
   // Founding members keep Practice while they are members (owner, 2026-09-28).
-  terms.updated = 'September 28, 2026';
+  terms.updated = 'November 16, 2026';
   privacy.intro[1] = privacy.intro[1].replace('is in free beta.', 'is in early release.');
   const membership = terms.sections[0];
   membership.title = '1. Membership, early release and pricing';
