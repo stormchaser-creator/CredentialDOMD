@@ -93,7 +93,9 @@ export default function PricingModal({ open, onClose }) {
         </div>}
         {message && <p role="status" style={{ padding: "0 20px", color: T.text, textAlign: "center" }}>{message}</p>}
         <div style={{ padding: "12px 16px", display: "flex", flexDirection: "column", gap: 12 }}>
-          {getPublicTiers().map(offer => {
+          {/* While the offer is founding, only the $99 Founder plan is shown: it
+              already includes Practice, so the package is not offered beside it. */}
+          {getPublicTiers().filter((offer, _i, all) => offer.id === "core" || !all.some(o => o.id === "core" && o.pricePhase === "founding")).map(offer => {
             const current = billingAvailable && plan === offer.tier;
             const price = priceFor(offer.id);
             return (

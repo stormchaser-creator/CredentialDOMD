@@ -5,7 +5,9 @@ const view = publicLaunchPresentation();
 // trusted entitlements; this copy never grants access or starts a trial.
 export const MEMBERSHIP_COPY = Object.freeze({
   foundingHeadline: view.publicRateHeadline,
-  credentialPrices: `${view.foundingRate} ${view.rateComparison}`,
+  // Shown while the offer is founding, so it states the $99 founding rate only
+  // (owner, 2026-11-16: no later price appears during founding).
+  credentialPrices: view.foundingRate,
   rateLock: "The founding and early bird annual rates stay the same while membership remains continuously active.",
   fullPackage: view.fullPackage,
   // The $245 offer on the membership screen, which shows it only once this

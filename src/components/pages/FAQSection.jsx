@@ -27,7 +27,7 @@ const FAQ_DATA = [
       },
       {
         q: "What are the annual membership prices?",
-        a: `${MEMBERSHIP_COPY.credentialPrices} ${MEMBERSHIP_COPY.rateLock} ${MEMBERSHIP_COPY.fullPackage}`,
+        a: `${MEMBERSHIP_COPY.credentialPrices} ${MEMBERSHIP_COPY.rateLock} ${MEMBERSHIP_COPY.bundleDuringFounding}`,
       },
       {
         q: "What does Practice add?",

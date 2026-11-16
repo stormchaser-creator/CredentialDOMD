@@ -82,7 +82,8 @@ try {
         checkout: () => { throw Error('Must not call checkout'); } };
       const html = renderToStaticMarkup(React.createElement(PricingModal, { open: true, onClose() {} }));
       assert.match(html, /\$99/);
-      assert.match(html, /\$245/);
+      // While the offer is founding, no later price is shown beside the $99 Founder plan.
+      assert.doesNotMatch(html, /\$\s?(?:149|199|245)\b/);
       assert.ok((html.match(/\/year/g) || []).length >= 2);
       assert.match(html, /planned annual prices/);
       assert.match(html, /Billing is off/);
@@ -90,7 +91,7 @@ try {
       assert.match(html, /aria-label="Close"/);
       assert.match(html, /href="https:\/\/credentialdomd.com\/security.html"/);
       assert.doesNotMatch(html, /\$12\b|14-day|\/mo\b|US-region|tax-deductible|Start free|Resident|Monthly|Current plan|Recommended/);
-      assert.equal((html.match(/<section/g) || []).length, 2);
+      assert.equal((html.match(/<section/g) || []).length, 1);
     }
   });
   test('closed pricing modal renders nothing', () => {

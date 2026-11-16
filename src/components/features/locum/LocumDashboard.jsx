@@ -149,7 +149,7 @@ function UpgradeCard({ T }) {
         <p style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5, margin: "0 0 12px" }}>
           Practice is for every practicing clinician, employed or locum. It keeps your own record of
           your work: procedures, shifts and call, work RVUs, your contracts, and invoices, payments and
-          expenses if you bill for your work. {MEMBERSHIP_COPY.fullPackage} {MEMBERSHIP_COPY.practiceTrial}
+          expenses if you bill for your work. {MEMBERSHIP_COPY.foundingOffer}.
         </p>
         <p style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5, margin: "0 0 12px" }}>
           Billing is off. Invited beta accounts have access; if these tools are missing
