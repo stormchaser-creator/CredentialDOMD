@@ -65,16 +65,23 @@ test("the lifecycle columns are required exactly as src/utils/lifecycle.js lists
   const { LIFECYCLE_COLUMNS } = await import("../src/utils/lifecycle.js");
   for (const [table, cols] of Object.entries(LIFECYCLE_COLUMNS)) assert.deepEqual(REQUIRED_COLUMNS[table], cols, table);
   // 13 lifecycle + 3 call-day split + profiles.training_start_year + the 3
-  // address columns (kind, place_name, favorite). The invoice email stamp is
-  // server-owned and never written by the client, so it is not a
+  // address columns (kind, place_name, favorite) + the 4 agreement bonus
+  // terms (20261116120000_contract_bonus_terms.sql). The invoice email stamp
+  // is server-owned and never written by the client, so it is not a
   // client-written column.
-  assert.equal(Object.values(REQUIRED_COLUMNS).flat().length, 20);
+  assert.equal(Object.values(REQUIRED_COLUMNS).flat().length, 24);
+  for (const col of ["bonus_wrvu_target", "bonus_period", "bonus_period_start", "bonus_rate_per_wrvu"]) {
+    assert.ok(REQUIRED_COLUMNS.locum_contracts.includes(col), col);
+  }
 });
 
 test("the client keys these columns stand for are the ones it writes", () => {
   const read = (p) => readFileSync(new URL(`../src/${p}`, import.meta.url), "utf8");
   assert.match(read("components/features/locum/Contracts.jsx"), /entry\.splitAtDayStart =/);
   assert.match(read("components/features/locum/Contracts.jsx"), /entry\.dayStartHour =/);
+  // The four bonus keys are written together, from utils/bonusTracking.js.
+  assert.match(read("components/features/locum/Contracts.jsx"), /if \(BONUS_FIELDS\.some\(k => k in form\)\) Object\.assign\(entry, bonus\.terms\);/);
+  assert.match(read("utils/bonusTracking.js"), /export const BONUS_FIELDS = \["bonusWrvuTarget", "bonusPeriod", "bonusPeriodStart", "bonusRatePerWrvu"\];/);
   assert.match(read("utils/billing.js"), /splitGroupId/);
   // The Addresses form: Type is kind, Place is placeName, and it is starrable.
   assert.match(read("App.jsx"), /\{ key: "kind", label: "Type", type: "choice"/);

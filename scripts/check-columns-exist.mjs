@@ -24,7 +24,10 @@ export const REQUIRED_COLUMNS = {
   // 20260925030000_credential_lifecycle.sql (ticket 2c819309)
   ...LIFECYCLE_COLUMNS,
   // 20260925120000_call_day_split.sql (ticket 73202ae8)
-  locum_contracts: ["split_at_day_start", "day_start_hour"],
+  // and 20261116120000_contract_bonus_terms.sql: the agreement form writes the
+  // four bonus keys once an agreement carries one.
+  locum_contracts: ["split_at_day_start", "day_start_hour",
+    "bonus_wrvu_target", "bonus_period", "bonus_period_start", "bonus_rate_per_wrvu"],
   work_log: ["split_group_id"],
   // 20260929221000_profiles_training_start_year.sql: Settings writes
   // trainingStartYear through SETTINGS_TO_PROFILE, and one unknown column

@@ -17,6 +17,7 @@ import Expenses from "./Expenses";
 import Schedule from "./Schedule";
 import Invoices from "./Invoices";
 import RVULog from "./RVULog";
+import { BonusOverview } from "./BonusProgress";
 import { BASE_KEYS, lsSet } from "../../../utils/storageScope";
 import { MEMBERSHIP_COPY } from "../../../content/membershipCopy";
 import { loadRunningTimer } from "../../../utils/runningTimerStore.js";
@@ -120,6 +121,8 @@ export default function LocumDashboard({ initialSub, focusId, openContract = nul
           time-priced agreements get the timer/time log, the day-rate
           agreement gets days-and-call logging (DutyLog). */}
       {sub === "work" && <WorkLog billDraft={billDraft} onBillDraftDone={() => setBillDraft(null)} openContractId={openContractId} />}
+      {/* Bonus progress sits with the wRVUs it is worked out from. */}
+      {sub === "rvus" && <BonusOverview onOpenContracts={() => showSub("contracts")} />}
       {sub === "rvus" && <RVULog />}
       {sub === "schedule" && <Schedule />}
       {sub === "invoices" && (

@@ -12,6 +12,8 @@ import { PlusIcon, EditIcon, TrashIcon, FileIcon } from "../../shared/Icons";
 import { generateId, formatDate, deleteConfirmText } from "../../../utils/helpers";
 import DocAttach from "../DocAttach";
 import ContractSummary from "./ContractSummary";
+import BonusProgress from "./BonusProgress";
+import { BONUS_PERIODS, BONUS_FIELDS, savedBonusTerms, hasBonusTerms } from "../../../utils/bonusTracking";
 import { analyzeAgreement, analyzeAgreementText } from "../../../utils/documentScanner";
 import { agreementDocCandidates, attachExistingDoc, withAgreementFields } from "../../../utils/docPrefill";
 import { TAX_STATES, MODELED_STATES, NO_INCOME_TAX_STATES } from "../../../utils/taxConstants";
@@ -204,6 +206,9 @@ function Contracts() {
     // stayed "daily": $0 days, and no Work tab entry could bill it).
     const modelProblem = payModelProblem(form);
     if (modelProblem) { setFormError(modelProblem); return; }
+    // Bonus terms are optional: blank saves as not set, never as 0.
+    const bonus = savedBonusTerms(form);
+    if (bonus.problem) { setFormError(bonus.problem); return; }
     const grid = savedGrid(form.callRateGrid);
     // A renamed or removed grid row, or a new grid replacing the stipend,
     // would reprice call days already logged under the old names at $0.
@@ -247,6 +252,12 @@ function Contracts() {
     // it always did.
     if ("splitAtDayStart" in form) entry.splitAtDayStart = form.splitAtDayStart === true;
     if ("dayStartHour" in form) entry.dayStartHour = callDayStartHour(form);
+    // Bonus terms (locum_contracts.bonus_wrvu_target / bonus_period /
+    // bonus_period_start / bonus_rate_per_wrvu, migration 20261116120000).
+    // The same rule: written only once the contract carries one (loaded from
+    // the cloud, or entered on this form), so an agreement without bonus terms
+    // saves exactly the keys it always did.
+    if (BONUS_FIELDS.some(k => k in form)) Object.assign(entry, bonus.terms);
     // Refused (membership being re-checked): the form stays open with the
     // terms typed in it, to save again; addItem has said why.
     if ((editItem ? editCtx("locumContracts", entry) : addItem("locumContracts", entry)) === false) return;
@@ -514,6 +525,25 @@ function Contracts() {
           <Field label="Billing increment (min)" hint="Time rounds UP to this"><input type="number" inputMode="numeric" value={form.incrementMinutes ?? 15} onChange={e => setForm(f => ({ ...f, incrementMinutes: e.target.value }))} style={iS} /></Field>
           <Field label="Minimum per call (min)"><input type="number" inputMode="numeric" value={form.minCallMinutes ?? 15} onChange={e => setForm(f => ({ ...f, minCallMinutes: e.target.value }))} style={iS} /></Field>
         </div>
+        {/* Productivity bonus: all optional. The progress and the estimate
+            they drive are on the agreement's summary and the RVUs tab. */}
+        <div role="group" aria-label="Productivity bonus" style={{ borderTop: `1px solid ${T.border}`, marginTop: 6, paddingTop: 10 }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Productivity bonus (optional)</div>
+          <div style={{ fontSize: 12, color: T.textMuted, margin: "2px 0 8px", lineHeight: 1.5 }}>If this agreement pays a bonus on wRVUs above a target, enter the terms here. Your logged wRVUs are then shown against the target with an estimated bonus.</div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <Field label="wRVU target" hint="The threshold the bonus starts at, for one period"><input type="number" inputMode="decimal" min="0" step="any" value={form.bonusWrvuTarget ?? ""} onChange={e => setForm(f => ({ ...f, bonusWrvuTarget: e.target.value }))} style={iS} placeholder="e.g. 6000" /></Field>
+            <Field label="$ per wRVU" hint="Paid on each wRVU above the target"><input type="number" inputMode="decimal" min="0" step="any" value={form.bonusRatePerWrvu ?? ""} onChange={e => setForm(f => ({ ...f, bonusRatePerWrvu: e.target.value }))} style={iS} placeholder="e.g. 52.50" /></Field>
+          </div>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 8 }}>
+            <Field label="Bonus period" hint="How often the target resets">
+              <select value={form.bonusPeriod || ""} onChange={e => setForm(f => ({ ...f, bonusPeriod: e.target.value }))} style={{ ...iS, appearance: "auto" }}>
+                <option value="">No period</option>
+                {BONUS_PERIODS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+              </select>
+            </Field>
+            <Field label="Period start date" hint={form.bonusPeriod ? "The first day of a period; blank uses the calendar year, quarter or month" : "Count wRVUs logged from this day; blank counts all of them"}><input type="date" value={form.bonusPeriodStart || ""} onChange={e => setForm(f => ({ ...f, bonusPeriodStart: e.target.value }))} style={iS} /></Field>
+          </div>
+        </div>
         <Field label="Key terms / notes" hint="Cancellation clause, guaranteed hours, travel, etc."><textarea value={form.notes || ""} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} style={{ ...iS, minHeight: 60, resize: "vertical" }} /></Field>
         <DocAttach setForm={setForm} attachedDocs={attachedDocs} setAttachedDocs={setAttachedDocs}
           analyzer={agreementAnalyzer} textAnalyzer={agreementTextAnalyzer} existingDocs={existingDocs} />
@@ -569,6 +599,13 @@ function Contracts() {
                   <button aria-label="Delete agreement" onClick={() => { const held = unbilledRefusal(item); if (held) { window.alert(held); return; } const files = linkedDocsFor(item.id); if (window.confirm(deleteConfirmText("agreement", linkedDocsFor(item.id).length, { extra: "Work log entries keep their data.", names: files.map(d => d.name || "file") }))) deleteItem("locumContracts", item.id); }} style={{ padding: "6px 8px", minWidth: 32, minHeight: 32, borderRadius: 8, border: "none", backgroundColor: T.dangerDim, color: T.danger, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}><TrashIcon /></button>
                 </div>
               </div>
+              {/* Bonus progress, the card's full width, only once the
+                  agreement carries bonus terms. */}
+              {hasBonusTerms(item) && (
+                <div style={{ marginTop: 10 }}>
+                  <BonusProgress contract={item} quiet onAddTerms={() => openEdit(item)} />
+                </div>
+              )}
             </div>
           ))}
         </div>
@@ -582,6 +619,7 @@ function Contracts() {
           onOpenDoc={openDoc}
           openingId={openingId}
           openError={openError}
+          onEdit={() => { const item = summaryFor; setSummaryFor(null); setOpenError(null); openEdit(item); }}
         />
       )}
 
