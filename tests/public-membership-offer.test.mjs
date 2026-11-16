@@ -23,7 +23,7 @@ test('each current-offer element follows all phases and later failures retain th
     const label=phase==='founding'?'Founding':phase==='earlybird'?'Early bird':'Standard';
     assert.equal(dom.nodes.price[0].textContent,`$${current.annualCents/100}`);
     assert.match(dom.nodes.headline[0].textContent,new RegExp(label));
-    assert.equal(dom.nodes.heading[0].textContent,'Create your account');
+    assert.equal(dom.nodes.heading[0].textContent,'Sign up today');
     assert.equal(dom.nodes.phase[0].textContent,`${label} membership`);
     assert.equal(dom.nodes['price-label'][0].textContent,` / year, ${label.toLowerCase()} Credential`);
     // The Credential card's rate paragraph and the package price follow the phase too.
@@ -40,14 +40,17 @@ test('each current-offer element follows all phases and later failures retain th
 
 test('public phase updates use only validated annual prices and distinguish capacity holds from a sales pause', () => {
   for (const [phase,amount] of [['founding',99],['earlybird',149],['standard',199]]) {
-    // Funnel 2026-10-14: the signup button names the live annual price.
-    assert.equal(offerPresentation(offer(phase)).action, `Join for $${amount} a year`);
+    // Owner, 2026-11-16: every signup link says "Sign up today" in every phase.
+    // The live annual price is the app's own line above its email box.
+    assert.equal(offerPresentation(offer(phase)).action, 'Sign up today');
+    assert.equal(offerPresentation(offer(phase)).priceLine, `Join for $${amount} a year`);
     assert.equal(offerPresentation(offer(phase)).renewal, `$${amount} at checkout, then $${amount} each year while this subscription remains active. Cancel before renewal to avoid the next annual charge.`);
     assert.match(offerPresentation(offer(phase)).reviewAction, new RegExp(amount));
   }
   assert.match(offerPresentation(offer('founding','temporarily_full')).status, /temporarily unavailable/);
-  // No price button or renewal line when nothing can be paid today.
-  assert.equal(offerPresentation(offer('founding','temporarily_full')).action, 'Create your account');
+  // No price line or renewal line when nothing can be paid today.
+  assert.equal(offerPresentation(offer('founding','temporarily_full')).action, 'Sign up today');
+  assert.equal(offerPresentation(offer('founding','temporarily_full')).priceLine, null);
   assert.equal(offerPresentation(offer('founding','temporarily_full')).renewal, null);
   assert.equal(offerPresentation(offer('earlybird','paused')).renewal, null);
   assert.match(offerPresentation(offer('earlybird','paused')).status, /checkout is paused/);
@@ -67,7 +70,7 @@ test('a verified pause retains the actual phase and price instead of hiding them
     assert.match(dom.statuses[0].textContent, /Paid checkout is paused/);
     // PUBLIC-001: a paused account is held until checkout reopens, and the page says so.
     assert.match(dom.statuses[0].textContent, /An account you create today opens when checkout reopens and your payment completes\./);
-    assert.equal(dom.actions[0].textContent, 'Create your account for later');
+    assert.equal(dom.actions[0].textContent, 'Sign up today');
     if (phase === 'founding') assert.equal(dom.nodes['review-action'][0].textContent, 'See the $99 founding plan');
     else assert.doesNotMatch(JSON.stringify(dom.nodes), /\$99|first 100|founding/i);
   }
@@ -103,7 +106,7 @@ test('unknown configuration uses qualified founding policy, while a later failur
   const dom=root();let calls=0;
   const refresh=createOfferUpdater(dom,endpoint,{fetchImpl:async()=>{calls++;return calls===1?Response.json(offer('earlybird')):Response.json({}, {status:503});}});
   await refresh();assert.match(dom.nodes['review-action'][0].textContent,/149/);
-  await refresh();assert.equal(dom.actions[0].textContent,'Create your account');
+  await refresh();assert.equal(dom.actions[0].textContent,'Sign up today');
   assert.equal(dom.nodes.price[0].textContent, '$149');
   assert.equal(dom.statuses[0].textContent,'Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.');
   await createOfferUpdater(dom,undefined,{fetchImpl:()=>{throw Error('Must not fetch');}})();
@@ -182,16 +185,16 @@ test('a page view asks for the offer once, and only a back forward cache restore
   }
 });
 
-test('every signup button says the live price once confirmed, and goes back to the plain label when it cannot be', async () => {
+test('a signup link says "Sign up today" in every phase, confirmed or not; the price stays on the plan cards', async () => {
   const dom = root(); let current = offer();
   const refresh = createOfferUpdater(dom, endpoint, { fetchImpl: async () => { if (current instanceof Error) throw current; return Response.json(current); } });
   await refresh();
-  assert.equal(dom.actions[0].textContent, 'Join for $99 a year');
+  assert.equal(dom.actions[0].textContent, 'Sign up today');
   current = offer('earlybird'); await refresh();
-  assert.equal(dom.actions[0].textContent, 'Join for $149 a year');
-  // Unconfirmed: the last price stays on the plan cards, never on the button.
+  assert.equal(dom.actions[0].textContent, 'Sign up today');
+  // Unconfirmed: the last price stays on the plan cards, never on the link.
   current = Error('offline'); await refresh();
-  assert.equal(dom.actions[0].textContent, 'Create your account');
+  assert.equal(dom.actions[0].textContent, 'Sign up today');
   assert.equal(dom.nodes.price[0].textContent, '$149');
   // The static page's own label before any answer (scripts/public-launch-render.mjs) is the plain one.
   const html = renderPublicLaunch(await readFile(new URL('../landing/index.html', import.meta.url), 'utf8'), 'home');

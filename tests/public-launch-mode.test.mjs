@@ -10,11 +10,13 @@ test('production mode opens protected app signup without collecting a waitlist r
   const view = publicLaunchPresentation();
   assert.equal(view.mode, 'founding-signup');
   assert.deepEqual(view.primaryAction, {
-    kind: 'navigation', label: 'Create your account', shortLabel: 'Create your account', href: '/app/', collectEmail: false,
+    kind: 'navigation', label: 'Sign up today', shortLabel: 'Sign up', href: '/app/', collectEmail: false,
   });
   assert.equal(view.guideCapture.forceGuideOnly, true);
   assert.equal(view.guideCapture.showWaitlistChoice, false);
-  assert.match(view.availability, /Compare the plans here, then create your account/);
+  // Owner, 2026-11-16: one plan while founding lasts, so there is nothing to compare.
+  assert.match(view.availability, /^Founding Credential is \$99\/year for the first 100 paid founding members\. Availability is confirmed before payment; signing up does not reserve a place\./);
+  assert.doesNotMatch(view.availability, /create your account|Compare the plans/i);
   assert.match(view.availability, /card at checkout/);
   assert.doesNotMatch(view.availability, /Checkout is not open/);
 });
@@ -52,7 +54,7 @@ test('paid preview is navigation, and guide delivery cannot imply paid or waitli
   assert.equal(view.guideCapture.signupIsSeparateNavigation, true);
   assert.equal(view.guideCapture.submitLabel, 'Email me the guide');
   assert.match(view.guideCapture.note, /does not create an account/);
-  assert.match(view.primaryAction.label, /Create your account/);
+  assert.match(view.primaryAction.label, /^Sign up today$/);
   assert.match(view.availability, /Founding Credential is \$99\/year for the first 100 paid founding members/);
   assert.match(view.foundingRate, /Founding Credential: \$99\/year for the first 100 paid members, Practice included while you are a member/);
   assert.match(view.promisedBeta, /first activate their account with a verified email address/);
@@ -107,7 +109,9 @@ test('founding marketing states the paid cap without claiming live availability 
   assert.match(view.availability, /Availability is confirmed before payment/);
   assert.match(view.availability, /does not reserve a place/);
   assert.match(view.foundingRate, /membership remains continuously active/);
-  assert.match(view.rateComparison, /After the 100 paid founding memberships.*\$149.*\$199/);
+  // No later price is stated while founding lasts (owner, 2026-11-16).
+  assert.equal(view.rateComparison, '');
+  assert.equal(view.signupHeading, 'Sign up today');
   // Liability hedging about a never-charged $149 price was removed for a live product.
   assert.equal(view.foundingChange, undefined);
   assert.doesNotMatch(JSON.stringify(view), /previously planned/i);

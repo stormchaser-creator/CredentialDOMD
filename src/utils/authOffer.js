@@ -1,5 +1,5 @@
 // The signed-out screen used to show an email box and nothing else, so a physician who
-// pressed "Create your account" on the site met no price and no offer. This loads the
+// pressed the sign up button on the site met no price and no offer. This loads the
 // SAME reviewed public module the website uses (/membership-offer.js: strict schema,
 // fixed price table, size caps, no redirects) instead of re-implementing it, so the app
 // can never state a price the site would refuse. Any failure resolves to null and the
@@ -23,7 +23,9 @@ export async function loadAuthOffer({
     // the annual renewal sentence, both from the same validated reply. An
     // older module without them (or a paused offer) leaves them out.
     const offer = { headline: view.heroHeadline, status: view.status };
-    if (typeof view.action === "string" && /^Join for \$\d+ a year$/.test(view.action)) offer.action = view.action;
+    // The module's priceLine; a copy cached from before 2026-11-16 said it in action.
+    const line = typeof view.priceLine === "string" ? view.priceLine : view.action;
+    if (typeof line === "string" && /^Join for \$\d+ a year$/.test(line)) offer.action = line;
     if (typeof view.renewal === "string" && view.renewal) offer.renewal = view.renewal;
     return offer;
   } catch {

@@ -4,6 +4,9 @@
 // /help and /terms, and the public offer module the site and the app sign-in
 // screen share. Early-bird and standard keep the 30 day trial. Public copy
 // written for this change carries no hyphen and no dash.
+// Owner, 2026-11-16: while founding lasts the site names one plan. /locums
+// and /help print the Founder plan's Practice sentence alone, with no later
+// price, package or trial; the Terms state the $99 founding price only.
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
@@ -69,13 +72,15 @@ test('the $99 card\'s rate paragraph is replaced once the live phase is no longe
   assert.equal(offerPresentation(reply('founding')).bundleLabel, ' / year, after founding');
 });
 
-test('the /locums membership card leads with the $99 founding offer, then the package, and keeps the guarantee', async () => {
+test('the /locums membership card leads with the $99 founding offer, names no package or later price, and keeps the guarantee', async () => {
   const output = renderPublicLaunch(await read('landing/locums.html'), 'locums');
   const card = visible(between(output, '<div class="beta-card', '</div>'));
   const at = text => card.indexOf(text);
-  assert.ok(at(view.foundingRate) >= 0 && at(view.fullPackage) > at(view.foundingRate), 'founding first');
-  assert.ok(at(view.practiceTrial) > at(view.fullPackage));
-  assert.ok(at(view.refundGuarantee) > at(view.practiceTrial), 'the guarantee is in the card');
+  assert.ok(at(view.foundingRate) >= 0 && at(view.foundingPractice) > at(view.foundingRate), 'founding first');
+  assert.equal(at(view.fullPackage), -1, 'no package beside the Founder plan');
+  assert.equal(at(view.practiceTrial), -1, 'no later members\' trial');
+  assert.doesNotMatch(visible(output), /\$\s?(?:149|199|245)\b|early bird|Create your account/i);
+  assert.ok(at(view.refundGuarantee) > at(view.foundingPractice), 'the guarantee is in the card');
   assert.ok(between(output, '<div class="beta-card', '</div>').includes('<span data-membership-rate>'));
 });
 
@@ -84,14 +89,14 @@ test('the home page no longer says "No free trial" against the Practice trial', 
   assert.doesNotMatch(await read('landing/index.html'), /No free trial/);
 });
 
-test('the Practice paragraph is the same on /locums, /help and /terms, and the terms date moved', async () => {
+test('the Founder plan\'s Practice sentence is the same on /locums, /help and /terms, and the terms keep their trial paragraph', async () => {
   const locums = visible(renderPublicLaunch(await read('landing/locums.html'), 'locums'));
-  assert.ok(locums.includes(view.practiceTrial), '/locums card and cost answer');
+  assert.ok(locums.includes(view.foundingPractice) && !locums.includes(view.practiceTrial), '/locums card and cost answer');
   const help = publicLaunchHelp(JSON.parse(await read('public/knowledge/credentialdo-help.json')));
-  assert.ok(help.articles.find(article => article.id === 'locum-contract').availability.includes(view.practiceTrial), '/help');
+  assert.ok(help.articles.find(article => article.id === 'locum-contract').availability.includes(view.foundingPractice), '/help');
   const terms = renderLegalPages()['terms.html'];
   assert.ok(visible(terms).includes(view.practiceTrial), '/terms');
-  assert.match(terms, /Last updated September 28, 2026/);
+  assert.match(terms, /Last updated November 16, 2026/);
   // The committed pages are the generator's output.
   assert.equal(await read('landing/terms.html'), terms);
   assert.equal(await read('public/terms.html'), terms);
@@ -134,9 +139,11 @@ test('the rendered price blocks spell "early bird" one way and carry no hyphen o
   // The pricing blocks of /terms section 1 and the in-app price answers.
   const terms = getLegalDocuments().terms.sections[0].blocks;
   const pricing = terms.slice(3, 6);
-  assert.match(pricing[0], /the early bird price is \$149 per year/);
-  assert.match(pricing[0], /Founding and early bird members keep their annual rate/);
-  for (const text of [...pricing, view.rateComparison, view.earlyBirdRateLock, view.bundleOffer,
+  // Owner approved, 2026-11-16: the $99 founding terms, with no later price.
+  assert.match(pricing[0], /^The first 100 paid founding members get Credential for \$99 per year\. Founding members keep their annual rate for life/);
+  assert.equal(pricing[1], 'Founding Credential at $99 per year includes Practice while you are a member.');
+  assert.doesNotMatch(terms.join(' '), /\$\s?(?:149|199|245)\b/);
+  for (const text of [...pricing, view.earlyBirdRateLock, view.bundleOffer,
     MEMBERSHIP_COPY.credentialPrices, MEMBERSHIP_COPY.rateLock, MEMBERSHIP_COPY.bundleOffer, MEMBERSHIP_COPY.bundleDuringFounding]) {
     assert.doesNotMatch(text, NO_HYPHEN, text);
   }
