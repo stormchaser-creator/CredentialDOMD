@@ -128,7 +128,10 @@ test('the Traffic "New accounts" total states its 90-day window and how it diffe
   const shown = text(f.render('SignupsList', { rows: [{ day: '2026-09-24T00:00:00Z', signups: 2 }, { day: '2026-09-23T00:00:00Z', signups: 1 }], T }));
   assert.match(shown, /Last 90 days \(rolling; server view limit\)/);
   assert.match(shown, /Includes deleted and closed accounts/);
-  assert.match(shown, /New signup profiles/);
+  assert.match(shown, /New account profiles/);
+  // Owner rule 2026-11-16: an account is not a member, and this panel says so.
+  assert.match(shown, /These are accounts, not members/);
+  assert.doesNotMatch(shown, /signup profiles/);
   assert.match(text(f.render('SignupsList', { rows: [], T })), /No new accounts in the last 90 days/);
 });
 

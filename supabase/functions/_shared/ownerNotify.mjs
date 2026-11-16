@@ -62,7 +62,15 @@ export function ownerNotifyMessage(rows) {
   } else if (rows.some(row => ACTIVITY_PREFIXES.some(prefix => (row.kind || '').startsWith(prefix)))) {
     header = 'CredentialDOMD activity';
   } else {
-    header = 'CredentialDOMD signup' + (rows.length > 1 ? 's' : '');
+    // Nobody here has paid, so nobody here is a signup (owner rule
+    // 2026-11-16): an email given for the waitlist or a guide is a lead, a
+    // new profile is an account that has not paid. A payment is reported
+    // under "CredentialDOMD money" above.
+    const accounts = rows.filter(row => (row.kind || '') === 'app profile').length;
+    const many = rows.length > 1;
+    header = accounts === rows.length ? `CredentialDOMD new account${many ? 's' : ''}, not paid`
+      : accounts ? 'CredentialDOMD leads and new accounts, not paid'
+        : `CredentialDOMD lead${many ? 's' : ''}`;
   }
   const lines = [header];
   for (const row of rows) {
@@ -79,7 +87,7 @@ export function ownerNotifyEmail(rows) {
   const text = ownerNotifyMessage(rows);
   if (!text) return null;
   const subject = text.split('\n')[0].slice(0, 300);
-  return { subject, text: `${text}\n\nSent by the owner-notify job in Supabase every 10 minutes: signups, guides, payments and fixes. Technical issues are handled by the scheduled agents.` };
+  return { subject, text: `${text}\n\nSent by the owner-notify job in Supabase every 10 minutes: leads, new accounts, guides, payments and fixes. Technical issues are handled by the scheduled agents.` };
 }
 
 function sameSecret(presented, expected) {

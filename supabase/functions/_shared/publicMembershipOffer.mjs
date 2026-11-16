@@ -22,8 +22,15 @@ export function createPublicMembershipOfferHandler({ readOffer, origin = 'https:
         // Founding Credential includes Practice, so the $245 bundle is not
         // offered to new buyers until founding is sold out or ended.
         || (offer.bundleAvailable !== undefined && offer.bundleAvailable !== (offer.phase !== 'founding'))) throw Error('Invalid public policy');
+      // Founder countdown (owner rule 2026-11-16): the database's own number,
+      // capacity minus PAID founding places. Leads and accounts never reduce
+      // it. Sent only while founding is offered and only as a whole number
+      // from 0 to 100; anything else is left out, and the site then shows no
+      // count rather than a wrong one. Never computed or defaulted here.
+      const spots = offer.phase === 'founding' && Number.isInteger(offer.founderSpotsLeft)
+        && offer.founderSpotsLeft >= 0 && offer.founderSpotsLeft <= 100 ? { founderSpotsLeft: offer.founderSpotsLeft } : {};
       return respond(200, { schemaVersion: 1, phase: offer.phase, annualCents: offer.annualCents,
-        checkoutEnabled: offer.checkoutEnabled, availability: offer.availability, bundleAvailable: offer.phase !== 'founding' });
+        checkoutEnabled: offer.checkoutEnabled, availability: offer.availability, bundleAvailable: offer.phase !== 'founding', ...spots });
     } catch { return respond(503, { error: 'membership_offer_unavailable' }); }
   };
 }

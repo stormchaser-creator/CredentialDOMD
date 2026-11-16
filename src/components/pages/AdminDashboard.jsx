@@ -4,7 +4,7 @@ import { copyToClipboard } from "../../utils/helpers";
 import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
 import { useIsAdmin } from "../../lib/admin";
-import { ADMIN_SOURCES, adminTabSources, readAdminSource, readAdminAttention, readArchivedTicketCount, filterAdminTickets, filterAdminUsers, readAccountMemberships, groupAdminAccounts, accountMembershipNote, isFoundingAccount, ACCOUNT_GROUPS } from "../../utils/adminData";
+import { ADMIN_SOURCES, adminTabSources, readAdminSource, readAdminAttention, readArchivedTicketCount, filterAdminTickets, filterAdminUsers, readAccountMemberships, groupAdminAccounts, accountMembershipNote, isFoundingAccount, isPaidFounder, ACCOUNT_GROUPS } from "../../utils/adminData";
 import AdminOperationsReport from "./AdminOperationsReport";
 import AdminErrorReports from "./AdminErrorReports";
 import AdminAccessChange from "./AdminAccessChange";
@@ -16,7 +16,7 @@ import { adminButtonStyle } from "../shared/adminButton";
 import { foundingText } from "../../utils/founding";
 import { setupProgressSummary } from "../../utils/setupTasks";
 import { leadNoteLabel } from "../../utils/adminLabels";
-import { waitlistView, leadState } from "../../utils/adminWaitlist";
+import { waitlistView, leadState, paidMemberEmails } from "../../utils/adminWaitlist";
 import { attachmentsPayload, linksFor, ticketAttachmentShortfall } from "../../utils/ticketAttachments";
 import TicketAttachments from "../shared/TicketAttachments";
 import { loadAdminSupportThread } from "../../utils/adminSupportThread";
@@ -398,8 +398,11 @@ function AdminDashboardContent() {
     attention?.error ? { id: "errors", ...countFailed("Errors", "New error count") }
       : { id: "errors", label: counts?.new_errors_since_seen > 0 ? `Errors (${counts.new_errors_since_seen})` : "Errors" },
     { id: "signups", label: "Traffic history" },
-    attention?.error ? { id: "waitlist", ...countFailed("Waitlist", "Waiting count") }
-      : { id: "waitlist", label: counts ? `Waitlist (${counts.waitlist_waiting})` : "Waitlist" },
+    // Leads: everyone who gave an email for a guide or the waitlist and is
+    // not a paid member. Never users, members or signups. The count appears
+    // once the server sends it (20261116120000).
+    attention?.error ? { id: "waitlist", ...countFailed("Leads", "Lead count") }
+      : { id: "waitlist", label: Number.isSafeInteger(counts?.leads) ? `Leads (${counts.leads})` : "Leads" },
     attention?.error ? { id: "fields", ...countFailed("Fields", "Pending field count") }
       : { id: "fields", label: counts?.fields_pending > 0 ? `Fields (${counts.fields_pending} pending)` : "Fields" },
     { id: "ai", label: "AI" },
@@ -414,7 +417,7 @@ function AdminDashboardContent() {
     <div className="cdomd-admin">
       <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 800, color: T.text }}>Admin</h2>
       <p style={{ margin: "0 0 14px", fontSize: 12, color: T.textMuted }}>
-        Support, accounts, waitlist signups, and traffic for credentialdomd.com
+        Support, paid members, accounts, leads, and traffic for credentialdomd.com
       </p>
 
       <nav aria-label="Administration sections" style={{
@@ -520,7 +523,7 @@ function AdminDashboardContent() {
             Page loads = every landing-page view that day. Homepage = loads of credentialdomd.com itself. State pages = loads across the 50 state SEO pages (views, not states). Via links = arrived from another site (search, forum, shared link) instead of typing the address.
           </div>
           <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>
-            New accounts
+            New accounts (not members)
           </div>
           <SignupsList rows={signups} T={T} reloadedAt={reloadedAt} onReload={() => setReloadKey((k) => k + 1)} />
         </>
@@ -812,7 +815,7 @@ function SignupsList({ rows, T, onReload, reloadedAt }) {
             <div style={{ fontSize: 11, color: T.textMuted }}>Last 90 days (rolling; server view limit)</div>
             <div style={{ fontSize: 26, fontWeight: 800, color: T.accent }}>{total}</div>
             <div style={{ fontSize: 11, color: T.textMuted }}>account records with email on file, excluding administrators</div>
-            <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4, lineHeight: 1.5 }}>Includes deleted and closed accounts. "New signup profiles" in Overview &amp; reports leaves those out and uses the window you pick there, so the two numbers can differ.</div>
+            <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4, lineHeight: 1.5 }}>These are accounts, not members: only paid members count as members, users or signups, and Overview &amp; reports has that number. Includes deleted and closed accounts. "New account profiles" in Overview &amp; reports leaves those out and uses the window you pick there, so the two numbers can differ.</div>
           </div>
           {onReload && (
             <button onClick={onReload} style={{
@@ -909,9 +912,14 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
 
   const isTest = (u) => !u.email && !u.name && !u.npi && !u.last_seen_at;
   const shown = filterAdminUsers(users, { query: search, access: accessFilter, showEmpty: showTest });
-  // Founding members: pre-launch founders (profiles.founding_number) and
-  // members who paid for a founding place. An invitation alone never counts.
-  const foundingCount = users.filter(u => !u.deleted_at && isFoundingAccount(u, membershipMap?.get(u.id))).length;
+  // Paid founder members only (owner rule 2026-11-16): a founding place with
+  // a verified first payment. The pre-launch badge is shown on the row but is
+  // not a paid member and is counted apart. Null until the server says which
+  // is which, so no number is shown rather than a mixed one.
+  const liveUsers = users.filter(u => !u.deleted_at);
+  const paidFounderKnown = !!membershipMap && liveUsers.every(u => !membershipMap.has(u.id) || isPaidFounder(membershipMap.get(u.id)) !== null);
+  const paidFounderCount = paidFounderKnown ? liveUsers.filter(u => isPaidFounder(membershipMap.get(u.id)) === true).length : null;
+  const legacyBadgeCount = paidFounderKnown ? liveUsers.filter(u => isFoundingAccount(u, membershipMap.get(u.id)) && isPaidFounder(membershipMap.get(u.id)) !== true).length : null;
   const groups = membershipMap ? groupAdminAccounts(shown, membershipMap) : null;
   const hiddenCount = users.filter(isTest).length;
   const inviteByEmail = Object.fromEntries(invites.map(i => [i.email.toLowerCase(), i]));
@@ -1029,7 +1037,8 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
 
       <AdminMailboxRepair />
       <div style={{ fontSize: 12, color: T.textMuted, margin: "14px 0 0" }}>
-        Founding members: {foundingCount}
+        {paidFounderCount === null ? "Paid founder members: unavailable until payment details load"
+          : `Paid founder members: ${paidFounderCount} in the loaded accounts${legacyBadgeCount ? ` · ${legacyBadgeCount} with the pre-launch founding badge, not paid, not counted` : ""}`}
       </div>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
         <label>Search loaded accounts <input aria-label="Search loaded accounts" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Name, email, NPI or state" style={FORM_CONTROL} /></label>
@@ -1039,8 +1048,8 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
         Accounts ({shown.length}){hiddenCount > 0 && <button onClick={() => setShowTest(v => !v)} style={{ marginLeft: 8, fontSize: 11, border: "none", background: "transparent", color: T.accent, cursor: "pointer" }}>{showTest ? "hide" : "show"} {hiddenCount} empty account record{hiddenCount === 1 ? "" : "s"}</button>}
       </div>
       <div style={{ fontSize: 12, color: T.textMuted, margin: "0 0 8px", lineHeight: 1.5 }}>
-        Everyone here has signed in to the app. People who only asked for a state guide are on the Waitlist tab, not here.
-        {groups && ` ${groups.paying.length} paying, ${groups.free.length} free access, ${groups.unpaid.length} signed in without paying${groups.closed.length ? `, ${groups.closed.length} closed` : ""}.`}
+        Only paid members count as members, users or signups. Everyone here has signed in to the app; people who only asked for a state guide or joined the waitlist are leads, on the Leads tab, not here.
+        {groups && ` ${groups.paying.length} paid ${groups.paying.length === 1 ? "member" : "members"}. Not members: ${groups.free.length} free access, ${groups.unpaid.length} without a paid membership${groups.closed.length ? `, ${groups.closed.length} closed` : ""}.`}
       </div>
       {memberships?.error && <div role="status" style={{ fontSize: 12, color: T.textMuted, margin: "0 0 8px" }}>Payment details could not be loaded, so accounts are not sorted by membership. Refresh to try again.</div>}
       {groups ? ACCOUNT_GROUPS.filter(g => g.id !== "closed" || groups.closed.length).map(g => (
@@ -1123,8 +1132,17 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T,
   };
   const [showJoined, setShowJoined] = useState(false);
   const [showGuideOnly, setShowGuideOnly] = useState(false);
-  const view = waitlistView(rows, users || [], invites || [], { showJoined, showGuideOnly });
-  const { activeEmails, guideOnly, joined: alreadyJoined, waiting, visible: visibleRows } = view;
+  // Who has paid, from the same server facts as Admin > Accounts. A lead whose
+  // address belongs to a paid member has moved to members and is not counted
+  // as a lead. null while loading or on failure: then nobody is moved.
+  const [memberships, setMemberships] = useState(null);
+  useEffect(() => {
+    let active = true;
+    readAccountMemberships(supabase).then(result => { if (active) setMemberships(result); });
+    return () => { active = false; };
+  }, [users]);
+  const view = waitlistView(rows, users || [], invites || [], { showJoined, showGuideOnly }, paidMemberEmails(users || [], memberships));
+  const { activeEmails, paidEmails, guideOnly, joined: alreadyJoined, waiting, visible: visibleRows } = view;
   const leadEmails = new Set(rows.map(r => (r.email || "").toLowerCase()));
   const orphanAttempts = attempts.filter(a => !leadEmails.has((a.email || "").toLowerCase()));
   const copyAll = async () => {
@@ -1141,9 +1159,13 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T,
         borderRadius: 12, padding: "12px 16px", marginBottom: 12,
       }}>
         <div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: T.accent }}>{waiting.length}</div>
+          <div style={{ fontSize: 26, fontWeight: 800, color: T.accent }}>{view.leadCount}</div>
           <div style={{ fontSize: 11, color: T.textMuted }}>
-            waiting to join · {alreadyJoined.length} already have access · {guideOnly.length} guide-only requests
+            {view.leadCount === 1 ? "lead" : "leads"} in the loaded list. Leads gave an email for a guide or the waitlist; they are not users, members or signups.
+          </div>
+          <div style={{ fontSize: 11, color: T.textMuted, marginTop: 2 }}>
+            {waiting.length} waiting to join · {alreadyJoined.length} already have an account · {guideOnly.length} guide-only
+            {view.paidKnown ? ` · ${view.members.length} now paid ${view.members.length === 1 ? "member" : "members"}, not counted as leads` : " · payment details not loaded, so this count may include paid members"}
           </div>
           <div role="status" aria-live="polite" style={{ fontSize: 12, marginTop: 4, color: inviteMsg.startsWith("Could not") ? "#ef4444" : T.textMuted }}>{inviteMsg}</div>
         </div>
@@ -1159,18 +1181,18 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T,
             <button onClick={() => setShowJoined(s => !s)} style={{
               padding: "6px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
               backgroundColor: "transparent", color: T.textMuted, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
-            }}>{showJoined ? "Hide" : "Show"} already-joined leads ({alreadyJoined.length})</button>
+            }}>{showJoined ? "Hide" : "Show"} leads who already have an account ({alreadyJoined.length})</button>
           )}
           {guideOnly.length > 0 && (
             <button onClick={() => setShowGuideOnly(s => !s)} style={{
               padding: "6px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
               backgroundColor: "transparent", color: T.textMuted, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
-            }}>{showGuideOnly ? "Hide" : "Show"} guide-only requests ({guideOnly.length})</button>
+            }}>{showGuideOnly ? "Hide" : "Show"} guide-only leads ({guideOnly.length})</button>
           )}
         </div>
       )}
 
-      {/* Manual add — for signups that arrive by text, call, or hallway */}
+      {/* Manual add: for leads that arrive by text, call, or hallway */}
       <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
         <input aria-label="Name" value={addName} onChange={e => setAddName(e.target.value)} placeholder="Name"
           style={{ flex: 1, minWidth: 0, padding: "9px 11px", borderRadius: 9, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, ...FORM_CONTROL }} />
@@ -1182,7 +1204,7 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T,
         }}>Add</button>
       </div>
 
-      {visibleRows.length === 0 && <Empty T={T} text="No pending waitlist signups in this view." />}
+      {visibleRows.length === 0 && <Empty T={T} text="No leads in this view." />}
       <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
         {visibleRows.map((r) => (
           <div key={r.id || r.email + r.created_at} style={{
@@ -1214,9 +1236,11 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T,
                   {r.note && <span style={badge(T.info, T.infoDim)}>{leadNoteLabel(r.note)}{/^guide(?:-email)?(?: |$)/.test(r.note) ? (r.guide_sent_at ? " · sent" : r.guide_attempts >= 5 ? " · delivery failed" : " · pending") : ""}</span>}
                   {r.source === "admin-manual" && <span style={badge(T.accent, T.accentGlow)}>added by you</span>}
                   {r.waitlist === false && <span style={badge(T.textMuted, T.neutralDim)}>guide only</span>}
-                  {activeEmails.has((r.email || "").toLowerCase()) && (
-                    <span style={badge("#10b981", "rgba(16,185,129,0.14)")}>already a user</span>
-                  )}
+                  {paidEmails.has((r.email || "").trim().toLowerCase())
+                    ? <span style={badge("#10b981", "rgba(16,185,129,0.14)")}>paid member, not a lead</span>
+                    : activeEmails.has((r.email || "").toLowerCase()) && (
+                      <span style={badge(T.textMuted, T.neutralDim)}>has an account, not paid</span>
+                    )}
                 </div>
               </div>
               <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
@@ -1250,7 +1274,7 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T,
               <div style={{ minWidth: 0, flex: "1 1 220px" }}>
                 {a.name && <div style={{ fontSize: 13, fontWeight: 700, color: T.text, overflowWrap: "anywhere" }}>{a.name}</div>}
                 <div style={{ fontSize: a.name ? 12 : 13, fontWeight: a.name ? 500 : 700, color: a.name ? T.textMuted : T.text, overflowWrap: "anywhere" }}>{a.email}</div>
-                <span style={{ ...badge(T.warning, T.warningDim), display: "inline-block", marginTop: 4 }}>{a.stage === "guide" ? "guide request" : a.stage === "normal" ? "waitlist signup" : "request"}</span>
+                <span style={{ ...badge(T.warning, T.warningDim), display: "inline-block", marginTop: 4 }}>{a.stage === "guide" ? "guide request" : a.stage === "normal" ? "waitlist request" : "request"}</span>
               </div>
               <button onClick={() => removeAttempt(a)} style={{ padding: "4px 8px", borderRadius: 7, border: "none", backgroundColor: "transparent", color: T.textDim, fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>dismiss</button>
             </div>

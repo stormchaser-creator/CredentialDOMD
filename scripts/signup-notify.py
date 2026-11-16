@@ -654,7 +654,18 @@ def compose(rows):
     elif any((row.get('kind') or '').startswith(ACTIVITY_PREFIXES) for row in rows):
         header = 'CredentialDOMD activity'
     else:
-        header = 'CredentialDOMD signup' + ('s' if len(rows) > 1 else '')
+        # Nobody here has paid, so nobody here is a signup (owner rule
+        # 2026-11-16): an email given for the waitlist or a guide is a lead, a
+        # new profile is an account that has not paid. A payment is reported
+        # under "CredentialDOMD money" above.
+        accounts = sum(1 for row in rows if (row.get('kind') or '') == 'app profile')
+        many = len(rows) > 1
+        if accounts == len(rows):
+            header = f"CredentialDOMD new account{'s' if many else ''}, not paid"
+        elif accounts:
+            header = 'CredentialDOMD leads and new accounts, not paid'
+        else:
+            header = f"CredentialDOMD lead{'s' if many else ''}"
     lines = [header]
     for row in rows:
         kind = row.get('kind') or ''

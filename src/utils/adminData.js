@@ -10,8 +10,8 @@ export const ADMIN_SOURCES = {
   feedback: { table: 'admin_feedback_recent', label: 'Legacy feedback', order: 'created_at', size: 50 },
   signups: { table: 'admin_signups_daily', label: 'Account creation days', order: 'day', size: 100, daily: true },
   visits: { table: 'admin_visits_daily', label: 'Traffic days', order: 'day', size: 100, daily: true },
-  waitlist: { table: 'early_access_leads', label: 'Waitlist', order: 'created_at', size: 500, columns: 'id,name,email,source,note,status,invited_at,created_at,waitlist,guide_sent_at,guide_attempts' },
-  attempts: { table: 'waitlist_attempts', label: 'Signup attempts', order: 'created_at', size: 200, columns: 'id,name,email,stage,created_at' },
+  waitlist: { table: 'early_access_leads', label: 'Leads', order: 'created_at', size: 500, columns: 'id,name,email,source,note,status,invited_at,created_at,waitlist,guide_sent_at,guide_attempts' },
+  attempts: { table: 'waitlist_attempts', label: 'Lead form attempts', order: 'created_at', size: 200, columns: 'id,name,email,stage,created_at' },
   fields: { table: 'field_proposals', label: 'Field proposals', order: 'created_at', size: 200 },
   users: { table: 'profiles', label: 'Account records', order: 'created_at', size: 500, columns: 'id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi,founding_number,is_founding_member,setup_state,deleted_at,updated_at' },
   invites: { table: 'beta_access', label: 'Invitations', order: 'created_at', size: 500 },
@@ -110,7 +110,17 @@ export async function readAccountMemberships(client) {
   }
 }
 
-/** A paid founding place, or the pre-launch activation badge. */
+/**
+ * A paid founder member: a founding place with a verified first payment
+ * (admin_account_memberships.founding_paid, 20261116120000). The only kind
+ * that counts toward "founding members" and the founder countdown. Null when
+ * the server does not say yet, so the caller shows no number, never a guess.
+ */
+export function isPaidFounder(facts) {
+  return typeof facts?.founding_paid === 'boolean' ? facts.founding_paid : null;
+}
+
+/** Whoever wears the founding badge: a paid founding place, or the pre-launch activation badge (not a paid member count). */
 export function isFoundingAccount(user, facts) {
   return !!(facts?.founding || user?.is_founding_member === true || user?.founding_number != null);
 }
@@ -118,8 +128,9 @@ export function isFoundingAccount(user, facts) {
 /**
  * Which section of Admin > Accounts a profile belongs in. Everyone listed
  * there signed in with an emailed code; a guide request alone never makes a
- * profile (guide-only people are on the Waitlist tab).
- *   paying: an active paid membership.
+ * profile (guide-only people are leads, on the Leads tab). Only the paying
+ * group counts as members, users or signups (owner rule 2026-11-16).
+ *   paying: an active paid membership (the server's paid_member_profiles rule).
  *   free:   lifetime access, or a beta grant that has not ended.
  *   unpaid: signed in, no paid membership and no free access.
  *   closed: the account was deleted or closed.
@@ -135,9 +146,9 @@ export function accountGroup(user, facts, now = Date.now()) {
 }
 
 export const ACCOUNT_GROUPS = [
-  { id: 'paying', label: 'Paying members', empty: 'Nobody has an active paid membership.' },
-  { id: 'free', label: 'Free access', empty: 'Nobody has lifetime or beta access.' },
-  { id: 'unpaid', label: 'Signed in, not paid', empty: 'Everyone who signed in has paid or has free access.' },
+  { id: 'paying', label: 'Paid members', empty: 'Nobody has an active paid membership.' },
+  { id: 'free', label: 'Free access, not paid members', empty: 'Nobody has lifetime or beta access.' },
+  { id: 'unpaid', label: 'Accounts without a paid membership, not members', empty: 'Everyone who signed in has paid or has free access.' },
   { id: 'closed', label: 'Closed accounts', empty: '' },
 ];
 

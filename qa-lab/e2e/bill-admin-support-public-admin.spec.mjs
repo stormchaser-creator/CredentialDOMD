@@ -115,15 +115,15 @@ test('owner: Errors, Waitlist, Fields and AI tab counts follow each action', {
     qa.check('other reports are untouched', others >= 0, `${others} other report(s) remain; seen stamp ${seen}`);
   }, { soft: true });
 
-  await qa.feature('ADMIN-003', 'Waitlist: add a QA lead, copy waiting emails, Invite opens prefilled, Remove (confirm) deletes it; the label follows', async () => {
+  await qa.feature('ADMIN-003', 'Leads: add a QA lead, copy waiting emails, Invite opens prefilled, Remove (confirm) deletes it; the label follows', async () => {
     const leadEmail = `${t}-lead@${LAB_EMAIL_DOMAIN}`;
     const leadName = `Quinn Lead ${letters()}`;
     await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: lab().urls.appOrigin });
-    await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^Waitlist/ }).click();
+    await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^Leads/ }).click();
     await page.getByPlaceholder(LEAD_EMAIL_PLACEHOLDER).waitFor({ timeout: 30000 });
-    const label0 = await tabLabel(page, 'Waitlist');
-    const db0 = attention(admin.profile.id).waitlist_waiting;
-    qa.check('the Waitlist label is the database\'s waiting count', labelCount(label0) === db0, `"${label0}" vs ${db0}`);
+    const label0 = await tabLabel(page, 'Leads');
+    const db0 = attention(admin.profile.id).leads;
+    qa.check('the Leads label is the database\'s lead count', labelCount(label0) === db0, `"${label0}" vs ${db0}`);
     await page.getByPlaceholder('Name').fill(leadName);
     await page.getByPlaceholder(LEAD_EMAIL_PLACEHOLDER).fill(leadEmail);
     await page.getByRole('button', { name: 'Add', exact: true }).click();
@@ -132,8 +132,8 @@ test('owner: Errors, Waitlist, Fields and AI tab counts follow each action', {
     const shown = page.locator('div').filter({ hasText: leadEmail }).filter({ has: page.getByRole('button', { name: 'Remove' }) }).last();
     qa.check('the lead appears in the list, marked "added by you"', await shown.isVisible() && /added by you/i.test(await shown.innerText()));
     await sleep(1500);
-    const labelNow = await tabLabel(page, 'Waitlist');
-    const dbNow = attention(admin.profile.id).waitlist_waiting;
+    const labelNow = await tabLabel(page, 'Leads');
+    const dbNow = attention(admin.profile.id).leads;
     qa.check('right after Add, the Waitlist label shows the new count (no tab switch)', labelCount(labelNow) === dbNow, `"${labelNow}" vs ${dbNow} (was ${db0})`);
     if (labelCount(labelNow) !== dbNow) {
       qa.bug({
@@ -149,11 +149,11 @@ test('owner: Errors, Waitlist, Fields and AI tab counts follow each action', {
     qa.check('Copy waiting emails puts the new lead on the clipboard ("Name <email>")', clip.includes(`${leadName} <${leadEmail}>`), clip.slice(0, 200));
     // Re-open the tab: the label is read again.
     await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^Fields/ }).click();
-    await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^Waitlist/ }).click();
+    await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^Leads/ }).click();
     await page.getByPlaceholder(LEAD_EMAIL_PLACEHOLDER).waitFor();
     await sleep(1200);
-    const label1 = await tabLabel(page, 'Waitlist');
-    const db1 = attention(admin.profile.id).waitlist_waiting;
+    const label1 = await tabLabel(page, 'Leads');
+    const db1 = attention(admin.profile.id).leads;
     qa.check('after adding, the label is the new waiting count', labelCount(label1) === db1 && db1 >= db0 + 1 - 1, `"${label1}" vs ${db1} (was ${db0})`);
     // Invite opens the invite-to-join dialog prefilled; sending is covered by admin-invite-gift.spec.mjs
     // (and would spend one of the service's 20 invitations a day shared by every journey).
@@ -173,13 +173,13 @@ test('owner: Errors, Waitlist, Fields and AI tab counts follow each action', {
     qa.check('Remove asks to confirm, then deletes the lead', dialogs.some((d) => d.includes(leadEmail)) && removed, dialogs);
     qa.check('the lead leaves the list', !(await page.getByText(leadEmail).count()));
     await sleep(1500);
-    const labelAfterRemove = await tabLabel(page, 'Waitlist');
-    qa.check('right after Remove, the Waitlist label shows the new count (no tab switch)', labelCount(labelAfterRemove) === attention(admin.profile.id).waitlist_waiting, `"${labelAfterRemove}"`);
+    const labelAfterRemove = await tabLabel(page, 'Leads');
+    qa.check('right after Remove, the Waitlist label shows the new count (no tab switch)', labelCount(labelAfterRemove) === attention(admin.profile.id).leads, `"${labelAfterRemove}"`);
     await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^Fields/ }).click();
-    await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^Waitlist/ }).click();
+    await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^Leads/ }).click();
     await sleep(1500);
-    const label2 = await tabLabel(page, 'Waitlist');
-    const db2 = attention(admin.profile.id).waitlist_waiting;
+    const label2 = await tabLabel(page, 'Leads');
+    const db2 = attention(admin.profile.id).leads;
     qa.check('after removing, the label is the database count again', labelCount(label2) === db2, `"${label2}" vs ${db2}`);
     const welcome = await emails({ to: leadEmail });
     qa.check('adding a waitlist lead by hand sent no email (the founding welcome is held for owner review)', welcome.length === 0, welcome.map((e) => e.subject));

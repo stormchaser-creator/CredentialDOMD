@@ -112,8 +112,8 @@ test('attention counts appear as Overview cards that open their tabs', async () 
   const cards = f.nodes().filter(node => node.type === 'article');
   assert.equal(cards.length, 11);
   const text = f.text(f.render());
-  for (const label of ['Unread message replies', 'New error reports', 'Waiting on the waitlist', 'Fields awaiting review']) assert.match(text, new RegExp(label));
-  for (const [label, tab] of [['Open messages', 'messages'], ['Open waitlist', 'waitlist'], ['Open field proposals', 'fields']]) {
+  for (const label of ['Unread message replies', 'New error reports', 'Leads waiting on the waitlist', 'Fields awaiting review']) assert.match(text, new RegExp(label));
+  for (const [label, tab] of [['Open messages', 'messages'], ['Open leads', 'waitlist'], ['Open field proposals', 'fields']]) {
     f.button(label).props.onClick(); assert.equal(f.navigation.at(-1), tab);
   }
 });

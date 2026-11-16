@@ -3,7 +3,7 @@ import { supabase } from "../../lib/supabase";
 import { ADMIN_REPORT_DAYS, ADMIN_REPORT_FRESH_MS, ADMIN_REPORT_DEFINITIONS, adminReportCsv, adminReportErrorMessage, formatReportTimestamp, normalizeAdminReport } from "../../utils/adminOperationsReport";
 
 const emptySnapshot = () => ({ report: null, status: "loading", error: "", expiresAt: 0 });
-const TAB_NAMES = { users: "accounts", signups: "traffic history", errors: "errors", tickets: "tickets", messages: "messages", waitlist: "waitlist", fields: "field proposals" };
+const TAB_NAMES = { users: "accounts", signups: "traffic history", errors: "errors", tickets: "tickets", messages: "messages", waitlist: "leads", fields: "field proposals" };
 const number = value => value.toLocaleString("en-US");
 
 export default function AdminOperationsReport({ T = {}, onNavigate }) {
@@ -62,19 +62,30 @@ export default function AdminOperationsReport({ T = {}, onNavigate }) {
   };
   const card = { border: `1px solid ${T.border || "#d1d5db"}`, background: T.card, borderRadius: 12, padding: 16 };
   const button = { minHeight: 44, borderRadius: 8, border: `1px solid ${T.border || "#d1d5db"}`, background: T.card, color: T.text, padding: "10px 14px", font: "inherit", cursor: "pointer" };
+  // Paid members first: they are the only people counted as members, users
+  // or signups (owner rule 2026-11-16). Leads and accounts are shown apart.
+  const people = report?.people;
   const metrics = report ? [
+    ...(people ? [
+      { label: "Paid members", value: people.paid_members, detail: ADMIN_REPORT_DEFINITIONS.paid_members, tab: "users" },
+      { label: "New paid members", value: people.new_paid_in_period, detail: ADMIN_REPORT_DEFINITIONS.new_paid, tab: "users" },
+      { label: "Paid founder members", value: people.paid_founders, detail: ADMIN_REPORT_DEFINITIONS.paid_founders, tab: "users" },
+      ...(people.founder_spots_left === null ? [] : [{ label: "Founder spots left", value: people.founder_spots_left, detail: ADMIN_REPORT_DEFINITIONS.founder_spots_left, tab: "users" }]),
+      { label: "Leads", value: people.leads, detail: ADMIN_REPORT_DEFINITIONS.leads, tab: "waitlist" },
+      { label: "Accounts without a paid membership", value: people.accounts_not_paid, detail: ADMIN_REPORT_DEFINITIONS.accounts_not_paid, tab: "users" },
+    ] : []),
     { label: "Open tickets", value: report.support.open, detail: ADMIN_REPORT_DEFINITIONS.open, tab: "tickets", filters: { status: "unresolved" } },
     { label: "Urgent open tickets", value: report.support.urgent, detail: ADMIN_REPORT_DEFINITIONS.urgent, tab: "tickets", filters: { status: "unresolved", priority: "urgent" } },
     { label: "Awaiting approval", value: report.support.waiting_approval, detail: ADMIN_REPORT_DEFINITIONS.approval, tab: "tickets", filters: { status: "unresolved", approval: "needs_review" } },
-    { label: "New signup profiles", value: report.accounts.new_in_period, detail: ADMIN_REPORT_DEFINITIONS.signups, tab: "signups" },
-    { label: "Account profiles", value: report.accounts.total, detail: ADMIN_REPORT_DEFINITIONS.accounts, tab: "users" },
+    { label: "New account profiles (not members)", value: report.accounts.new_in_period, detail: ADMIN_REPORT_DEFINITIONS.signups, tab: "signups" },
+    { label: "Account profiles (not members)", value: report.accounts.total, detail: ADMIN_REPORT_DEFINITIONS.accounts, tab: "users" },
     { label: "Active account profiles", value: report.accounts.active, detail: ADMIN_REPORT_DEFINITIONS.active, tab: "users", filters: { access: "active" } },
     { label: "Retained error reports", value: report.errors.in_period, detail: ADMIN_REPORT_DEFINITIONS.errors, tab: "errors" },
     // Present once the database update that restores these counts is applied.
     ...(report.attention ? [
       { label: "Unread message replies", value: report.attention.unread_replies, detail: ADMIN_REPORT_DEFINITIONS.unread_replies, tab: "messages" },
       { label: "New error reports", value: report.attention.new_errors_since_seen, detail: ADMIN_REPORT_DEFINITIONS.new_errors, tab: "errors" },
-      { label: "Waiting on the waitlist", value: report.attention.waitlist_waiting, detail: ADMIN_REPORT_DEFINITIONS.waitlist_waiting, tab: "waitlist" },
+      { label: "Leads waiting on the waitlist", value: report.attention.waitlist_waiting, detail: ADMIN_REPORT_DEFINITIONS.waitlist_waiting, tab: "waitlist" },
       { label: "Fields awaiting review", value: report.attention.fields_pending, detail: ADMIN_REPORT_DEFINITIONS.fields_pending, tab: "fields" },
     ] : []),
   ] : [];
@@ -97,11 +108,12 @@ export default function AdminOperationsReport({ T = {}, onNavigate }) {
     {status === "loading" && <p role="status" aria-live="polite">Loading the operations report…</p>}
     {error && <div role="alert" style={{ ...card, color: T.danger || "#b91c1c", marginBottom: 16 }}>{error}</div>}
     {status === "stale" && <p role="status" style={card}>This snapshot is more than five minutes old. Refresh the report before exporting or acting on its counts.</p>}
+    {report && !people && <p role="status" style={card}>Paid member and lead counts are not available in this environment yet. Apply the reporting database update to see them. The account counts below are not member counts.</p>}
     {report && <>
       <div style={{ ...card, marginBottom: 16, fontSize: 13 }}>
         <strong>Snapshot: {formatReportTimestamp(report.generated_at)}</strong>
         <div>Reporting window: {formatReportTimestamp(report.period_start)} (inclusive) to {formatReportTimestamp(report.period_end)} (exclusive).</div>
-        <div style={{ color: T.textMuted }}>Includes today’s partial UTC day. Ticket backlog and account totals describe the current snapshot; new signups, page loads, tickets created and retained error reports use the selected window.</div>
+        <div style={{ color: T.textMuted }}>Includes today’s partial UTC day. Ticket backlog, paid members, leads and account totals describe the current snapshot; new paid members, new accounts, page loads, tickets created and retained error reports use the selected window.</div>
       </div>
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(min(100%, 225px), 1fr))", gap: 12 }}>
         {metrics.map(metric => <article key={metric.label} style={card}>
@@ -115,10 +127,10 @@ export default function AdminOperationsReport({ T = {}, onNavigate }) {
       <div style={{ ...card, padding: 0, overflowX: "auto", marginTop: 20 }} role="region" aria-label="Daily operations counts" tabIndex={0}>
         <table style={{ width: "100%", minWidth: 600, borderCollapse: "collapse", fontVariantNumeric: "tabular-nums" }}>
           <caption style={{ textAlign: "left", padding: 16, fontWeight: 700 }}>Daily activity in UTC (today is partial)</caption>
-          <thead><tr>{["UTC date", "New signup profiles", "Recorded page loads", "Tickets created", "Retained error reports"].map(label => <th key={label} scope="col" style={{ textAlign: label === "UTC date" ? "left" : "right", padding: "10px 12px", borderBottom: `1px solid ${T.border || "#d1d5db"}`, fontSize: 12 }}>{label}</th>)}</tr></thead>
+          <thead><tr>{["UTC date", ...(people ? ["New paid members"] : []), "New accounts (not members)", "Recorded page loads", "Tickets created", "Retained error reports"].map(label => <th key={label} scope="col" style={{ textAlign: label === "UTC date" ? "left" : "right", padding: "10px 12px", borderBottom: `1px solid ${T.border || "#d1d5db"}`, fontSize: 12 }}>{label}</th>)}</tr></thead>
           <tbody>{report.daily.map(row => <tr key={row.day}>
             <th scope="row" style={{ textAlign: "left", fontWeight: 500, padding: "10px 12px", borderBottom: `1px solid ${T.border || "#d1d5db"}` }}>{row.day}</th>
-            {[row.signups, row.page_views, row.tickets, row.errors].map((value, index) => <td key={index} style={{ textAlign: "right", padding: "10px 12px", borderBottom: `1px solid ${T.border || "#d1d5db"}` }}>{number(value)}</td>)}
+            {[...(people ? [row.paid_members] : []), row.signups, row.page_views, row.tickets, row.errors].map((value, index) => <td key={index} style={{ textAlign: "right", padding: "10px 12px", borderBottom: `1px solid ${T.border || "#d1d5db"}` }}>{number(value)}</td>)}
           </tr>)}</tbody>
         </table>
       </div>
@@ -127,7 +139,7 @@ export default function AdminOperationsReport({ T = {}, onNavigate }) {
         <p>{ADMIN_REPORT_DEFINITIONS.page_views}</p>
         <p>{ADMIN_REPORT_DEFINITIONS.tickets}</p>
         <p>{ADMIN_REPORT_DEFINITIONS.errors}</p>
-        <p>Profile creation, administrative access status and billing are separate. This report does not calculate revenue or paid membership from profile counts.</p>
+        <p>Only paid members count as members, users or signups. An account profile or a lead (someone who gave an email for a guide or the waitlist) is never counted as one. Paid membership is read from billing, never from profile counts, and this report does not calculate revenue.</p>
       </details>
     </>}
   </section>;

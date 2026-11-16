@@ -59,24 +59,24 @@ function dashboardDb(counts) {
 }
 
 test('adding or removing a lead, or settling a field, re-reads the tab counts', async () => {
-  const counts = { unread_replies: 0, new_errors_since_seen: 0, waitlist_waiting: 3, fields_pending: 2 };
+  const counts = { unread_replies: 0, new_errors_since_seen: 0, waitlist_waiting: 3, leads: 3, fields_pending: 2 };
   const db = dashboardDb(counts);
   const { exports, mount } = load(db);
   const render = mount(exports.AdminDashboardContent, () => ({}));
   const tabLabel = (tree, pattern) => nodes(tree).filter(n => n.type === 'button').map(n => text(n.props.children)).find(t => pattern.test(t));
   let tree = await render();
-  assert.equal(tabLabel(tree, /^Waitlist/), 'Waitlist (3)');
-  nodes(tree).find(n => n.type === 'button' && text(n.props.children) === 'Waitlist (3)').props.onClick();
+  assert.equal(tabLabel(tree, /^Leads/), 'Leads (3)');
+  nodes(tree).find(n => n.type === 'button' && text(n.props.children) === 'Leads (3)').props.onClick();
   tree = await render();
   const list = nodes(tree).find(n => n.type === exports.WaitlistList);
   assert.ok(list, 'the Waitlist tab renders its list');
   assert.equal(typeof list.props.onChanged, 'function', 'the list can tell the dashboard its counts changed');
   const reads = db.rpcs.length;
-  counts.waitlist_waiting = 4;
+  counts.waitlist_waiting = 4; counts.leads = 4;
   list.props.onChanged();
   tree = await render();
   assert.equal(db.rpcs.length, reads + 1, 'one count read, not a section reload');
-  assert.equal(tabLabel(tree, /^Waitlist/), 'Waitlist (4)');
+  assert.equal(tabLabel(tree, /^Leads/), 'Leads (4)');
 
   nodes(tree).find(n => n.type === 'button' && /^Fields/.test(text(n.props.children))).props.onClick();
   tree = await render();

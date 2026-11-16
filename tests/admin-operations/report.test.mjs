@@ -69,8 +69,8 @@ test('CSV records exact totals, scope, retention limits, definitions and timesta
   input.customer_email = 'private@example.invalid'; input.daily[0].notes = '=HYPERLINK("private")';
   const csv = adminReportCsv(input, '2026-09-24T13:00:00Z');
   assert.ok(csv.startsWith('\uFEFF"Section","Metric","UTC date","Value","Definition"\r\n'));
-  assert.match(csv, /"Snapshot","Account profiles","","1000"/);
-  assert.match(csv, /"Window","New signup profiles","","14"/);
+  assert.match(csv, /"Snapshot","Account profiles \(not members\)","","1000"/);
+  assert.match(csv, /"Window","New account profiles \(not members\)","","14"/);
   assert.match(csv, /2026-09-24T12:30:00.000Z/);
   assert.match(csv, /2026-09-24T13:00:00.000Z/);
   assert.match(csv, /Window start inclusive/);
@@ -102,7 +102,7 @@ test('the optional attention block is validated, carried and exported; absent it
   const csv = adminReportCsv({ ...reportFixture(7), attention }, '2026-09-24T13:00:00Z');
   assert.match(csv, /"Attention","Unread message replies","","2"/);
   assert.match(csv, /"Attention","New error reports since last opened","","5"/);
-  assert.match(csv, /"Attention","Waiting on the waitlist","","11"/);
+  assert.match(csv, /"Attention","Leads waiting on the waitlist","","11"/);
   assert.match(csv, /"Attention","Field proposals awaiting review","","1"/);
   assert.doesNotMatch(csv, /private@example|debug/);
   assert.doesNotMatch(adminReportCsv(reportFixture(7), '2026-09-24T13:00:00Z'), /"Attention"/);
