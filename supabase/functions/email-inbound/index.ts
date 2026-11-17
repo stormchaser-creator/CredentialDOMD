@@ -22,11 +22,13 @@
  *   docs@ | requests@ | packets@credentialdomd.com   Documents and requests.
  *     Same sender matching and authentication as cme@. The email is first
  *     READ for what it is FOR, before any rule decides anything: one model
- *     reading (first Cloudflare Workers AI's free Llama 3.3 70B on
- *     app_secrets.cf_ai_account_id and cf_ai_token, _shared/workersAiCall.mjs;
- *     when that is not set or fails, Vera's model on
+ *     reading (first Gemini Flash on the scanner's own shared key,
+ *     app_secrets.gemini_shared_key, model GEMINI_INTAKE_MODEL else the app's
+ *     GEMINI_MODEL, _shared/geminiIntakeCall.mjs; when that fails, Cloudflare
+ *     Workers AI's free Llama 3.3 70B on app_secrets.cf_ai_account_id and
+ *     cf_ai_token, _shared/workersAiCall.mjs, when set; then Vera's model on
  *     app_secrets.anthropic_intake_key, else the shared anthropic_shared_key,
- *     with ai-proxy's dollar hold; both under the step's own daily allowance
+ *     with ai-proxy's dollar hold; all under the step's own daily allowance
  *     per account, a much smaller one for a forward that is not positively
  *     authenticated, and ai_usage metering; _shared/intakeModelCall.ts; one
  *     email a day to the owner when a reader answers with an error, only with
@@ -269,6 +271,7 @@ import { existingForModel, corpusIndex, attachmentText, planRecords, sourceLine,
 import { recordFromFields, RECORD_SECTIONS, sameReference } from "../_shared/app/utils/intakeRecords.js";
 import { admitUnderstanding, callUnderstanding, COUNT_TIMEOUT_MS, promptChars as anthropicPromptChars, type Admission } from "../_shared/intakeModelCall.ts";
 import { callWorkersAi, workersAiConfig, WORKERS_AI_TIMEOUT_MS } from "../_shared/workersAiCall.mjs";
+import { callGeminiIntake, geminiIntakeConfig, GEMINI_INTAKE_TIMEOUT_MS } from "../_shared/geminiIntakeCall.mjs";
 import { alertsEnabled, maybeAlertOwner } from "../_shared/intakeAiAlert.mjs";
 // Word, Excel, CSV, text and RTF attachments are read here and screened for
 // patient records BEFORE they are stored, as the app screens them before upload.
@@ -367,7 +370,12 @@ const SCAN_CONCURRENCY = 3;
 // not wait on Vera's key to read mail. ai-proxy reads only the shared name.
 const ANTHROPIC_INTAKE_SECRET_NAME = "anthropic_intake_key";
 const ANTHROPIC_SECRET_NAME = "anthropic_shared_key";
-// The free reader, tried first (2026-11-17, _shared/workersAiCall.mjs):
+// The first reader (2026-11-17, _shared/geminiIntakeCall.mjs): Gemini Flash
+// on the scanner's key above, under the same active-or-admin rule, in
+// structured-output mode. GEMINI_INTAKE_MODEL may name another Gemini model
+// (default: the app's GEMINI_MODEL); INTAKE_GEMINI_READER=off skips it.
+const GEMINI_READER = Deno.env.get("INTAKE_GEMINI_READER")?.trim().toLowerCase() !== "off";
+// Then the free reader (_shared/workersAiCall.mjs):
 // Cloudflare Workers AI on the account and token in app_secrets
 // cf_ai_account_id and cf_ai_token, else the function's CF_AI_ACCOUNT_ID and
 // CF_AI_TOKEN. Neither set means it is skipped. CF_AI_MODEL may name another
@@ -397,7 +405,8 @@ const BUDGET_HARD_USD = positiveEnv("AI_BUDGET_HARD_USD", 15, parseFloat);
 // it (the local harness uses a fraction of a second); it is never longer
 // than UNDERSTANDING_TIMEOUT_MS, because the webhook is still open.
 const UNDERSTAND_TIMEOUT_MS = Math.min(UNDERSTANDING_TIMEOUT_MS, positiveEnv("INTAKE_UNDERSTANDING_TIMEOUT_MS", UNDERSTANDING_TIMEOUT_MS, (s) => parseInt(s, 10)));
-// The Workers AI call's timeout, at most WORKERS_AI_TIMEOUT_MS; the harness shortens it.
+// The Gemini and Workers AI calls' timeouts, at most their modules' own; the harness shortens them.
+const GEMINI_TIMEOUT_MS = Math.min(GEMINI_INTAKE_TIMEOUT_MS, positiveEnv("INTAKE_GEMINI_TIMEOUT_MS", GEMINI_INTAKE_TIMEOUT_MS, (s) => parseInt(s, 10)));
 const WORKERS_TIMEOUT_MS = Math.min(WORKERS_AI_TIMEOUT_MS, positiveEnv("INTAKE_WORKERS_AI_TIMEOUT_MS", WORKERS_AI_TIMEOUT_MS, (s) => parseInt(s, 10)));
 // The model call runs INSIDE the scan budget, after the scans it reads: the
 // scans for the reading stop MODEL_RESERVE_MS early (the call's timeout, the
@@ -1241,6 +1250,7 @@ interface ScanContext {
   active: boolean;          // profiles.access_status is active
   admin: boolean;           // an app admin (no dollar hold on a proven forward, as in ai-proxy)
   anthropicKey: string;     // the understanding step's Anthropic key (intake's own, else the shared one), "" when neither is set
+  gemini: { key: string; model: string; base: string } | null;  // the first reader, on the scanner's key; null when it may not be used
   workersAi: { accountId: string; token: string; model: string } | null;  // the free reader, null when not configured
   physicianName: string;    // profiles.name, so a fact about another doctor is not entered as theirs
 }
@@ -1277,10 +1287,11 @@ async function scanContext(profile: MatchedProfile): Promise<ScanContext> {
     token: secretNamed(CF_AI_TOKEN_SECRET_NAME) || Deno.env.get("CF_AI_TOKEN"),
     model: Deno.env.get("CF_AI_MODEL"),
   });
-  const base = { degree, categoryNames, deadline, active: isActive, admin: isAdmin, anthropicKey, workersAi, physicianName: cleanHeaderText(p.name, 120) };
+  const base = { degree, categoryNames, deadline, active: isActive, admin: isAdmin, anthropicKey, workersAi, gemini: null, physicianName: cleanHeaderText(p.name, 120) };
   if (!active) return { ...base, key: "", why: "account not active" };
   if (!key) return { ...base, key: "", why: "shared key not configured" };
-  return { ...base, key, why: "" };
+  const gemini = GEMINI_READER ? geminiIntakeConfig({ key, model: Deno.env.get("GEMINI_INTAKE_MODEL"), base: GEMINI_BASE.replace(/\/v1beta\/$/, "") }) : null;
+  return { ...base, gemini, key, why: "" };
 }
 
 /** ai-proxy's prompt_chars: the text parts of the request, never the file. */
@@ -2288,7 +2299,7 @@ async function recentCorrections(profileId: string): Promise<string[]> {
  */
 function admitFor(profile: MatchedProfile, ctx: ScanContext, verified: boolean): Promise<Admission> {
   return admitUnderstanding({
-    db, profileId: profile.id, isAdmin: ctx.admin, active: ctx.active, verified, key: ctx.anthropicKey, workersAi: Boolean(ctx.workersAi),
+    db, profileId: profile.id, isAdmin: ctx.admin, active: ctx.active, verified, key: ctx.anthropicKey, otherReader: Boolean(ctx.workersAi || ctx.gemini),
     dailyLimit: INTAKE_DAILY_LIMIT, unverifiedDailyLimit: INTAKE_UNVERIFIED_DAILY_LIMIT,
   });
 }
@@ -2349,12 +2360,19 @@ async function understandEmail(profile: MatchedProfile, ctx: ScanContext, admiss
       corrections,
       records: onFile.lines,
     });
-    // Workers AI first (free), then Anthropic, each only when configured; a
+    // Gemini first, then Workers AI (free), then Anthropic, each only when configured; a
     // reader that fails or answers unusably hands the email to the next, and
     // the rules read it when none is left. A reading that is usable but whose
     // asks are not the email's own words goes to the rules, as before.
     type ReaderResult = { ok: boolean; message?: unknown; why?: string; status?: number | null };
     const readers: { provider: string; call: () => Promise<ReaderResult> }[] = [];
+    if (ctx.gemini) {
+      const config = ctx.gemini;
+      readers.push({ provider: "gemini", call: () => callGeminiIntake({
+        config, request, db, profileId: profile.id, promptChars: anthropicPromptChars(request),
+        timeoutMs: GEMINI_TIMEOUT_MS, deadline: ctx.deadline, minMs: MIN_MODEL_MS,
+      }) });
+    }
     if (ctx.workersAi) {
       const config = ctx.workersAi;
       readers.push({ provider: "workers-ai", call: () => callWorkersAi({
@@ -2374,7 +2392,7 @@ async function understandEmail(profile: MatchedProfile, ctx: ScanContext, admiss
       const call = await reader.call();
       if (!call.ok) { failures.push({ provider: reader.provider, why: call.why ?? "the model call failed", status: call.status ?? null }); continue; }
       const read = readModelReply(call.message);
-      if (!read.ok) { failures.push({ provider: reader.provider, why: reader.provider === "workers-ai" ? `Workers AI: ${read.why}` : read.why, status: null }); continue; }
+      if (!read.ok) { failures.push({ provider: reader.provider, why: reader.provider === "workers-ai" ? `Workers AI: ${read.why}` : reader.provider === "gemini" ? `Gemini: ${read.why}` : read.why, status: null }); continue; }
       const verified = verifyUnderstanding(read.value, { subject: input.subject, parts, attachmentCount: input.files.length, facts }) as Reading;
       reading = { ...verified, via: reader.provider };
       break;

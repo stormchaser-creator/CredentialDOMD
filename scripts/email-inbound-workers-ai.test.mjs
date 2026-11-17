@@ -1,5 +1,6 @@
-// End to end through supabase/functions/email-inbound/index.ts: the free
-// reader first (Cloudflare Workers AI, _shared/workersAiCall.mjs), then
+// End to end through supabase/functions/email-inbound/index.ts, with the
+// Gemini reader off (the harness default; email-inbound-gemini.test.mjs covers
+// it): the free reader (Cloudflare Workers AI, _shared/workersAiCall.mjs), then
 // Anthropic, then the rules, and one alert to the owner a day when a reader
 // answers with an error (_shared/intakeAiAlert.mjs), switched on here.
 //

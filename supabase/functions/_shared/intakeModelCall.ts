@@ -64,8 +64,8 @@ export interface AdmissionInput {
   /** The forward is positively authenticated (email-inbound mayFileFrom). */
   verified: boolean;
   key: string;
-  /** The free Workers AI reader is configured (workersAiCall.mjs); it needs the admission too. */
-  workersAi?: boolean;
+  /** A reader other than Anthropic is configured (geminiIntakeCall.mjs, workersAiCall.mjs); it needs the admission too. */
+  otherReader?: boolean;
   dailyLimit: number;
   unverifiedDailyLimit: number;
   now?: Date;
@@ -143,12 +143,12 @@ export function apiErrorWhy(body: unknown): string {
 /**
  * May this email be read by the model? Reserves one of the day's reads on
  * the understanding step's own scope when it may. One read covers every
- * reader tried for the email (Workers AI, then Anthropic). Called before any
+ * reader tried for the email (Gemini, Workers AI, then Anthropic). Called before any
  * attachment is scanned for the reading, so a forward over the allowance
  * costs nothing but the rules. Never throws.
  */
 export async function admitUnderstanding(input: AdmissionInput): Promise<Admission> {
-  if (!input.key && !input.workersAi) return { ok: false, why: "shared Anthropic key not configured" };
+  if (!input.key && !input.otherReader) return { ok: false, why: "no AI reader configured" };
   // An admin is an admin only when the forward proves who sent it.
   const admin = input.isAdmin && input.verified;
   if (!input.active && !admin) return { ok: false, why: "account not active" };
