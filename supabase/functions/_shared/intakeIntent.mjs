@@ -136,6 +136,14 @@ const LIST_LINE = /^\s*(?:[-*\u{2022}\u{00b7}\u{25aa}\u{25cf}\u{25cb}\u{2013}]|\
 const FORM_FIRST = /\b(?:forms?|checklists?|questionnaires?|attestations?|fillable|blank|requests?|applications?(?!\s+(?:approval|approved|letter|confirmation|acceptance)\b))\b/i;
 const FORM_NAME = /\b(?:packet|authori[sz]ation|release)\b/i;
 const DOCUMENT_NAME = /\b(?:approval|approved|letter|certificate|cert|licen[cs]e|card|diploma|receipt|confirmation|welcome|policy|declaration|coi|registration|badge)\b/i;
+// A record of credit already earned. "Eric Whitney-Transcript-OMED26 CME
+// Attestation and Evaluation.pdf" is what a conference issues once the
+// attestation is done; FORM_FIRST read "Attestation", called it a blank form,
+// the email sent to docs@ became a request and the certificate went unfiled
+// (2026-11-17). Only a word no blank form carries settles it, and only with
+// no plain form word beside it: "CME Attestation.pdf" alone stays a form.
+const EARNED_RECORD = /\b(?:transcripts?|certificates?\s+of\s+(?:completion|attendance|participation)|(?:completion|attendance)\s+certificates?)\b/i;
+const PLAIN_FORM = /\b(?:forms?|fillable|blank|questionnaires?|checklists?|requests?|applications?)\b/i;
 
 const STRONG = 2;
 
@@ -183,6 +191,7 @@ function score(signals, { subject, message }) {
 /** "form" when a file name says it is something to fill in, "document" when it says it is a finished one, else "unknown". */
 export function attachmentRole(name) {
   const n = String(name ?? "").replace(/\.[a-z0-9]{1,5}$/i, "").replace(/[_\-.]+/g, " ");
+  if (EARNED_RECORD.test(n) && !PLAIN_FORM.test(n)) return "document";
   if (FORM_FIRST.test(n)) return "form";
   if (DOCUMENT_NAME.test(n)) return "document";
   if (FORM_NAME.test(n)) return "form";
