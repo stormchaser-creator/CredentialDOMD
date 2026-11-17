@@ -24,7 +24,7 @@ const out = resolve(here, "..", "landing");
 const esc = (s) => String(s)
   .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const inline = (s) => esc(s).replace(/\*\*(.+?)\*\*/g, "<strong>$1</strong>")
-  .replace(/(?:Dr\.\s+)?Eric\s+Whitney(?:,\s*DO)?/g,
+  .replace(/(?:Dr\.\s+)?Eric\s+Whitney(?:,\s*DO)?(?:, A Professional Corporation)?/g,
     '<a href="https://drericwhitney.com" style="color:inherit;text-decoration:inherit">$&</a>');
 
 const block = (b) => Array.isArray(b)
