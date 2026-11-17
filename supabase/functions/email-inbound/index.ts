@@ -22,11 +22,15 @@
  *   docs@ | requests@ | packets@credentialdomd.com   Documents and requests.
  *     Same sender matching and authentication as cme@. The email is first
  *     READ for what it is FOR, before any rule decides anything: one model
- *     call (Vera's model, on app_secrets.anthropic_intake_key, else the
- *     shared anthropic_shared_key, under its own daily allowance per
- *     account, a much smaller one for a forward that is not positively
- *     authenticated, ai-proxy's dollar hold and ai_usage metering;
- *     _shared/intakeModelCall.ts) sees the forward, its subject and sender,
+ *     reading (first Cloudflare Workers AI's free Llama 3.3 70B on
+ *     app_secrets.cf_ai_account_id and cf_ai_token, _shared/workersAiCall.mjs;
+ *     when that is not set or fails, Vera's model on
+ *     app_secrets.anthropic_intake_key, else the shared anthropic_shared_key,
+ *     with ai-proxy's dollar hold; both under the step's own daily allowance
+ *     per account, a much smaller one for a forward that is not positively
+ *     authenticated, and ai_usage metering; _shared/intakeModelCall.ts; one
+ *     email a day to the owner when a reader answers with an error, only with
+ *     INTAKE_AI_FAILURE_ALERTS on, _shared/intakeAiAlert.mjs) sees the forward, its subject and sender,
  *     each attachment's scanner result and words, the physician's records
  *     on file (by ref) and the account's last corrections, and answers in a
  *     strict schema
@@ -263,7 +267,9 @@ import {
 // in the app on one tap (any other). Nobody is emailed about them.
 import { existingForModel, corpusIndex, attachmentText, planRecords, sourceLine, withSource, fitItems, minimalItems, asWritten, itemsBytes } from "../_shared/intakeFacts.mjs";
 import { recordFromFields, RECORD_SECTIONS, sameReference } from "../_shared/app/utils/intakeRecords.js";
-import { admitUnderstanding, callUnderstanding, COUNT_TIMEOUT_MS, type Admission } from "../_shared/intakeModelCall.ts";
+import { admitUnderstanding, callUnderstanding, COUNT_TIMEOUT_MS, promptChars as anthropicPromptChars, type Admission } from "../_shared/intakeModelCall.ts";
+import { callWorkersAi, workersAiConfig, WORKERS_AI_TIMEOUT_MS } from "../_shared/workersAiCall.mjs";
+import { alertsEnabled, maybeAlertOwner } from "../_shared/intakeAiAlert.mjs";
 // Word, Excel, CSV, text and RTF attachments are read here and screened for
 // patient records BEFORE they are stored, as the app screens them before upload.
 import { officeText } from "../_shared/officeText.mjs";
@@ -361,6 +367,16 @@ const SCAN_CONCURRENCY = 3;
 // not wait on Vera's key to read mail. ai-proxy reads only the shared name.
 const ANTHROPIC_INTAKE_SECRET_NAME = "anthropic_intake_key";
 const ANTHROPIC_SECRET_NAME = "anthropic_shared_key";
+// The free reader, tried first (2026-11-17, _shared/workersAiCall.mjs):
+// Cloudflare Workers AI on the account and token in app_secrets
+// cf_ai_account_id and cf_ai_token, else the function's CF_AI_ACCOUNT_ID and
+// CF_AI_TOKEN. Neither set means it is skipped. CF_AI_MODEL may name another
+// JSON-mode model. Then Anthropic, when a key is set, then the rules.
+const CF_AI_ACCOUNT_SECRET_NAME = "cf_ai_account_id";
+const CF_AI_TOKEN_SECRET_NAME = "cf_ai_token";
+// One email to the owner, at most once a day, when a reader answers with an
+// error (_shared/intakeAiAlert.mjs). Off until INTAKE_AI_FAILURE_ALERTS=on.
+const AI_FAILURE_ALERTS = alertsEnabled(Deno.env.get("INTAKE_AI_FAILURE_ALERTS"));
 const positiveEnv = (name: string, fallback: number, parse: (s: string) => number) => {
   const n = parse(Deno.env.get(name) || "");
   return Number.isFinite(n) && n > 0 ? n : fallback;
@@ -381,6 +397,8 @@ const BUDGET_HARD_USD = positiveEnv("AI_BUDGET_HARD_USD", 15, parseFloat);
 // it (the local harness uses a fraction of a second); it is never longer
 // than UNDERSTANDING_TIMEOUT_MS, because the webhook is still open.
 const UNDERSTAND_TIMEOUT_MS = Math.min(UNDERSTANDING_TIMEOUT_MS, positiveEnv("INTAKE_UNDERSTANDING_TIMEOUT_MS", UNDERSTANDING_TIMEOUT_MS, (s) => parseInt(s, 10)));
+// The Workers AI call's timeout, at most WORKERS_AI_TIMEOUT_MS; the harness shortens it.
+const WORKERS_TIMEOUT_MS = Math.min(WORKERS_AI_TIMEOUT_MS, positiveEnv("INTAKE_WORKERS_AI_TIMEOUT_MS", WORKERS_AI_TIMEOUT_MS, (s) => parseInt(s, 10)));
 // The model call runs INSIDE the scan budget, after the scans it reads: the
 // scans for the reading stop MODEL_RESERVE_MS early (the call's timeout, the
 // token count before it, and two seconds for the ledger), and the call is
@@ -1223,6 +1241,7 @@ interface ScanContext {
   active: boolean;          // profiles.access_status is active
   admin: boolean;           // an app admin (no dollar hold on a proven forward, as in ai-proxy)
   anthropicKey: string;     // the understanding step's Anthropic key (intake's own, else the shared one), "" when neither is set
+  workersAi: { accountId: string; token: string; model: string } | null;  // the free reader, null when not configured
   physicianName: string;    // profiles.name, so a fact about another doctor is not entered as theirs
 }
 
@@ -1238,7 +1257,7 @@ async function scanContext(profile: MatchedProfile): Promise<ScanContext> {
     db.from("app_admins").select("profile_id").eq("profile_id", profile.id).maybeSingle(),
     db.from("custom_categories").select("name, archived_at").eq("user_id", profile.id),
     db.from("app_secrets").select("value").eq("name", GEMINI_SECRET_NAME).maybeSingle(),
-    db.from("app_secrets").select("name, value").in("name", [ANTHROPIC_INTAKE_SECRET_NAME, ANTHROPIC_SECRET_NAME]),
+    db.from("app_secrets").select("name, value").in("name", [ANTHROPIC_INTAKE_SECRET_NAME, ANTHROPIC_SECRET_NAME, CF_AI_ACCOUNT_SECRET_NAME, CF_AI_TOKEN_SECRET_NAME]),
   ]);
   const p = (prof.data ?? {}) as { degree_type?: string | null; access_status?: string | null; name?: string | null };
   // Any profession the app models; anything else is blank, and the scanner
@@ -1253,7 +1272,12 @@ async function scanContext(profile: MatchedProfile): Promise<ScanContext> {
   const claudeRows = (claude.data ?? []) as { name?: string; value?: string | null }[];
   const secretNamed = (name: string) => String(claudeRows.find((r) => r.name === name)?.value ?? "").trim();
   const anthropicKey = secretNamed(ANTHROPIC_INTAKE_SECRET_NAME) || secretNamed(ANTHROPIC_SECRET_NAME);
-  const base = { degree, categoryNames, deadline, active: isActive, admin: isAdmin, anthropicKey, physicianName: cleanHeaderText(p.name, 120) };
+  const workersAi = workersAiConfig({
+    accountId: secretNamed(CF_AI_ACCOUNT_SECRET_NAME) || Deno.env.get("CF_AI_ACCOUNT_ID"),
+    token: secretNamed(CF_AI_TOKEN_SECRET_NAME) || Deno.env.get("CF_AI_TOKEN"),
+    model: Deno.env.get("CF_AI_MODEL"),
+  });
+  const base = { degree, categoryNames, deadline, active: isActive, admin: isAdmin, anthropicKey, workersAi, physicianName: cleanHeaderText(p.name, 120) };
   if (!active) return { ...base, key: "", why: "account not active" };
   if (!key) return { ...base, key: "", why: "shared key not configured" };
   return { ...base, key, why: "" };
@@ -2173,6 +2197,8 @@ async function ackAlreadySent(profileId: string, requestId: string, messageId: s
 /** What the email is for, as the host acts on it (intakeUnderstanding.mjs). */
 interface Reading {
   method: "model" | "rules";
+  /** Model readings only: which reader answered ("workers-ai" | "anthropic"). */
+  via?: string;
   why?: string;
   intent: "request" | "delivery" | "informational" | "mixed";
   /** from: where the words were found ("subject", "message", "history", or "attachment": an attachment's words, never acknowledged on their own). */
@@ -2262,7 +2288,7 @@ async function recentCorrections(profileId: string): Promise<string[]> {
  */
 function admitFor(profile: MatchedProfile, ctx: ScanContext, verified: boolean): Promise<Admission> {
   return admitUnderstanding({
-    db, profileId: profile.id, isAdmin: ctx.admin, active: ctx.active, verified, key: ctx.anthropicKey,
+    db, profileId: profile.id, isAdmin: ctx.admin, active: ctx.active, verified, key: ctx.anthropicKey, workersAi: Boolean(ctx.workersAi),
     dailyLimit: INTAKE_DAILY_LIMIT, unverifiedDailyLimit: INTAKE_UNVERIFIED_DAILY_LIMIT,
   });
 }
@@ -2323,14 +2349,38 @@ async function understandEmail(profile: MatchedProfile, ctx: ScanContext, admiss
       corrections,
       records: onFile.lines,
     });
-    const call = await callUnderstanding({
-      db, profileId: profile.id, admission, key: ctx.anthropicKey, request,
-      budgetHardUsd: BUDGET_HARD_USD, timeoutMs: UNDERSTAND_TIMEOUT_MS, deadline: ctx.deadline, minMs: MIN_MODEL_MS,
-    });
-    if (!call.ok) return rules(call.why);
-    const read = readModelReply(call.message);
-    if (!read.ok) return rules(read.why);
-    const reading = verifyUnderstanding(read.value, { subject: input.subject, parts, attachmentCount: input.files.length, facts }) as Reading;
+    // Workers AI first (free), then Anthropic, each only when configured; a
+    // reader that fails or answers unusably hands the email to the next, and
+    // the rules read it when none is left. A reading that is usable but whose
+    // asks are not the email's own words goes to the rules, as before.
+    type ReaderResult = { ok: boolean; message?: unknown; why?: string; status?: number | null };
+    const readers: { provider: string; call: () => Promise<ReaderResult> }[] = [];
+    if (ctx.workersAi) {
+      const config = ctx.workersAi;
+      readers.push({ provider: "workers-ai", call: () => callWorkersAi({
+        config, request, db, profileId: profile.id, promptChars: anthropicPromptChars(request),
+        timeoutMs: WORKERS_TIMEOUT_MS, deadline: ctx.deadline, minMs: MIN_MODEL_MS,
+      }) });
+    }
+    if (ctx.anthropicKey) {
+      readers.push({ provider: "anthropic", call: () => callUnderstanding({
+        db, profileId: profile.id, admission, key: ctx.anthropicKey, request,
+        budgetHardUsd: BUDGET_HARD_USD, timeoutMs: UNDERSTAND_TIMEOUT_MS, deadline: ctx.deadline, minMs: MIN_MODEL_MS,
+      }) });
+    }
+    const failures: { provider: string; why: string; status: number | null }[] = [];
+    let reading: Reading | null = null;
+    for (const reader of readers) {
+      const call = await reader.call();
+      if (!call.ok) { failures.push({ provider: reader.provider, why: call.why ?? "the model call failed", status: call.status ?? null }); continue; }
+      const read = readModelReply(call.message);
+      if (!read.ok) { failures.push({ provider: reader.provider, why: reader.provider === "workers-ai" ? `Workers AI: ${read.why}` : read.why, status: null }); continue; }
+      const verified = verifyUnderstanding(read.value, { subject: input.subject, parts, attachmentCount: input.files.length, facts }) as Reading;
+      reading = { ...verified, via: reader.provider };
+      break;
+    }
+    await alertOwner(failures);
+    if (!reading) return rules(failures.map((f) => f.why).join("; ") || "no AI provider configured");
     // Called a request, with asks the email does not hold word for word: a
     // paraphrase is no evidence that nothing was asked, so the rules read it.
     if (reading.needsRules) return rules("the reading's asks were not the email's own words");
@@ -2338,6 +2388,17 @@ async function understandEmail(profile: MatchedProfile, ctx: ScanContext, admiss
   } catch (err) {
     console.error(`understanding failed: ${err instanceof Error ? err.name : "unknown"}`);
     return rules("understanding failed");
+  }
+}
+
+/** The owner's alert for a reader that answered with an error (intakeAiAlert.mjs). Never throws. */
+async function alertOwner(failures: { provider: string; why: string; status: number | null }[]) {
+  if (!AI_FAILURE_ALERTS || !failures.length) return;
+  try {
+    const outcome = await maybeAlertOwner({ enabled: AI_FAILURE_ALERTS, failures, db, send: sendEmail });
+    if (outcome === "sent" || outcome === "failed") console.log(`understanding: owner alert ${outcome}`);
+  } catch {
+    console.error("understanding: owner alert failed");
   }
 }
 
@@ -2363,7 +2424,7 @@ async function prescanAll(profileId: string, files: Downloaded[], ctx: ScanConte
 }
 
 /** "model" or "rules (why)", for the ledger and the log. */
-const readingDetail = (r: Reading) => `${r.method === "model" ? `read by model (${r.confidence}${r.dropped.length ? `, ${r.dropped.length} ask(s) dropped` : ""})` : `read by rules${r.why ? ` (${r.why})` : ""}`}${r.unclear ? ", unclear" : ""}`;
+const readingDetail = (r: Reading) => `${r.method === "model" ? `read by model (${r.confidence}${r.dropped.length ? `, ${r.dropped.length} ask(s) dropped` : ""})${r.via ? ` via ${r.via}` : ""}` : `read by rules${r.why ? ` (${r.why})` : ""}`}${r.unclear ? ", unclear" : ""}`;
 
 async function handleDocsRequest(ledgerId: string, emailId: string, from: string, subject: string, messageId: string) {
   const recent = await countSince(60, (q) => q.eq("from_addr", from).eq("route", "docs").neq("id", ledgerId));
