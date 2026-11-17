@@ -432,6 +432,13 @@ test("a failed call is metered and its hold settled: an answered error at zero, 
   assert.equal(ledger("settle_ai_spend")[0].args.p_actual_usd, null, "unknown is expensive: the hold stays at its worst case");
 });
 
+test("with INTAKE_AI_FAILURE_ALERTS unset (the default), an out-of-credit 400 emails nobody and claims no alert", async () => {
+  const r = await sendCase(REQUIRED_WORDS, { anthropicReply: () => ({ status: 400, body: { type: "error", error: { type: "invalid_request_error", message: "Your credit balance is too low" } } }) });
+  assert.equal(r.body.read, "rules");
+  assert.equal(harness.aiAlerts.length, 0);
+  assert.equal(harness.sent.filter((m) => /intake AI is failing/.test(m.subject ?? "")).length, 0);
+});
+
 test("over the day's limit or the month's budget, or with the ledger down, no call is made and the rules read the email", async () => {
   for (const [name, answer] of [
     ["reserve_ai_call", () => ({ data: [], error: null })],

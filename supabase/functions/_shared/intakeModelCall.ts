@@ -64,6 +64,8 @@ export interface AdmissionInput {
   /** The forward is positively authenticated (email-inbound mayFileFrom). */
   verified: boolean;
   key: string;
+  /** A reader other than Anthropic is configured (geminiIntakeCall.mjs, workersAiCall.mjs); it needs the admission too. */
+  otherReader?: boolean;
   dailyLimit: number;
   unverifiedDailyLimit: number;
   now?: Date;
@@ -90,7 +92,7 @@ export interface UnderstandingCall {
 
 export type UnderstandingCallResult =
   | { ok: true; message: Anthropic.Message; costUsd: number | null }
-  | { ok: false; why: string };
+  | { ok: false; why: string; status?: number | null };
 
 function startOfTodayUtc(now: Date): string {
   const d = new Date(now.getTime());
@@ -140,12 +142,13 @@ export function apiErrorWhy(body: unknown): string {
 
 /**
  * May this email be read by the model? Reserves one of the day's reads on
- * the understanding step's own scope when it may. Called before any
+ * the understanding step's own scope when it may. One read covers every
+ * reader tried for the email (Gemini, Workers AI, then Anthropic). Called before any
  * attachment is scanned for the reading, so a forward over the allowance
  * costs nothing but the rules. Never throws.
  */
 export async function admitUnderstanding(input: AdmissionInput): Promise<Admission> {
-  if (!input.key) return { ok: false, why: "shared Anthropic key not configured" };
+  if (!input.key && !input.otherReader) return { ok: false, why: "no AI reader configured" };
   // An admin is an admin only when the forward proves who sent it.
   const admin = input.isAdmin && input.verified;
   if (!input.active && !admin) return { ok: false, why: "account not active" };
@@ -263,7 +266,7 @@ export async function callUnderstanding(input: UnderstandingCall): Promise<Under
       await logUsage({ path: ANTHROPIC_USAGE_PATH, ok: false, status, prompt_chars: chars, provider: "anthropic", model });
       await settle(hold, status === null ? null : 0);
       const said = apiErrorWhy(e.error);
-      return { ok: false, why: `the AI service answered ${status ?? "with an error"}${said ? ` (${said})` : ""}` };
+      return { ok: false, why: `the AI service answered ${status ?? "with an error"}${said ? ` (${said})` : ""}`, status };
     }
     await logUsage({ path: ANTHROPIC_USAGE_PATH, ok: false, status: null, prompt_chars: chars, provider: "anthropic", model });
     await settle(hold, null);

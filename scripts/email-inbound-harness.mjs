@@ -124,6 +124,14 @@ export function createDb() {
         if (name === "reserve_ai_spend") return { data: { outcome: "held", hold: `hold-${harness.ledger.calls.length}` }, error: null };
         return { data: null, error: null };
       }
+      if (name === "claim_intake_ai_alert") {
+        harness.aiAlerts.push(args);
+        if (harness.aiAlertClaim) return harness.aiAlertClaim(args);
+        if (rows("intake_ai_alerts").length) return { data: null, error: null };
+        const id = crypto.randomUUID();
+        rows("intake_ai_alerts").push({ id, provider: args.p_provider, detail: args.p_detail, sent_at: null });
+        return { data: id, error: null };
+      }
       return { data: null, error: { message: `no rpc ${name}` } };
     },
     storage: {
@@ -155,6 +163,18 @@ export const harness = {
   // for an API error, { hang: true } for a call that never answers, or
   // { message } for a whole Messages response.
   anthropicReply: () => null,
+  workersAi: [],            // { url, body, headers } sent to the fake Workers AI REST API
+  // (body) => the reading object Workers AI "answers" with, { status, body }
+  // for an API error, { hang: true } for a call that never answers, or
+  // { result } for a whole result object.
+  workersAiReply: () => null,
+  geminiIntake: [],         // { url, body, headers } sent to Gemini by the understanding step (a body with responseJsonSchema)
+  // (body) => the reading object Gemini "answers" with, { status, body } for
+  // an API error, { hang: true } for a call that never answers, or
+  // { response } for a whole generateContent response.
+  geminiIntakeReply: () => null,
+  aiAlerts: [],             // claim_intake_ai_alert calls; harness.aiAlertClaim decides the answer
+  aiAlertClaim: null,       // (args) => { data, error }; default: a new id unless one was claimed
   ledger: { calls: [] },    // AI ledger rpc calls; set reserve_ai_call / reserve_ai_spend / settle_ai_spend to answer
   failInsert: null,
   failRemove: null,         // (paths) => an error message to fail a Storage removal with
@@ -210,6 +230,32 @@ globalThis.fetch = async (input, init = {}) => {
       usage: { input_tokens: 2300, output_tokens: 420, cache_creation_input_tokens: 0, cache_read_input_tokens: 0 },
     });
   }
+  if (url.startsWith("https://api.cloudflare.com/client/v4/accounts/")) {
+    const body = JSON.parse(init.body);
+    harness.workersAi.push({ url, body, headers: init.headers });
+    const r = harness.workersAiReply(body);
+    if (r && r.hang) {
+      return new Promise((_, reject) => init.signal?.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }))));
+    }
+    if (r && r.status) return json(r.body ?? { success: false, errors: [{ code: 5000, message: "boom" }], result: null }, r.status);
+    if (r && r.result) return json({ success: true, errors: [], messages: [], result: r.result });
+    return json({ success: true, errors: [], messages: [], result: { response: r ?? {}, usage: { prompt_tokens: 2300, completion_tokens: 420, total_tokens: 2720 } } });
+  }
+  if (url.startsWith("https://generativelanguage.googleapis.com/") && JSON.parse(init.body).generationConfig?.responseJsonSchema) {
+    const body = JSON.parse(init.body);
+    harness.geminiIntake.push({ url, body, headers: init.headers });
+    const r = harness.geminiIntakeReply(body);
+    if (r && r.hang) {
+      return new Promise((_, reject) => init.signal?.addEventListener("abort", () => reject(Object.assign(new Error("aborted"), { name: "AbortError" }))));
+    }
+    if (r && r.status) return json(r.body ?? { error: { code: r.status, status: "INTERNAL", message: "boom" } }, r.status);
+    if (r && r.response) return json(r.response);
+    return json({
+      candidates: [{ finishReason: "STOP", content: { role: "model", parts: [{ text: JSON.stringify(r ?? {}) }] } }],
+      usageMetadata: { promptTokenCount: 2300, candidatesTokenCount: 420, thoughtsTokenCount: 60 },
+      modelVersion: url.match(/models\/([^:]+):/)?.[1] ?? "gemini-3.8-flash",
+    });
+  }
   if (url.startsWith("https://generativelanguage.googleapis.com/")) {
     const body = JSON.parse(init.body);
     harness.gemini.push({ url, body });
@@ -239,6 +285,12 @@ export const env = {
   // The understanding step's model call gives up after this long here, so a
   // test of a call that never answers takes a moment, not thirty seconds.
   INTAKE_UNDERSTANDING_TIMEOUT_MS: "400",
+  INTAKE_WORKERS_AI_TIMEOUT_MS: "400",
+  INTAKE_GEMINI_TIMEOUT_MS: "400",
+  // The Gemini reader shares the scanner's key, which every test seeds; the
+  // tests written before it read with Anthropic or Workers AI, so it is off
+  // here. scripts/email-inbound-gemini.test.mjs turns it on.
+  INTAKE_GEMINI_READER: "off",
 };
 let handler = null;
 globalThis.Deno = { env: { get: (k) => env[k] }, serve: (h) => { handler = h; } };
@@ -253,6 +305,12 @@ export function resetWorld() {
   harness.anthropic.length = 0;
   harness.anthropicCounts.length = 0;
   harness.anthropicReply = () => null;
+  harness.workersAi.length = 0;
+  harness.workersAiReply = () => null;
+  harness.geminiIntake.length = 0;
+  harness.geminiIntakeReply = () => null;
+  harness.aiAlerts.length = 0;
+  harness.aiAlertClaim = null;
   harness.ledger = { calls: [] };
   harness.failInsert = null;
   harness.failRemove = null;
