@@ -1750,7 +1750,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
                   {comp.topicResults.map(t => (
                     <div key={t.topic} style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
                       <span style={{ color: T.text, fontWeight: 600 }}>{t.topic}{t.checklist ? " (required topic)" : ""}</span>
-                      <span style={{ fontWeight: 800, color: t.met ? T.success : T.warning }}>{t.checklist ? (t.met ? "recorded" : "not recorded") : `${t.earned} / ${t.required}h recorded`}</span>
+                      <span style={{ fontWeight: 800, color: t.met ? T.success : T.warning }}>{t.metByBoardExemption ? "met by board certification exemption" : t.checklist ? (t.met ? "recorded" : "not recorded") : `${t.earned} / ${t.required}h recorded`}</span>
                     </div>
                   ))}
                   {comp.mate && (

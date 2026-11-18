@@ -1,5 +1,5 @@
 {
-  "reason": "Verified official reference URL migrations only. Restoring exactly four source URL values in isolated test modules reproduces every tested0e42d44e case, including derived fingerprints. Original baseline hashes retained.",
+  "reason": "Verified official reference URL migrations only. Restoring exactly four source URL values in isolated test modules reproduces every tested0e42d44e case, including derived fingerprints. Original baseline hashes retained. Amended 2026-11-18 (board-exemption-tx-source-1118.json): the TX rule source now also names Tex. Occ. Code § 156.052 and the TMB Physician CME Hours Requirement chart; the reviewedHash moved by that source string only.",
   "replacements": [
     [
       "https://legislature.maine.gov/legis/statutes/32/title32sec3300-F-1.html",
@@ -162,7 +162,7 @@
     {
       "key": "snapshot:MD",
       "originalHash": "534bde73cbf702b026c4bad067ae0f678946b21d331bf0120d526566e19e1405",
-      "reviewedHash": "15d3d4ec4d9510d4a04642cfb3109f824506845c198e226b7789b3ea03e595f2"
+      "reviewedHash": "83dbaaf99f10c0e810be076027d18aa480dd60e24435838e0cbca1b374089f97"
     },
     {
       "key": "evidence:ME:MD",
@@ -177,12 +177,12 @@
     {
       "key": "evidence:saved:MD",
       "originalHash": "869086f744d1d84e745b52744539ebef4de5990d6ff5515a1294029a89e50a72",
-      "reviewedHash": "9560f1e8b8ec506a6475e0b7d770feb1e4b1dfec2086529a15292561eb6a8211"
+      "reviewedHash": "a4d14694504adb0d5253eb34859cf9a8fb68298664b4e41dcb7f24f9f536ecf7"
     },
     {
       "key": "evidence:turn:MD",
       "originalHash": "1f729ded27c7112f85290efe87ff2c853dfd66f80a8f3333a4ff754abd1ef2f6",
-      "reviewedHash": "fcb63a27218c99695652cc147e6ee27be4616d922bc0ffe3e0512aa9f6300247"
+      "reviewedHash": "3f6fcedfd2fa389cf1788877f8039d3cc6745bd5c224a34cb5a18e41030b46c7"
     },
     {
       "key": "rules:getStateReq:ME:DO",
@@ -327,7 +327,7 @@
     {
       "key": "snapshot:DO",
       "originalHash": "5d09f56b6fc5e7d18ff17bce3474cf326878ea9d6f1dae6b62a273d6f4cd09af",
-      "reviewedHash": "ba44151a643f35f98671853e5c49ef111af64ec43fa45cd27f665e0f6557e836"
+      "reviewedHash": "a79bac12fdfcce95ace2dc8069bc6761d0338a56caba78c676f4cf37df873656"
     },
     {
       "key": "evidence:ME:DO",
@@ -342,12 +342,12 @@
     {
       "key": "evidence:saved:DO",
       "originalHash": "28d7416c9af0f5dcbb354cb454fb7498c7d5f0062ceb5b676ef1757b844e0646",
-      "reviewedHash": "0e53e7103185f9293915d0d3cfbbfdaa4943659fd82b07935184f446312b8216"
+      "reviewedHash": "3faf4abfaf2a78d15603e85fdd34c8ad80372f6a7deb1e19fbd11a6ad5593eed"
     },
     {
       "key": "evidence:turn:DO",
       "originalHash": "d9d622871a5f9c45ea800584d4d86a8f07124367c37546ddf3536e4cf8dbad04",
-      "reviewedHash": "d31520dde2309514771ca5a2f9e69258c8ee3f2a4cd7366e8ec2251fcc03e4e6"
+      "reviewedHash": "bd219fb2fb10f41c43727baf76a01a9bbbaa8f3ee73b08bb98b7f9dff2f37c6b"
     }
   ]
 }

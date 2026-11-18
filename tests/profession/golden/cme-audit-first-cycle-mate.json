@@ -1,5 +1,5 @@
 {
-  "reason": "CME shortfall audit, three rule fixes. (1) CO: a license issued after the default window start cannot be a renewed term, so the DORA first-cycle tier is the requirement for the total and the Category 1 minimum (C.R.S. 12-240-130.5(3)(c)). (2) ND: a license issued inside the current cycle is on its first reporting period, counted from the issue date: under one year licensed owes no CME (N.D. Admin. Code 50-04-01-02(2)), one year up to two owes twenty hours (50-04-01-04(1)). The golden ND fixture (issued 2025-11-15, expiring 2027-03-31, 16 months) owes 20. (3) MATE Act: a one-time DEA registration item (DEA letter to registrants), carried by one card only (the first tracked state whose card can alert), so the other complianceFor, list and viewer cards no longer repeat it. Every other state and field is unchanged. Review: the ND first-cycle note quotes 50-04-01-02(2) and 50-04-01-04(1) verbatim from the ndlegis.gov text, each tier with its own citation. Review of 2026-11-07: (4) a DEA registration expiring more than 39 months after 2023-06-27 (21 CFR 1301.13 term) was issued or renewed after it, so it carries the MATE affirmation even with no or an original issue date; the golden DEA fixture expires 20 days after the frozen date, so the TX card and the list and viewer now read MATE as affirmed. (5) An issue date within 31 days of the cycle start may be a renewed term's, so no first-cycle proration applies to it.",
+  "reason": "CME shortfall audit, three rule fixes. (1) CO: a license issued after the default window start cannot be a renewed term, so the DORA first-cycle tier is the requirement for the total and the Category 1 minimum (C.R.S. 12-240-130.5(3)(c)). (2) ND: a license issued inside the current cycle is on its first reporting period, counted from the issue date: under one year licensed owes no CME (N.D. Admin. Code 50-04-01-02(2)), one year up to two owes twenty hours (50-04-01-04(1)). The golden ND fixture (issued 2025-11-15, expiring 2027-03-31, 16 months) owes 20. (3) MATE Act: a one-time DEA registration item (DEA letter to registrants), carried by one card only (the first tracked state whose card can alert), so the other complianceFor, list and viewer cards no longer repeat it. Every other state and field is unchanged. Review: the ND first-cycle note quotes 50-04-01-02(2) and 50-04-01-04(1) verbatim from the ndlegis.gov text, each tier with its own citation. Review of 2026-11-07: (4) a DEA registration expiring more than 39 months after 2023-06-27 (21 CFR 1301.13 term) was issued or renewed after it, so it carries the MATE affirmation even with no or an original issue date; the golden DEA fixture expires 20 days after the frozen date, so the TX card and the list and viewer now read MATE as affirmed. (5) An issue date within 31 days of the cycle start may be a renewed term's, so no first-cycle proration applies to it. Amended 2026-11-18 (board-exemption-tx-source-1118.json): the TX rule source now also names Tex. Occ. Code § 156.052 and the TMB Physician CME Hours Requirement chart; the reviewedHash moved by that source string only.",
   "entries": [
     {
       "key": "rules:getStateEntry:ND:MD",
@@ -69,12 +69,12 @@
     {
       "key": "list:MD",
       "originalHash": "8d39d3550effd2aca3215995d78dc79a23c4aaba54a182e27f407d07aefb0524",
-      "reviewedHash": "a32a6600712f428e5c579a0d62858a264155b3d6340f174e8e1f331ebcb6eaef"
+      "reviewedHash": "21a828ee6fb4eb07765ebcb68d87740483446176e46538acdd05f35c1921b560"
     },
     {
       "key": "viewer:MD",
       "originalHash": "c44a6a4369285542d85c309a8008580beb7e73d5098516bec5c95fd7af9b1495",
-      "reviewedHash": "eedb82eed81dd384e5767f64329102e2d93de4b78881e1a69e0c2f21257dcc31"
+      "reviewedHash": "bc64f2ce6f829ffdaeec677d81e24a69c6cd5f16aa4e3de9fbd96e6d98ec9686"
     },
     {
       "key": "rules:getStateEntry:ND:DO",
@@ -144,22 +144,22 @@
     {
       "key": "list:DO",
       "originalHash": "c60b87612f7e1e15fbc7cadddf6d496c154ca406fa353e37ea3732d782cc1969",
-      "reviewedHash": "d25b3153c7bb9c8a83af2f24c3399a55b45fac78f8a3a74e33aba0ee27355f81"
+      "reviewedHash": "06b80c5d66420d7acfbddba68b807ee755581eb5acbb109cf9d57f605bbc77b3"
     },
     {
       "key": "viewer:DO",
       "originalHash": "5c5e270cedfb4599f07ac2098cb69e247d80deeec933600589326ecc4bdc0ed9",
-      "reviewedHash": "513d875bb01af489f617febe9877d7b20a996b67c17aa5ab475ab20fa4d7584c"
+      "reviewedHash": "db5c50660ac00765f68d552ea63e0a5eb1acdecad4f2a90118db1783e7cdd7fa"
     },
     {
       "key": "complianceFor:TX:MD",
       "originalHash": "5e8d248fc22af24551af6ba4e8433017cde6255bf4769e5d6267679095b4fbdb",
-      "reviewedHash": "2affdb47612314bfe99b9e9b7c581b226d3256d4f254619a5c4141c1d2de49f5"
+      "reviewedHash": "28de250904c4adce4c4598561cba4f4759803de1d295041f2b279f46742d320a"
     },
     {
       "key": "complianceFor:TX:DO",
       "originalHash": "337b5b384716bea3641469116cd608c3a6609e3ad394848ccd72c8b7d955fc36",
-      "reviewedHash": "0fc7cf5408d434a3700e51a7046c479216c81589f506fe7b473e49cef378d27a"
+      "reviewedHash": "e614614f1374bb58dd019b8f7c68a5d2e4b8eefa7c36660d2abb181454d1939e"
     }
   ]
 }

@@ -7,15 +7,29 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { computeCompliance } from '../src/utils/compliance.js';
+import { createRequire } from 'node:module';
+import { fileURLToPath } from 'node:url';
+import { build } from 'esbuild';
 import {
-  BOARD_EXEMPTION_FIELD, BOARD_EXEMPTION_RENEWAL_FIELD, BOARD_EXEMPTION_STATES,
+  BOARD_EXEMPTION_FIELD, BOARD_EXEMPTION_RENEWAL_FIELD, BOARD_EXEMPTION_STATES, BOARD_EXEMPTION_CONDITION_DEGREE_FIELD,
   boardExemptionOffered, boardExemptionCondition, boardExemptionOn, boardExemptionFields,
 } from '../src/utils/conditionalCme.js';
 import { getStateEntry, hasSeparateBoards } from '../src/constants/stateRequirements.js';
 
+// The transcript module imports extensionless paths, so bundle it as the
+// other transcript tests do.
+const { stateTranscriptModel } = await (async () => {
+  const require = createRequire(import.meta.url);
+  const entry = fileURLToPath(new URL('../src/utils/cmeTranscriptPdf.js', import.meta.url));
+  const out = await build({ entryPoints: [entry], bundle: true, platform: 'node', format: 'cjs', write: false, logLevel: 'silent', define: { 'import.meta.env': '{}' } });
+  const mod = { exports: {} };
+  new Function('require', 'module', 'exports', out.outputFiles[0].text)(require, mod, mod.exports);
+  return mod.exports;
+})();
+
 const EXP = '2027-03-31';
 const DAY = '2026-11-18';
-const chosen = (st) => boardExemptionFields({}, st, DAY, EXP, DAY);
+const chosen = (st, deg = 'MD') => boardExemptionFields({}, st, DAY, EXP, DAY, deg);
 const lowCme = [{ id: 'c1', category: 'AMA PRA Category 1', hours: '2', date: '2026-01-10' }];
 
 test('Maine DO: not offered, never applied, even with a stored choice and confirmed condition', () => {
@@ -74,7 +88,7 @@ test('Washington: MD and DO each get their own board rule condition', () => {
     assert.equal(boardExemptionOffered('WA', deg), true, deg);
     const unconfirmed = { [BOARD_EXEMPTION_FIELD]: DAY, [BOARD_EXEMPTION_RENEWAL_FIELD]: EXP };
     assert.equal(computeCompliance(lowCme, 'WA', deg, { licenseExpiration: EXP, topicApplicability: unconfirmed }).boardExemption, undefined, `${deg} unconfirmed`);
-    const comp = computeCompliance(lowCme, 'WA', deg, { licenseExpiration: EXP, topicApplicability: chosen('WA') });
+    const comp = computeCompliance(lowCme, 'WA', deg, { licenseExpiration: EXP, topicApplicability: chosen('WA', deg) });
     assert.equal(comp.totalMet, true, deg);
     assert.equal(comp.topicResults.find(t => t.topic === 'Suicide Prevention').met, false, `${deg} state mandates still owed`);
   }
@@ -102,4 +116,55 @@ test('Texas: the exemption meets ethics with the rule named; human trafficking s
   assert.equal(plainEthics.metByBoardExemption, undefined);
   // A DO under the same Texas board gets the same result.
   assert.equal(computeCompliance(lowCme, 'TX', 'DO', opts).topicResults.find(t => t.topic === 'Ethics').met, true);
+  // The note cites the TMB chart for ethics and 156.052 for the presumption.
+  assert.match(ethics.note, /TMB Physician CME Hours Requirement chart says .* ethics/);
+  assert.match(ethics.note, /presumption itself is Tex\. Occ\. Code 156\.052/);
+  // The card and PDF provenance names the same sources as the note.
+  assert.match(comp.boardExemption.source, /161\.35/);
+  assert.match(comp.boardExemption.source, /156\.052/);
+  assert.match(comp.boardExemption.source, /physician-cme-hours-requirement-chart/);
+  // A renewal other than the one chosen for: ethics goes back to logged hours.
+  const renewed = computeCompliance(lowCme, 'TX', 'MD', { licenseExpiration: '2029-06-30', topicApplicability: chosen('TX') });
+  assert.equal(renewed.boardExemption, undefined);
+  const renewedEthics = renewed.topicResults.find(t => t.topic === 'Ethics');
+  assert.equal(renewedEthics.met, false);
+  assert.equal(renewedEthics.metByBoardExemption, undefined);
+});
+
+test('Washington: a condition confirmed for one degree does not carry to the other', () => {
+  const md = chosen('WA', 'MD');
+  assert.equal(md[BOARD_EXEMPTION_CONDITION_DEGREE_FIELD], 'MD');
+  assert.equal(boardExemptionOn('WA', md, EXP, 'MD'), DAY);
+  assert.equal(boardExemptionOn('WA', md, EXP, 'DO'), null, 'MD wording confirmed, Settings now DO');
+  const dO = chosen('WA', 'DO');
+  assert.equal(boardExemptionOn('WA', dO, EXP, 'DO'), DAY);
+  assert.equal(boardExemptionOn('WA', dO, EXP, 'MD'), null, 'DO wording confirmed, Settings now MD');
+  const switched = computeCompliance(lowCme, 'WA', 'DO', { licenseExpiration: EXP, topicApplicability: md });
+  assert.equal(switched.boardExemption, undefined);
+  assert.equal(switched.totalMet, false);
+  // Confirmed with no degree recorded (none set at the time): not applied.
+  const noDeg = boardExemptionFields({}, 'WA', DAY, EXP, DAY, null);
+  assert.equal(boardExemptionOn('WA', noDeg, EXP, 'MD'), null);
+  // A single-wording state stores no degree and is unaffected by a switch.
+  const tx = chosen('TX', 'MD');
+  assert.equal(tx[BOARD_EXEMPTION_CONDITION_DEGREE_FIELD], undefined);
+  assert.equal(boardExemptionOn('TX', tx, EXP, 'DO'), DAY);
+  // Undo clears the degree too.
+  assert.deepEqual(boardExemptionFields(md, 'WA', null, EXP), {});
+});
+
+test('Texas PDF summary names ethics as met by the exemption', () => {
+  const data = {
+    settings: { degreeType: 'MD' },
+    cme: lowCme,
+    licenses: [
+      { id: 'l1', type: 'State Medical License', state: 'TX', expirationDate: EXP, customFields: chosen('TX') },
+      { id: 'b1', type: 'Board Certification', name: 'Synthetic Board', expirationDate: '2030-12-31' },
+    ],
+  };
+  const model = stateTranscriptModel(data, 'TX');
+  assert.ok(!model.error, model.error);
+  const line = model.footnotes.find(f => /Board certification exemption used/.test(f));
+  assert.ok(line, 'exemption footnote present');
+  assert.match(line, /The total and Category 1 hours are counted as met, and so is Ethics\./);
 });

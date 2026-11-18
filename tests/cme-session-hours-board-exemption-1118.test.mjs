@@ -66,7 +66,7 @@ test('Low: Undo removes exactly the topic it added and keeps later edits', () =>
 });
 
 const lowCme = [{ id: 'c', category: 'AMA PRA Category 1', hours: '2', date: '2026-01-10' }];
-const chosen = (state, extra = {}) => boardExemptionFields({}, state, '2026-11-18', EXP, '2026-11-18');
+const chosen = (state, deg = 'MD') => boardExemptionFields({}, state, '2026-11-18', EXP, '2026-11-18', deg);
 
 test('M2: the exemption applies only for the renewal it was chosen for', () => {
   const answers = chosen('ND');
@@ -87,7 +87,7 @@ test('M2: LA, TX, KY, NH, ME (MD) and WA need their condition confirmed', () => 
     assert.ok(boardExemptionCondition(st, deg), `${st} ${deg}`);
     const unconfirmed = { [BOARD_EXEMPTION_FIELD]: '2026-11-18', [BOARD_EXEMPTION_RENEWAL_FIELD]: EXP };
     assert.equal(boardExemptionOn(st, unconfirmed, EXP, deg), null, `${st} ${deg} unconfirmed`);
-    assert.equal(boardExemptionOn(st, chosen(st), EXP, deg), '2026-11-18', `${st} ${deg} confirmed`);
+    assert.equal(boardExemptionOn(st, chosen(st, deg), EXP, deg), '2026-11-18', `${st} ${deg} confirmed`);
   }
   const tx = computeCompliance(lowCme, 'TX', 'MD', { licenseExpiration: EXP, topicApplicability: chosen('TX') });
   assert.equal(tx.totalMet, true);

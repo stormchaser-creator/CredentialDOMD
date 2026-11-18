@@ -48,6 +48,12 @@ export const BOARD_EXEMPTION_RENEWAL_FIELD = "Board certification exemption for 
 /** The day the physician confirmed the state's narrower condition (BOARD_EXEMPTION_CONDITIONS). */
 export const BOARD_EXEMPTION_CONDITION_FIELD = "Board certification exemption condition confirmed on";
 /**
+ * Where the condition differs by degree (WA), the degree whose wording was
+ * confirmed. A WA MD who confirms the ABMS four-year wording and then sets
+ * Settings to DO has not confirmed the DO wording, and the reverse.
+ */
+export const BOARD_EXEMPTION_CONDITION_DEGREE_FIELD = "Board certification exemption condition confirmed for";
+/**
  * States whose `moc` rule text is narrower than "board certified": the
  * statement the physician confirms before the exemption applies. Each one
  * restates that state's stateRequirements `moc` text and adds nothing to it
@@ -104,7 +110,7 @@ export const BOARD_EXEMPTION_CONDITIONS = Object.freeze({
 export const BOARD_EXEMPTION_COVERS = Object.freeze({
   TX: Object.freeze({
     topics: Object.freeze(["Ethics"]),
-    note: "Met by your board certification exemption: the TMB CME chart says board certification, recertification or MOC covers the ethics requirement (Tex. Occ. Code 156.052).",
+    note: "Met by your board certification exemption: the TMB Physician CME Hours Requirement chart says board certification, recertification or MOC covers the ethics requirement. The 36 month presumption itself is Tex. Occ. Code 156.052.",
   }),
 });
 
@@ -158,6 +164,8 @@ export function boardExemptionOn(state, answers = {}, licenseExpiration = null, 
   if (boardExemptionCondition(state, degree)) {
     const c = answers?.[BOARD_EXEMPTION_CONDITION_FIELD];
     if (typeof c !== "string" || !ISO_DAY.test(c)) return null;
+    // A condition worded by degree counts only for the degree confirmed.
+    if (typeof BOARD_EXEMPTION_CONDITIONS[state] === "object" && answers?.[BOARD_EXEMPTION_CONDITION_DEGREE_FIELD] !== physicianDegree(degree)) return null;
   }
   return v;
 }
@@ -186,16 +194,25 @@ export function currentBoardCertificationOnFile(licenses, today = null) {
   });
 }
 
-/** The customFields a choice writes (value: the day chosen) or clears (null). */
-export function boardExemptionFields(customFields, state, value, licenseExpiration, conditionConfirmedOn = null) {
+/**
+ * The customFields a choice writes (value: the day chosen) or clears (null).
+ * degree: the physician's degree when the condition was confirmed, stored
+ * for a state whose condition is worded by degree.
+ */
+export function boardExemptionFields(customFields, state, value, licenseExpiration, conditionConfirmedOn = null, degree = null) {
   const out = { ...(customFields || {}) };
   delete out[BOARD_EXEMPTION_FIELD];
   delete out[BOARD_EXEMPTION_RENEWAL_FIELD];
   delete out[BOARD_EXEMPTION_CONDITION_FIELD];
+  delete out[BOARD_EXEMPTION_CONDITION_DEGREE_FIELD];
   if (!value) return out;
   out[BOARD_EXEMPTION_FIELD] = value;
   if (licenseExpiration) out[BOARD_EXEMPTION_RENEWAL_FIELD] = String(licenseExpiration);
-  if (BOARD_EXEMPTION_CONDITIONS[state] && conditionConfirmedOn) out[BOARD_EXEMPTION_CONDITION_FIELD] = conditionConfirmedOn;
+  if (BOARD_EXEMPTION_CONDITIONS[state] && conditionConfirmedOn) {
+    out[BOARD_EXEMPTION_CONDITION_FIELD] = conditionConfirmedOn;
+    const deg = physicianDegree(degree);
+    if (typeof BOARD_EXEMPTION_CONDITIONS[state] === "object" && deg) out[BOARD_EXEMPTION_CONDITION_DEGREE_FIELD] = deg;
+  }
   return out;
 }
 

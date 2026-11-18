@@ -39,7 +39,7 @@ export default function BoardExemption({ state, comp, moc }) {
   });
   const save = (value) => {
     const today = localToday();
-    const customFields = boardExemptionFields(license.customFields, state, value, license.expirationDate, value && condition ? today : null);
+    const customFields = boardExemptionFields(license.customFields, state, value, license.expirationDate, value && condition ? today : null, degree);
     editItem("licenses", { ...license, customFields });
     setConfirming(false);
     setConditionMet(false);
