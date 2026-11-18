@@ -167,8 +167,11 @@ export function calculationEvidence(comp, degree, today) {
     historicalRuleCoverage: 'not_established',
     // The engine can use an MD fallback; the assistant must not assert it for an unknown degree.
     degreeSelectionNeeded: !!comp.degreeUnknown || (!degreeOf(degree) && !!(STATE_REQS[comp.state]?.md || STATE_REQS[comp.state]?.do)),
+    // A row prefilled from board specialties says so (and which ones); an
+    // answer on the license is the physician's own selection.
     conditionalApplicability: (comp.conditionalTopics || []).map(t => ({ topic: t.topic, applicability: t.applicability,
-      basis: 'physician_selection', condition: t.condition?.description || null })),
+      basis: t.applicabilitySource === 'specialty' ? 'specialty_prefill' : 'physician_selection', condition: t.condition?.description || null,
+      ...(t.applicabilitySource === 'specialty' ? { fromSpecialties: t.applicabilityPrefill?.specialties || [] } : {}) })),
   };
 }
 

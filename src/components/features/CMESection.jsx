@@ -1,5 +1,6 @@
 import ConditionalCmeTopics from "../shared/ConditionalCmeTopics";
 import PriorCompletion from "../shared/PriorCompletion";
+import TopicCourseMatches from "../shared/TopicCourseMatches";
 import AppCardDetails from "../shared/AppCardDetails";
 import { cmeAssessmentLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE, appCardTitle, certificationMetLine, mateStatusText } from "../../utils/cmePresentation";
 import { useState, useMemo, useCallback, useEffect, useRef, memo } from "react";
@@ -666,6 +667,11 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
                     citeInherited={tr.citeInherited}
                   />
                   {tr.period === "lifetime" && !comp.profession && <PriorCompletion state={comp.state} topic={tr} />}
+                  {/* Logged courses that name this topic but are not tagged
+                      with it: physician cards, which count the topic over
+                      the same period topicCountingPool reads. */}
+                  {!comp.profession && <TopicCourseMatches comp={comp} topic={tr}
+                    acceptedCategories={(getStateEntry(st, deg)?.topics || []).find(t => t.topic === tr.topic)?.acceptedCategories} />}
                   {!tr.met && (
                     <button onClick={() => navigate("credentials", `findCme:${tr.topic}`)} style={{
                       padding: "3px 10px", minHeight: isDesktop ? undefined : TAP_MIN, fontSize: 11, fontWeight: 700, borderRadius: 8, border: "none",
