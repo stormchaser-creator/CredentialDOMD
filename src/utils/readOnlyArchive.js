@@ -12,6 +12,7 @@ import { docAttachedLabel, docBytes, fmtBytes } from "./docLabel.js";
 import { money, invoicePeriod } from "./invoiceCover.js";
 import { scopeForCollection } from "./limitedLaunchAccess.js";
 import { isIdentityLink, isIdentitySection } from "./pausedApplicationRecords.js";
+import { BOARD_APP_MADE_FIELD, awaitsBoardDate } from "./lifecycle.js";
 
 const SECTION_LABELS = {
   invoices: "Invoices", travelExpenses: "Expenses", deductibles: "Deductions", encounters: "RVU entries",
@@ -107,9 +108,14 @@ export function recordDetails(key, record, data) {
   const rows = [];
   for (const [field, value] of Object.entries(record || {})) {
     if (HIDDEN_FIELDS.has(field)) continue;
+    // A board record the app made, still awaiting its date, never claims
+    // "Does not expire" (a record from the 11-18 release carries the flag).
+    if (field === "noExpiration" && awaitsBoardDate(record)) continue;
     if ((field === "fieldValues" || field === "customFields") && value && typeof value === "object" && !Array.isArray(value)) {
       const named = field === "fieldValues" && record.fieldLabels && typeof record.fieldLabels === "object" ? record.fieldLabels : {};
       for (const [inner, innerValue] of Object.entries(value)) {
+        // The app's own marker on a board record it made (lifecycle.awaitsBoardDate).
+        if (field === "customFields" && inner === BOARD_APP_MADE_FIELD) continue;
         const shown = detailValue(inner, innerValue, data);
         if (shown) rows.push({ label: text(named[inner]) || humanize(inner), value: shown });
       }

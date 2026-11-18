@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { computeCompliance } from '../src/utils/compliance.js';
 import { sessionTopicHours, topicHoursOf, CME_SESSIONS_FIELD } from '../src/utils/topicSuggest.js';
 import { newBoardRecord } from '../src/utils/boardTasks.js';
-import { isAlertable } from '../src/utils/lifecycle.js';
+import { isAlertable, awaitsBoardDate } from '../src/utils/lifecycle.js';
 import { isNonExpiring } from '../src/utils/helpers.js';
 
 const conf = (sessions) => ({ id: 'c', title: 'Synthetic Annual Meeting', category: 'AOA Category 1-A', hours: 60, date: '2026-11-10',
@@ -25,7 +25,7 @@ test('MATE counts only the opioid session, not the conference', () => {
 
 test('a board record the app makes to hold a mark never warns about a missing date', () => {
   const rec = newBoardRecord('ABMS:ABNS', () => 'z');
-  assert.equal(rec.noExpiration, true);
-  // App.jsx missingExpiration: !expirationDate && !isNonExpiring && isAlertable
-  assert.equal(!rec.expirationDate && !isNonExpiring(rec, 'licenses') && isAlertable(rec), false);
+  assert.equal(rec.noExpiration, undefined, 'no "does not expire" claim (2026-11-18 portal: AOA certificates show a valid thru date)');
+  // App.jsx missingExpiration: !expirationDate && !isNonExpiring && !awaitsBoardDate && isAlertable
+  assert.equal(!rec.expirationDate && !isNonExpiring(rec, 'licenses') && !awaitsBoardDate(rec) && isAlertable(rec), false);
 });

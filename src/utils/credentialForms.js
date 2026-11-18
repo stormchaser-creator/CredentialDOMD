@@ -14,7 +14,7 @@
 
 import { STATES } from "../constants/states.js";
 import { getLicenseTypes, ALL_LICENSE_TYPES, CERTIFICATION_TYPE, PRIVILEGE_TYPES, INSURANCE_TYPES, isInherentlyNonExpiringLicense } from "../constants/credentialTypes.js";
-import { lifecycleFields, expirationWaived, PERSONAL_COVERAGE_RE } from "./lifecycle.js";
+import { lifecycleFields, expirationWaived, PERSONAL_COVERAGE_RE, awaitsBoardDate } from "./lifecycle.js";
 import { plainLabel } from "./helpers.js";
 import { certBodyOf, licenseKindOf, mayNotExpire, isAdvancedPractice, isPracticeLicense } from "../constants/professions.js";
 
@@ -71,7 +71,7 @@ export function licenseFields({ degreeType, records = [], physicianName } = {}) 
       hint: (f) => (mayNotExpire(f.type)
         ? "Some states set no end date for this (an Ohio PA's practice agreement does not expire). Tick this and the app stops asking for one."
         : "A lifetime diplomate has no renewal date. Tick this and the app stops asking for one. Course and device certifications are already treated this way.") },
-    { key: "expirationDate", label: "Expires", type: "date", required: (f) => !isInherentlyNonExpiringLicense(f.type) && !(f.noExpiration === true && offersNoExpiration(f)) && !expirationWaived(f) },
+    { key: "expirationDate", label: "Expires", type: "date", required: (f) => !isInherentlyNonExpiringLicense(f.type) && !(f.noExpiration === true && offersNoExpiration(f)) && !expirationWaived(f) && !awaitsBoardDate(f) },
     // "Not known yet" is a different answer from "does not expire": a course
     // certification never expires, and a lifetime diplomate has said so
     // (lifecycle.dateUnknownApplies, which the save path enforces too).

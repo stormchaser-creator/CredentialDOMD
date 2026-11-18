@@ -6,7 +6,7 @@ import { certBodyOf, DEGREE_LABELS, isAdvancedPractice, isPhysicianDegree, mayNo
 import { professionCopy } from "../constants/professionCopy.js";
 import { buildReferenceText, referenceSentences } from "./referenceDraft.js";
 import { scrubSsn, plainDashes, withDegree } from "./outgoingText.js";
-import { LIFECYCLE_SECTIONS, lifecycleNote } from "./lifecycle.js";
+import { LIFECYCLE_SECTIONS, lifecycleNote, awaitsBoardDate } from "./lifecycle.js";
 import { daysUntilDate } from "./dateDays.js";
 import { isWorkAddress, isCurrent as isCurrentAddress } from "./addressHistory.js";
 
@@ -63,6 +63,10 @@ export function shortFacility(facility, contracts) {
 
 export function isNonExpiring(item, sectionKey) {
   if (!item || item.expirationDate) return false;
+  // A board record the app made (or the 11-18 release made with
+  // noExpiration) has no date yet; it is not "does not expire". It raises no
+  // missing-date warning either (App.jsx missingExpiration skips it).
+  if (awaitsBoardDate(item)) return false;
   const t = String(item.type || "");
   // The licenses form offers the "does not expire" checkbox on a board
   // certification and nowhere else, so under licenses only a board

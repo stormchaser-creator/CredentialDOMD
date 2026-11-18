@@ -57,6 +57,72 @@ export function lifecycleOf(item) {
 /** True only for an explicit true: a text "false" must never silence a record. */
 export const isDateUnknown = (item) => !!item && item.dateUnknown === true;
 
+/**
+ * A Board Certification record the app made to hold a board step's mark
+ * (boardTasks.js newBoardRecord), still without the date the physician has
+ * not added yet. Its customFields carry BOARD_APP_MADE_FIELD. A record made by
+ * the 2026-11-18 release carried noExpiration: true and its fixed note
+ * instead, which read as "Does not expire": wrong for an AOA certificate, whose
+ * portal shows a "valid thru" date. Both are read the same way: no
+ * "missing an expiration date" warning and no "Does not expire" label, only
+ * the board card's calm request for the date. Once a date is on the record it
+ * is an ordinary dated record, and the next write drops the marker
+ * (normalizeLifecycle), so clearing that date later raises the missing-date
+ * banner like any record of the physician's own.
+ *
+ * A marked record the physician then ticks "does not expire" on is a lifetime
+ * certificate by their own word, not one awaiting a date. A legacy record's
+ * flag was the app's, not theirs, so it is read as awaiting a date; opening it
+ * in the form moves it to the marker with the box unticked (boardFormStart).
+ */
+export const BOARD_APP_MADE_FIELD = "appMadeBoardRecord";
+export const LEGACY_APP_MADE_NOTE = "Added when you marked a board step done.";
+/** "marked", "legacy" or null: whether the app made this board record, whatever its date. */
+function appMadeBoardKind(item) {
+  if (!item || typeof item !== "object") return null;
+  const type = String(item.type || "");
+  if (!/board certification/i.test(type) || certBodyOf(type)) return null;
+  if (item.customFields && typeof item.customFields === "object" && item.customFields[BOARD_APP_MADE_FIELD]) return "marked";
+  return item.noExpiration === true && String(item.notes || "").trim().startsWith(LEGACY_APP_MADE_NOTE) ? "legacy" : null;
+}
+export function awaitsBoardDate(item) {
+  if (!item || typeof item !== "object") return false;
+  if (typeof item.expirationDate === "string" ? item.expirationDate.trim() : item.expirationDate) return false;
+  const kind = appMadeBoardKind(item);
+  return kind === "legacy" || (kind === "marked" && item.noExpiration !== true);
+}
+
+/**
+ * The edit form's starting values for a record. A legacy app-made board
+ * record awaiting its date opens with "does not expire" unticked and the
+ * app's marker in its place: the box was the app's claim, never the
+ * physician's, and saving the form stores that correction.
+ */
+export function boardFormStart(sectionKey, item) {
+  if (sectionKey !== "licenses" || !awaitsBoardDate(item) || appMadeBoardKind(item) !== "legacy") return item;
+  return { ...item, noExpiration: false, customFields: { ...(item.customFields || {}), [BOARD_APP_MADE_FIELD]: "Added when you marked a board step" } };
+}
+
+/**
+ * An app-made board record once a date is on it: an ordinary dated record.
+ * The marker goes, and a legacy record's "does not expire" goes with it (a
+ * certificate with a date expires). Anything else is returned as it came.
+ */
+function settleBoardRecord(sectionKey, item) {
+  if (sectionKey !== "licenses") return item;
+  const date = typeof item.expirationDate === "string" ? item.expirationDate.trim() : item.expirationDate;
+  const kind = date ? appMadeBoardKind(item) : null;
+  if (!kind) return item;
+  const out = { ...item };
+  if (kind === "marked") {
+    out.customFields = { ...item.customFields };
+    delete out.customFields[BOARD_APP_MADE_FIELD];
+  } else {
+    out.noExpiration = false;
+  }
+  return out;
+}
+
 /** Historical or superseded: kept for the record, never renewed. */
 export const isInactive = (item) => INACTIVE.has(lifecycleOf(item));
 
@@ -124,6 +190,7 @@ export function lifecycleNote(item) {
   if (s === "superseded") return "Superseded";
   if (s === "pending_confirmation") return "Pending confirmation";
   if (isDateUnknown(item)) return "Date not yet known";
+  if (awaitsBoardDate(item)) return "Date not added yet";
   if (s === "provisional") return "Provisional";
   return null;
 }
@@ -151,10 +218,13 @@ export function lifecycleSummary(item) {
  *     that is a stale date the physician marked not yet known.
  *   - supersededBy: kept only on a superseded record, never pointing at itself
  *   - statusSource: one line, at most 200 characters, blank becomes null
+ *   - an app-made board record with a date loses the app's marker, and a
+ *     legacy one its "does not expire" (settleBoardRecord)
  * Other sections are returned unchanged.
  */
 export function normalizeLifecycle(sectionKey, item, previous = null) {
   if (!LIFECYCLE_SECTIONS.includes(sectionKey) || !item || typeof item !== "object") return item;
+  item = settleBoardRecord(sectionKey, item);
   const has = (k) => Object.prototype.hasOwnProperty.call(item, k);
   if (!["lifecycleStatus", "dateUnknown", "supersededBy", "statusSource", "noExpiration"].some(has)) return item;
   const out = { ...item };

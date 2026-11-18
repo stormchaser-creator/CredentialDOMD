@@ -1,6 +1,5 @@
-import { isInactive } from "./lifecycle.js";
-import { boardIdsFromLicenses } from "./boardCompliance.js";
-import { noExpirationFor } from "./boardTasks.js";
+import { isInactive, awaitsBoardDate } from "./lifecycle.js";
+import { readMark } from "./boardTasks.js";
 import { ABMS_MOC, ABMS_SUBSPECIALTIES, AOA_OCC, AOA_SUBSPECIALTIES, ABPS_CERTS } from "../constants/boardRequirements.js";
 
 // Applicability is a physician-supplied fact on the license, never inferred
@@ -85,9 +84,13 @@ export function boardExemptionOn(state, answers = {}, licenseExpiration = null) 
 /**
  * True when a current board certification record is on file: a record whose
  * type names board certification, not superseded or historical, and not past
- * its expiration date. A certificate with no expiration date counts, and so
- * does an AOA certificate the board says has none (issued after 2018,
- * boardTasks.js noExpirationFor), whatever date was typed on it.
+ * its expiration date. A certificate with no expiration date counts. An AOA
+ * certificate's "valid thru" date is its date like any other (the AOA
+ * Physician Portal shows one on every current-track certificate), so a
+ * passed one does not count until the physician updates it.
+ * A record the app made to hold a board step's mark, still without its date,
+ * counts only when it holds a Done mark: marking a step done says the
+ * physician holds the certificate, "Not required for me" says nothing about it.
  */
 export function currentBoardCertificationOnFile(licenses, today = null) {
   const now = today || (() => {
@@ -96,9 +99,9 @@ export function currentBoardCertificationOnFile(licenses, today = null) {
   })();
   return (licenses || []).some(l => {
     if (!l || !/board certification/i.test(l.type || "") || isInactive(l)) return false;
+    if (awaitsBoardDate(l) && !Object.entries(l.customFields || {}).some(([k, v]) => / done for /.test(k) && readMark(v)?.kind === "done")) return false;
     const exp = String(l.expirationDate || "").slice(0, 10);
-    if (!ISO_DAY.test(exp) || exp >= now) return true;
-    return boardIdsFromLicenses([l]).some(id => noExpirationFor(id, l));
+    return !ISO_DAY.test(exp) || exp >= now;
   });
 }
 

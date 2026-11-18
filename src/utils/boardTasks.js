@@ -8,13 +8,14 @@
 // file first creates that record (applyBoardTaskMark `create`), because
 // settings.boardTaskMarks is not a synced setting and an online load dropped
 // it. A mark already in settings from before is still read and Undo clears
-// it. The physician marks a task done and can undo it; nothing is marked
-// automatically.
+// it. The physician marks a task done, or says it is not required for them
+// this period, and can undo either; nothing is marked automatically.
 //
 // Extensions spelled out so pure-node test scripts can import this module.
 import { ABMS_MOC, AOA_OCC, BOARD_TASKS } from "../constants/boardRequirements.js";
 import { aoaCycle, boardRecordFor, effectiveBoardSpecialties } from "./boardCompliance.js";
 import { daysUntilDate, localToday } from "./dateDays.js";
+import { BOARD_APP_MADE_FIELD, awaitsBoardDate } from "./lifecycle.js";
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 
@@ -41,7 +42,24 @@ export function boardTaskName(boardId, task) {
   return `${certName(boardId)} ${task.label}`;
 }
 
-/** The customFields key that holds one task's Done date for one period. */
+/**
+ * "Not required for me" is stored in the same customFields field as a Done
+ * mark, so it syncs the same way, as this text around the day it was chosen.
+ * A Done mark is a bare ISO date; nothing else is read as a mark.
+ */
+const NOT_REQUIRED_RE = /^Not required for me \((\d{4}-\d{2}-\d{2})\)$/;
+export function notRequiredMark(day) {
+  return `Not required for me (${day})`;
+}
+/** { kind: "done" | "not-required", on } for a stored mark, or null. */
+export function readMark(v) {
+  if (typeof v !== "string") return null;
+  if (ISO.test(v)) return { kind: "done", on: v };
+  const m = NOT_REQUIRED_RE.exec(v);
+  return m ? { kind: "not-required", on: m[1] } : null;
+}
+
+/** The customFields key that holds one task's mark for one period. */
 export function boardTaskField(boardId, task, periodLabel) {
   return `${boardTaskName(boardId, task)} done for ${periodLabel}`;
 }
@@ -98,53 +116,70 @@ export function newBoardRecord(boardId, makeId = () => globalThis.crypto.randomU
     id: makeId(),
     type: aoa ? "Board Certification (AOA)" : "Board Certification (ABMS)",
     name: `${code} ${sub || boardName}`.trim(),
-    // Made by the app to hold a step's Done mark, not by the physician: no
-    // date is known, so it must not raise a "no expiration date" warning.
-    // Continuous certification has no end date while its steps are met; a
-    // certificate that does expire gets its date added on the record.
-    issuedDate: "", expirationDate: "", noExpiration: true,
-    notes: "Added when you marked a board step done. If your certificate shows an expiration date, add it here.",
-    customFields: {},
+    // Made by the app to hold a step's mark, not by the physician: no date
+    // is known yet. The marker keeps it out of the "missing an expiration
+    // date" warning (lifecycle.awaitsBoardDate); the board card asks for the
+    // date calmly instead. It never claims the certificate does not expire.
+    issuedDate: "", expirationDate: "",
+    notes: aoa
+      ? "Added when you marked a board step. Add the valid thru date your AOA Physician Portal shows as the expiration date."
+      : "Added when you marked a board step. Add your certificate's expiration date here.",
+    customFields: { [BOARD_APP_MADE_FIELD]: "Added when you marked a board step" },
   };
 }
 
+/** True for a certificate on the old exam track: issued in or before the set's last year for it, the track whose assessment starts in the expiration year. */
+function onOldExamTrack(set, record) {
+  const through = set?.oldExamTrackIssuedThrough;
+  const issued = String(record?.issuedDate || "").slice(0, 10);
+  return !!through && ISO.test(issued) && Number(issued.slice(0, 4)) <= through;
+}
+
 /**
- * Whether the board says this certificate has no expiration date: an AOA
- * certificate issued after 2018. A typed expiration date on the record is
- * left as the physician entered it and is not read as the certificate's end.
+ * What the card says about an AOA "valid thru" date, or null when the board
+ * has none or the certificate is on the old exam track. The date is the end
+ * of the current OCC cycle and moves forward as the steps are met; a typed
+ * date is the certificate's date like any other. `askDate` when no date is on
+ * file (no record, or one without a date), unless the physician ticked "does
+ * not expire" on a record of their own (a lifetime certificate).
  */
-export function noExpirationFor(boardId, record) {
+export function validThruFor(boardId, record) {
   const set = boardTaskSet(boardId);
-  const after = set?.noExpirationIssuedAfter;
-  const issued = String(record?.issuedDate || "");
-  if (!after || !ISO.test(issued.slice(0, 10)) || Number(issued.slice(0, 4)) <= after) return null;
+  if (!set?.validThru || onOldExamTrack(set, record)) return null;
   const typed = String(record?.expirationDate || "").slice(0, 10);
-  return { issued: issued.slice(0, 10), typedExpiration: ISO.test(typed) ? typed : null, url: set.noExpirationUrl || set.sourceUrl };
+  const date = ISO.test(typed) ? typed : null;
+  if (!date && record?.noExpiration === true && !awaitsBoardDate(record)) return null;
+  return { date, askDate: !date, url: set.validThru.url, hasRecord: !!record };
 }
 
 /**
  * The year a task starts, for a task the board starts in the year a
- * time-limited certificate expires. Only a certificate issued in 2018 or
- * before carries a real expiration date; a later one never delays the task.
+ * certificate on the old exam track (issued in or before the set's
+ * oldExamTrackIssuedThrough year) expires. A later certificate is time-limited
+ * as well, but its valid-thru date (the end of the current OCC cycle) never
+ * delays the task: the board gives every diplomate the assessment each year.
  */
 function startsYear(task, boardId, record) {
   if (!task.startsYearOfExpiration || !record) return null;
-  const issued = String(record.issuedDate || "");
   const exp = String(record.expirationDate || "");
-  if (!ISO.test(issued.slice(0, 10)) || !ISO.test(exp.slice(0, 10))) return null;
-  const after = boardTaskSet(boardId)?.noExpirationIssuedAfter;
-  if (after && Number(issued.slice(0, 4)) > after) return null;
+  if (!ISO.test(exp.slice(0, 10))) return null;
+  if (!onOldExamTrack(boardTaskSet(boardId), record)) return null;
   return Number(exp.slice(0, 4));
 }
 
 /**
  * The tasks for one board card, each with:
- *   status: "done" (marked in this period), "unconfirmed" (the date passed
- *           with no mark: asked, never alerted),
+ *   status: "done" (marked in this period), "not-required" (the physician
+ *           said it is not required for them this period: answered, never
+ *           alerted), "unconfirmed" (the date passed with no mark: asked,
+ *           never alerted),
  *           "upcoming" (the window has not opened), "not-yet" (the board has
  *           not started it for this certificate), or "due"
  *   due, daysLeft (null when the board has not published a date), doneOn,
- *   field (where a mark is stored), period label.
+ *   notRequiredOn, field (where a mark is stored), period label, and
+ *   periodWord ("year" or "cycle").
+ * With the board's valid-thru facts (validThruFor), where to check and who
+ * to ask.
  * Null when the board has no task data.
  */
 export function boardTasksFor(data, board, now = new Date()) {
@@ -160,11 +195,13 @@ export function boardTasksFor(data, board, now = new Date()) {
     const field = boardTaskField(boardId, task, period.label);
     // The parent card's mark for the same duty counts here too (and Undo clears it).
     const alsoFields = parentId ? [boardTaskField(parentId, task, period.label)] : [];
-    const mark = [field, ...alsoFields].map(f => marks[f]).find(m => typeof m === "string" && ISO.test(m));
-    const doneOn = typeof mark === "string" && ISO.test(mark) ? mark : null;
+    const mark = [field, ...alsoFields].map(f => readMark(marks[f])).find(Boolean) || null;
+    const doneOn = mark?.kind === "done" ? mark.on : null;
+    const notRequiredOn = mark?.kind === "not-required" ? mark.on : null;
     const begins = startsYear(task, boardId, record);
     let status = "due";
     if (doneOn) status = "done";
+    else if (notRequiredOn) status = "not-required";
     else if (begins && begins > now.getFullYear()) status = "not-yet";
     // Past the date with no mark: the app cannot tell a missed step from one
     // done before it was tracked here, so it asks instead of alarming
@@ -175,15 +212,21 @@ export function boardTasksFor(data, board, now = new Date()) {
       id: task.id, label: task.label, detail: task.detail || "", cost: task.cost ?? null, source: task.source || set.sourceUrl,
       every: task.every, period: period.label, due: period.due, opens: period.opens,
       daysLeft: period.due ? daysUntilDate(period.due, now) : null,
-      doneOn, status, field, alsoFields, startsYear: begins && begins > now.getFullYear() ? begins : null,
+      doneOn, notRequiredOn, status, field, alsoFields, startsYear: begins && begins > now.getFullYear() ? begins : null,
+      periodWord: task.every === "year" ? "year" : "cycle",
     };
   });
-  return { boardId, recordId: record?.id || null, tasks, noExpiration: noExpirationFor(boardId, record), checked: set.checked, sourceUrl: set.sourceUrl };
+  return {
+    boardId, recordId: record?.id || null, tasks, validThru: validThruFor(boardId, record),
+    whereToCheck: set.whereToCheck || null, contact: set.contact || null,
+    checked: set.checked, sourceUrl: set.sourceUrl,
+  };
 }
 
 /**
  * A mark written as the physician chose it, on the board's Board
- * Certification record. `date` null removes it (Undo) wherever it is: the
+ * Certification record: a Done date (ISO) or notRequiredMark(day). `date`
+ * null removes it (Undo) wherever it is: the
  * record, any record holding a shared parent-card mark (`alsoFields`), and a
  * legacy settings.boardTaskMarks copy. Returns, for the caller to save:
  *   records:  edited existing records (editItem)
@@ -193,7 +236,7 @@ export function boardTasksFor(data, board, now = new Date()) {
  */
 export function applyBoardTaskMark(data, boardId, field, date, { alsoFields = [], makeId } = {}) {
   const fields = [field, ...alsoFields];
-  const marking = !!(date && ISO.test(date));
+  const marking = !!readMark(date);
   const strip = (obj) => {
     const out = { ...(obj || {}) };
     for (const f of fields) delete out[f];
@@ -208,12 +251,20 @@ export function applyBoardTaskMark(data, boardId, field, date, { alsoFields = []
     if (!(mine && marking) && !has(l.customFields)) continue;
     const customFields = strip(l.customFields);
     if (mine && marking) customFields[field] = date;
-    records.push({ ...l, customFields });
+    const rec = { ...l, customFields };
+    // A record the 11-18 release made carried noExpiration ("Does not
+    // expire"); the first write the physician makes through the card moves
+    // it to the app's marker, so the form no longer shows that box ticked.
+    if (awaitsBoardDate(l) && !l.customFields?.[BOARD_APP_MADE_FIELD]) {
+      rec.noExpiration = false;
+      rec.customFields[BOARD_APP_MADE_FIELD] = "Added when you marked a board step";
+    }
+    records.push(rec);
   }
   const out = { records };
   if (marking && !own) {
     const rec = newBoardRecord(boardId, makeId);
-    out.create = { ...rec, customFields: { [field]: date } };
+    out.create = { ...rec, customFields: { ...rec.customFields, [field]: date } };
   }
   const legacy = data?.settings?.boardTaskMarks;
   if (has(legacy)) out.settings = { boardTaskMarks: strip(legacy) };
@@ -224,7 +275,8 @@ export function applyBoardTaskMark(data, boardId, field, date, { alsoFields = []
  * Board tasks that belong in the alerts (the bell, the banner, the reminder
  * message, the reminder email): due inside the reminder lead window. A date
  * that passed with no mark is asked on the card, never alerted. A task with no
- * published date, already done, or not started yet raises nothing.
+ * published date, already done, marked not required, or not started yet
+ * raises nothing.
  * [{ board, tasks }] per board with any, tasks as boardTasksFor gives them.
  * boardTaskAlerts makes the app's one entry per board from it; the reminder
  * email (supabase/functions/_shared/reminderBoardSteps.mjs) names each task.

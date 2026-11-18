@@ -1653,16 +1653,45 @@ export const AOA_OCC = {
 //   due:    "MM-DD" each year, or windows: { YYYY: { from, to } } for a
 //           published year; a year with neither has no dated deadline
 //   startsYearOfExpiration: the board starts the task in the year a
-//           time-limited certificate expires
+//           certificate on the old exam track expires: one issued in or
+//           before oldExamTrackIssuedThrough, the track whose assessment
+//           starts in the expiration year. Later certificates are
+//           time-limited too (the portal says so of a 2025 one); what sets
+//           the tracks apart is when the assessment starts, not whether the
+//           certificate expires
+//   oldExamTrackIssuedThrough: the last issue year on that old track; a
+//           later certificate starts the task at once, whatever date it shows
+//   validThru: the AOA "valid thru" date. Every AOA certificate on the
+//           current track shows one in the AOA Physician Portal: the end of
+//           the current OCC cycle, moved forward as the steps are met
+//           (portal, read 2026-11-18). It is the certificate's date like any
+//           other; the card explains it and asks for it when none is on file.
+//   whereToCheck: { label, url } where a diplomate sees each step's status
+//   contact: who to ask, only when an official page states it
+//   sources: the pages the set was checked against (`checked`)
 // ----------------------------------------------------------------------------
 const AOBS_URL = "https://certification.osteopathic.org/surgery/occ-overview/";
+const AOA_PORTAL_URL = "https://physicianportal.osteopathic.org/OccComponents";
 export const BOARD_TASKS = {
   "AOA:AOBS": {
     checked: "2026-11",
     sourceUrl: AOBS_URL,
-    // AOA certificates issued after 2018 carry no expiration date (Component 3 page).
-    noExpirationIssuedAfter: 2018,
-    noExpirationUrl: "https://certification.osteopathic.org/surgery/occ-overview/component-3/",
+    sources: [
+      AOA_PORTAL_URL,
+      "https://certification.osteopathic.org/surgery/occ-overview/component-1/",
+      "https://certification.osteopathic.org/surgery/occ-overview/component-2/",
+      "https://certification.osteopathic.org/surgery/occ-overview/component-3/",
+      "https://certification.osteopathic.org/surgery/occ-overview/component-4/",
+    ],
+    // Portal, 2026-11-18: a certificate first issued in 2025 shows "Initial
+    // certification valid thru 12/31/2027" with OCC in effect "because this
+    // is a time-limited Certificate"; certification stays valid while the
+    // OCC components are met, and the valid-thru date reflects AOA audits.
+    oldExamTrackIssuedThrough: 2018,
+    validThru: { url: AOA_PORTAL_URL },
+    whereToCheck: { label: "AOA Physician Portal", url: AOA_PORTAL_URL },
+    // Listed on the portal, read 2026-11-18.
+    contact: { name: "AOBS", phone: "(312) 202-8078", email: "aobs@osteopathic.org", source: AOA_PORTAL_URL },
     // Component 2, initial certification: share of the 60 hours owed by the
     // half year of the AOA cycle the certificate was issued in; a share that
     // is not a whole or half number is rounded down to the nearest half.
