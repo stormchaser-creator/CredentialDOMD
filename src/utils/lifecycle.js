@@ -57,6 +57,28 @@ export function lifecycleOf(item) {
 /** True only for an explicit true: a text "false" must never silence a record. */
 export const isDateUnknown = (item) => !!item && item.dateUnknown === true;
 
+/**
+ * A Board Certification record the app made to hold a board step's mark
+ * (boardTasks.js newBoardRecord), still without the date the physician has
+ * not added yet. Its customFields carry BOARD_APP_MADE_FIELD. A record made by
+ * the 2026-11-18 release carried noExpiration: true and its fixed note
+ * instead, which read as "Does not expire": wrong for an AOA certificate, whose
+ * portal shows a "valid thru" date. Both are read the same way: no
+ * "missing an expiration date" warning and no "Does not expire" label, only
+ * the board card's calm request for the date. Once a date is on the record it
+ * is an ordinary dated record.
+ */
+export const BOARD_APP_MADE_FIELD = "appMadeBoardRecord";
+export const LEGACY_APP_MADE_NOTE = "Added when you marked a board step done.";
+export function awaitsBoardDate(item) {
+  if (!item || typeof item !== "object") return false;
+  if (typeof item.expirationDate === "string" ? item.expirationDate.trim() : item.expirationDate) return false;
+  const type = String(item.type || "");
+  if (!/board certification/i.test(type) || certBodyOf(type)) return false;
+  if (item.customFields && typeof item.customFields === "object" && item.customFields[BOARD_APP_MADE_FIELD]) return true;
+  return item.noExpiration === true && String(item.notes || "").trim().startsWith(LEGACY_APP_MADE_NOTE);
+}
+
 /** Historical or superseded: kept for the record, never renewed. */
 export const isInactive = (item) => INACTIVE.has(lifecycleOf(item));
 
@@ -124,6 +146,7 @@ export function lifecycleNote(item) {
   if (s === "superseded") return "Superseded";
   if (s === "pending_confirmation") return "Pending confirmation";
   if (isDateUnknown(item)) return "Date not yet known";
+  if (awaitsBoardDate(item)) return "Date not added yet";
   if (s === "provisional") return "Provisional";
   return null;
 }

@@ -519,13 +519,15 @@ export function boardTranscriptModel(data, board, { certFiles = null } = {}) {
   };
 }
 
-/** One line per board task: done on a date, or when it is due. Nothing for a board with no task data. */
+/** One line per board task: done on a date, not required, or when it is due. Nothing for a board with no task data. */
 function boardTaskFootnotes(data, board) {
   const t = boardTasksFor(data, board);
   if (!t) return [];
   return t.tasks.map(x => x.doneOn
     ? `${x.label} (${x.period}): done ${formatDate(x.doneOn)}.`
-    : `${x.label} (${x.period}): not marked done${x.due ? `, due ${formatDate(x.due)}` : ""}.`);
+    : x.notRequiredOn
+      ? `${x.label} (${x.period}): not required for me this ${x.periodWord} (marked ${formatDate(x.notRequiredOn)}).`
+      : `${x.label} (${x.period}): not marked done${x.due ? `, due ${formatDate(x.due)}` : ""}.`);
 }
 
 // ─── Rendering ────────────────────────────────────────────────────────────

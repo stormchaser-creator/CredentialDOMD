@@ -106,7 +106,7 @@ import { boardTaskSet } from "./utils/boardTasks";
 import BoardTasks from "./components/shared/BoardTasks";
 import { certificationCards, certificationRingComps } from "./utils/certCompliance";
 import { licenseFields, licenseTypeTab, privilegeFields, insuranceFields } from "./utils/credentialForms";
-import { isAlertable, isInactive, lifecycleNote, needsResolution, LIFECYCLE_LABELS, lifecycleOf } from "./utils/lifecycle";
+import { isAlertable, isInactive, lifecycleNote, needsResolution, LIFECYCLE_LABELS, lifecycleOf, awaitsBoardDate } from "./utils/lifecycle";
 import { licenseDeskColumns } from "./components/features/licenseDeskColumns";
 import {
   generateId, getStatusColor, getStatusLabel, formatDate, MS_PER_DAY, describeItem, daysUntil,
@@ -974,7 +974,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
     // A record marked "date not yet known" or awaiting confirmation is an
     // answered question, not a missing date: it goes to the resolve list
     // below instead. Historical and superseded records are never chased.
-    for (const l of data.licenses || []) if (!l.expirationDate && !isNonExpiring(l, "licenses") && isAlertable(l)) out.push({ item: l, sec: "licenses", label: describeItem(l, data.settings.name, "licenses") });
+    // A board record the app made to hold a step's mark asks for its date
+    // calmly on the board card instead (lifecycle.awaitsBoardDate).
+    for (const l of data.licenses || []) if (!l.expirationDate && !isNonExpiring(l, "licenses") && !awaitsBoardDate(l) && isAlertable(l)) out.push({ item: l, sec: "licenses", label: describeItem(l, data.settings.name, "licenses") });
     for (const pv of data.privileges || []) if (!pv.expirationDate && isAlertable(pv)) out.push({ item: pv, sec: "privileges", label: describeItem(pv, data.settings.name, "privileges") });
     // Personal coverage (health/dental/vision/disability/life) has no
     // credentialing expiration to chase — only professional policies nag.

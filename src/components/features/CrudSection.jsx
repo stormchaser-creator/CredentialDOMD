@@ -41,7 +41,8 @@ import { fileWaitLine, fileWaitTag, statusWithoutStore } from "../../utils/docum
 // resolves through the description catalogs.
 // The Documents tab's per-file limit (DocumentsSection checkBeforeRead).
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
-const HIDDEN_CUSTOM_KEYS = new Set(["cptDetail", "componentAudit", "sourceRow", "sourceDoc", "patient"]);
+// appMadeBoardRecord: the app's own marker on a board record it made (lifecycle.awaitsBoardDate).
+const HIDDEN_CUSTOM_KEYS = new Set(["cptDetail", "componentAudit", "sourceRow", "sourceDoc", "patient", "appMadeBoardRecord"]);
 
 // label/placeholder can vary by the record being edited (e.g. Certification
 // asks a different question than a license does) — same function-of-form

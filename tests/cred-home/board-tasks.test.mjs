@@ -1,6 +1,6 @@
 // Board certification as its own item: dated tasks per board (AOBS, the
 // Neurological Surgery discipline, ABNS), Done marks with Undo, first-cycle
-// proration, no-expiration AOA certificates, alerts, no AOA "national" card
+// proration, the AOA valid-thru date, alerts, no AOA "national" card
 // for a DO with no board, and the state exemption as the physician's choice.
 // Synthetic records only.
 import test from 'node:test';
@@ -88,7 +88,8 @@ test('with no Board Certification record a mark creates the record (synced), nev
   const out = applyBoardTaskMark(data, b.id, t.tasks[0].field, '2026-05-01', { makeId: () => 'new1' });
   assert.equal(out.settings, undefined, 'settings.boardTaskMarks is not a synced setting');
   assert.deepEqual(out.records, []);
-  assert.deepEqual(out.create, { id: 'new1', type: 'Board Certification (ABMS)', name: 'ABNS Neurological Surgery', issuedDate: '', expirationDate: '', noExpiration: true, notes: 'Added when you marked a board step done. If your certificate shows an expiration date, add it here.', customFields: { 'ABNS Adaptive Learning Tool done for 2026': '2026-05-01' } });
+  assert.deepEqual(out.create, { id: 'new1', type: 'Board Certification (ABMS)', name: 'ABNS Neurological Surgery', issuedDate: '', expirationDate: '', notes: "Added when you marked a board step. Add your certificate's expiration date here.", customFields: { appMadeBoardRecord: 'Added when you marked a board step', 'ABNS Adaptive Learning Tool done for 2026': '2026-05-01' } });
+  assert.equal('noExpiration' in out.create, false, 'never claims the certificate does not expire');
   assert.deepEqual(boardIdsFromLicenses([out.create]), ['ABMS:ABNS']);
   const after = { ...data, licenses: [out.create] };
   assert.equal(boardTasksFor(after, b, at('2026-05-02')).tasks[0].status, 'done');
@@ -168,13 +169,14 @@ test('a board with no task data keeps its sentence and gets no tasks', () => {
   assert.ok(boardComplianceFor(data)[0].assessment);
 });
 
-test('AOA certificate issued after 2018: no expiration date, a typed date is not its end and is left as typed', () => {
+test('AOA certificate issued after 2018: the typed valid-thru date is its date and never delays the assessment', () => {
   const data = doData({ issuedDate: '2020-06-01', expirationDate: '2030-12-31' });
   const t = boardTasksFor(data, aobs(data), at('2026-03-01'));
-  assert.deepEqual(t.noExpiration?.typedExpiration, '2030-12-31');
+  assert.equal(t.validThru?.date, '2030-12-31');
+  assert.equal(t.validThru?.askDate, false);
   assert.equal(data.licenses[0].expirationDate, '2030-12-31');
   assert.equal(t.tasks[0].status, 'due', 'a typed date never delays the assessment');
-  assert.equal(boardTasksFor(doData({ issuedDate: '2015-06-01' }), aobs(doData()), at('2026-03-01')).noExpiration, null);
+  assert.equal(boardTasksFor(doData({ issuedDate: '2015-06-01' }), aobs(doData()), at('2026-03-01')).validThru, null, 'old exam track: no valid-thru explainer');
 });
 
 test('a time-limited certificate (issued 2018 or before) starts the assessment the year it expires', () => {
