@@ -1814,6 +1814,10 @@
         {
           "question": "How do I prove I am renewed while waiting for the record to update?",
           "answer": "Print the temporary wallet card and receipt at the completion of online payment by choosing the Finish Transaction With KBML option; the Board no longer mails wallet cards and the card cannot be reproduced once the receipt screen closes. The renewed license appears on the Board's online verification site in approximately 48 hours."
+        },
+        {
+          "question": "Does board certification count toward my CME?",
+          "answer": "Yes. Passing an ABMS or AOA board certification or recertification exam counts as 60 hours of Category 1 CME and satisfies the full 3 year cycle (201 KAR 9:310). In CredentialDOMD, once a current board certification is on file, you can choose to use this exemption for one renewal."
         }
       ],
       "sources": [
@@ -1918,6 +1922,10 @@
         {
           "question": "Do I have to use CE Broker?",
           "answer": "Yes. The board's Renewals page states that all LSBME licensees are required to use CE Broker to track their continuing education credits; renewal is tied to CME being satisfied there."
+        },
+        {
+          "question": "Does board certification count toward my CME?",
+          "answer": "Yes. The annual CME requirement does not apply to a physician certified or recertified by an ABMS member board or AOA recognized specialty board within the past year (LAC 46:XLV.447.A.3). The initial renewal Laws and Rules course and the controlled substance CME are still required. In CredentialDOMD, once a current board certification is on file, you can choose to use this exemption for one renewal."
         }
       ],
       "sources": [
@@ -3060,6 +3068,10 @@
         {
           "question": "I hold my NH license through the Interstate Medical Licensure Compact. Is my renewal different?",
           "answer": "The board posts a separate document, Important Information for Compact Physician License Renewals, linked from the Applications for Physician page, and the fee schedule lists Compact Physician as its own category (renewal $413.00, reinstatement $378.00). Review that document before renewing rather than assuming the standard path applies."
+        },
+        {
+          "question": "Does board certification count toward my CME?",
+          "answer": "Yes. Passing an ABMS board exam counts as 100 hours of Category 1 CME (N.H. Rev. Stat. \u00a7 329:16-g). In CredentialDOMD, once a current board certification is on file, you can choose to use this exemption for one renewal."
         }
       ],
       "sources": [
@@ -3478,6 +3490,10 @@
         {
           "question": "What do I have to report at renewal?",
           "answer": "You attest to hospital or regulatory board actions, criminal charges or convictions, malpractice suits and settlements, and your AMA PRA Category 1 CME hours earned since your last renewal (NC requires 60 hours per 3-year cycle, including 3 hours on controlled substance prescribing). Enter CME hours as whole numbers only."
+        },
+        {
+          "question": "Does board certification count toward my CME?",
+          "answer": "Yes. Recertification or MOC through an ABMS, AOA, or RCPSC board satisfies the entire CME requirement (N.C. Admin. Code tit. 21, r. 32R.0101). In CredentialDOMD, once a current board certification is on file, you can choose to use this exemption for one renewal."
         }
       ],
       "sources": [
@@ -3581,6 +3597,10 @@
         {
           "question": "Do I have to prove CME at renewal?",
           "answer": "You certify compliance with the 40-hour AMA Category 1 biennial requirement at renewal rather than uploading certificates. The board audits a subset of renewing physicians, who must then submit proof; noncompliance or false certification carries a $500 fee and possible disciplinary action."
+        },
+        {
+          "question": "Does board certification count toward my CME?",
+          "answer": "Yes. Physicians with ABMS, AOA, or RCPSC certification or MOC are exempt from the CME requirement (N.D. Admin. Code 50-04-01-02). In CredentialDOMD, once a current board certification is on file, you can choose to use this exemption for one renewal."
         }
       ],
       "sources": [
@@ -4520,6 +4540,10 @@
         {
           "question": "Why does my license expire in a different month than my colleague's?",
           "answer": "TMB assigns each license one of four expiration dates (February 28, May 31, August 31, or November 30) at the time of licensure, with initial fees pro-rated (12-month $281.48 or 24-month $467.48). Even-numbered licenses expire in even years, odd-numbered in odd years, so cycles vary physician to physician."
+        },
+        {
+          "question": "Does board certification count toward my CME?",
+          "answer": "Yes, for one renewal. Board certification or recertification within 36 months before your renewal presumes CME compliance for that renewal, and current ABMS MOC or AOA OCC is also accepted. It covers the ethics hours but not human trafficking, and whether it covers the opioid hours depends on your specialty board (Tex. Admin. Code tit. 22, \u00a7 161.35). In CredentialDOMD, once a current board certification is on file, you can choose to use this exemption for one renewal."
         }
       ],
       "sources": [
@@ -4934,6 +4958,10 @@
         {
           "question": "Do DOs renew the same way as MDs?",
           "answer": "No. DOs are licensed by the Board of Osteopathic Medicine and Surgery under DOH, renew every year on their birthday, and pay $461 annually. They use the same HELMS/SAW portal, but the fee schedule (WAC 246-853-990) and CME rules differ from the MD side."
+        },
+        {
+          "question": "Does board certification count toward my CME?",
+          "answer": "Yes. MDs: ABMS certification in the last 4 years, or participation in ABMS MOC, is accepted in place of the 200 hours (an AMA PRA award earned in 2 of the last 4 years also qualifies). DOs: ABOMS or ABMS certification or recertification within the last 6 years satisfies the 150 hours (so does a current AOA CME certificate or an AMA PRA award), and the state's required topics are still required (chapters 246-919 and 246-853 WAC). In CredentialDOMD, once a current board certification is on file, you can choose to use this exemption for one renewal."
         }
       ],
       "sources": [
