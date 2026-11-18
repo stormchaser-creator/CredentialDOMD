@@ -1672,6 +1672,19 @@ export const AOA_OCC = {
 //           the current OCC cycle, moved forward as the steps are met
 //           (portal, read 2026-11-18). It is the certificate's date like any
 //           other; the card explains it and asks for it when none is on file.
+//   newIssueStartsAfterYears: a certificate issued after
+//           oldExamTrackIssuedThrough starts a startsYearOfExpiration task
+//           this many years after its issue year, where the board's page
+//           says so ("one full calendar year", register in the next cycle,
+//           begin the following year: issued 2022, begins 2024)
+//   trackedFrom: the day the app started tracking a set's (or one task's)
+//           steps. In the period that day falls in, an unmarked step is
+//           asked on the card and listed with its date, never alerted: a
+//           step finished before the app knew of it must not raise a
+//           day-one alert or reminder email. Set to the release day.
+//   A yearly step whose `opens` is later in the year than its `due` is a
+//           window across the new year (opens Oct 1, closes Jan 5 of the
+//           next year); its period is the closing year.
 //   whereToCheck: { label, url } where a diplomate sees each step's status
 //   contact: who to ask, only when an official page states it
 //   sources: the pages the set was checked against (`checked`)
@@ -1679,6 +1692,9 @@ export const AOA_OCC = {
 const AOBS_URL = "https://certification.osteopathic.org/surgery/occ-overview/";
 const AOA_PORTAL_URL = "https://physicianportal.osteopathic.org/OccComponents";
 const ABNS_URL = "https://www.abns.org/content/continuing-certification";
+// The release that added every board below except AOBS and ABNS (and the
+// ABNS dues step): its first period asks instead of alerting (trackedFrom).
+const BOARD_STEPS_ADDED = "2026-11-18";
 export const BOARD_TASKS = {
   "AOA:AOBS": {
     checked: "2026-11",
@@ -1748,7 +1764,7 @@ export const BOARD_TASKS = {
       { id: "ihhc", label: "IHHC quality improvement attestation", every: "year", due: "09-30",
         detail: "A brief questionnaire attesting to participation in quality improvement activities.",
         source: ABNS_URL },
-      { id: "dues", label: "Annual CC dues", every: "year", due: "09-30",
+      { id: "dues", label: "Annual CC dues", every: "year", due: "09-30", trackedFrom: BOARD_STEPS_ADDED,
         detail: "Paid with the other requirements. Missing Sept 30 changes the public status to Not Participating.",
         source: ABNS_URL },
     ],
@@ -1760,6 +1776,7 @@ export const BOARD_TASKS = {
   // official ABIM page could be read (bot protection).
   "ABMS:ABAI": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://www.abai.org/recrequirements.asp",
     tasks: [
       { id: "fee", label: "Annual MOC fee", every: "year", due: "12-31", cost: 400,
@@ -1774,8 +1791,8 @@ export const BOARD_TASKS = {
       { id: "cap1", label: "CAP block 1", every: "year", opens: "02-15", due: "07-15",
         detail: "40 questions. An unanswered block scores 0 of 40; the 2 lowest blocks in each 5-year cycle are dropped.",
         source: "https://www.abai.org/moc_part3.asp" },
-      { id: "cap2", label: "CAP block 2", every: "year", due: "01-15",
-        detail: "Opens Aug 15 and closes Jan 15 of the next year; this is the block that closes Jan 15 of this year.",
+      { id: "cap2", label: "CAP block 2", every: "year", opens: "08-15", due: "01-15",
+        detail: "Opens Aug 15 and closes Jan 15 of the next year.",
         source: "https://www.abai.org/moc_part3.asp" },
       { id: "qi", label: "Practice assessment or QI module", every: { years: 5 },
         dueRule: "Once in each 5-year cycle, by Dec 31 of the year it is due",
@@ -1788,6 +1805,7 @@ export const BOARD_TASKS = {
   },
   "ABMS:ABA": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://www.theaba.org/continue-certification/moca-eligibility/",
     tasks: [
       { id: "register", label: "Annual MOCA registration and fee", every: "year", cost: 350,
@@ -1809,6 +1827,7 @@ export const BOARD_TASKS = {
   },
   "ABMS:ABCRS": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://www.abcrs.org/continuing-certification/qualifications-requirements/",
     tasks: [
       { id: "fee", label: "Annual continuing certification fee", every: "year", due: "12-31", cost: 500,
@@ -1834,6 +1853,7 @@ export const BOARD_TASKS = {
   },
   "ABMS:ABD": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://www.abderm.org/diplomates/continuing-certification-requirements",
     tasks: [
       { id: "fee", label: "Annual fee", every: "year", due: "12-31", cost: 150,
@@ -1850,11 +1870,12 @@ export const BOARD_TASKS = {
   },
   "ABMS:ABEM": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://www.abem.org/stay-certified/",
     tasks: [
-      { id: "fee", label: "Annual fee", every: "year", due: "12-31",
-        detail: "Paid by Dec 31 or when you open your activities, whichever is first. Unpaid by Dec 31: until Apr 1 without the $150 late fee.",
-        source: "https://www.abem.org/wp-content/uploads/2024/07/5-year-continuing-certification-cycle-and-annual-fee-faqs.pdf" },
+      { id: "fee", label: "Annual fee", every: "year",
+        dueRule: "ABEM's current fee page gives no due date; your MyABEM portal shows yours",
+        source: "https://www.abem.org/stay-certified/annual-fee/" },
       { id: "myemcert", label: "4 MyEMCert modules", every: { years: 5, anchor: "certExpiration" },
         detail: "Open-book modules, within each 5-year certification cycle.",
         source: "https://www.abem.org/stay-certified/" },
@@ -1868,6 +1889,7 @@ export const BOARD_TASKS = {
   },
   "ABMS:ABFM": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://www.theabfm.org/continue-certification/5-year-cycle/",
     tasks: [
       { id: "fee", label: "Annual certification fee", every: "year", due: "07-01",
@@ -1891,6 +1913,7 @@ export const BOARD_TASKS = {
   },
   "ABMS:ABMGG": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://www.abmgg.org/continuing-certification/lifelong-learning-and-self-assessment/",
     tasks: [
       { id: "fee", label: "Annual continuing certification fee", every: "year", due: "12-31", cost: 500,
@@ -1916,6 +1939,7 @@ export const BOARD_TASKS = {
   },
   "ABMS:ABNM": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://www.abnm.org/continuing-certification/what-i-need-to-do",
     tasks: [
       { id: "annual", label: "Annual attestation: fee, standing, CPD and IHHC", every: "year", due: "12-31",
@@ -1928,6 +1952,7 @@ export const BOARD_TASKS = {
   },
   "ABMS:ABOG": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://www.abog.org/continuing-certification/requirements",
     tasks: [
       { id: "apply", label: "Annual CC application and fee", every: "year", due: "08-15",
@@ -1948,6 +1973,7 @@ export const BOARD_TASKS = {
   },
   "ABMS:ABOP": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://www.abop.org/continuing-certification-activities",
     tasks: [
       { id: "fee", label: "Annual fee", every: "year", cost: 225,
@@ -1969,6 +1995,7 @@ export const BOARD_TASKS = {
   // Dec 31, 2037, so year 9 is the year before the expiration year.
   "ABMS:ABOS": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://www.abos.org/wp-content/uploads/2023/04/CC-Rules-and-Procedures-2026_03_16.pdf",
     tasks: [
       { id: "wla", label: "ABOS WLA (30 questions)", every: "year",
@@ -1989,6 +2016,7 @@ export const BOARD_TASKS = {
   // the Part I due date and fee are not public.
   "ABMS:ABOTO": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://www.abohns.org/certlinktm-program-updates-2022",
     tasks: [
       { id: "part1", label: "Part I annual attestation and fee", every: "year",
@@ -2007,6 +2035,7 @@ export const BOARD_TASKS = {
   },
   "ABMS:ABPath": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://abpath.org/continuing-certification/",
     tasks: [
       { id: "certlink", label: "ABPath CertLink questions", every: "year",
@@ -2025,6 +2054,7 @@ export const BOARD_TASKS = {
   },
   "ABMS:ABP": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://www.abp.org/continuing-cert/enrollment-and-fees",
     tasks: [
       { id: "mocapeds", label: "MOCA-Peds quarterly questions", every: "year",
@@ -2041,6 +2071,7 @@ export const BOARD_TASKS = {
   },
   "ABMS:ABPMR": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://www.abpmr.org/CC/About/Overview",
     tasks: [
       { id: "la", label: "LA-PM&R enrollment", every: "year", opens: "01-05", due: "02-28",
@@ -2077,6 +2108,7 @@ export const BOARD_TASKS = {
   },
   "ABMS:ABPM": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://www.theabpm.org/continuing-certification-program-ccp/",
     tasks: [
       { id: "fee", label: "Annual CC fee", every: "year", due: "12-31",
@@ -2092,6 +2124,7 @@ export const BOARD_TASKS = {
   },
   "ABMS:ABPN": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://abpn.org/wp-content/uploads/CC-Booklet.pdf",
     tasks: [
       { id: "fee", label: "CC annual fee", every: "year", due: "12-31", cost: 175,
@@ -2107,6 +2140,7 @@ export const BOARD_TASKS = {
   },
   "ABMS:ABR": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://www.theabr.org/stay-certified/knowledge-judgment-skills/",
     tasks: [
       { id: "ola", label: "OLA: 52 questions per certificate", every: "year", due: "12-31",
@@ -2125,13 +2159,15 @@ export const BOARD_TASKS = {
   },
   "ABMS:ABS": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://www.absurgery.org/stay-certified/ongoing-certification-requirements/",
     tasks: [
       { id: "cca", label: "Continuous Certification Assessment", every: { years: 2 },
         dueRule: "Every other year, in the annual window (2026: Aug 25 to Nov 3)",
         source: "https://www.absurgery.org/resources/dates-and-fees/" },
-      { id: "fee", label: "Annual CC fee", every: "year", due: "12-31", cost: 285,
-        detail: "$150 for each additional certificate. Unpaid in an assessment year, certification ends Dec 31.",
+      { id: "fee", label: "Annual CC fee", every: "year", cost: 285,
+        dueRule: "Paid when you enter the assessment process; unpaid in an assessment year, certification ends Dec 31",
+        detail: "$150 for each additional certificate.",
         source: "https://www.absurgery.org/resources/abs-policies/annual-fee-policy/" },
       { id: "ongoing", label: "License, privileges, registry and ethics attestation", every: { years: 5 },
         dueRule: "At least every five years, and before you register for the assessment",
@@ -2140,6 +2176,7 @@ export const BOARD_TASKS = {
   },
   "ABMS:ABTS": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://www.abts.org/ABTS/ContinuingCertificationWebPages/Requirements.aspx",
     tasks: [
       { id: "exam", label: "Continuing Certification Exam", every: { years: 5 },
@@ -2157,6 +2194,7 @@ export const BOARD_TASKS = {
   },
   "ABMS:ABU": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://abu.org/wp-content/uploads/cuc/2026CUCHandbook.pdf",
     tasks: [
       { id: "fee", label: "Annual Certificate Fee", every: "year", due: "04-01", cost: 330,
@@ -2187,8 +2225,10 @@ export const BOARD_TASKS = {
   // in the expiration year, as each page states it.
   "AOA:AOBA": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://certification.osteopathic.org/anesthesiology/longitudinal-assessment/",
     oldExamTrackIssuedThrough: 2020,
+    newIssueStartsAfterYears: 2,
     tasks: [
       { id: "la", label: "Longitudinal Assessment", every: "year", due: "11-30", startsYearOfExpiration: true,
         detail: "30 untimed questions a year, 70% to pass at year end. The board's pages differ on the fee ($175 or $210).",
@@ -2200,8 +2240,10 @@ export const BOARD_TASKS = {
   },
   "AOA:AOBD": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://certification.osteopathic.org/dermatology/occ-overview/component-3/",
     oldExamTrackIssuedThrough: 2020,
+    newIssueStartsAfterYears: 2,
     tasks: [
       { id: "la", label: "Longitudinal Assessment", every: "year", due: "11-30", cost: 175, startsYearOfExpiration: true,
         detail: "30 questions a year; 70% cumulative at the end of the 3-year cycle. $50 late fee.",
@@ -2213,6 +2255,7 @@ export const BOARD_TASKS = {
   },
   "AOA:AOBEM": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://certification.osteopathic.org/emergency-medicine/home/occ-core/",
     tasks: [
       { id: "coreReg", label: "CORE registration and annual OCC fee", every: "year", due: "11-15", cost: 210,
@@ -2227,6 +2270,7 @@ export const BOARD_TASKS = {
   },
   "AOA:AOBFP": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://certification.osteopathic.org/family-physicians/occ-overview/occ-requirements/",
     tasks: [
       { id: "la", label: "Longitudinal Assessment", every: "year", due: "11-30", cost: 225,
@@ -2240,6 +2284,7 @@ export const BOARD_TASKS = {
   },
   "AOA:AOBIM": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://certification.osteopathic.org/internal-medicine/occ-overview/component-3/",
     tasks: [
       { id: "la", label: "Longitudinal Assessment: 3 modules", every: "year", due: "10-31", cost: 250,
@@ -2255,8 +2300,10 @@ export const BOARD_TASKS = {
   },
   "AOA:AOBNP": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://certification.osteopathic.org/neurology-psychiatry/longitudinal-assessment/",
     oldExamTrackIssuedThrough: 2019,
+    newIssueStartsAfterYears: 2,
     tasks: [
       { id: "la", label: "Longitudinal Assessment", every: "year", due: "11-30", cost: 175, startsYearOfExpiration: true,
         detail: "30 untimed questions a year, 70% at year end. $50 late fee after Oct 16.",
@@ -2268,8 +2315,10 @@ export const BOARD_TASKS = {
   },
   "AOA:AOBNMM": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://certification.osteopathic.org/neuromusculoskeletal-medicine/occ-overview/component-3/",
     oldExamTrackIssuedThrough: 2021,
+    newIssueStartsAfterYears: 2,
     tasks: [
       { id: "la", label: "Longitudinal Assessment", every: "year", due: "10-31", cost: 150, startsYearOfExpiration: true,
         detail: "30 questions between mid-January and Oct 31, 80% to pass. $50 late fee.",
@@ -2284,8 +2333,10 @@ export const BOARD_TASKS = {
   },
   "AOA:AOBOG": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://certification.osteopathic.org/obstetrics-gynecology/occ-overview/component-4/",
     oldExamTrackIssuedThrough: 2019,
+    newIssueStartsAfterYears: 2,
     tasks: [
       { id: "la", label: "Longitudinal Assessment", every: "year", due: "11-30", cost: 300, startsYearOfExpiration: true,
         detail: "85% to pass. $150 for each subspecialty; $50 late fee.",
@@ -2297,8 +2348,10 @@ export const BOARD_TASKS = {
   },
   "AOA:AOBOO": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://certification.osteopathic.org/ophthalmology-otolaryngology/occ-overview/component-3/",
     oldExamTrackIssuedThrough: 2021,
+    newIssueStartsAfterYears: 2,
     tasks: [
       { id: "la", label: "Longitudinal Assessment", every: "year", due: "10-31", cost: 200, startsYearOfExpiration: true,
         detail: "30 questions between mid-January and Oct 31, 70% to pass. $50 late fee.",
@@ -2310,10 +2363,11 @@ export const BOARD_TASKS = {
   },
   "AOA:AOBOS": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://certification.osteopathic.org/orthopedic-surgery/occ-overview/component-3/",
     tasks: [
-      { id: "laReg", label: "Longitudinal Assessment registration", every: "year", due: "01-05",
-        detail: "Registration opens Oct 1 and closes Jan 5.",
+      { id: "laReg", label: "Longitudinal Assessment registration", every: "year", opens: "10-01", due: "01-05",
+        detail: "Opens Oct 1 and closes Jan 5, for the assessment of the year it closes in.",
         source: "https://certification.osteopathic.org/orthopedic-surgery/occ-overview/component-3/" },
       { id: "la", label: "Longitudinal Assessment", every: "year", cost: 230,
         dueRule: "By the end of July (the board gives no day)",
@@ -2323,6 +2377,7 @@ export const BOARD_TASKS = {
   },
   "AOA:AOBP": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://certification.osteopathic.org/pediatrics/home/longitudinal-assessment/",
     tasks: [
       { id: "la", label: "General Pediatrics Longitudinal Assessment", every: "year", opens: "01-30", due: "09-30", cost: 200,
@@ -2335,6 +2390,7 @@ export const BOARD_TASKS = {
   },
   "AOA:AOBPM": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://certification.osteopathic.org/preventive-medicine/occ-overview/component-3/",
     tasks: [
       { id: "la", label: "Longitudinal Assessment", every: "year", cost: 150,
@@ -2345,8 +2401,10 @@ export const BOARD_TASKS = {
   },
   "AOA:AOBPMR": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://certification.osteopathic.org/physical-medicine-rehabilitation/occ-overview/component-3/",
     oldExamTrackIssuedThrough: 2020,
+    newIssueStartsAfterYears: 2,
     tasks: [
       { id: "la", label: "Longitudinal Assessment", every: "year", due: "11-30", cost: 200, startsYearOfExpiration: true,
         detail: "30 items a year; 80% cumulative at the end of the three-year cycle. $50 late fee.",
@@ -2358,6 +2416,7 @@ export const BOARD_TASKS = {
   },
   "AOA:AOBR": {
     checked: "2026-11",
+    trackedFrom: BOARD_STEPS_ADDED,
     sourceUrl: "https://certification.osteopathic.org/radiology/occ-overview/",
     tasks: [
       { id: "fee", label: "Annual OCC fee", every: "year", due: "12-31", cost: 300,

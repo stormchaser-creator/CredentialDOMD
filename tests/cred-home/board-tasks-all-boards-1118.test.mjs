@@ -61,7 +61,11 @@ test('a cycle the app cannot place has no date, shows the board rule and never a
   assert.match(t.block.dueRule, /Dec 31 of the last year of your 3-year block/);
   const steps = upcomingBoardSteps(data, boardComplianceFor(data), 30, at('2026-11-18'));
   assert.ok(!steps.some(s => s.taskId === 'block'));
-  assert.ok(openBoardTasks(data, boardComplianceFor(data), 60, at('2026-11-18'))[0].tasks.some(x => x.id === 'fee'), 'the Dec 31 fee is inside a 60-day window');
+  // The Dec 31 fee is inside a 60-day window, but 2026 is the first year the
+  // app tracks ABPN: asked on the card, alerted from 2027 on.
+  assert.equal(t.fee.askFirst, true);
+  assert.ok(!openBoardTasks(data, boardComplianceFor(data), 60, at('2026-11-18'))[0]?.tasks.some(x => x.id === 'fee'));
+  assert.ok(openBoardTasks(data, boardComplianceFor(data), 60, at('2027-11-18'))[0].tasks.some(x => x.id === 'fee'), 'the 2027 fee alerts');
 });
 
 test('an old-track AOA certificate starts the assessment in its expiration year', () => {

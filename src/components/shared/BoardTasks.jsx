@@ -12,11 +12,14 @@ const dayLabel = iso => new Date(`${iso}T12:00`).toLocaleDateString(undefined, {
 function taskStatusText(t) {
   if (t.status === "done") return `Done ${dayLabel(t.doneOn)}`;
   if (t.status === "not-required") return `Not required for me this ${t.periodWord}`;
-  if (t.status === "not-yet") return `Starts in ${t.startsYear}, the year your certificate expires`;
+  if (t.status === "not-yet") return t.startsWhy === "newIssue"
+    ? `Starts in ${t.startsYear}, after your first full year certified`
+    : `Starts in ${t.startsYear}, the year your certificate expires`;
   if (t.status === "unconfirmed") return `Due ${dayLabel(t.due)}. Done it? Mark it done`;
   if (t.status === "upcoming") return `Opens ${dayLabel(t.opens)}, due ${dayLabel(t.due)}`;
   if (!t.due && t.dueRule) return t.dueRule;
   if (!t.due) return `Due in ${t.period}. The board has not posted the date yet`;
+  if (t.askFirst) return `Due ${dayLabel(t.due)}. Already done? Mark it done`;
   return `Due ${dayLabel(t.due)}${t.daysLeft != null ? ` (${t.daysLeft} day${t.daysLeft === 1 ? "" : "s"})` : ""}`;
 }
 
@@ -27,7 +30,9 @@ function taskStatusText(t) {
  * chooses; nothing is marked for them. A first mark with no Board
  * Certification record on file creates that record and stores the mark on
  * it (settings.boardTaskMarks is not synced). A step whose date passed with
- * no mark says where to check and who to ask. Also the board's facts that
+ * no mark, or one in the first period the app tracks it (askFirst: asked,
+ * never alerted), says where to check and who to ask. A step with no period
+ * the app can place offers no mark: it would never reset. Also the board's facts that
  * change how the card reads: the AOA "valid thru" date (explained, and asked
  * for calmly when none is on file), and a first-cycle proration applied only
  * once the physician says the issued date is their first certification.
@@ -107,7 +112,7 @@ export default function BoardTasks({ board }) {
             <span style={{ fontSize: 12, fontWeight: 700, color: color(t.status) }}>{taskStatusText(t)}</span>
           </div>
           {t.detail && <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 2, lineHeight: 1.4 }}>{t.detail}</div>}
-          {t.status === "unconfirmed" && (
+          {(t.status === "unconfirmed" || t.askFirst) && (
             <div style={{ ...small, marginTop: 4 }}>
               {info.whereToCheck
                 ? <>Check in the <a href={info.whereToCheck.url} target="_blank" rel="noopener noreferrer" style={link}>{info.whereToCheck.label}</a>.</>
@@ -118,7 +123,9 @@ export default function BoardTasks({ board }) {
           <div style={{ marginTop: 4 }}>
             {t.doneOn || t.notRequiredOn
               ? <button style={btn(false)} onClick={() => save(t, null)}>Undo</button>
-              : marking === t.field
+              : !t.markable
+                ? null
+                : marking === t.field
                 ? <span style={small}>
                     Done on <input type="date" value={day} max={localToday()} onChange={e => setDay(e.target.value)} aria-label={`Date ${t.label} was done`} style={{ fontSize: 16, padding: "2px 6px", borderRadius: 6, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text }} />
                     <button style={btn(true)} disabled={!/^\d{4}-\d{2}-\d{2}$/.test(day)} onClick={() => save(t, day)}>Save</button>

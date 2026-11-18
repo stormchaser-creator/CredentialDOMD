@@ -75,9 +75,19 @@ export function boardTaskField(boardId, task, periodLabel) {
 }
 
 /**
+ * The period label of a step whose period the app cannot compute (a cycle of
+ * the physician's own it cannot place, or one tied to an expiration date not
+ * on file). A mark under it would never reset, so none is offered (markable).
+ */
+export const UNPLACED_PERIOD = "current cycle";
+
+/**
  * The period a task is in today, its due date (null when it cannot be
  * computed) and when it opens. `record` is the board's certificate record,
  * read only by a task tied to the certificate's expiration date.
+ * A yearly window that opens later in the year than it closes (`opens`
+ * "10-01", `due` "01-05": AOBOS registration) runs across the new year: it
+ * closes in the next year, and its period is labelled with the closing year.
  */
 export function taskPeriod(task, now = new Date(), record = null) {
   const y = now.getFullYear();
@@ -92,11 +102,15 @@ export function taskPeriod(task, now = new Date(), record = null) {
     // dueYearOffset) is a fixed day in a year counted from the expiration
     // year (ABOS: Dec 1 of year 9 of 10). No date on file: no due date.
     const exp = String(record?.expirationDate || "").slice(0, 10);
-    if (!ISO.test(exp) || record?.noExpiration === true) return { label: "current cycle", start: null, end: null, due: null, opens: null };
+    if (!ISO.test(exp) || record?.noExpiration === true) return { label: UNPLACED_PERIOD, start: null, end: null, due: null, opens: null };
     const due = task.due ? `${Number(exp.slice(0, 4)) + (task.dueYearOffset || 0)}-${task.due}` : exp;
     return { label: `cycle ending ${exp}`, start: null, end: exp, due, opens: null };
   }
-  if (every) return { label: "current cycle", start: null, end: null, due: null, opens: null };
+  if (every) return { label: UNPLACED_PERIOD, start: null, end: null, due: null, opens: null };
+  if (!task.windows?.[y] && task.opens && task.due && task.opens > task.due) {
+    const closes = localToday(now).slice(5) > task.due ? y + 1 : y;
+    return { label: String(closes), start: `${closes - 1}-${task.opens}`, end: `${closes}-${task.due}`, due: `${closes}-${task.due}`, opens: `${closes - 1}-${task.opens}` };
+  }
   const win = task.windows?.[y];
   const due = win?.to || (task.due ? `${y}-${task.due}` : null);
   const opens = win?.from || (!win && task.opens ? `${y}-${task.opens}` : null);
@@ -180,18 +194,42 @@ export function validThruFor(boardId, record) {
 }
 
 /**
- * The year a task starts, for a task the board starts in the year a
- * certificate on the old exam track (issued in or before the set's
- * oldExamTrackIssuedThrough year) expires. A later certificate is time-limited
- * as well, but its valid-thru date (the end of the current OCC cycle) never
- * delays the task: the board gives every diplomate the assessment each year.
+ * { year, why } for the year a task starts, or null. A task the board starts
+ * in the year a certificate on the old exam track (issued in or before the
+ * set's oldExamTrackIssuedThrough year) expires starts then (why
+ * "expiration"). A later certificate is time-limited as well, but its
+ * valid-thru date (the end of the current OCC cycle) never delays the task.
+ * Where the set says so (newIssueStartsAfterYears), a later certificate
+ * starts the task that many years after its issue year (why "newIssue"): the
+ * board's pages give one full calendar year after issue, registration in the
+ * next cycle, and the assessment the year after (issued 2022, registered
+ * 2023, started 2024).
  */
 function startsYear(task, boardId, record) {
   if (!task.startsYearOfExpiration || !record) return null;
-  const exp = String(record.expirationDate || "");
-  if (!ISO.test(exp.slice(0, 10))) return null;
-  if (!onOldExamTrack(boardTaskSet(boardId), record)) return null;
-  return Number(exp.slice(0, 4));
+  const set = boardTaskSet(boardId);
+  if (onOldExamTrack(set, record)) {
+    const exp = String(record.expirationDate || "");
+    return ISO.test(exp.slice(0, 10)) ? { year: Number(exp.slice(0, 4)), why: "expiration" } : null;
+  }
+  const issued = String(record.issuedDate || "").slice(0, 10);
+  if (set?.newIssueStartsAfterYears && set.oldExamTrackIssuedThrough && ISO.test(issued)) {
+    return { year: Number(issued.slice(0, 4)) + set.newIssueStartsAfterYears, why: "newIssue" };
+  }
+  return null;
+}
+
+/**
+ * True while a step is in the period it was in on the day the app started
+ * tracking it (`trackedFrom` on the task or its set, the release day). A step
+ * done before the app knew it would otherwise alert on day one; in that first
+ * period an unmarked step is asked on the card and listed with its date, but
+ * never alerted (no bell, no banner, no reminder email).
+ */
+function inFirstTrackedPeriod(task, set, period, record) {
+  const from = task.trackedFrom || set?.trackedFrom;
+  if (!from || !ISO.test(from) || period.label === UNPLACED_PERIOD) return false;
+  return taskPeriod(task, new Date(`${from}T12:00:00`), record).label === period.label;
 }
 
 /**
@@ -204,7 +242,10 @@ function startsYear(task, boardId, record) {
  *           not started it for this certificate), or "due"
  *   due, daysLeft (null when the board has not published a date), doneOn,
  *   notRequiredOn, field (where a mark is stored), period label, and
- *   periodWord ("year" or "cycle").
+ *   periodWord ("year" or "cycle"), markable (false for a step with no
+ *   period the app can place: no mark is offered), askFirst (an unmarked
+ *   step in the first period the app tracks it: asked, never alerted), and
+ *   startsWhy for a "not-yet" step ("expiration" or "newIssue").
  * With the board's valid-thru facts (validThruFor), where to check and who
  * to ask.
  * Null when the board has no task data.
@@ -225,7 +266,8 @@ export function boardTasksFor(data, board, now = new Date()) {
     const mark = [field, ...alsoFields].map(f => readMark(marks[f])).find(Boolean) || null;
     const doneOn = mark?.kind === "done" ? mark.on : null;
     const notRequiredOn = mark?.kind === "not-required" ? mark.on : null;
-    const begins = startsYear(task, boardId, record);
+    const starts = startsYear(task, boardId, record);
+    const begins = starts?.year || null;
     let status = "due";
     if (doneOn) status = "done";
     else if (notRequiredOn) status = "not-required";
@@ -241,7 +283,11 @@ export function boardTasksFor(data, board, now = new Date()) {
       every: task.every, period: period.label, due: period.due, opens: period.opens,
       daysLeft: period.due ? daysUntilDate(period.due, now) : null,
       doneOn, notRequiredOn, status, field, alsoFields, startsYear: begins && begins > now.getFullYear() ? begins : null,
+      startsWhy: begins && begins > now.getFullYear() ? starts.why : null,
       periodWord: task.every === "year" ? "year" : "cycle",
+      // A mark needs a period that ends; an existing one still shows (and Undo clears it).
+      markable: period.label !== UNPLACED_PERIOD,
+      askFirst: status === "due" && inFirstTrackedPeriod(task, set, period, record),
     };
   });
   return {
@@ -304,7 +350,8 @@ export function applyBoardTaskMark(data, boardId, field, date, { alsoFields = []
  * message, the reminder email): due inside the reminder lead window. A date
  * that passed with no mark is asked on the card, never alerted. A task with no
  * published date, already done, marked not required, or not started yet
- * raises nothing.
+ * raises nothing, and so does a step in the first period the app tracks it
+ * (askFirst: asked on the card instead, see inFirstTrackedPeriod).
  * [{ board, tasks }] per board with any, tasks as boardTasksFor gives them.
  * boardTaskAlerts makes the app's one entry per board from it; the reminder
  * email (supabase/functions/_shared/reminderBoardSteps.mjs) names each task.
@@ -315,7 +362,7 @@ export function openBoardTasks(data, boards, lead, now = new Date()) {
     if (b.followsParent || b.source === "CERT" || b.body) continue;
     const t = boardTasksFor(data, b, now);
     if (!t) continue;
-    const open = t.tasks.filter(x => x.status === "due" && x.daysLeft != null && x.daysLeft >= 0 && x.daysLeft <= lead);
+    const open = t.tasks.filter(x => x.status === "due" && !x.askFirst && x.daysLeft != null && x.daysLeft >= 0 && x.daysLeft <= lead);
     if (open.length) out.push({ board: b, tasks: open });
   }
   return out;
@@ -341,7 +388,7 @@ export function boardTaskAlerts(data, boards, lead, now = new Date()) {
  * `alerted` is true for a step inside the reminder lead window, which
  * openBoardTasks already alerts; the rest are listed, never alerted.
  * Sorted by due date. [{ boardId, boardLabel, taskId, label, name, due,
- * opens, daysLeft, status, period, periodWord, source, alerted }]
+ * opens, daysLeft, status, period, periodWord, source, askFirst, alerted }]
  */
 export function datedBoardSteps(data, boards, lead, now = new Date()) {
   const alerted = new Set();
@@ -357,7 +404,7 @@ export function datedBoardSteps(data, boards, lead, now = new Date()) {
       out.push({
         boardId: b.id, boardLabel: b.label || certName(b.id), taskId: x.id, label: x.label,
         name: boardTaskName(b.id, x), due: x.due, opens: x.opens, daysLeft: x.daysLeft, status: x.status,
-        period: x.period, periodWord: x.periodWord, source: x.source, alerted: alerted.has(`${b.id}|${x.id}`),
+        period: x.period, periodWord: x.periodWord, source: x.source, askFirst: !!x.askFirst, alerted: alerted.has(`${b.id}|${x.id}`),
       });
     }
   }
