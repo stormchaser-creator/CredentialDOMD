@@ -36,9 +36,14 @@ function certName(boardId) {
   return sub ? `${code} ${sub}` : code;
 }
 
+/** A task's name with its certificate: "AOBS Neurological Surgery Longitudinal Assessment". */
+export function boardTaskName(boardId, task) {
+  return `${certName(boardId)} ${task.label}`;
+}
+
 /** The customFields key that holds one task's Done date for one period. */
 export function boardTaskField(boardId, task, periodLabel) {
-  return `${certName(boardId)} ${task.label} done for ${periodLabel}`;
+  return `${boardTaskName(boardId, task)} done for ${periodLabel}`;
 }
 
 /** The period a task is in today, its due date (null when not published) and when it opens. */
@@ -217,21 +222,30 @@ export function applyBoardTaskMark(data, boardId, field, date, { alsoFields = []
 
 /**
  * Board tasks that belong in the alerts (the bell, the banner, the reminder
- * message): due inside the reminder lead window. A date that passed with no
- * mark is asked on the card, never alerted. A task with no
+ * message, the reminder email): due inside the reminder lead window. A date
+ * that passed with no mark is asked on the card, never alerted. A task with no
  * published date, already done, or not started yet raises nothing.
+ * [{ board, tasks }] per board with any, tasks as boardTasksFor gives them.
+ * boardTaskAlerts makes the app's one entry per board from it; the reminder
+ * email (supabase/functions/_shared/reminderBoardSteps.mjs) names each task.
  */
-export function boardTaskAlerts(data, boards, lead, now = new Date()) {
+export function openBoardTasks(data, boards, lead, now = new Date()) {
   const out = [];
   for (const b of boards || []) {
     if (b.followsParent || b.source === "CERT" || b.body) continue;
     const t = boardTasksFor(data, b, now);
     if (!t) continue;
     const open = t.tasks.filter(x => x.status === "due" && x.daysLeft != null && x.daysLeft >= 0 && x.daysLeft <= lead);
-    if (!open.length) continue;
-    const issues = open.map(x => `${x.label}: due ${x.due}`);
-    const soonest = open.reduce((a, x) => (x.due < a.due ? x : a), open[0]);
-    out.push({ state: b.code, issues, daysLeft: soonest.daysLeft, renewal: soonest.due, key: `board:${b.id}`, kind: "board", label: b.label });
+    if (open.length) out.push({ board: b, tasks: open });
   }
   return out;
+}
+
+/** The alert entries for openBoardTasks: one per board, as the CME gaps list them. */
+export function boardTaskAlerts(data, boards, lead, now = new Date()) {
+  return openBoardTasks(data, boards, lead, now).map(({ board: b, tasks: open }) => {
+    const issues = open.map(x => `${x.label}: due ${x.due}`);
+    const soonest = open.reduce((a, x) => (x.due < a.due ? x : a), open[0]);
+    return { state: b.code, issues, daysLeft: soonest.daysLeft, renewal: soonest.due, key: `board:${b.id}`, kind: "board", label: b.label };
+  });
 }

@@ -310,11 +310,19 @@ function createDb(tables, fail = [], { maxRows = 1000 } = {}) {
     lte(c, v) { this.filters.push(r => r[c] != null && String(r[c]) <= String(v)); return this; }
     gt(c, v) { this.filters.push(r => r[c] != null && String(r[c]) > String(v)); return this; }
     limit(n) { this.pageLimit = n; return this; }
+    // PostgREST ilike with % wildcards, case-insensitive. The Board
+    // Certification read uses it; fail: ['licenses:board'] fails that read alone.
+    ilike(c, pat) {
+      this.board = true;
+      const re = new RegExp(`^${String(pat).split('%').map(x => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('.*')}$`, 'i');
+      this.filters.push(r => r[c] != null && re.test(String(r[c])));
+      return this;
+    }
     run() {
       const rows = tables[this.table] ||= [];
-      log.push({ table: this.table, op: this.op, payload: this.payload });
+      log.push({ table: this.table, op: this.op, payload: this.payload, board: !!this.board });
       if (this.op === 'insert') { rows.push(...[].concat(this.payload)); return { data: null, error: null }; }
-      if (this.op === 'select' && fail.includes(this.table)) return { data: null, error: { message: `${this.table} read failed` } };
+      if (this.op === 'select' && (fail.includes(this.table) || (this.board && fail.includes(`${this.table}:board`)))) return { data: null, error: { message: `${this.table} read failed` } };
       let hit = rows.filter(r => this.filters.every(f => f(r)));
       if (this.op === 'update') { for (const r of hit) Object.assign(r, this.payload); return { data: null, error: null }; }
       if (this.orderBy) hit = [...hit].sort((a, b) => String(a[this.orderBy]) < String(b[this.orderBy]) ? -1 : String(a[this.orderBy]) > String(b[this.orderBy]) ? 1 : 0);
@@ -653,7 +661,8 @@ test('send-reminders under node: snooze, the app\'s columns and the daily cadenc
     assert.ok(!previewed.has(uid(10002)), 'a 30-day lead in the same group does not list it');
     assert.equal(body.results.filter(r => r.sent === false && r.reason === 'nothing due').length, Math.floor(n / 2));
     const reads = log.filter(l => l.op === 'select');
-    assert.ok(reads.filter(l => l.table === 'licenses').length <= 2 * Math.ceil(n / 100), `licenses read per group of members, not per member (${reads.filter(l => l.table === 'licenses').length})`);
+    assert.ok(reads.filter(l => l.table === 'licenses' && !l.board).length <= 2 * Math.ceil(n / 100), `licenses read per group of members, not per member (${reads.filter(l => l.table === 'licenses' && !l.board).length})`);
+    assert.ok(reads.filter(l => l.table === 'licenses' && l.board).length <= 2 * Math.ceil(n / 100), 'and the Board Certification records once per group too');
     assert.ok(reads.length < n, `${reads.length} reads for ${n} members`);
   });
 
@@ -665,6 +674,72 @@ test('send-reminders under node: snooze, the app\'s columns and the daily cadenc
     assert.equal(byProfile[uid(20001)].sent, false);
     assert.equal(log.filter(l => l.table === 'profiles' && l.op === 'update').length, 0, 'the told list is kept for the next full read');
     assert.equal(sent.length, 0);
+  });
+
+  // Board certification steps (reminderBoardSteps.mjs), through the real
+  // function: a DO with an AOBS Board Certification record (no dates, as the
+  // app makes it). The Longitudinal Assessment is due 2026-11-15.
+  const boardRecord = (n, marks = {}) => ({ id: `board-${n}`, user_id: uid(n), type: 'Board Certification (AOA)', name: 'AOBS Surgery',
+    issued_date: null, expiration_date: null, lifecycle_status: 'active', no_expiration: true, custom_fields: marks });
+  const DONE = { 'AOBS Longitudinal Assessment done for 2026': '2026-10-01' };
+
+  await t.test('a board step due within the lead time is in the digest, the headline and the count', async () => {
+    sent.length = 0;
+    const p = profile(30001, { degree_type: 'DO' });
+    const tables = { profiles: [p], licenses: [boardRecord(30001), { ...license(30001), expiration_date: '2026-11-01' }], alert_acks: [], notification_log: [] };
+    const { byProfile } = await runAt('2026-09-22T13:00:03.000Z', tables);
+    assert.equal(byProfile[uid(30001)].sent, true);
+    assert.equal(byProfile[uid(30001)].count, 2, 'the license and the board step');
+    assert.equal(sent[0].subject, 'Credential check: 2 coming up', 'both counted in the headline');
+    assert.match(sent[0].text, /Coming up \(within 90 days\)\n {2}- State Medical License · ZZ: Nov 1, 2026 \(in 40 days\)\n {2}- AOBS/, 'sorted with the records by days left');
+    assert.match(sent[0].text, /\n {2}- AOBS Longitudinal Assessment: Nov 15, 2026 \(in 54 days\)\n {6}Mark it done in the app when finished\./);
+    assert.equal(sent[0].text.match(/Mark it done in the app/g).length, 1, 'the hint once');
+  });
+
+  await t.test('a step marked done drops out and the list changes; a passed unmarked step is never emailed', async () => {
+    sent.length = 0;
+    const p = profile(30002, { degree_type: 'DO', notify_freq_days: 30 });
+    const tables = { profiles: [p], licenses: [boardRecord(30002)], alert_acks: [], notification_log: [] };
+    const first = await runAt('2026-09-22T13:00:03.000Z', tables);
+    assert.equal(first.byProfile[uid(30002)].count, 1);
+    const fpDue = tables.profiles[0].reminder_email_fingerprint;
+    tables.licenses[0].custom_fields = DONE;
+    const done = await runAt('2026-10-02T13:00:03.000Z', tables);
+    assert.deepEqual(done.byProfile[uid(30002)], { profile: uid(30002), sent: false, reason: 'nothing due' }, 'marked done: nothing left to send');
+    tables.licenses[0].custom_fields = {};
+    assert.equal(tables.profiles[0].reminder_email_fingerprint, `${fpDue.slice(0, 24)};`, 'the done step is forgotten as told');
+    const back = await runAt('2026-10-03T13:00:03.000Z', tables);
+    assert.equal(back.byProfile[uid(30002)].sent, true, 'the mark undone: the step is listed again and told again, Monthly or not');
+    assert.equal(back.byProfile[uid(30002)].reason, 'list changed');
+    assert.equal(tables.profiles[0].reminder_email_fingerprint, fpDue, 'the same step id and date as before');
+    const passed = await runAt('2026-11-18T13:00:03.000Z', tables);
+    assert.deepEqual(passed.byProfile[uid(30002)], { profile: uid(30002), sent: false, reason: 'nothing due' }, 'past Nov 15 with no mark: asked in the app, not emailed');
+    assert.equal(sent.length, 2);
+  });
+
+  await t.test('a failed board read sends the credential digest without the steps and forgets nothing', async () => {
+    sent.length = 0;
+    const lic = { id: 'lic-board-fail', user_id: uid(30003), type: 'State Medical License', state: 'ZZ', expiration_date: '2026-10-19' };
+    const told = await reminderFingerprint([{ id: 'lic-held', exp: lic.expiration_date, table: 'licenses' }, { id: 'board:AOA:AOBS:la:2026', exp: '2026-11-15', table: 'board' }]);
+    const held = profile(30004, { degree_type: 'DO', reminder_email_fingerprint: told, reminder_emailed_at: '2026-09-21T13:00:05.000Z',
+      snoozed_until: '2026-10-30T13:00:00.000Z' });
+    const p = profile(30003, { degree_type: 'DO' });
+    const tables = { profiles: [p, held], licenses: [lic, boardRecord(30003), { ...lic, id: 'lic-held', user_id: uid(30004) }, boardRecord(30004)], alert_acks: [], notification_log: [] };
+    const { byProfile, log } = await runAt('2026-09-22T13:00:03.000Z', tables, { fail: ['licenses:board'] });
+    assert.equal(byProfile[uid(30003)].sent, true, 'the credential digest goes out');
+    assert.equal(byProfile[uid(30003)].count, 1, 'without the board step');
+    assert.doesNotMatch(sent[0].text, /Longitudinal Assessment|Mark it done/);
+    assert.match(sent[0].text, /Oct 19, 2026/);
+    assert.deepEqual(byProfile[uid(30004)], { profile: uid(30004), sent: false, reason: 'snoozed' });
+    assert.equal(log.filter(l => l.table === 'profiles' && l.op === 'update' && l.payload?.reminder_email_fingerprint && !l.payload.reminder_emailed_at).length, 0, 'the held run does not forget the told step');
+    assert.equal(tables.profiles[1].reminder_email_fingerprint, told);
+  });
+
+  await t.test('a PA gets no physician board steps', async () => {
+    sent.length = 0;
+    const p = profile(30005, { degree_type: 'PA', specialties: ['AOA:AOBS'] });
+    const { byProfile } = await runAt('2026-09-22T13:00:03.000Z', { profiles: [p], licenses: [boardRecord(30005)], alert_acks: [], notification_log: [] });
+    assert.deepEqual(byProfile[uid(30005)], { profile: uid(30005), sent: false, reason: 'nothing due' });
   });
 });
 
@@ -696,7 +771,7 @@ async function startPostgres() {
 const PROFILES = `
   create table public.profiles (id uuid primary key, name text, email text, access_status text not null default 'pending',
     notify_email boolean, reminder_lead_days integer, notify_freq_days integer, last_notified text, snoozed_until text,
-    alerts_fingerprint text, degree_type text, updated_at timestamptz default now());
+    alerts_fingerprint text, specialties jsonb, degree_type text, updated_at timestamptz default now());
 `;
 const OLD = '2026-09-01 00:00:00+00';
 const ROWS = [

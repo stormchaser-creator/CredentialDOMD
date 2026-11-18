@@ -11,7 +11,15 @@
  * the user has acknowledged (alert_acks.until in
  * the future) and records that are historical, superseded, awaiting
  * confirmation or whose date is not known yet (_shared/reminderRows.mjs),
- * and sends ONE plain-text digest through Resend. It re-sends
+ * adds the board certification steps the app alerts on (an annual
+ * assessment, a QI attestation due within the same lead time and not marked
+ * done; _shared/reminderBoardSteps.mjs runs the app's own boardTaskAlerts on
+ * the member's Board Certification records and Settings boards), listed by
+ * days left like a record and counted in the headline and the fingerprint
+ * ("board:<board>:<step>:<period>"), and sends ONE plain-text digest through
+ * Resend. A board step's date that passed with no mark, or one marked done,
+ * is never listed. A failed board read or computation leaves the steps out
+ * and sends the credential digest; that run forgets no told items. It re-sends
  * no more often than notify_freq_days (blank is 7, clamped to 1..60), counted
  * in whole UTC days, unless the set of items changed (fingerprint). While the
  * member's banner snooze (snoozed_until) is in the future it sends only an
@@ -36,6 +44,7 @@ import { remindable, reminderLabel, withCurrentCategoryNames, reminderGreeting, 
 import { reminderRecipientsQuery, reminderLeadDays, notifyFreqDays } from "../_shared/reminderRecipients.mjs";
 import { reminderEmailDecision, reminderFingerprint, reminderToldStill } from "../_shared/reminderCadence.mjs";
 import { readAllPages, groupsOf, readReminderGroup } from "../_shared/reminderReads.mjs";
+import { reminderBoardItems } from "../_shared/reminderBoardSteps.mjs";
 import { drainReminderQueue, reminderDeadline } from "../_shared/reminderQueue.mjs";
 
 const RESEND = Deno.env.get("RESEND_API_KEY")!;
@@ -57,6 +66,10 @@ const TABLES: { table: string; label: string }[] = [
   // categories", App.jsx search results).
   { table: "custom_records", label: "Your categories" },
 ];
+
+// One line of the digest: a record from TABLES, or a board certification
+// step (table "board", _shared/reminderBoardSteps.mjs).
+type ReminderItem = { id: string; table: string; label: string; name: string; exp: string; days: number; state?: string | null; type?: string | null; isDea?: boolean; isLicense?: boolean };
 
 const json = (status: number, body: unknown) =>
   new Response(JSON.stringify(body), { status, headers: { "Content-Type": "application/json" } });
@@ -146,7 +159,7 @@ async function handle(req: Request, queueJob: { id: string; lease_token: string 
 
       const acked = read.acked.get(p.id) || new Set();
 
-      const items: { id: string; table: string; label: string; name: string; exp: string; days: number }[] = [];
+      const items: ReminderItem[] = [];
       // A failed table read leaves that table's items out of this run's list;
       // they are not gone, so a run that holds must not forget them as told.
       let readFailed = false;
@@ -171,6 +184,20 @@ async function handle(req: Request, queueJob: { id: string; lease_token: string 
           items.push({ id: r.id, table: t.table, label: t.label, name: reminderLabel(r, t.label, p.name), exp: r.expiration_date, days: dayDiff(r.expiration_date, today), state: r.state ?? null, type: r.type ?? null, isDea: /dea/i.test(String(r.type ?? "")), isLicense: t.table === "licenses" });
         }
       }
+      // Board certification steps due within this member's lead time, as the
+      // app alerts on them. The app never applies an acknowledgement to a
+      // board step (alert_acks name records), so none is applied here. A
+      // failure leaves them out and never blocks the credential digest; like
+      // a failed table read, that run forgets no told items.
+      let boardFailed = !!read.boardsFailed;
+      if (!boardFailed) {
+        try {
+          items.push(...(reminderBoardItems(p, read.boards.get(p.id) || [], { lead, now: new Date() }) as ReminderItem[]));
+        } catch (e) {
+          boardFailed = true;
+          console.error("reminder board steps failed", p.id, (e as Error)?.message);
+        }
+      }
       const fp = await reminderFingerprint(items);
       // A run that sends nothing forgets the told items it no longer lists, so
       // one that returns under the same snooze (an acknowledgement lapsed) is
@@ -179,7 +206,7 @@ async function handle(req: Request, queueJob: { id: string; lease_token: string 
       // Not after a failed table read: the next full read would find that
       // table's told items fresh and mail the same list again under a snooze.
       const forget = async () => {
-        const told = dryRun || readFailed ? null : reminderToldStill(p.reminder_email_fingerprint, fp);
+        const told = dryRun || readFailed || boardFailed ? null : reminderToldStill(p.reminder_email_fingerprint, fp);
         if (!told) return;
         const { error } = await db.from("profiles").update({ reminder_email_fingerprint: told }).eq("id", p.id);
         if (error) console.error("reminder told update failed", p.id, error.message);
@@ -198,8 +225,12 @@ async function handle(req: Request, queueJob: { id: string; lease_token: string 
       // license line names where to renew it.
       // A PA's or NP's licence names its own board, never the medical board
       // portal (_shared/reminderRenewalLine.mjs); MD and DO lines unchanged.
-      const renewLine = (i: typeof items[0]) => renewalLineFor(i, p.degree_type ?? "", { renewalLinks, appBoardLinks });
-      const line = (i: typeof items[0]) => `  - ${i.name}: ${fmt(i.exp)} (${i.days < 0 ? `${-i.days} day${i.days === -1 ? "" : "s"} ago` : i.days === 0 ? "today" : `in ${i.days} day${i.days === 1 ? "" : "s"}`})${renewLine(i)}`;
+      const renewLine = (i: ReminderItem) => renewalLineFor(i, p.degree_type ?? "", { renewalLinks, appBoardLinks });
+      // A board step has no renewal portal; the first one listed says how it
+      // leaves the list (the app's Done mark), once.
+      const firstBoard = items.find(i => i.table === "board");
+      const boardHint = (i: ReminderItem) => i === firstBoard ? "\n      Mark it done in the app when finished." : "";
+      const line = (i: ReminderItem) => `  - ${i.name}: ${fmt(i.exp)} (${i.days < 0 ? `${-i.days} day${i.days === -1 ? "" : "s"} ago` : i.days === 0 ? "today" : `in ${i.days} day${i.days === 1 ? "" : "s"}`})${renewLine(i)}${boardHint(i)}`;
       const parts: string[] = [];
       if (expired.length) parts.push(`EXPIRED\n${expired.map(line).join("\n")}`);
       if (soon.length) parts.push(`Due within 30 days\n${soon.map(line).join("\n")}`);

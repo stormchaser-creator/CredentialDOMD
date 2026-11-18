@@ -65,6 +65,10 @@ export const ROOTS = Object.freeze([
   // public-record types an import the way the app does, and send-reminders
   // routes a reminder line by licence kind.
   "constants/professions.js",
+  // send-reminders names the board certification steps the app alerts on,
+  // with the app's own board list and step rules (reminderBoardSteps.mjs).
+  "utils/boardCompliance.js",
+  "utils/boardTasks.js",
 ]);
 
 export const banner = (rel) =>

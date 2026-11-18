@@ -23,8 +23,10 @@ export { reminderLeadDays, notifyFreqDays };
 // to tell what the member has seen, never compared as the server's state
 // and never written; last_notified is not read (reminderCadence.mjs says why).
 // degree_type picks the reminder line's board for a PA or NP licence
-// (reminderRenewalLine.mjs).
-export const RECIPIENT_COLUMNS = 'id, name, email, notify_email, reminder_lead_days, notify_freq_days, snoozed_until, alerts_fingerprint, reminder_email_fingerprint, reminder_emailed_at, access_status, degree_type';
+// (reminderRenewalLine.mjs). specialties (the boards picked in Settings) and
+// degree_type also decide the board certification steps the email names
+// (reminderBoardSteps.mjs).
+export const RECIPIENT_COLUMNS = 'id, name, email, notify_email, reminder_lead_days, notify_freq_days, snoozed_until, alerts_fingerprint, reminder_email_fingerprint, reminder_emailed_at, access_status, specialties, degree_type';
 
 /**
  * The profiles query send-reminders runs, on a supabase-js client. profileId

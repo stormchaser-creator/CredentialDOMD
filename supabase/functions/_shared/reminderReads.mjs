@@ -57,6 +57,12 @@ function byUser(rows) {
  * A table whose read fails is in `failed` and has no rows; the caller treats
  * its members as not fully read. A failed acknowledgement read is marked so the caller can refuse
  * a digest rather than treating unread snoozes as an empty list.
+ *
+ * Also returned: boards: Map<user_id, rows[]>, every Board Certification
+ * licence record of the group's members whatever its dates (a board record
+ * often has none, and its customFields hold the board steps' Done marks,
+ * reminderBoardSteps.mjs), and boardsFailed. A failed board read never fails
+ * the credential digest: the caller sends without the board steps.
  */
 export async function readReminderGroup(db, ids, { tables, today, lo, hi }) {
   const acksRead = await readAllPages(() => db.from('alert_acks')
@@ -102,5 +108,16 @@ export async function readReminderGroup(db, ids, { tables, today, lo, hi }) {
     if (read.error) { console.error('query failed', 'custom_categories', read.error.message); categoriesFailed = true; }
     for (const [user, list] of byUser(read.data)) categories.set(user, list.map(({ id, name }) => ({ id, name })));
   }
-  return { acked, rows, categories, failed, categoriesFailed, acksFailed: !!acksRead.error };
+  // Board Certification records, any dates: the app finds a member's boards
+  // and their Done marks on the records whose type names "Board
+  // Certification" (src/utils/boardCompliance.js boardIdsFromLicenses).
+  const boardsRead = await readAllPages(() => db.from('licenses')
+    .select('*')
+    .in('user_id', ids)
+    .ilike('type', '%board certification%')
+    .order('id'));
+  if (boardsRead.error) console.error('query failed', 'licenses (board certification)', boardsRead.error.message);
+  const boards = boardsRead.error ? new Map() : byUser(boardsRead.data);
+
+  return { acked, rows, categories, failed, categoriesFailed, acksFailed: !!acksRead.error, boards, boardsFailed: !!boardsRead.error };
 }
