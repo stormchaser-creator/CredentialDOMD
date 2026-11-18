@@ -8,34 +8,24 @@
  * Vera mid-visit (a reload of the data, the access check, the offline screen)
  * keeps the conversation in use.
  *
- * A visit keeps the conversation it came back to in two cases only:
- *  - "return": Vera's own open_record card took the physician to a record
- *    and the very next screen is Vera again, within RETURN_WINDOW_MS. Any
- *    other screen in between (Home, a menu) ends it.
- *  - "reload": the page reopened straight onto Vera (iOS reloading the app
- *    after Mail, Photos or the share sheet; App.jsx lastScreen) and she was
- *    in use within ACTIVE_WINDOW_MS. A packet still downloading or a question
- *    waiting on the profession choice is then not filed away mid-task.
+ * A visit keeps the conversation in one case only, "reload": the page
+ * reopened straight onto Vera (iOS reloading the app after Mail, Photos or
+ * the share sheet; App.jsx lastScreen) and she was in use within
+ * ACTIVE_WINDOW_MS. A packet still downloading or a question waiting on the
+ * profession choice is then not filed away mid-task. Coming back to Vera
+ * from anywhere else, her own record card included, is a new chat.
  * A question handed to Vera on arrival (Home search, Requests) always starts
  * a new chat, so it never goes out with an older conversation as history.
  *
- * The marks live in sessionStorage for this tab only.
+ * The mark lives in sessionStorage for this tab only.
  */
 
-export const VERA_RETURN_KEY = "credentialdomd-vera-return";
-export const RETURN_WINDOW_MS = 15 * 60 * 1000;
 export const VERA_ACTIVE_KEY = "credentialdomd-vera-active";
 export const ACTIVE_WINDOW_MS = 10 * 60 * 1000;
 
 const session = () => { try { return globalThis.sessionStorage || null; } catch { return null; } };
 const read = (store, key) => { try { return store?.getItem(key) ?? null; } catch { return null; } };
 const write = (store, key, value) => { try { store?.setItem(key, value); } catch { /* unavailable */ } };
-const remove = (store, key) => { try { store?.removeItem(key); } catch { /* unavailable */ } };
-
-/** Called just before Vera navigates to a record she opened. */
-export function markVeraReturn(now = Date.now(), store = session()) {
-  write(store, VERA_RETURN_KEY, JSON.stringify({ until: now + RETURN_WINDOW_MS, hops: 0 }));
-}
 
 /** Stamped whenever Vera's conversation is saved. */
 export function markVeraActive(now = Date.now(), store = session()) {
@@ -44,27 +34,14 @@ export function markVeraActive(now = Date.now(), store = session()) {
 
 /**
  * App.jsx calls this on every screen change. Returns the kind of a new Vera
- * visit ("open" | "return" | "reload"), or null when the screen is not a new
- * arrival at Vera. `first` is true for the screen the page opened on.
+ * visit ("open" | "reload"), or null when the screen is not a new arrival at
+ * Vera. `first` is true for the screen the page opened on.
  */
 export function veraArrival({ toVera, fromVera, first }, now = Date.now(), store = session()) {
-  let mark = null;
-  try { mark = JSON.parse(read(store, VERA_RETURN_KEY) || "null"); } catch { mark = null; }
-  if (!toVera) {
-    // Leaving for the record Vera opened is the one hop a return allows.
-    if (mark) {
-      if (fromVera && mark.hops === 0) write(store, VERA_RETURN_KEY, JSON.stringify({ ...mark, hops: 1 }));
-      else remove(store, VERA_RETURN_KEY);
-    }
-    return null;
-  }
-  if (fromVera) return null; // still on Vera
-  remove(store, VERA_RETURN_KEY);
-  if (first) {
-    const active = Number(read(store, VERA_ACTIVE_KEY));
-    return Number.isFinite(active) && active > 0 && now - active < ACTIVE_WINDOW_MS ? "reload" : "open";
-  }
-  return mark && mark.hops === 1 && Number(mark.until) > now ? "return" : "open";
+  if (!toVera || fromVera) return null;
+  if (!first) return "open";
+  const active = Number(read(store, VERA_ACTIVE_KEY));
+  return Number.isFinite(active) && active > 0 && now - active < ACTIVE_WINDOW_MS ? "reload" : "open";
 }
 
 /** The title an archived conversation is listed under: its first question. */
@@ -102,6 +79,6 @@ const decided = new Set();
 export function decideVisit(visitId, kind, { seeded = false } = {}) {
   if (visitId != null && decided.has(visitId)) return false;
   if (visitId != null) decided.add(visitId);
-  return seeded || !(kind === "return" || kind === "reload");
+  return seeded || kind !== "reload";
 }
 export function _resetVisits() { decided.clear(); }

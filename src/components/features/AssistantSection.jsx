@@ -27,7 +27,7 @@ import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
 import { isIdentityLink } from "../../utils/pausedApplicationRecords.js";
 import { shareAtHandoff, shareNotStartedMessage } from "../../utils/shareHandoff.js";
 import { isKnownDegree } from "../../constants/professions.js";
-import { decideVisit, markVeraReturn, markVeraActive, archiveTitle, unfiled, archivedIds } from "../../utils/veraOpen.js";
+import { decideVisit, markVeraActive, archiveTitle, unfiled, archivedIds } from "../../utils/veraOpen.js";
 import { appRulesReady, loadAppRules, needsAppRules, APP_RULES_UNAVAILABLE } from "../../utils/appRules.js";
 import { alertWriteRefused } from "../../utils/limitedLaunchAccess.js";
 import ProfessionPicker from "./ProfessionPicker";
@@ -131,7 +131,9 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
   const [err, setErr] = useState(null);
   const [archives, setArchives] = useState(() => {
     const { fresh, stored } = openRef.current;
-    return fresh && stored.length ? [archiveEntry(stored), ...openedArchivesRef.current] : openedArchivesRef.current;
+    if (!(fresh && stored.length)) return openedArchivesRef.current;
+    openRef.current.entry = archiveEntry(stored);
+    return [openRef.current.entry, ...openedArchivesRef.current];
   });
   // The transcript and archives above come from what this tab read when the
   // account loaded. IndexedDB tells no other tab about a write, so another
@@ -191,6 +193,14 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
     Promise.all([reread(BASE_KEYS.chat), reread(BASE_KEYS.archives)]).then(([chatText, archivesText]) => {
       if (!live) return;
       const unchanged = { ...opened };
+      // Archives first: a conversation another tab already filed is not
+      // filed again here (the entry made at mount is dropped).
+      let rereadArchived = null;
+      if (archivesText !== undefined) rereadArchived = archivedIds(list(archivesText));
+      const mountEntry = openRef.current.entry;
+      if (mountEntry && rereadArchived && mountEntry.msgs.length && mountEntry.msgs.every(m => rereadArchived.has(m.id))) {
+        setArchives(current => current.filter(a => a.id !== mountEntry.id));
+      }
       // What was read replaces what the screen opened with; anything this
       // session changed meanwhile is merged with it by id.
       if (chatText !== undefined) {
@@ -226,7 +236,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       if (msgs.length) markVeraActive();
     }
     const go = pendingNavRef.current;
-    if (go) { pendingNavRef.current = null; markVeraReturn(); navigate(...go); return; }
+    if (go) { pendingNavRef.current = null; navigate(...go); return; }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs, navigate, storesRead]);
   useEffect(() => () => { try { recRef.current?.stop(); } catch { /* stopped */ } }, []);

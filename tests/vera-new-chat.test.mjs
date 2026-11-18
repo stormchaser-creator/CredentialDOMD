@@ -33,8 +33,8 @@ test('an empty chat files nothing', async () => {
   assert.deepEqual(plain(ui.store.archives), []);
 });
 
-test('a kept visit (back from her record, or the app reopening on her) keeps the conversation', async () => {
-  for (const visitKind of ['return', 'reload']) {
+test('the app reopening on Vera mid-task keeps the conversation', async () => {
+  for (const visitKind of ['reload']) {
     const ui = await mountVera({ saved: OLD.map(m => ({ ...m })), visitKind });
     await settle(); ui.render();
     assert.equal(onScreen(ui, 'Synthetic old answer'), true, visitKind);
@@ -43,7 +43,7 @@ test('a kept visit (back from her record, or the app reopening on her) keeps the
 });
 
 test('a question handed to Vera on a kept visit still starts a new chat and never carries the old one', async () => {
-  const ui = await mountVera({ saved: OLD.map(m => ({ ...m })), visitKind: 'return', props: { initialQuestion: 'Synthetic handed-in question' } });
+  const ui = await mountVera({ saved: OLD.map(m => ({ ...m })), visitKind: 'reload', props: { initialQuestion: 'Synthetic handed-in question' } });
   await settle(); ui.render(); await settle(); ui.render();
   assert.ok(ui.turns.length >= 1, 'the handed-in question was sent');
   const history = ui.turns[0].history.map(h => h.text || '');

@@ -25,37 +25,28 @@ const bundle = async (entry, stubs = {}) => {
   return mod.exports;
 };
 const AI_STUB = 'export const geminiCall=()=>{};export const proxyErrorMessage=()=>null;export const anthropicAvailable=()=>false;export const anthropicClientFor=async()=>null;export const anthropicErrorMessage=()=>null;export const anthropicSdk=()=>null;export const AI_MESSAGES={};';
-import { veraArrival, markVeraReturn, markVeraActive, decideVisit, archiveTitle, unfiled, archivedIds, RETURN_WINDOW_MS, ACTIVE_WINDOW_MS } from '../src/utils/veraOpen.js';
+import { veraArrival, markVeraActive, decideVisit, archiveTitle, unfiled, archivedIds, ACTIVE_WINDOW_MS } from '../src/utils/veraOpen.js';
 
 const store = () => { const m = new Map(); return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k) }; };
 
-test('a visit to Vera is a new chat unless she just opened a record or the app reopened on her mid-task', () => {
+test('every visit to Vera is a new chat unless the app reopened on her mid-task', () => {
   const s = store();
   const go = (toVera, fromVera, first = false, now = 1000) => veraArrival({ toVera, fromVera, first }, now, s);
   assert.equal(go(true, false), 'open', 'from the menu');
-  // Vera opens a record, the physician comes straight back.
-  markVeraReturn(1000, s);
-  assert.equal(go(false, true), null, 'to the record');
-  assert.equal(go(true, false, false, 1000 + RETURN_WINDOW_MS - 1), 'return');
-  // Vera opens a record, then Home, then Vera from the menu: a new chat.
-  markVeraReturn(1000, s);
-  go(false, true); go(false, false);
-  assert.equal(go(true, false), 'open', 'a screen in between ends the return');
-  // Too late.
-  markVeraReturn(1000, s); go(false, true);
-  assert.equal(go(true, false, false, 1000 + RETURN_WINDOW_MS + 1), 'open');
-  // The page reopened on Vera: kept only when she was in use lately.
+  assert.equal(go(false, true), null, 'leaving Vera');
+  assert.equal(go(true, false), 'open', 'back from a record she opened: still a new chat');
   markVeraActive(1000, s);
-  assert.equal(go(true, false, true, 1000 + 60000), 'reload');
-  assert.equal(go(true, false, true, 1000 + ACTIVE_WINDOW_MS + 1), 'open');
+  assert.equal(go(true, false, false, 1000 + 1), 'open', 'in use a moment ago, but reached from another screen: new chat');
+  assert.equal(go(true, false, true, 1000 + 60000), 'reload', 'the page reopened on Vera mid-task');
+  assert.equal(go(true, false, true, 1000 + ACTIVE_WINDOW_MS + 1), 'open', 'reopened on her much later');
   assert.equal(go(true, true), null, 'still on Vera is not a new visit');
-  assert.equal(veraArrival({ toVera: true, fromVera: false, first: false }, 1, { getItem() { throw new Error('blocked'); } }), 'open', 'no storage: new chat');
+  assert.equal(veraArrival({ toVera: true, fromVera: false, first: true }, 1, { getItem() { throw new Error('blocked'); } }), 'open', 'no storage: new chat');
 });
 
 test('a visit is decided once: a re-mount keeps, a handed-in question is always fresh', () => {
   assert.equal(decideVisit('v1', 'open'), true);
   assert.equal(decideVisit('v1', 'open'), false, 're-mount in the same visit keeps the chat');
-  assert.equal(decideVisit('v2', 'return'), false);
+  assert.equal(decideVisit('v2', 'reload'), false);
   assert.equal(decideVisit('v3', 'reload', { seeded: true }), true, 'a question handed in starts fresh');
 });
 
@@ -70,14 +61,6 @@ test('the old conversation is filed once, titled by its first question', () => {
   assert.deepEqual(unfiled([{ id: 'd' }, { id: 'e' }], filed, ['d']).map(m => m.id), ['e'], 'never the chat on screen');
   assert.deepEqual([...archivedIds([{ msgs: [{ id: 'x' }, { id: 'y' }] }, { msgs: null }])], ['x', 'y']);
 });
-
-test('Vera wiring: new chat on open, seed never sees the old chat, return mark set before her navigation', () => {
-  const src = readFileSync(new URL('../src/components/features/AssistantSection.jsx', import.meta.url), 'utf8');
-  assert.match(src, /useState\(\(\) => \(openRef\.current\.fresh \? \[\] : openRef\.current\.stored\)\)/);
-  assert.match(src, /markVeraReturn\(\); navigate\(\.\.\.go\)/);
-  assert.match(src, /fresh && stored\.length \? \[archiveEntry\(stored\)/);
-});
-
 
 test('snapshot carries an EIN from Travel & IDs, never a passport or licence number', async () => {
   const { buildSnapshot, travelNumberShared } = await bundle('src/utils/assistant.js', { 'aiClient$': AI_STUB, 'veraSourcesClient\\.js$': 'export const loadVeraSources=async()=>({});export const sourceCheckReceipt=()=>null;' });
