@@ -23,6 +23,8 @@ import FollowUpHistory from "../shared/FollowUpHistory";
 import { attachExistingDoc } from "../../utils/docPrefill";
 import RuleProvenance from "../shared/RuleProvenance";
 import TopicProvenance from "../shared/TopicProvenance";
+import SessionTopicSuggestions, { PendingSessionTopics } from "../shared/SessionTopicSuggestions";
+import { cmeSessionsOf } from "../../utils/topicSuggest";
 import DeskTable from "../shared/DeskTable";
 import { PlusIcon, SendIcon, EditIcon, TrashIcon, FileIcon, StarIcon } from "../shared/Icons";
 import { getCmeTopics } from "../../constants/cmeTopics";
@@ -857,6 +859,14 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
         <Field label="Provider / Institution"><input value={form.provider || ""} onChange={e => setForm(f => ({ ...f, provider: e.target.value }))} style={iS} placeholder="e.g. AMA, hospital name" /></Field>
         <Field label="Certificate #"><input value={form.certificateNumber || ""} onChange={e => setForm(f => ({ ...f, certificateNumber: e.target.value }))} style={iS} /></Field>
 
+        {/* A transcript's sessions (scanned, emailed or attached): each topic
+            a session title names, accepted or rejected here. */}
+        <SessionTopicSuggestions
+          sessions={cmeSessionsOf(form)}
+          topics={form.topics}
+          onToggle={toggleTopic}
+          onAcceptAll={ts => setForm(f => ({ ...f, topics: [...new Set([...(f.topics || []), ...ts])] }))}
+        />
         <Field label="Topics Covered" hint={`Tag the topics this ${ce} covers. This determines state compliance.`}>
           {requiredTopics.length > 0 && (
             <div style={{ marginBottom: 6 }}>
@@ -1094,6 +1104,9 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
                       </>
                     );
                   })()}
+                  {/* Topics its sessions name that are not on it yet (an
+                      emailed transcript is filed without review). */}
+                  <PendingSessionTopics record={item} topics={topicsOf(item)} onReview={() => openEdit(item)} />
                   {topicsOf(item).length > 0 && (
                     <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 6 }}>
                       {topicsOf(item).map(t => (

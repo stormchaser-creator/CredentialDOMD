@@ -1,6 +1,7 @@
 import { useState, useMemo, memo } from "react";
 import { cardActionSize, TAP_MIN } from "../shared/actionButton";
 import OtherDocumentReview from "./OtherDocumentReview";
+import SessionTopicSuggestions from "../shared/SessionTopicSuggestions";
 import { identifierReason } from "../../utils/customCategories";
 import { useApp } from "../../context/AppContext";
 import { useInputStyle } from "../shared/useInputStyle";
@@ -134,6 +135,12 @@ function remapEdited(prevDocType, nextDocType, prev) {
     extras[k] = text;
   };
   for (const f of Array.isArray(prev.facts) ? prev.facts : []) if (f?.label && f.value != null) put(String(f.label), f.value);
+  // A transcript's sessions are CME-only: kept by title as one detail.
+  if (Array.isArray(prev.sessions) && nextDocType === "cme") { next.sessions = prev.sessions; used.add("sessions"); }
+  else if (Array.isArray(prev.sessions)) {
+    put("Sessions", prev.sessions.map(s => (s && typeof s === "object" ? s.title : s)).filter(Boolean).join("; "));
+    used.add("sessions");
+  }
   for (const [k, v] of Object.entries(prev)) {
     if (used.has(k) || k === "facts" || k === "customFields" || k === "suggestedCategory") continue;
     if (v == null || v === "" || typeof v === "object" && !Array.isArray(v)) continue;
@@ -356,6 +363,17 @@ function ScanReviewCard({ result, imageData, fileName, onSave, onDiscard, onDele
                 )}
               </div>
             ))}
+            {docType === "cme" && Array.isArray(edited.sessions) && edited.sessions.length > 0 && (
+              <SessionTopicSuggestions
+                sessions={edited.sessions}
+                topics={edited.topics}
+                onToggle={t => setEdited(p => {
+                  const cur = p.topics || [];
+                  return { ...p, topics: cur.includes(t) ? cur.filter(x => x !== t) : [...cur, t] };
+                })}
+                onAcceptAll={ts => setEdited(p => ({ ...p, topics: [...new Set([...(p.topics || []), ...ts])] }))}
+              />
+            )}
             {docType === "cme" && (
               <div>
                 <div style={{ fontSize: 12, fontWeight: 700, color: T.textDim, textTransform: "uppercase", marginBottom: 6 }}>
