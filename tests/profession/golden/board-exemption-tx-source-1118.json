@@ -1,0 +1,155 @@
+{
+  "reason": "TX rule source names every source the board certification exemption relies on (2026-11-18). source was \"Tex. Admin. Code tit. 22, § 161.35\" and is now \"Tex. Admin. Code tit. 22, § 161.35; board certification presumption: Tex. Occ. Code § 156.052; what it covers: TMB Physician CME Hours Requirement chart (tmb.texas.gov/file/physician-cme-hours-requirement-chart)\". Tex. Occ. Code § 156.052 (tcss.legis.texas.gov/resources/OC/htm/OC.156.htm): \"A license holder is presumed to be in compliance with the requirements of this subchapter if, during the 36 months preceding the date of the required registration, the license holder becomes board certified or recertified by a specialty board approved by the American Board of Medical Specialties or the American Osteopathic Association Bureau of Osteopathic Specialists.\" TMB Physician CME Hours Requirement chart (tmb.texas.gov/file/physician-cme-hours-requirement-chart), Alternate compliance, Board Certification/Re-certification and MOC rows: \"DOES cover the ethics\", \"DOES NOT cover the Human trafficking prevention\", \"MIGHT cover the opioid requirement - depending on specialty bd\". 22 TAC § 161.35 stays first: it is the CME rule itself, but it does not state what the presumption covers, which the moc text (covers ethics, not human trafficking, opioid depends on specialty board) says. Checked mechanically: replacing the new source string with the old one in every changed case's output gives back the prior hash for all 42 cases (TX MD and DO rule entries, engine cases, evidence packs, and the list, viewer, snapshot and complianceFor cases that carry the source). No hours, cycle, topic, met flag or other field moved. The 12 cases already reviewed in qa-reference-urls.json and cme-audit-first-cycle-mate.json had their reviewedHash updated there, with a note in their reason.",
+  "entries": [
+    {
+      "key": "rules:getStateReq:TX:MD",
+      "originalHash": "d6db1484bc518c8b71191e27938ed985fc35cfaa0d846d876e70e971317c38ff",
+      "reviewedHash": "2b0730a3431acb7f9b18414e8d2a43dce243e9050b4ecd857b3640db5a48a522"
+    },
+    {
+      "key": "rules:getStateEntry:TX:MD",
+      "originalHash": "41166c8e39c5da86944b33d2144ced618809fab88f00a01c069ab73a2e77f13c",
+      "reviewedHash": "28a6ad11d709c8337b07a14078a66985f450f59905f27c062397919bf27a33eb"
+    },
+    {
+      "key": "engine:TX:MD:empty:rolling",
+      "originalHash": "c307ae72cee029dbaa288bb1d96721ad8f04d04b60e4c7b663f0ebea973d1366",
+      "reviewedHash": "e4174c8b4d432005e5719fada319d9ac2672d3375b4b337a5ac63697e5bf21a9"
+    },
+    {
+      "key": "engine:TX:MD:empty:anchored",
+      "originalHash": "74a8e7d55b7f5f02306ef66f3ce18e832515d5ed570937e9209fc3a9dcff453f",
+      "reviewedHash": "005201b7abd0bafac48538a94de45da5caa8863770de9f319cbdfe6670ac77b4"
+    },
+    {
+      "key": "engine:TX:MD:empty:custom",
+      "originalHash": "546eeab09149d2a3a1ca5097197a036586e4245236a9bde2dae21e715eee04ad",
+      "reviewedHash": "398a58321c8c390bf10438559fb80bf6c7ed351e9f5b7700cca0fe86543c5ac4"
+    },
+    {
+      "key": "engine:TX:MD:empty:badStart",
+      "originalHash": "919815d1b4c472f3adccca25ed5042a6b293206e1bd544f7a53940bfacfbab7c",
+      "reviewedHash": "26a22ee621ae72728003543cb03e4b39370cfd5d450b8294e211081683617dbe"
+    },
+    {
+      "key": "engine:TX:MD:mixed:rolling",
+      "originalHash": "c21867b41d2db31af722c866733965d06035522c08f21f04e357f2c606e7db83",
+      "reviewedHash": "dca4d5bafcc5f027260501eb47b7288494607e94111c35e053ad4b5f0ad7ef23"
+    },
+    {
+      "key": "engine:TX:MD:mixed:anchored",
+      "originalHash": "64fd43a6300470c6c6f8bc5c442cb8cac4af97420d4e32badce839f046d668d7",
+      "reviewedHash": "004514226ebc9768fa22d5fd91c04109bd2da0940486892b0831248ddfe1e0b2"
+    },
+    {
+      "key": "engine:TX:MD:mixed:custom",
+      "originalHash": "912646dfb9a57ea3b23e6644eb340474859881663bab8851df885fdc0c7a7840",
+      "reviewedHash": "03a5f0272115fa5cfff8e15bff64ee767e20cc555e6d17a85cc06f85abe82907"
+    },
+    {
+      "key": "engine:TX:MD:mixed:badStart",
+      "originalHash": "417fa495cb95827bce828d3cb1d45abce1ce942cad1f9c500aa9622c9238d0bc",
+      "reviewedHash": "031b6fd1288c11e6277c145a2edc83a8916277ad4edf9bcbaa6cf8e3f6e79716"
+    },
+    {
+      "key": "engine:TX:MD:boundary:rolling",
+      "originalHash": "f48929a7a2bbb6626b38fc0af4a3ac8cb89787932800cc6bafb5e64a66029d2c",
+      "reviewedHash": "33f1d078159a03c2e227ff7f0ab4c307a2dd673c97bba8076684bf136592813d"
+    },
+    {
+      "key": "engine:TX:MD:boundary:anchored",
+      "originalHash": "bdd4684403520f87c085287133c0d81824942e8dc672d366bc0044ef2cb32a2a",
+      "reviewedHash": "c789cbf3cc7c11c345f5f5b6326c6e12af0c2ae6b7d2fccd8502eeb8eb41a69b"
+    },
+    {
+      "key": "engine:TX:MD:boundary:custom",
+      "originalHash": "a3b71f5ea9e297a2602100efac2ecb8c515e819b58d9a329b010f1d6a4c1700f",
+      "reviewedHash": "6b323c8998ed470e591dd3a64f6982e039ccaa3c0f49cbc38843c9b69f4cbf66"
+    },
+    {
+      "key": "engine:TX:MD:boundary:badStart",
+      "originalHash": "bca350485dc429f340ae785d2d1e2500e11ffcd812300cd2e58028776f71774d",
+      "reviewedHash": "d3a7454e618bee2a40e7c4a98c7622fb5339bc1b3be98fb46473f3aa65e36008"
+    },
+    {
+      "key": "evidence:TX:MD",
+      "originalHash": "c3de304acd843c390dd8d6e2b745b996c3ce75c4b91ca416b3fa2fb7cf755ebc",
+      "reviewedHash": "ec07b3e88e357bd0e78fa05f2b52bd90f79407117343d49d8903f63ff84ef529"
+    },
+    {
+      "key": "rules:getStateReq:TX:DO",
+      "originalHash": "d6db1484bc518c8b71191e27938ed985fc35cfaa0d846d876e70e971317c38ff",
+      "reviewedHash": "2b0730a3431acb7f9b18414e8d2a43dce243e9050b4ecd857b3640db5a48a522"
+    },
+    {
+      "key": "rules:getStateEntry:TX:DO",
+      "originalHash": "41166c8e39c5da86944b33d2144ced618809fab88f00a01c069ab73a2e77f13c",
+      "reviewedHash": "28a6ad11d709c8337b07a14078a66985f450f59905f27c062397919bf27a33eb"
+    },
+    {
+      "key": "engine:TX:DO:empty:rolling",
+      "originalHash": "5fd1ecb4e6c7d4ca2ac3d97d2439b522e5bbde3191ce466ee98705282ca78575",
+      "reviewedHash": "62d6a1195e7b9c808ed073c27c6e778c6d5a71c2de8c4e3e5b3d0bd5454cc270"
+    },
+    {
+      "key": "engine:TX:DO:empty:anchored",
+      "originalHash": "ab1e467b4b8b6dc6538619009e955fdb35c63a38e572deddbe7c710e8324c46b",
+      "reviewedHash": "8ed941bbd63d0c2f1bb60b1517931428354ed73c2720c4c67433e201a4a53334"
+    },
+    {
+      "key": "engine:TX:DO:empty:custom",
+      "originalHash": "2fb2a77a57601e6b8a7418ea6a4eb53936448eb0b1391a347e615efdefb2fd49",
+      "reviewedHash": "8f418c44594508fbf942b9587f560c570f75ed759d49c090fcca14a827ace607"
+    },
+    {
+      "key": "engine:TX:DO:empty:badStart",
+      "originalHash": "5f9fcaafbae91083377320b845e904bb7e037dabf4fb3d6bf5379b1f265fe79c",
+      "reviewedHash": "2ee26dd23b3ecb20f0e0b2a85df8e2e3b3b41e142c419266e8194cf3e7697608"
+    },
+    {
+      "key": "engine:TX:DO:mixed:rolling",
+      "originalHash": "859ba5ec6d7d4e8de957566aa2c6a921f42169a40d3532723c338dc28d0e68f5",
+      "reviewedHash": "91986804ed780f3ebfdb24eec826333a70f4c3fc10cb7e4940bdab3c03b7630f"
+    },
+    {
+      "key": "engine:TX:DO:mixed:anchored",
+      "originalHash": "6680447b9755619caff178136ec4aa3555410f92ce934fe09ee792263ed0396f",
+      "reviewedHash": "a2292ff519c29c018328bcfc339339abd72b647728b9e83d822ee7e00fc5c0e8"
+    },
+    {
+      "key": "engine:TX:DO:mixed:custom",
+      "originalHash": "fa811ef8a9996885ebe7bcd42de785a031a5122bcb127b06c9c67ffe832214f0",
+      "reviewedHash": "ec648606965926b4742add47798114779d0b7fb882305fbbe365b1818452809c"
+    },
+    {
+      "key": "engine:TX:DO:mixed:badStart",
+      "originalHash": "6de367f9f872ab1d54e96bb464da077e25d870cc9082a06233102b83cb8efe45",
+      "reviewedHash": "af1a7a43e26a72c4560e5bc750e0917d35aed6061bf7651922b880fe3c7f9f55"
+    },
+    {
+      "key": "engine:TX:DO:boundary:rolling",
+      "originalHash": "87c834cdc5ca59109b1f1c4e15927baffbb64b10d4a88b97898aec0c2cb955da",
+      "reviewedHash": "c5f872f443f514595771de85df813bf9d71b656b929f63cb76f53df68e4a464f"
+    },
+    {
+      "key": "engine:TX:DO:boundary:anchored",
+      "originalHash": "a05946b15c78525fb460a54fe03d9a0957e642cf9daa932aa47daed178163343",
+      "reviewedHash": "2114823dfec3d14e5339870d2233ac1f71b77cf4aa391ed5b269b5a88d6472a0"
+    },
+    {
+      "key": "engine:TX:DO:boundary:custom",
+      "originalHash": "6e0bbe27627de781b5f41a3c339145c713571f541cbb3ff1bac0f84f4b903644",
+      "reviewedHash": "51a64bb74993f894d6443874b73eb51ac1606696b002b65e6999e1d8ccd370b9"
+    },
+    {
+      "key": "engine:TX:DO:boundary:badStart",
+      "originalHash": "9878b4e5573aae81eeead82adac65c4dc0725d0025a2a2f3b77ab11a5a826868",
+      "reviewedHash": "991b0317709370ff0d4b0cf4d8313d69ace0c120beb5f2e51554fd3e26c7540d"
+    },
+    {
+      "key": "evidence:TX:DO",
+      "originalHash": "8cd1a7eef0184f88338873822ac9faf631cdf5145a9903de0d975bb1e9a0ffeb",
+      "reviewedHash": "232d23ffa90c3a0234b1d169a72158bb0018acb555383ab8d580350314e92833"
+    }
+  ]
+}

@@ -693,6 +693,9 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
                 const hasBoardCert = (data.licenses || []).some(l => /board certification/i.test(l.type || ""));
                 const moc = (getStateEntry(st, deg)?.moc || "").trim();
                 if (!hasBoardCert || !moc || /^no$/i.test(moc)) return null;
+                // Split-board state before MD or DO is chosen: the MD stand-in
+                // rule may not be this physician's board (Maine DOs have none).
+                if (hasSeparateBoards(st) && deg !== "MD" && deg !== "DO") return null;
                 return <BoardExemption state={st} comp={comp} moc={moc} />;
               })()}
               <RuleProvenance

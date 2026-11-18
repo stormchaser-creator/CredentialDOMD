@@ -4496,7 +4496,7 @@
       "cmeHours": 48,
       "cmeDetails": "48 hours per 2-year cycle, including at least 24 Category 1, 2 hours ethics, 1 hour human trafficking, 2 hours opioid prescribing, 10 hours pain management, required topics: Life of the Mother Act.",
       "cmeSplit": false,
-      "cmeSource": "Tex. Admin. Code tit. 22, \u00a7 161.35",
+      "cmeSource": "Tex. Admin. Code tit. 22, \u00a7 161.35; board certification presumption: Tex. Occ. Code \u00a7 156.052; what it covers: TMB Physician CME Hours Requirement chart (tmb.texas.gov/file/physician-cme-hours-requirement-chart)",
       "cmeSourceUrl": "https://www.tmb.texas.gov/apply-renew/physician/continuing-education-requirements-for-physicians",
       "renewalFee": "$491.48 (biennial physician registration, as of 9/1/2025): Agency fee $370.00 + SB 104 fee $80.00 + Office of Patient Protection $2.00 + NPDB $21.00 + Texas Physician Health Program $7.00 + PMP $11.48. Paper renewal adds a $50 surcharge when online renewal is available; credit card payment adds a Texas.gov processing fee (electronic check does not).",
       "lateFee": "$75 penalty once the license is more than 30 days past expiration; increases to $150 after 90 days expired (board renewal page, corroborated by former 22 TAC 175.3)",
@@ -4543,7 +4543,7 @@
         },
         {
           "question": "Does board certification count toward my CME?",
-          "answer": "Yes, for one renewal. Board certification or recertification within 36 months before your renewal presumes CME compliance for that renewal, and current ABMS MOC or AOA OCC is also accepted. It covers the ethics hours but not human trafficking, and whether it covers the opioid hours depends on your specialty board (Tex. Admin. Code tit. 22, \u00a7 161.35). In CredentialDOMD, once a current board certification is on file and your state license has its expiration date, you can choose to use this exemption for one renewal."
+          "answer": "Yes, for one renewal. Board certification or recertification within 36 months before your renewal presumes CME compliance for that renewal, and current ABMS MOC or AOA OCC is also accepted. It covers the ethics hours but not human trafficking, and whether it covers the opioid hours depends on your specialty board (Tex. Occ. Code \u00a7 156.052 and the Texas Medical Board CME hours chart). In CredentialDOMD, once a current board certification is on file and your state license has its expiration date, you can choose to use this exemption for one renewal; the ethics hours then count as met and human trafficking still shows."
         }
       ],
       "sources": [
@@ -4961,7 +4961,7 @@
         },
         {
           "question": "Does board certification count toward my CME?",
-          "answer": "Yes. MDs: ABMS certification in the last 4 years, or participation in ABMS MOC, is accepted in place of the 200 hours (an AMA PRA award earned in 2 of the last 4 years also qualifies). DOs: ABOMS or ABMS certification or recertification within the last 6 years satisfies the 150 hours (so does a current AOA CME certificate or an AMA PRA award), and the state's required topics are still required (chapters 246-919 and 246-853 WAC). In CredentialDOMD, once a current board certification is on file and your state license has its expiration date, you can choose to use this exemption for one renewal."
+          "answer": "Yes. MDs: ABMS certification in the last 4 years, or participation in ABMS MOC, is accepted in place of the 200 hours (an AMA PRA award earned in 2 of the last 4 years also qualifies). DOs: ABOMS or ABMS certification or recertification within the last 6 years, or participation in ABOMS or ABMS MOC, satisfies the 150 hours (so does a current AOA CME certificate or an AMA PRA award), and the state's required topics are still required (chapters 246-919 and 246-853 WAC). In CredentialDOMD, once a current board certification is on file and your state license has its expiration date, you can choose to use this exemption for one renewal."
         }
       ],
       "sources": [

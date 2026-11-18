@@ -405,7 +405,7 @@ export function stateTranscriptModel(data, state, { certFiles = null, kind } = {
       (() => {
         const hasBoardCert = currentBoardCertificationOnFile(data.licenses);
         const moc = plain(req.moc || "").trim();
-        if (comp.boardExemption) return `Board certification exemption used (you chose it on ${formatDate(comp.boardExemption.usedOn)}): ${plain(comp.boardExemption.rule)}. The total and Category 1 hours are counted as met.`;
+        if (comp.boardExemption) return `Board certification exemption used (you chose it on ${formatDate(comp.boardExemption.usedOn)}): ${plain(comp.boardExemption.rule)}. The total and Category 1 hours are counted as met${(() => { const covered = (comp.topicResults || []).filter(t => t.metByBoardExemption).map(t => t.topic); return covered.length ? `, and so ${covered.length > 1 ? "are" : "is"} ${covered.join(" and ")}` : ""; })()}.`;
         return hasBoardCert && moc && !/^no$/i.test(moc)
           ? `You may be exempt from the ${stateName} CME requirement: ${moc}. This transcript does not apply the exemption; confirm with the board and claim it on your renewal if it applies to you.`
           : "";

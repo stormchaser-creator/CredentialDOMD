@@ -1,0 +1,20 @@
+{
+  "reason": "Board certification exemption by degree (2026-11-18). Only the WA DO rule text changed: its moc now also names MOC participation, which WAC 246-853-080(2)(b) lists: \"Meet the requirements for participation in maintenance of certification of a member board of the ABOMS or ABMS at the time of renewal\" (app.leg.wa.gov/wac/default.aspx?cite=246-853-080). moc was \"ABOMS or ABMS cert/recert within last 6 yrs, current AOA CME certificate, or AMA PRA satisfies 150 hrs; state mandates still required\" and is now \"ABOMS or ABMS cert/recert within last 6 yrs, ABOMS or ABMS MOC participation at renewal, current AOA CME certificate, or AMA PRA satisfies 150 hrs; state mandates still required\". The rule entry (getStateReq, getStateEntry) and the evidence pack that quotes it (evidence:WA:DO) carry that string; no hours, cycle, topic or compliance result moved.",
+  "entries": [
+    {
+      "key": "rules:getStateReq:WA:DO",
+      "originalHash": "df4991ae19960a8f178a7af1dd875da859571d2914fd929b5585547396f8fe01",
+      "reviewedHash": "9a0bf31c59644a6413c279fe1329e91b2cf329748760b19fe4800d4ce7c3e3b6"
+    },
+    {
+      "key": "rules:getStateEntry:WA:DO",
+      "originalHash": "0940fffd4953de1a2ff4ce1a08a9f2f9f81c083ef68792450bd2f99b43c08926",
+      "reviewedHash": "9aa712f3be8e08591df073303c77e2a30d22c58ac9479adfdbecb2d2cfff7f2d"
+    },
+    {
+      "key": "evidence:WA:DO",
+      "originalHash": "f859d306b9688bcf230173880da47a1ee3e4e00965f412a843bebb30ce095712",
+      "reviewedHash": "1bf2d383eab54a6697f20719a424f19a0fd521ce97718caa8f2e1a009e6ccb07"
+    }
+  ]
+}

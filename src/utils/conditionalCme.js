@@ -1,6 +1,7 @@
 import { isInactive, awaitsBoardDate } from "./lifecycle.js";
 import { readMark } from "./boardTasks.js";
 import { ABMS_MOC, ABMS_SUBSPECIALTIES, AOA_OCC, AOA_SUBSPECIALTIES, ABPS_CERTS } from "../constants/boardRequirements.js";
+import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements.js";
 
 // Applicability is a physician-supplied fact on the license, never inferred
 // from DEA registration, an employer name or an AI response. The one
@@ -47,36 +48,124 @@ export const BOARD_EXEMPTION_RENEWAL_FIELD = "Board certification exemption for 
 /** The day the physician confirmed the state's narrower condition (BOARD_EXEMPTION_CONDITIONS). */
 export const BOARD_EXEMPTION_CONDITION_FIELD = "Board certification exemption condition confirmed on";
 /**
+ * Where the condition differs by degree (WA), the degree whose wording was
+ * confirmed. A WA MD who confirms the ABMS four-year wording and then sets
+ * Settings to DO has not confirmed the DO wording, and the reverse.
+ */
+export const BOARD_EXEMPTION_CONDITION_DEGREE_FIELD = "Board certification exemption condition confirmed for";
+/**
  * States whose `moc` rule text is narrower than "board certified": the
  * statement the physician confirms before the exemption applies. Each one
  * restates that state's stateRequirements `moc` text and adds nothing to it
- * (tests/board-exemption-renewal.test.mjs checks the key words are still in
- * the rule text).
+ * (tests/cme-session-hours-board-exemption-1118.test.mjs checks the key words
+ * are still in the rule text). A state with separate MD and DO boards keys
+ * its condition by degree; a degree with no entry has no exemption there.
+ *
+ * ME, MD only. Board of Licensure in Medicine Rules ch. 1 s. 11(1)(A) (02-373,
+ * amended 2026): "Current certification, including maintenance of
+ * certification, by the American Board of Medical Specialties (ABMS) is
+ * deemed equivalent to the requirements in section A. Lifetime certification
+ * is not deemed equivalent." Maine DOs are licensed by the Board of
+ * Osteopathic Licensure: 32 M.R.S. s. 2581 and 02-383 ch. 14 s. 2(1) require
+ * "100 hours of continuing medical education during the two years preceding
+ * the renewal" with no certification substitute, so no DO offer.
+ *
+ * WA, by degree. MD: WAC 246-919-430(3) "Become certified by a member board
+ * of the American Board of Medical Specialties in the four years preceding
+ * the renewal due date"; (4) "Meet the requirements for participation in
+ * maintenance of certification of a member board of the American Board of
+ * Medical Specialties at the time of renewal." DO: WAC 246-853-080(2)(a)
+ * "Certify or recertify with the American Board of Osteopathic Medical
+ * Specialties (ABOMS) or the American Board of Medical Specialties (ABMS)
+ * within the last six years"; (b) "Meet the requirements for participation
+ * in maintenance of certification of a member board of the ABOMS or ABMS at
+ * the time of renewal"; (3) state mandates still required.
  */
 export const BOARD_EXEMPTION_CONDITIONS = Object.freeze({
   LA: "I was certified or recertified by an ABMS member board or AOA-recognized specialty board within the past year.",
   TX: "I was board certified or recertified within 36 months before this renewal, or I hold current ABMS MOC or AOA OCC. This presumes compliance for one renewal only.",
   KY: "I passed an ABMS or AOA board certification or recertification exam in this CME cycle.",
   NH: "I passed an ABMS board exam.",
-  ME: "My ABMS certification is current with MOC. A lifetime certificate does not qualify.",
+  ME: Object.freeze({ MD: "My ABMS certification is current with MOC. A lifetime certificate does not qualify." }),
+  WA: Object.freeze({
+    MD: "I was certified by an ABMS member board in the four years before this renewal is due, or I meet my ABMS board's MOC participation requirements now.",
+    DO: "I certified or recertified with ABOMS or ABMS within the last six years, or I meet my ABOMS or ABMS board's MOC participation requirements now.",
+  }),
 });
-const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+
 /**
- * The day the physician chose the exemption, or null. Only for the renewal it
+ * Topics the state's rule says board certification also covers, with the
+ * note the topic row shows. Only from the state's own text.
+ *
+ * TX: Tex. Occ. Code s. 156.052 ("presumed to be in compliance with the
+ * requirements of this subchapter if, during the 36 months preceding the date
+ * of the required registration, the license holder becomes board certified
+ * or recertified") and the TMB Physician CME Hours Requirement chart
+ * (tmb.texas.gov/file/physician-cme-hours-requirement-chart), Alternate
+ * compliance, Board Certification/Re-certification and MOC rows: "DOES cover
+ * the ethics", "DOES NOT cover the Human trafficking prevention", "MIGHT
+ * cover the opioid requirement - depending on specialty bd". Only ethics is
+ * marked met; human trafficking, opioid and the rest still show.
+ */
+export const BOARD_EXEMPTION_COVERS = Object.freeze({
+  TX: Object.freeze({
+    topics: Object.freeze(["Ethics"]),
+    note: "Met by your board certification exemption: the TMB Physician CME Hours Requirement chart says board certification, recertification or MOC covers the ethics requirement. The 36 month presumption itself is Tex. Occ. Code 156.052.",
+  }),
+});
+
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+const isRealMoc = (moc) => {
+  const t = String(moc || "").trim();
+  return !!t && !/^no$/i.test(t);
+};
+
+/**
+ * True when the exemption can be offered for this state and degree: the
+ * state is listed, the rule set for this degree names a board certification
+ * substitute, and, where MD and DO have separate boards, the degree is known
+ * (the MD stand-in numbers are not the DO board's rule).
+ */
+const physicianDegree = (d) => (d === "MD" || d === "DO" ? d : null);
+export function boardExemptionOffered(state, degree = null) {
+  if (!BOARD_EXEMPTION_STATES.includes(state)) return false;
+  // A PA or NP renews under a different rule set; only MD and DO, or a
+  // physician who has not chosen yet in a combined-board state.
+  if (degree && !physicianDegree(degree)) return false;
+  const deg = physicianDegree(degree);
+  if (hasSeparateBoards(state) && !deg) return false;
+  const cond = BOARD_EXEMPTION_CONDITIONS[state];
+  if (cond && typeof cond === "object" && !cond[deg]) return false;
+  return isRealMoc(getStateEntry(state, deg)?.moc);
+}
+
+/** The condition the physician confirms for this state and degree, or null. */
+export function boardExemptionCondition(state, degree = null) {
+  const cond = BOARD_EXEMPTION_CONDITIONS[state];
+  if (!cond) return null;
+  if (typeof cond === "string") return cond;
+  return cond[physicianDegree(degree)] || null;
+}
+
+/**
+ * The day the physician chose the exemption, or null. Only where it is
+ * offered for this degree (boardExemptionOffered), only for the renewal it
  * was chosen for (licenseExpiration must equal the stored expiration), and
  * for a state with a narrower condition only once that condition is
  * confirmed. A choice stored without the renewal it was made for (before
  * 2026-11-18 evening) lapses and is offered again.
  */
-export function boardExemptionOn(state, answers = {}, licenseExpiration = null) {
-  if (!BOARD_EXEMPTION_STATES.includes(state)) return null;
+export function boardExemptionOn(state, answers = {}, licenseExpiration = null, degree = null) {
+  if (!boardExemptionOffered(state, degree)) return null;
   const v = answers?.[BOARD_EXEMPTION_FIELD];
   if (typeof v !== "string" || !ISO_DAY.test(v)) return null;
   const forRenewal = answers?.[BOARD_EXEMPTION_RENEWAL_FIELD];
   if (!licenseExpiration || typeof forRenewal !== "string" || forRenewal !== String(licenseExpiration)) return null;
-  if (BOARD_EXEMPTION_CONDITIONS[state]) {
+  if (boardExemptionCondition(state, degree)) {
     const c = answers?.[BOARD_EXEMPTION_CONDITION_FIELD];
     if (typeof c !== "string" || !ISO_DAY.test(c)) return null;
+    // A condition worded by degree counts only for the degree confirmed.
+    if (typeof BOARD_EXEMPTION_CONDITIONS[state] === "object" && answers?.[BOARD_EXEMPTION_CONDITION_DEGREE_FIELD] !== physicianDegree(degree)) return null;
   }
   return v;
 }
@@ -105,16 +194,25 @@ export function currentBoardCertificationOnFile(licenses, today = null) {
   });
 }
 
-/** The customFields a choice writes (value: the day chosen) or clears (null). */
-export function boardExemptionFields(customFields, state, value, licenseExpiration, conditionConfirmedOn = null) {
+/**
+ * The customFields a choice writes (value: the day chosen) or clears (null).
+ * degree: the physician's degree when the condition was confirmed, stored
+ * for a state whose condition is worded by degree.
+ */
+export function boardExemptionFields(customFields, state, value, licenseExpiration, conditionConfirmedOn = null, degree = null) {
   const out = { ...(customFields || {}) };
   delete out[BOARD_EXEMPTION_FIELD];
   delete out[BOARD_EXEMPTION_RENEWAL_FIELD];
   delete out[BOARD_EXEMPTION_CONDITION_FIELD];
+  delete out[BOARD_EXEMPTION_CONDITION_DEGREE_FIELD];
   if (!value) return out;
   out[BOARD_EXEMPTION_FIELD] = value;
   if (licenseExpiration) out[BOARD_EXEMPTION_RENEWAL_FIELD] = String(licenseExpiration);
-  if (BOARD_EXEMPTION_CONDITIONS[state] && conditionConfirmedOn) out[BOARD_EXEMPTION_CONDITION_FIELD] = conditionConfirmedOn;
+  if (BOARD_EXEMPTION_CONDITIONS[state] && conditionConfirmedOn) {
+    out[BOARD_EXEMPTION_CONDITION_FIELD] = conditionConfirmedOn;
+    const deg = physicianDegree(degree);
+    if (typeof BOARD_EXEMPTION_CONDITIONS[state] === "object" && deg) out[BOARD_EXEMPTION_CONDITION_DEGREE_FIELD] = deg;
+  }
   return out;
 }
 
