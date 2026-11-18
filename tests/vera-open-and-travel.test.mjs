@@ -25,23 +25,38 @@ const bundle = async (entry, stubs = {}) => {
   return mod.exports;
 };
 const AI_STUB = 'export const geminiCall=()=>{};export const proxyErrorMessage=()=>null;export const anthropicAvailable=()=>false;export const anthropicClientFor=async()=>null;export const anthropicErrorMessage=()=>null;export const anthropicSdk=()=>null;export const AI_MESSAGES={};';
-import { opensFresh, markVeraReturn, clearVeraReturn, archiveTitle, unfiled, RETURN_WINDOW_MS } from '../src/utils/veraOpen.js';
+import { veraArrival, markVeraReturn, markVeraActive, decideVisit, archiveTitle, unfiled, archivedIds, RETURN_WINDOW_MS, ACTIVE_WINDOW_MS } from '../src/utils/veraOpen.js';
 
 const store = () => { const m = new Map(); return { getItem: k => (m.has(k) ? m.get(k) : null), setItem: (k, v) => m.set(k, String(v)), removeItem: k => m.delete(k) }; };
 
-test('every open is a new chat unless Vera just opened a record', () => {
+test('a visit to Vera is a new chat unless she just opened a record or the app reopened on her mid-task', () => {
   const s = store();
-  assert.equal(opensFresh(1000, s), true);
+  const go = (toVera, fromVera, first = false, now = 1000) => veraArrival({ toVera, fromVera, first }, now, s);
+  assert.equal(go(true, false), 'open', 'from the menu');
+  // Vera opens a record, the physician comes straight back.
   markVeraReturn(1000, s);
-  assert.equal(opensFresh(1000 + RETURN_WINDOW_MS - 1, s), false, 'back from her own record: keep the chat');
-  assert.equal(opensFresh(1000 + RETURN_WINDOW_MS + 1, s), true, 'too late: new chat');
-  clearVeraReturn(s);
-  assert.equal(opensFresh(1001, s), true, 'the mark is used once');
-  assert.equal(opensFresh(1, { getItem() { throw new Error('blocked'); } }), true, 'no storage: new chat');
-  const t = store(); t.setItem('credentialdomd-vera-active', '1000');
-  assert.equal(opensFresh(1000 + 60000, t, true), false, 'app reopened on Vera mid-use: keep');
-  assert.equal(opensFresh(1000 + 60000, t, false), true, 'opened from inside the app: new chat');
-  assert.equal(opensFresh(1000 + 11 * 60000, t, true), true, 'idle over 10 minutes: new chat');
+  assert.equal(go(false, true), null, 'to the record');
+  assert.equal(go(true, false, false, 1000 + RETURN_WINDOW_MS - 1), 'return');
+  // Vera opens a record, then Home, then Vera from the menu: a new chat.
+  markVeraReturn(1000, s);
+  go(false, true); go(false, false);
+  assert.equal(go(true, false), 'open', 'a screen in between ends the return');
+  // Too late.
+  markVeraReturn(1000, s); go(false, true);
+  assert.equal(go(true, false, false, 1000 + RETURN_WINDOW_MS + 1), 'open');
+  // The page reopened on Vera: kept only when she was in use lately.
+  markVeraActive(1000, s);
+  assert.equal(go(true, false, true, 1000 + 60000), 'reload');
+  assert.equal(go(true, false, true, 1000 + ACTIVE_WINDOW_MS + 1), 'open');
+  assert.equal(go(true, true), null, 'still on Vera is not a new visit');
+  assert.equal(veraArrival({ toVera: true, fromVera: false, first: false }, 1, { getItem() { throw new Error('blocked'); } }), 'open', 'no storage: new chat');
+});
+
+test('a visit is decided once: a re-mount keeps, a handed-in question is always fresh', () => {
+  assert.equal(decideVisit('v1', 'open'), true);
+  assert.equal(decideVisit('v1', 'open'), false, 're-mount in the same visit keeps the chat');
+  assert.equal(decideVisit('v2', 'return'), false);
+  assert.equal(decideVisit('v3', 'reload', { seeded: true }), true, 'a question handed in starts fresh');
 });
 
 test('the old conversation is filed once, titled by its first question', () => {
@@ -52,6 +67,8 @@ test('the old conversation is filed once, titled by its first question', () => {
   assert.deepEqual(unfiled(old, filed), []);
   assert.deepEqual(unfiled([...old, { id: 'c', role: 'user', text: 'from another tab' }], filed).map(m => m.id), ['c']);
   assert.deepEqual(unfiled([{ id: 'c' }], filed), [], 'never twice');
+  assert.deepEqual(unfiled([{ id: 'd' }, { id: 'e' }], filed, ['d']).map(m => m.id), ['e'], 'never the chat on screen');
+  assert.deepEqual([...archivedIds([{ msgs: [{ id: 'x' }, { id: 'y' }] }, { msgs: null }])], ['x', 'y']);
 });
 
 test('Vera wiring: new chat on open, seed never sees the old chat, return mark set before her navigation', () => {
@@ -63,7 +80,7 @@ test('Vera wiring: new chat on open, seed never sees the old chat, return mark s
 
 
 test('snapshot carries an EIN from Travel & IDs, never a passport or licence number', async () => {
-  const { buildSnapshot, isGovernmentId } = await bundle('src/utils/assistant.js', { 'aiClient$': AI_STUB, 'veraSourcesClient\\.js$': 'export const loadVeraSources=async()=>({});export const sourceCheckReceipt=()=>null;' });
+  const { buildSnapshot, travelNumberShared } = await bundle('src/utils/assistant.js', { 'aiClient$': AI_STUB, 'veraSourcesClient\\.js$': 'export const loadVeraSources=async()=>({});export const sourceCheckReceipt=()=>null;' });
   const data = { settings: { name: 'Synthetic', degreeType: 'MD' }, travelDocs: [
     { id: 't1', type: 'Business', name: 'EIN', number: '00-0000000', notes: 'secret note' },
     { id: 't2', type: 'Passport', name: 'US Passport', number: 'X0000000' },
@@ -77,6 +94,13 @@ test('snapshot carries an EIN from Travel & IDs, never a passport or licence num
   assert.equal(by.t2.number, undefined); assert.equal(by.t2.numberOnFile, true);
   assert.equal(by.t3.number, undefined); assert.equal(by.t3.numberOnFile, true);
   assert.ok(!JSON.stringify(snap.travelDocs).includes('secret note'));
-  assert.equal(isGovernmentId({ type: 'Known Traveler (TSA PreCheck)' }), true);
-  assert.equal(isGovernmentId({ type: 'Business', name: 'EIN' }), false);
+  for (const held of [{ type: 'Known Traveler (TSA PreCheck)' }, { type: 'Other', name: 'KTN' }, { type: 'Other', name: 'CA DL notarized copy' },
+    { type: 'Other', name: 'Green card' }, { type: 'Other', name: 'Military ID' }, { type: 'Other', name: 'ITIN' }, { type: 'Other', name: 'Medicare card' },
+    { type: 'Other', name: 'Redress number' }, { type: 'Other', name: 'Some number' }, { type: null, name: null }, { type: 'Business', name: 'TIN' }]) {
+    assert.equal(travelNumberShared(held), false, JSON.stringify(held));
+  }
+  for (const shared of [{ type: 'Business', name: 'EIN' }, { type: 'Other', name: 'Practice EIN' }, { type: 'Other', name: 'Employer Identification Number' },
+    { type: 'Hotel loyalty' }, { type: 'Airline credit' }, { type: 'Rental car membership' }]) {
+    assert.equal(travelNumberShared(shared), true, JSON.stringify(shared));
+  }
 });

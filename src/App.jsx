@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo, useEffect, useLayoutEffect, useRef } from "react";
+import { veraArrival } from "./utils/veraOpen.js";
 import { AppProvider, useApp, useNotifications } from "./context/AppContext";
 import {
   HomeIcon, ScanIcon, CredsIcon, MoreIcon,
@@ -166,12 +167,8 @@ const openingScreen = () => (pageScreen ??= LINK_SCREENS[openedOnLink()]
   ? { tab: "more", subPage: LINK_SCREENS[openedOnLink()] }
   : (!openedOnLink() && lastScreen()) || { tab: "home", subPage: null });
 
-// True while Vera is the screen this page reopened on (iOS bringing the app
-// back, lastScreen above): she keeps the conversation in use then. Any move
-// away ends it for this page, so opening Vera from a menu always starts a new
-// chat (veraOpen.js).
-let veraReopenedOnLoad = null;
-const veraWasReopened = () => (veraReopenedOnLoad ??= openingScreen().subPage === "assistant");
+// The current Vera visit for this page (see the screen-change block in App).
+const veraVisit = { screen: null, id: 0, kind: "open", onVera: false };
 
 export default function App() {
   // Reaching this render means the root app chunk loaded and mounted, so the
@@ -184,7 +181,20 @@ export default function App() {
   }, []);
   const [tab, setTab] = useState(() => openingScreen().tab);
   const [subPage, setSubPage] = useState(() => openingScreen().subPage);
-  if (subPage !== "assistant") veraReopenedOnLoad = false;
+  // Each arrival at Vera is a visit; veraOpen.js decides whether it opens on
+  // a new chat (the owner's rule) or keeps the conversation it came back to
+  // (her own record card, or iOS reopening the app on her mid-task). Worked
+  // out as the screen changes, never per mount, so a re-mount keeps the chat.
+  {
+    const screen = `${tab}|${subPage || ""}`;
+    const v = veraVisit;
+    if (v.screen !== screen) {
+      const toVera = subPage === "assistant";
+      const kind = veraArrival({ toVera, fromVera: v.onVera, first: v.screen === null });
+      if (kind) { v.id += 1; v.kind = kind; }
+      v.screen = screen; v.onVera = toVera;
+    }
+  }
   useEffect(() => {
     try { globalThis.sessionStorage?.setItem(LAST_SCREEN_KEY, JSON.stringify({ tab, subPage: typeof subPage === "string" ? subPage : null, at: Date.now() })); }
     catch { /* storage unavailable: the next load opens on Home */ }
@@ -2960,7 +2970,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
     if (subPage === "requests") return <RequestsInbox onAskVera={askVera} initialOpenId={requestsOpenId} onOpened={onRequestOpened} />;
     if (subPage === "assistant") return offlineMode
       ? <OfflineUnavailable T={T} feature="Vera" detail="Vera answers through the cloud AI service." onBack={() => setSubPage(null)} />
-      : <AssistantSection onFileTicket={() => setShowSupport(true)} initialQuestion={veraSeed} onSeedConsumed={() => setVeraSeed(null)} requestContext={veraRequest} onClearRequest={() => setVeraRequest(null)} reopenedOnLoad={veraWasReopened()} />;
+      : <AssistantSection onFileTicket={() => setShowSupport(true)} initialQuestion={veraSeed} onSeedConsumed={() => setVeraSeed(null)} requestContext={veraRequest} onClearRequest={() => setVeraRequest(null)} visitId={veraVisit.id} visitKind={veraVisit.kind} />;
     if (subPage === "faq") return <FAQSection />;
     if (subPage === "privacy") return <LegalSection page="privacy" />;
     if (subPage === "terms") return <LegalSection page="terms" />;

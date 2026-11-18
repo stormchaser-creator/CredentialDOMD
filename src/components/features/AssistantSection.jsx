@@ -27,7 +27,7 @@ import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
 import { isIdentityLink } from "../../utils/pausedApplicationRecords.js";
 import { shareAtHandoff, shareNotStartedMessage } from "../../utils/shareHandoff.js";
 import { isKnownDegree } from "../../constants/professions.js";
-import { opensFresh, clearVeraReturn, markVeraReturn, markVeraActive, archiveTitle, unfiled } from "../../utils/veraOpen.js";
+import { decideVisit, markVeraReturn, markVeraActive, archiveTitle, unfiled, archivedIds } from "../../utils/veraOpen.js";
 import { appRulesReady, loadAppRules, needsAppRules, APP_RULES_UNAVAILABLE } from "../../utils/appRules.js";
 import { alertWriteRefused } from "../../utils/limitedLaunchAccess.js";
 import ProfessionPicker from "./ProfessionPicker";
@@ -67,6 +67,10 @@ function openedTranscript(saved) {
 // takes; only a download that has stalled ends.
 const PACKET_DOWNLOAD_STALL_MS = 45000;
 
+// The stored transcript: the last 60 messages. sourceAttach can hold a
+// multi-MB file, so it is never persisted (quota).
+const slimChat = (msgs) => msgs.slice(-60).map(m => { const c = { ...m }; delete c.sourceAttach; return c; });
+
 // Keep words and reference selection IDs; never persist generated contact text.
 const slimForArchive = (msgs) =>
   msgs.map(m => ({ id: m.id, role: m.role, text: m.text || "", attachName: m.attachName || undefined, actions: archivedReferenceActions(m.actions), sourceEvidence: m.sourceEvidence }));
@@ -85,7 +89,7 @@ const slimForArchive = (msgs) =>
  * in the session from earlier once addressed an unrelated packet to its
  * credentialer. onClearRequest lets the app drop it on New chat.
  */
-function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, requestContext = null, onClearRequest, reopenedOnLoad = false }) {
+function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, requestContext = null, onClearRequest, visitId = null, visitKind = "open" }) {
   const { data, addItem, editItem, deleteItem, updateSettings, allTrackedStates, userIdRef, navigate, theme: T, isDesktop, appRulesWaiting, recordsWithAppRules } = useApp();
   const shareScopeRef = useRef(null);
   if (!shareScopeRef.current || shareScopeRef.current.owner !== userIdRef?.current) shareScopeRef.current = { owner: userIdRef?.current, live: true };
@@ -101,27 +105,30 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
   const onOpus = data.settings?.assistantModel === "opus" && opusReachable;
   // Send-packet card handed to the email modal: { msgId, idx, docIds, note }
   const [emailPacket, setEmailPacket] = useState(null);
-  // Vera opens on a new chat (veraOpen.js): the conversation stored from
-  // last time is filed under Archived as this screen opens, before anything
-  // is sent, so a question handed in (initialQuestion) never carries the old
-  // one as history. Returning from a record Vera opened keeps it.
+  // Vera opens on a new chat (veraOpen.js, decided once per visit by App):
+  // the conversation stored from last time is filed under Archived as this
+  // screen opens, before anything is sent, so a question handed in
+  // (initialQuestion) never carries the old one as history.
   const openRef = useRef(null);
+  const openedArchivesRef = useRef(null);
   if (openRef.current === null) {
     let stored = [];
     try { stored = openedTranscript(largeGetJSON(BASE_KEYS.chat)); } catch { stored = []; }
-    const fresh = opensFresh(Date.now(), undefined, reopenedOnLoad);
-    openRef.current = { fresh, stored, filed: new Set(fresh ? stored.map(m => m?.id).filter(Boolean) : []) };
+    try { openedArchivesRef.current = largeGetJSON(BASE_KEYS.archives) || []; } catch { openedArchivesRef.current = []; }
+    const fresh = decideVisit(visitId, visitKind, { seeded: !!initialQuestion });
+    // Ids already filed: every archived message, plus the conversation filed
+    // now. A copy of either read later is never filed again.
+    const filed = archivedIds(openedArchivesRef.current);
+    if (fresh) for (const m of stored) if (m?.id) filed.add(m.id);
+    openRef.current = { fresh, stored, filed };
   }
-  useEffect(() => { clearVeraReturn(); }, []);
   const archiveEntry = (list) => ({ id: generateId(), title: archiveTitle(list), archivedAt: new Date().toISOString(), msgs: slimForArchive(list) });
   const [msgs, setMsgs] = useState(() => (openRef.current.fresh ? [] : openRef.current.stored));
+  const msgsRef = useRef(msgs);
+  msgsRef.current = msgs;
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
-  const openedArchivesRef = useRef(null);
-  if (openedArchivesRef.current === null) {
-    try { openedArchivesRef.current = largeGetJSON(BASE_KEYS.archives) || []; } catch { openedArchivesRef.current = []; }
-  }
   const [archives, setArchives] = useState(() => {
     const { fresh, stored } = openRef.current;
     return fresh && stored.length ? [archiveEntry(stored), ...openedArchivesRef.current] : openedArchivesRef.current;
@@ -191,8 +198,9 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
         unchanged.chat = stored;
         if (openRef.current.fresh) {
           // The previous conversation, read again: what this screen had not
-          // seen is filed too, never put back on screen.
-          const extra = unfiled(stored, openRef.current.filed);
+          // seen is filed too, never put back on screen. The chat in use
+          // (msgsRef) is never filed from here.
+          const extra = unfiled(stored, openRef.current.filed, msgsRef.current.map(m => m.id));
           if (extra.length) setArchives(current => [archiveEntry(extra), ...current]);
         } else {
           setMsgs(current => (current === opened.chat ? stored : mergeLargeList(BASE_KEYS.chat, stored, current)));
@@ -200,6 +208,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       }
       if (archivesText !== undefined) {
         const stored = list(archivesText);
+        for (const id of archivedIds(stored)) openRef.current.filed.add(id);
         unchanged.archives = stored;
         setArchives(current => (current === opened.archives ? stored : mergeLargeList(BASE_KEYS.archives, stored, current)));
       }
@@ -212,9 +221,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
     if (!storesRead) return;
     if (msgs !== unchangedRef.current.chat) {
       try {
-        // sourceAttach can hold a multi-MB file — never persist it (quota).
-        const slim = msgs.slice(-60).map(m => { const c = { ...m }; delete c.sourceAttach; return c; });
-        largeSetJSON(BASE_KEYS.chat, slim);
+        largeSetJSON(BASE_KEYS.chat, slimChat(msgs));
       } catch { /* quota */ }
       if (msgs.length) markVeraActive();
     }
@@ -236,10 +243,15 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       const stored = largeGetJSON(base);
       if (!Array.isArray(stored)) return;
       if (base === BASE_KEYS.chat && openRef.current.fresh) {
-        const extra = unfiled(stored, openRef.current.filed);
+        const extra = unfiled(stored, openRef.current.filed, msgsRef.current.map(m => m.id));
         if (extra.length) setArchives(current => [archiveEntry(extra), ...current]);
+        // The merge put the old conversation back under the chat key; the
+        // chat in use is what belongs there.
+        try { largeSetJSON(BASE_KEYS.chat, slimChat(msgsRef.current)); } catch { /* quota */ }
+      } else if (base === BASE_KEYS.archives) {
+        for (const id of archivedIds(stored)) openRef.current.filed.add(id);
+        setArchives(current => mergeLargeList(base, stored, current));
       } else if (base === BASE_KEYS.chat) setMsgs(current => mergeLargeList(base, stored, current));
-      else if (base === BASE_KEYS.archives) setArchives(current => mergeLargeList(base, stored, current));
     } catch { /* unreadable: kept as it is */ }
   }), []);
 

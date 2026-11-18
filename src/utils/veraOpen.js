@@ -1,19 +1,25 @@
 /**
  * Vera opens on a new chat (owner, 2026-11-17). The conversation that was on
- * screen is not lost: it is filed under Archived, where "Continue this chat" brings it
- * back. One exception: Vera's own "open record" card takes the physician to a
- * record and back, and that return keeps the conversation it came from, for
- * RETURN_WINDOW_MS.
+ * screen is not lost: it is filed under Archived, where "Continue this chat"
+ * brings it back.
  *
- * A second exception: iOS reloads a PWA that was in the background (back from
- * Mail, Photos or the share sheet), and the app reopens on the screen it was
- * on (App.jsx lastScreen). That is not the physician opening Vera: when the
- * page reopened straight into Vera and she was in use within ACTIVE_WINDOW_MS,
- * the conversation stays, so a packet still downloading or a question waiting
- * on the profession choice is not filed away mid-task.
+ * The decision is made once per VISIT, by App.jsx as the screen changes to
+ * Vera (veraArrival below), never once per mount: anything that re-mounts
+ * Vera mid-visit (a reload of the data, the access check, the offline screen)
+ * keeps the conversation in use.
  *
- * Both marks live in sessionStorage for this tab only. They are read when
- * Vera opens, never inside a render.
+ * A visit keeps the conversation it came back to in two cases only:
+ *  - "return": Vera's own open_record card took the physician to a record
+ *    and the very next screen is Vera again, within RETURN_WINDOW_MS. Any
+ *    other screen in between (Home, a menu) ends it.
+ *  - "reload": the page reopened straight onto Vera (iOS reloading the app
+ *    after Mail, Photos or the share sheet; App.jsx lastScreen) and she was
+ *    in use within ACTIVE_WINDOW_MS. A packet still downloading or a question
+ *    waiting on the profession choice is then not filed away mid-task.
+ * A question handed to Vera on arrival (Home search, Requests) always starts
+ * a new chat, so it never goes out with an older conversation as history.
+ *
+ * The marks live in sessionStorage for this tab only.
  */
 
 export const VERA_RETURN_KEY = "credentialdomd-vera-return";
@@ -22,30 +28,43 @@ export const VERA_ACTIVE_KEY = "credentialdomd-vera-active";
 export const ACTIVE_WINDOW_MS = 10 * 60 * 1000;
 
 const session = () => { try { return globalThis.sessionStorage || null; } catch { return null; } };
+const read = (store, key) => { try { return store?.getItem(key) ?? null; } catch { return null; } };
+const write = (store, key, value) => { try { store?.setItem(key, value); } catch { /* unavailable */ } };
+const remove = (store, key) => { try { store?.removeItem(key); } catch { /* unavailable */ } };
 
 /** Called just before Vera navigates to a record she opened. */
 export function markVeraReturn(now = Date.now(), store = session()) {
-  try { store?.setItem(VERA_RETURN_KEY, String(now + RETURN_WINDOW_MS)); } catch { /* unavailable */ }
+  write(store, VERA_RETURN_KEY, JSON.stringify({ until: now + RETURN_WINDOW_MS, hops: 0 }));
 }
 
 /** Stamped whenever Vera's conversation is saved. */
 export function markVeraActive(now = Date.now(), store = session()) {
-  try { store?.setItem(VERA_ACTIVE_KEY, String(now)); } catch { /* unavailable */ }
+  write(store, VERA_ACTIVE_KEY, String(now));
 }
 
-/** True when this open should start a new chat. Reads only; see clearVeraReturn. */
-export function opensFresh(now = Date.now(), store = session(), reopenedOnLoad = false) {
-  try {
-    const until = Number(store?.getItem(VERA_RETURN_KEY));
-    if (Number.isFinite(until) && until > now) return false;
-    const active = Number(store?.getItem(VERA_ACTIVE_KEY));
-    if (reopenedOnLoad && Number.isFinite(active) && active > 0 && now - active < ACTIVE_WINDOW_MS) return false;
-    return true;
-  } catch { return true; }
-}
-
-export function clearVeraReturn(store = session()) {
-  try { store?.removeItem(VERA_RETURN_KEY); } catch { /* unavailable */ }
+/**
+ * App.jsx calls this on every screen change. Returns the kind of a new Vera
+ * visit ("open" | "return" | "reload"), or null when the screen is not a new
+ * arrival at Vera. `first` is true for the screen the page opened on.
+ */
+export function veraArrival({ toVera, fromVera, first }, now = Date.now(), store = session()) {
+  let mark = null;
+  try { mark = JSON.parse(read(store, VERA_RETURN_KEY) || "null"); } catch { mark = null; }
+  if (!toVera) {
+    // Leaving for the record Vera opened is the one hop a return allows.
+    if (mark) {
+      if (fromVera && mark.hops === 0) write(store, VERA_RETURN_KEY, JSON.stringify({ ...mark, hops: 1 }));
+      else remove(store, VERA_RETURN_KEY);
+    }
+    return null;
+  }
+  if (fromVera) return null; // still on Vera
+  remove(store, VERA_RETURN_KEY);
+  if (first) {
+    const active = Number(read(store, VERA_ACTIVE_KEY));
+    return Number.isFinite(active) && active > 0 && now - active < ACTIVE_WINDOW_MS ? "reload" : "open";
+  }
+  return mark && mark.hops === 1 && Number(mark.until) > now ? "return" : "open";
 }
 
 /** The title an archived conversation is listed under: its first question. */
@@ -55,13 +74,34 @@ export function archiveTitle(list) {
 }
 
 /**
- * The messages of `stored` not yet filed, so a copy of the old conversation
- * read later (another tab, a slow store) is archived too, never put back on
- * screen and never archived twice. `filed` is a Set of message ids; it is
- * updated with what is returned.
+ * The messages of `stored` not yet filed and not on screen, so a copy of the
+ * old conversation read later (another tab, a slow store) is archived too,
+ * never put back on screen and never archived twice. `filed` is a Set of
+ * message ids; it is updated with what is returned. `onScreen` lists the ids
+ * of the conversation in use, which is never filed from here.
  */
-export function unfiled(stored, filed) {
-  const out = (Array.isArray(stored) ? stored : []).filter(m => m && m.id && !filed.has(m.id));
+export function unfiled(stored, filed, onScreen = []) {
+  const live = new Set(onScreen);
+  const out = (Array.isArray(stored) ? stored : []).filter(m => m && m.id && !filed.has(m.id) && !live.has(m.id));
   for (const m of out) filed.add(m.id);
   return out;
 }
+
+/** Every message id already in an archive, so none is filed a second time. */
+export function archivedIds(archives) {
+  const ids = new Set();
+  for (const a of Array.isArray(archives) ? archives : []) for (const m of a?.msgs || []) if (m?.id) ids.add(m.id);
+  return ids;
+}
+
+/**
+ * Whether this mount starts a new chat. A visit is decided once on this page:
+ * a re-mount within the same visit keeps what is on screen.
+ */
+const decided = new Set();
+export function decideVisit(visitId, kind, { seeded = false } = {}) {
+  if (visitId != null && decided.has(visitId)) return false;
+  if (visitId != null) decided.add(visitId);
+  return seeded || !(kind === "return" || kind === "reload");
+}
+export function _resetVisits() { decided.clear(); }
