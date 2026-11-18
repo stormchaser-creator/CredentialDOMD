@@ -62,6 +62,12 @@ function renewalItemsOpen(comp) {
   ];
 }
 
+/** A travel record whose number is a government ID (never sent to the model). */
+export function isGovernmentId(doc) {
+  const text = `${doc?.type || ""} ${doc?.name || ""}`;
+  return /passport|driver|known traveler|tsa precheck|global entry|nexus|sentri|\bvisa\b|real id|state id|\bssn\b|social security/i.test(text);
+}
+
 /** Compact, privacy-lean snapshot of the user's data for grounding. */
 export function buildSnapshot(data, allTrackedStates = []) {
   const today = new Date().toISOString().slice(0, 10);
@@ -207,6 +213,17 @@ export function buildSnapshot(data, allTrackedStates = []) {
     rotations: short(data.rotations, r => ({ id: r.id, hospital: r.hospital, from: r.startDate, to: r.endDate, agency: r.agency })),
     deductibles: { count: (data.deductibles || []).length, total: Math.round((data.deductibles || []).reduce((t, d) => t + (parseFloat(d.amount) || 0), 0) * 100) / 100 },
     professionalPhotos: short(data.professionalPhotos, ph => ({ id: ph.id, name: ph.name, taken: ph.dateTaken })),
+    // Travel & IDs: business numbers (an EIN saved as type "Business"),
+    // loyalty and rental memberships, airline credits. Until 2026-11-17 the
+    // section was not sent at all, so "what's my EIN" got "not listed".
+    // A government ID's number (passport, driver's licence, Known Traveler,
+    // Global Entry, visa) stays on the record: Vera says it is on file and
+    // opens the record. Notes are never sent.
+    travelDocs: short(data.travelDocs, t => ({
+      id: t.id, type: t.type || null, name: t.name || null, provider: t.provider || null,
+      expires: t.expirationDate || null,
+      ...(isGovernmentId(t) ? { numberOnFile: !!String(t.number || "").trim() } : { number: t.number || null }),
+    })),
     // The physician's own categories. Names and field labels only, already
     // sanitised and length-capped by customCategories.js. Descriptions and
     // aliases are left out on purpose: text a scanned document put there must
@@ -342,6 +359,12 @@ For DEA use deaRenewal. Refer to the expiration as the date in the saved license
 record, not a live board determination. If a route is missing, use the supplied
 FSMB board directory and https://credentialdomd.com/states/ to help find it.
 Never invent or reuse an unverified current fee or deadline.
+
+TRAVEL & IDS: snapshot.travelDocs holds the user's own business numbers (an EIN or tax ID
+is saved there, usually type "Business"), loyalty and rental memberships and airline credits.
+When asked for one of those numbers, give the number from the record directly. A government
+ID (passport, driver's license, Known Traveler, Global Entry, visa) shows numberOnFile instead
+of the number: say it is saved and propose ONE open_record action for it.
 
 NAVIGATION: when the user asks to see, open, go to, show, or "take me to" a record or a
 section ("take me to UMC privileges", "open my DEA", "show the Mercy contract"),

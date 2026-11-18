@@ -27,6 +27,7 @@ import { spreadsheetGuard } from "../../utils/spreadsheetGuard";
 import { isIdentityLink } from "../../utils/pausedApplicationRecords.js";
 import { shareAtHandoff, shareNotStartedMessage } from "../../utils/shareHandoff.js";
 import { isKnownDegree } from "../../constants/professions.js";
+import { opensFresh, clearVeraReturn, markVeraReturn, markVeraActive, archiveTitle, unfiled } from "../../utils/veraOpen.js";
 import { appRulesReady, loadAppRules, needsAppRules, APP_RULES_UNAVAILABLE } from "../../utils/appRules.js";
 import { alertWriteRefused } from "../../utils/limitedLaunchAccess.js";
 import ProfessionPicker from "./ProfessionPicker";
@@ -84,7 +85,7 @@ const slimForArchive = (msgs) =>
  * in the session from earlier once addressed an unrelated packet to its
  * credentialer. onClearRequest lets the app drop it on New chat.
  */
-function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, requestContext = null, onClearRequest }) {
+function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, requestContext = null, onClearRequest, reopenedOnLoad = false }) {
   const { data, addItem, editItem, deleteItem, updateSettings, allTrackedStates, userIdRef, navigate, theme: T, isDesktop, appRulesWaiting, recordsWithAppRules } = useApp();
   const shareScopeRef = useRef(null);
   if (!shareScopeRef.current || shareScopeRef.current.owner !== userIdRef?.current) shareScopeRef.current = { owner: userIdRef?.current, live: true };
@@ -100,14 +101,30 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
   const onOpus = data.settings?.assistantModel === "opus" && opusReachable;
   // Send-packet card handed to the email modal: { msgId, idx, docIds, note }
   const [emailPacket, setEmailPacket] = useState(null);
-  const [msgs, setMsgs] = useState(() => {
-    try { return openedTranscript(largeGetJSON(BASE_KEYS.chat)); } catch { return []; }
-  });
+  // Vera opens on a new chat (veraOpen.js): the conversation stored from
+  // last time is filed under Archived as this screen opens, before anything
+  // is sent, so a question handed in (initialQuestion) never carries the old
+  // one as history. Returning from a record Vera opened keeps it.
+  const openRef = useRef(null);
+  if (openRef.current === null) {
+    let stored = [];
+    try { stored = openedTranscript(largeGetJSON(BASE_KEYS.chat)); } catch { stored = []; }
+    const fresh = opensFresh(Date.now(), undefined, reopenedOnLoad);
+    openRef.current = { fresh, stored, filed: new Set(fresh ? stored.map(m => m?.id).filter(Boolean) : []) };
+  }
+  useEffect(() => { clearVeraReturn(); }, []);
+  const archiveEntry = (list) => ({ id: generateId(), title: archiveTitle(list), archivedAt: new Date().toISOString(), msgs: slimForArchive(list) });
+  const [msgs, setMsgs] = useState(() => (openRef.current.fresh ? [] : openRef.current.stored));
   const [input, setInput] = useState("");
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState(null);
+  const openedArchivesRef = useRef(null);
+  if (openedArchivesRef.current === null) {
+    try { openedArchivesRef.current = largeGetJSON(BASE_KEYS.archives) || []; } catch { openedArchivesRef.current = []; }
+  }
   const [archives, setArchives] = useState(() => {
-    try { return largeGetJSON(BASE_KEYS.archives) || []; } catch { return []; }
+    const { fresh, stored } = openRef.current;
+    return fresh && stored.length ? [archiveEntry(stored), ...openedArchivesRef.current] : openedArchivesRef.current;
   });
   // The transcript and archives above come from what this tab read when the
   // account loaded. IndexedDB tells no other tab about a write, so another
@@ -118,7 +135,7 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
   // was opened with put this tab's older copy over the other tab's.
   const [storesRead, setStoresRead] = useState(false);
   const unchangedRef = useRef(null);
-  if (unchangedRef.current === null) unchangedRef.current = { chat: msgs, archives };
+  if (unchangedRef.current === null) unchangedRef.current = { chat: openRef.current.stored, archives: openedArchivesRef.current };
   const [showArchives, setShowArchives] = useState(false);
   const [viewArchive, setViewArchive] = useState(null);
   const [attachment, setAttachment] = useState(null); // {dataUrl?|text?, name, kind}
@@ -172,7 +189,14 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
       if (chatText !== undefined) {
         const stored = openedTranscript(list(chatText));
         unchanged.chat = stored;
-        setMsgs(current => (current === opened.chat ? stored : mergeLargeList(BASE_KEYS.chat, stored, current)));
+        if (openRef.current.fresh) {
+          // The previous conversation, read again: what this screen had not
+          // seen is filed too, never put back on screen.
+          const extra = unfiled(stored, openRef.current.filed);
+          if (extra.length) setArchives(current => [archiveEntry(extra), ...current]);
+        } else {
+          setMsgs(current => (current === opened.chat ? stored : mergeLargeList(BASE_KEYS.chat, stored, current)));
+        }
       }
       if (archivesText !== undefined) {
         const stored = list(archivesText);
@@ -192,9 +216,10 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
         const slim = msgs.slice(-60).map(m => { const c = { ...m }; delete c.sourceAttach; return c; });
         largeSetJSON(BASE_KEYS.chat, slim);
       } catch { /* quota */ }
+      if (msgs.length) markVeraActive();
     }
     const go = pendingNavRef.current;
-    if (go) { pendingNavRef.current = null; navigate(...go); return; }
+    if (go) { pendingNavRef.current = null; markVeraReturn(); navigate(...go); return; }
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
   }, [msgs, navigate, storesRead]);
   useEffect(() => () => { try { recRef.current?.stop(); } catch { /* stopped */ } }, []);
@@ -210,16 +235,15 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
     try {
       const stored = largeGetJSON(base);
       if (!Array.isArray(stored)) return;
-      if (base === BASE_KEYS.chat) setMsgs(current => mergeLargeList(base, stored, current));
+      if (base === BASE_KEYS.chat && openRef.current.fresh) {
+        const extra = unfiled(stored, openRef.current.filed);
+        if (extra.length) setArchives(current => [archiveEntry(extra), ...current]);
+      } else if (base === BASE_KEYS.chat) setMsgs(current => mergeLargeList(base, stored, current));
       else if (base === BASE_KEYS.archives) setArchives(current => mergeLargeList(base, stored, current));
     } catch { /* unreadable: kept as it is */ }
   }), []);
 
   // ── Archive: the current chat moves out of the way but stays readable ──
-  const archiveTitle = (list) => {
-    const first = list.find(m => m.role === "user" && (m.text || "").trim());
-    return (first?.text || "Conversation").replace(/\s+/g, " ").slice(0, 60);
-  };
   const archiveCurrent = useCallback(() => {
     if (!msgs.length) return false;
     setArchives(a => [{

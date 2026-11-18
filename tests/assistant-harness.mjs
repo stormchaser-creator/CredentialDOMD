@@ -15,6 +15,7 @@ import * as dictationErrors from '../src/utils/dictationErrors.js';
 import * as shareHandoff from '../src/utils/shareHandoff.js';
 import * as professions from '../src/constants/professions.js';
 import * as compliance from '../src/utils/compliance.js';
+import * as realVeraOpen from '../src/utils/veraOpen.js';
 import { mountComponent, settle } from './component-harness.mjs';
 
 export function recorder() {
@@ -36,8 +37,25 @@ export const baseData = over => ({
  * pass the same object to a second mount to stand in for leaving Vera and
  * coming back. Returns the harness plus helpers to type, send and find buttons.
  */
-export async function mountVera({ rec = recorder(), data = {}, props = {}, turn = async () => ({ reply: 'OK', actions: [] }), saved = [], modules = {}, app = {}, globals = {}, device = {} } = {}) {
+export async function mountVera({ rec = recorder(), data = {}, props = {}, turn = async () => ({ reply: 'OK', actions: [] }), saved = [], modules = {}, app = {}, globals = {}, device = {}, reopenedOnLoad = true } = {}) {
   const store = { chat: saved, archives: [] };
+  // This tab's sessionStorage, kept on `device` so a second mount with the
+  // same device is the same tab. Every mount stands for the page reloading
+  // straight into Vera (iOS bringing the app back); a test that opens Vera
+  // from elsewhere in the app passes reopenedOnLoad: false.
+  // With no session given, a mount stands for the app reloading into a
+  // conversation in use (the case these tests replay: stores read late,
+  // another tab, iOS bringing the app back), so it keeps the conversation.
+  // A test of opening Vera from the menu passes device: { __session: {} }.
+  if (!device.__session) device.__session = { 'credentialdomd-vera-active': String(Date.now()) };
+  const sess = { getItem: k => device.__session[k] ?? null, setItem: (k, v) => { device.__session[k] = String(v); }, removeItem: k => { delete device.__session[k]; } };
+  const veraOpen = {
+    ...realVeraOpen,
+    opensFresh: (now = Date.now()) => realVeraOpen.opensFresh(now, sess, reopenedOnLoad),
+    markVeraReturn: (now = Date.now()) => realVeraOpen.markVeraReturn(now, sess),
+    markVeraActive: (now = Date.now()) => realVeraOpen.markVeraActive(now, sess),
+    clearVeraReturn: () => realVeraOpen.clearVeraReturn(sess),
+  };
   const turns = [];
   const ui = await mountComponent(process.env.ASSISTANT_SOURCE || 'src/components/features/AssistantSection.jsx', {
     app: {
@@ -47,7 +65,7 @@ export async function mountVera({ rec = recorder(), data = {}, props = {}, turn 
     },
     props,
     modules: {
-      helpers, customCategories, shareText, deviceShare, docLabel, pausedApplicationRecords: paused, spreadsheetGuard: guard, dictationErrors, shareHandoff, professions, compliance,
+      helpers, customCategories, shareText, deviceShare, docLabel, pausedApplicationRecords: paused, spreadsheetGuard: guard, dictationErrors, shareHandoff, professions, compliance, veraOpen,
       referenceDraft,
       assistant: { assistantTurn: async (args) => { turns.push(args); return turn(args); }, buildSnapshot: () => ({}), splitFields: sectionFields.splitFields },
       // The transcript and archives are the IndexedDB-backed stores, read and
