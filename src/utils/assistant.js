@@ -63,21 +63,12 @@ function renewalItemsOpen(comp) {
 }
 
 /**
- * Whether a Travel & IDs record's number may go to the model. An allow-list:
- * membership and credit numbers, and a business tax number (EIN) named as
- * one. Anything that names a government or personal ID is held back even if
- * it also says EIN, and every other record (passport, licence, Known
- * Traveler, "Other", an ITIN or TIN that may be an SSN) shows only that a
- * number is on file.
+ * Whether a Travel & IDs record's number goes to the model. Every record's
+ * does (owner, 2026-11-18: "she needs access to all"), passport, licence and
+ * Known Traveler included, so Vera can read any saved number back.
  */
-const TRAVEL_NUMBER_TYPES = new Set(["airline credit", "airline loyalty", "hotel loyalty", "rental car membership"]);
-const GOVERNMENT_ID = /passport|driver|licen[cs]e|\bdl\b|known traveler|\bktn\b|pre-?check|trusted traveler|global entry|nexus|sentri|redress|\bvisa\b|green card|permanent resident|military|\bcac\b|twic|medicare|medicaid|\bitin\b|\btin\b|ssn|social security|real id|state id|\bid card\b/i;
-const BUSINESS_TAX_ID = /\bf?ein\b|employer identification|federal tax id|business tax id/i;
 export function travelNumberShared(doc) {
-  const type = String(doc?.type || "").trim().toLowerCase();
-  const text = `${doc?.type || ""} ${doc?.name || ""} ${doc?.provider || ""}`;
-  if (GOVERNMENT_ID.test(text)) return false;
-  return TRAVEL_NUMBER_TYPES.has(type) || BUSINESS_TAX_ID.test(text);
+  return !!doc;
 }
 
 /** Compact, privacy-lean snapshot of the user's data for grounding. */
@@ -228,13 +219,13 @@ export function buildSnapshot(data, allTrackedStates = []) {
     // Travel & IDs: business numbers (an EIN saved as type "Business"),
     // loyalty and rental memberships, airline credits. Until 2026-11-17 the
     // section was not sent at all, so "what's my EIN" got "not listed".
-    // Only membership, credit and business tax numbers are sent
-    // (travelNumberShared); any other record's number stays on it: Vera says
-    // it is on file and opens the record. Notes are never sent.
+    // Every record's number and notes are sent (owner, 2026-11-18), so
+    // passport, licence and Known Traveler numbers can be read back too.
     travelDocs: short(data.travelDocs, t => ({
       id: t.id, type: t.type || null, name: t.name || null, provider: t.provider || null,
       expires: t.expirationDate || null,
-      ...(travelNumberShared(t) ? { number: t.number || null } : { numberOnFile: !!String(t.number || "").trim() }),
+      number: travelNumberShared(t) ? (t.number || null) : null,
+      notes: String(t.notes || "").slice(0, 500) || null,
     })),
     // The physician's own categories. Names and field labels only, already
     // sanitised and length-capped by customCategories.js. Descriptions and
@@ -372,11 +363,10 @@ record, not a live board determination. If a route is missing, use the supplied
 FSMB board directory and https://credentialdomd.com/states/ to help find it.
 Never invent or reuse an unverified current fee or deadline.
 
-TRAVEL & IDS: snapshot.travelDocs holds the user's own business numbers (an EIN, saved as a
-record named EIN or Tax ID), loyalty and rental memberships and airline credits. When asked
-for one of those numbers, give the number from the record directly. A record that shows
-numberOnFile instead of a number (passport, driver's license, Known Traveler and other IDs):
-say it is saved and propose ONE open_record action for it.
+TRAVEL & IDS: snapshot.travelDocs holds the user's own saved numbers: an EIN (a record named
+EIN or Tax ID), passport, driver's license, Known Traveler, loyalty and rental memberships and
+airline credits, with their notes. When asked for one of these numbers, give the number from
+the record directly. If the record has no number, say so and propose ONE open_record action.
 
 NAVIGATION: when the user asks to see, open, go to, show, or "take me to" a record or a
 section ("take me to UMC privileges", "open my DEA", "show the Mercy contract"),

@@ -62,28 +62,19 @@ test('the old conversation is filed once, titled by its first question', () => {
   assert.deepEqual([...archivedIds([{ msgs: [{ id: 'x' }, { id: 'y' }] }, { msgs: null }])], ['x', 'y']);
 });
 
-test('snapshot carries an EIN from Travel & IDs, never a passport or licence number', async () => {
-  const { buildSnapshot, travelNumberShared } = await bundle('src/utils/assistant.js', { 'aiClient$': AI_STUB, 'veraSourcesClient\\.js$': 'export const loadVeraSources=async()=>({});export const sourceCheckReceipt=()=>null;' });
+test('snapshot carries every Travel & IDs number: EIN, passport, licence', async () => {
+  const { buildSnapshot } = await bundle('src/utils/assistant.js', { 'aiClient$': AI_STUB, 'veraSourcesClient\\.js$': 'export const loadVeraSources=async()=>({});export const sourceCheckReceipt=()=>null;' });
   const data = { settings: { name: 'Synthetic', degreeType: 'MD' }, travelDocs: [
-    { id: 't1', type: 'Business', name: 'EIN', number: '00-0000000', notes: 'secret note' },
+    { id: 't1', type: 'Business', name: 'EIN', number: '00-0000000', notes: 'synthetic note' },
     { id: 't2', type: 'Passport', name: 'US Passport', number: 'X0000000' },
     { id: 't3', type: 'Driver’s License', name: 'CA DL', number: 'D000' },
     { id: 't4', type: 'Hotel loyalty', provider: 'Synthetic Hotels', number: 'H123' },
+    { id: 't5', type: 'Other', name: 'Blank' },
   ] };
-  const snap = buildSnapshot(data, []);
-  const by = Object.fromEntries(snap.travelDocs.map(t => [t.id, t]));
-  assert.equal(by.t1.number, '00-0000000');
+  const by = Object.fromEntries(buildSnapshot(data, []).travelDocs.map(t => [t.id, t]));
+  assert.equal(by.t1.number, '00-0000000'); assert.equal(by.t1.notes, 'synthetic note');
+  assert.equal(by.t2.number, 'X0000000');
+  assert.equal(by.t3.number, 'D000');
   assert.equal(by.t4.number, 'H123');
-  assert.equal(by.t2.number, undefined); assert.equal(by.t2.numberOnFile, true);
-  assert.equal(by.t3.number, undefined); assert.equal(by.t3.numberOnFile, true);
-  assert.ok(!JSON.stringify(snap.travelDocs).includes('secret note'));
-  for (const held of [{ type: 'Known Traveler (TSA PreCheck)' }, { type: 'Other', name: 'KTN' }, { type: 'Other', name: 'CA DL notarized copy' },
-    { type: 'Other', name: 'Green card' }, { type: 'Other', name: 'Military ID' }, { type: 'Other', name: 'ITIN' }, { type: 'Other', name: 'Medicare card' },
-    { type: 'Other', name: 'Redress number' }, { type: 'Other', name: 'Some number' }, { type: null, name: null }, { type: 'Business', name: 'TIN' }]) {
-    assert.equal(travelNumberShared(held), false, JSON.stringify(held));
-  }
-  for (const shared of [{ type: 'Business', name: 'EIN' }, { type: 'Other', name: 'Practice EIN' }, { type: 'Other', name: 'Employer Identification Number' },
-    { type: 'Hotel loyalty' }, { type: 'Airline credit' }, { type: 'Rental car membership' }]) {
-    assert.equal(travelNumberShared(shared), true, JSON.stringify(shared));
-  }
+  assert.equal(by.t5.number, null);
 });
