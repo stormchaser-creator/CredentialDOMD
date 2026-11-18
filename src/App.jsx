@@ -101,7 +101,9 @@ import {
   STATES, CASE_CATEGORIES, CASE_CATEGORY_GROUPS,
   EDUCATION_TYPES, WORK_HISTORY_TYPES, REFERENCE_RELATIONSHIPS, MALPRACTICE_OUTCOMES,
 } from "./constants";
-import { boardComplianceFor, aoaNationalEntry } from "./utils/boardCompliance";
+import { boardComplianceFor } from "./utils/boardCompliance";
+import { boardTaskSet } from "./utils/boardTasks";
+import BoardTasks from "./components/shared/BoardTasks";
 import { certificationCards, certificationRingComps } from "./utils/certCompliance";
 import { licenseFields, licenseTypeTab, privilegeFields, insuranceFields } from "./utils/credentialForms";
 import { isAlertable, isInactive, lifecycleNote, needsResolution, LIFECYCLE_LABELS, lifecycleOf } from "./utils/lifecycle";
@@ -915,15 +917,13 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
     setFollowUpItem(null);
   }, [followUpItem, followUpRecipient, followUpNote, addItem, data.settings]);
 
-  // Board continuing-certification standing (cycle-windowed). Every DO sees
-  // the AOA national cycle even before picking a specific board.
+  // Board continuing-certification standing (cycle-windowed). No AOA
+  // "national" card for a DO with no board: AOA CME is a requirement for AOA
+  // board-certified physicians only (https://osteopathic.org/cme/cme-faqs/).
   const boardComps = useMemo(() => {
     // Settings picks plus boards implied by Board Certification records, the
     // same list the CME page and the transcript use.
     const list = boardComplianceFor(data);
-    if (data.settings.degreeType === "DO" && data.cme.length > 0 && !list.some(b => b.source === "AOA")) {
-      list.unshift(aoaNationalEntry(data));
-    }
     // A PA's NCCPA card and an NP's certifier cards, anchored on their own
     // certification records (src/utils/certCompliance.js). A record whose
     // role is not answered yet is left to the record's question.
@@ -2305,11 +2305,12 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
             }}>Find CME &rarr;</button>
           )}
         </div>
-        {b.assessment && !b.body && (
+        {b.assessment && !b.body && !boardTaskSet(b.id) && (
           <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 6, lineHeight: 1.4 }}>
             Also required: {b.assessment}
           </div>
         )}
+        {!b.body && <BoardTasks board={b} />}
         {b.notes && (
           <div style={{ fontSize: 11, color: T.textDim, marginTop: 3 }}>{b.notes}</div>
         )}

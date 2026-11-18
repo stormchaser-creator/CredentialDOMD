@@ -1,5 +1,6 @@
-import { ABMS_MOC, AOA_OCC, AOA_NATIONAL } from "../constants/boardRequirements.js";
+import { ABMS_MOC, AOA_OCC, BOARD_TASKS } from "../constants/boardRequirements.js";
 import { certBodyOf, isAdvancedPractice, isNuccSpecialtyId } from "../constants/professions.js";
+import { isInactive } from "./lifecycle.js";
 
 /**
  * Board continuing-certification compliance — computes standing for every
@@ -11,8 +12,10 @@ import { certBodyOf, isAdvancedPractice, isNuccSpecialtyId } from "../constants/
  *    window (without the certificate's anchor date that's the honest
  *    approximation, and it's labeled as such).
  *  - AOA boards: the AOA CME cycle is a FIXED three-year block
- *    (2022–24, 2025–27, …): 120 total hours with a 30-hour AOA Category 1-A
- *    minimum (AOA_NATIONAL), plus the board's specialty-specific note.
+ *    (2022–24, 2025–27, …), with the board's own OCC hours and any
+ *    Category 1-A minimum, plus the board's specialty-specific note. A board
+ *    with a published first-cycle chart (AOBS) prorates the hours from the
+ *    Board Certification record's issued date.
  *  - Subspecialties follow their primary board and render as notes.
  */
 
@@ -99,12 +102,13 @@ export function computeBoardCompliance(data) {
       // minimums are per board — many boards, incl. AOBS, have none.
       const b = AOA_OCC[code];
       seen.add(`AOA:${code}`);
-      const req = b.timeLimited || { hours: 120, cat1: 0 };
       const cyc = aoaCycle(today);
+      const { req, firstCycle } = aoaRequirement(b, code, data, id, cyc);
       const from = `${cyc.start}-01-01`, to = `${cyc.end}-12-31`;
       const earned = hoursIn(cme, from, to);
       const cat1a = hoursIn(cme, from, to, c => (c.category || "").includes("AOA Category 1-A"));
       out.push({
+        ...(firstCycle ? { firstCycle } : {}),
         id, source: "AOA", code, name: subName || b.name,
         label: `${subName || b.name}, AOA ${code}`,
         from, to, countRule: null,
@@ -125,12 +129,13 @@ export function computeBoardCompliance(data) {
       // the parent board but the certificate and its annual discipline-
       // specific assessment stand alone.
       const b = AOA_OCC[code];
-      const req = b.timeLimited || { hours: 120, cat1: 0 };
       const cyc = aoaCycle(today);
+      const { req, firstCycle } = aoaRequirement(b, code, data, id, cyc);
       const from = `${cyc.start}-01-01`, to = `${cyc.end}-12-31`;
       const earned = hoursIn(cme, from, to);
       const cat1a = hoursIn(cme, from, to, c => (c.category || "").includes("AOA Category 1-A"));
       out.push({
+        ...(firstCycle ? { firstCycle } : {}),
         id, source: "AOA", code: `${code}-${subName}`, name: subName,
         label: `${subName}, AOA`,
         from, to, countRule: null,
@@ -223,25 +228,45 @@ export function boardComplianceFor(data) {
   return computeBoardCompliance({ ...data, settings: { ...(data?.settings || {}), specialties: effectiveBoardSpecialties(data) } });
 }
 
-/** The AOA national 120/3yr requirement, cycle-windowed — shown to every DO
- *  even before a specific board is selected in Settings. */
-export function aoaNationalEntry(data) {
-  const cme = data.cme || [];
-  const today = new Date();
-  const cyc = aoaCycle(today);
-  const from = `${cyc.start}-01-01`, to = `${cyc.end}-12-31`;
-  const earned = hoursIn(cme, from, to);
-  const cat1a = hoursIn(cme, from, to, c => (c.category || "").includes("AOA Category 1-A"));
-  return {
-    id: "AOA:NATIONAL", source: "AOA", code: "AOA", name: "AOA National CME",
-    label: "AOA National CME",
-    from, to, countRule: null,
-    required: AOA_NATIONAL.hours, earned,
-    met: earned >= AOA_NATIONAL.hours && cat1a >= AOA_NATIONAL.cat1a,
-    cat1aRequired: AOA_NATIONAL.cat1a, cat1aEarned: cat1a,
-    unit: "total hrs (all categories)",
-    windowLabel: `${cyc.start}–${cyc.end} AOA cycle`,
-    daysLeft: Math.ceil((new Date(`${cyc.end}-12-31T23:59`) - today) / 86400000),
-    assessment: "", notes: "",
-  };
+/** The field on a Board Certification record that turns first-cycle proration off ("No"). */
+export const FIRST_CYCLE_FIELD = "AOA first-cycle proration";
+
+/**
+ * The Board Certification record behind a board card (b.id is the Settings
+ * id: "AOA:AOBS", "AOA-SUB:AOBS:Neurological Surgery", "ABMS:ABNS"): the
+ * current record whose name or notes name that board, preferring one that
+ * also names the discipline. Null when none is on file.
+ */
+export function boardRecordFor(licenses, boardId) {
+  const [kind, code, ...rest] = String(boardId || "").split(":");
+  const sub = rest.join(":").toLowerCase();
+  const want = `${kind.replace(/-SUB$/, "")}:${code}`;
+  const hits = (licenses || []).filter(l => l && !isInactive(l) && boardIdsFromLicenses([l]).includes(want));
+  if (!hits.length) return null;
+  const named = sub ? hits.find(l => `${l.name || ""} ${l.notes || ""}`.toLowerCase().includes(sub)) : null;
+  return named || hits[0];
+}
+
+/**
+ * An AOA card's hours for this cycle. A board that publishes a first-cycle
+ * chart (BOARD_TASKS firstCycleProration, AOBS Component 2) owes a share of
+ * its hours when the certificate was issued inside the current cycle: by the
+ * half year of issue, rounded down to the nearest half hour. Applied only
+ * from the record's issued date, and the physician can turn it off on the
+ * record (FIRST_CYCLE_FIELD "No") when the date is a recertification.
+ */
+function aoaRequirement(b, code, data, id, cyc) {
+  const base = b.timeLimited || { hours: 120, cat1: 0 };
+  const chart = BOARD_TASKS[`AOA:${code}`]?.firstCycleProration;
+  if (!chart) return { req: base, firstCycle: null };
+  const rec = boardRecordFor(data.licenses, id);
+  const issued = String(rec?.issuedDate || "").slice(0, 10);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(issued) || issued < `${cyc.start}-01-01` || issued > `${cyc.end}-12-31`) return { req: base, firstCycle: null };
+  const half = (Number(issued.slice(0, 4)) - cyc.start) * 2 + (Number(issued.slice(5, 7)) >= 7 ? 1 : 0);
+  const share = chart.shares[half] ?? 0;
+  const hours = Math.floor(base.hours * share * 2) / 2;
+  const cat1 = Math.floor((base.cat1 || 0) * share * 2) / 2;
+  const off = /^no$/i.test(String(rec.customFields?.[FIRST_CYCLE_FIELD] ?? ""));
+  const firstCycle = { issued, share, hours, fullHours: base.hours, url: chart.url, recordId: rec.id, off };
+  return { req: off ? base : { ...base, hours, cat1 }, firstCycle };
 }

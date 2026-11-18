@@ -8,6 +8,8 @@ import { reminderLeadDays } from "./reminderPreferences.js";
 import { alertRecords } from "./alertItems.js";
 import { daysUntilDate, localToday } from "./dateDays.js";
 import { certificationCards } from "./certCompliance.js";
+import { boardComplianceFor } from "./boardCompliance.js";
+import { boardTaskAlerts } from "./boardTasks.js";
 
 /** The active acknowledgment for an item, if its snooze date hasn't passed.
  *  An acknowledged alert stays quiet until then — "seen it, nothing to do
@@ -122,6 +124,11 @@ export function generateAlerts(data) {
     const renewal = end ? `${end.getFullYear()}-${String(end.getMonth() + 1).padStart(2, "0")}-${String(end.getDate()).padStart(2, "0")}` : (c.expirationDate || null);
     cmeIssues.push({ state: c.body, issues: [c.assessment], daysLeft: c.daysLeft, renewal, key: c.id, kind: "cert", label: c.label });
   }
+
+  // Board certification tasks (an annual assessment, a QI attestation)
+  // overdue or due inside the same lead window, until marked done
+  // (src/utils/boardTasks.js). A physician's board only, never a PA's or NP's.
+  for (const t of boardTaskAlerts(data, boardComplianceFor(data), lead, now)) cmeIssues.push(t);
 
   const count = expired.length + soon.length + cmeIssues.length;
   if (count === 0) return null;

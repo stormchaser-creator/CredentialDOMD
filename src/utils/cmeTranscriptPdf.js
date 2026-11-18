@@ -4,7 +4,8 @@ import { formatDate } from "./helpers.js";
 import { complianceFor, findStateLicense, cycleBucket, cmeTopics } from "./compliance";
 import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements";
 import { STATE_NAMES } from "../constants/states";
-import { boardComplianceFor, aoaNationalEntry } from "./boardCompliance";
+import { boardComplianceFor } from "./boardCompliance";
+import { boardTasksFor } from "./boardTasks.js";
 import { certificationCards } from "./certCompliance.js";
 import { cat1BucketLabel } from "../constants/creditEquivalence";
 import { mateStatusText } from "./cmePresentation.js";
@@ -397,6 +398,7 @@ export function stateTranscriptModel(data, state, { certFiles = null, kind } = {
       (() => {
         const hasBoardCert = (data.licenses || []).some(l => /board certification/i.test(l.type || ""));
         const moc = plain(req.moc || "").trim();
+        if (comp.boardExemption) return `Board certification exemption used (you chose it on ${formatDate(comp.boardExemption.usedOn)}): ${plain(comp.boardExemption.rule)}. The total and Category 1 hours are counted as met.`;
         return hasBoardCert && moc && !/^no$/i.test(moc)
           ? `You may be exempt from the ${stateName} CME requirement: ${moc}. This transcript does not apply the exemption; confirm with the board and claim it on your renewal if it applies to you.`
           : "";
@@ -411,10 +413,10 @@ export function stateTranscriptModel(data, state, { certFiles = null, kind } = {
 const isoDay = (d) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 
 export function boardTranscriptOptions(data) {
+  // No AOA "national" entry for a DO with no board: AOA CME is a
+  // requirement for AOA board-certified physicians only
+  // (https://osteopathic.org/cme/cme-faqs/).
   const list = boardComplianceFor(data).filter(b => !b.followsParent);
-  if (data.settings?.degreeType === "DO" && (data.cme || []).length > 0 && !list.some(b => b.source === "AOA")) {
-    list.unshift(aoaNationalEntry(data));
-  }
   // A PA's NCCPA cycle and an NP's certifier cycles (certCompliance.js): the
   // cycle a certifier audits, with the card's own counted figures.
   for (const c of certificationCards(data)) {
@@ -454,7 +456,7 @@ export function boardTranscriptModel(data, board, { certFiles = null } = {}) {
     ? `${board.body} certification, ${board.windowLabel}`
     : isABMS
       ? `ABMS ${board.code} continuing certification, ${board.unit || "AMA PRA Category 1"}`
-      : `AOA ${board.code === "AOA" ? "national CME requirement" : `${board.code} OCC`}, ${board.windowLabel || "3-year cycle"}`;
+      : `AOA ${board.code} OCC, ${board.windowLabel || "3-year cycle"}`;
   if (isCert) {
     return {
       kind: "board", board,
@@ -504,8 +506,19 @@ export function boardTranscriptModel(data, board, { certFiles = null } = {}) {
     footnotes: [
       board.countRule ? `Earned total counts ${board.countRule} activities only; other rows are listed for completeness.` : "",
       plain(board.notes),
+      board.firstCycle && !board.firstCycle.off ? `First cycle: certified ${formatDate(board.firstCycle.issued)}, so ${fmtHrs(board.firstCycle.hours)} of ${fmtHrs(board.firstCycle.fullHours)} hours are owed this cycle.` : "",
+      ...boardTaskFootnotes(data, board),
     ].filter(Boolean),
   };
+}
+
+/** One line per board task: done on a date, or when it is due. Nothing for a board with no task data. */
+function boardTaskFootnotes(data, board) {
+  const t = boardTasksFor(data, board);
+  if (!t) return [];
+  return t.tasks.map(x => x.doneOn
+    ? `${x.label} (${x.period}): done ${formatDate(x.doneOn)}.`
+    : `${x.label} (${x.period}): not marked done${x.due ? `, due ${formatDate(x.due)}` : ""}.`);
 }
 
 // ─── Rendering ────────────────────────────────────────────────────────────

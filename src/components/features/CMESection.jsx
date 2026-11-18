@@ -35,7 +35,10 @@ import { getStateEntry, hasSeparateBoards, STATE_REQS_META } from "../../constan
 import { STATE_NAMES } from "../../constants/states";
 import { generateId, formatDate } from "../../utils/helpers";
 import { complianceFor, complianceListFor, mainCardFor, hasDEARegistration, mateAttestationDate, cardWindowNotes, topicOutsidePeriod, cycleBucket, round2 } from "../../utils/compliance";
-import { boardComplianceFor, effectiveBoardSpecialties, aoaNationalEntry } from "../../utils/boardCompliance";
+import { boardComplianceFor, effectiveBoardSpecialties } from "../../utils/boardCompliance";
+import { boardTaskSet } from "../../utils/boardTasks";
+import BoardTasks from "../shared/BoardTasks";
+import BoardExemption from "../shared/BoardExemption";
 import { certificationCards } from "../../utils/certCompliance";
 import { stateTranscriptModel, boardTranscriptOptions, boardTranscriptModel, shareTranscriptPdf, certificateDocsForModels, prefetchCertificates, certificateSummary, certificatesNotIncludedMessage } from "../../utils/cmeTranscriptPdf";
 import { CME_INBOX_ADDRESS, docMime } from "../../utils/inboxDocs";
@@ -622,7 +625,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
               </div>
               {!comp.noGeneralReq && (!comp.profession || comp.totalRequired > 0) && (
                 <>
-                  <ComplianceBar label={comp.profession ? `Total logged ${comp.unit || "hours"}` : "Total logged hours"} earned={comp.totalEarned} required={comp.totalRequired} met={comp.totalMet} note={certificationMetLine(comp) || undefined} />
+                  <ComplianceBar label={comp.profession ? `Total logged ${comp.unit || "hours"}` : "Total logged hours"} earned={comp.totalEarned} required={comp.totalRequired} met={comp.totalMet} note={comp.boardExemption ? "Met by your board certification exemption" : certificationMetLine(comp) || undefined} />
                   {!comp.totalMet && (
                     <button onClick={() => navigate("credentials", "findCme")} style={{
                       padding: "3px 10px", minHeight: isDesktop ? undefined : TAP_MIN, fontSize: 11, fontWeight: 700, borderRadius: 8, border: "none",
@@ -682,11 +685,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
                 const hasBoardCert = (data.licenses || []).some(l => /board certification/i.test(l.type || ""));
                 const moc = (getStateEntry(st, deg)?.moc || "").trim();
                 if (!hasBoardCert || !moc || /^no$/i.test(moc)) return null;
-                return (
-                  <div style={{ fontSize: 12, color: T.textMuted, backgroundColor: T.accentGlow, borderRadius: 8, padding: "7px 10px", marginTop: 6, marginBottom: 2, lineHeight: 1.4 }}>
-                    <span style={{ fontWeight: 700, color: T.accent }}>You may be exempt.</span> {moc}. Not applied automatically; confirm with the board and claim it on your renewal if it applies.
-                  </div>
-                );
+                return <BoardExemption state={st} comp={comp} moc={moc} />;
               })()}
               <RuleProvenance
                 reportKey={key ?? st}
@@ -721,9 +720,10 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
                       {b.cat1aEarned < b.cat1aRequired && <SmallSpecialtyNote degreeType={deg} />}
                     </>
                   )}
-                  {b.assessment && (
+                  {b.assessment && !boardTaskSet(b.id) && (
                     <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.4 }}>Also required: {b.assessment}</div>
                   )}
+                  <BoardTasks board={b} />
                   {b.notes && <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 3 }}>{b.notes}</div>}
                   <RuleProvenance
                     reportKey={`board:${b.code}`}
@@ -765,25 +765,21 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
             </div>
           );
 
-          // AOA National 120/3-yr requirement, cycle-windowed via the same
-          // engine the transcript and Home use (the old block compared a
-          // LIFETIME hour sum to a 3-year requirement). Suppressed when an
-          // AOA board card is already shown, matching Home's logic.
-          const aoaCard = deg === "DO" && !boardComps.some(b => b.source === "AOA" && !b.followsParent) && (() => {
-            const aoa = aoaNationalEntry(data);
-            return (
-              <div style={cardStyle(T.border)}>
-                <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 2 }}>AOA National</div>
-                <div style={{ fontSize: 13, color: T.textDim, marginBottom: 12 }}>{aoa.windowLabel}{aoa.daysLeft != null ? ` · ${aoa.daysLeft} days left` : ""}</div>
-                <ComplianceBar label="Total" earned={aoa.earned} required={aoa.required} met={aoa.met} />
-                <ComplianceBar label="Cat 1-A minimum" earned={aoa.cat1aEarned} required={aoa.cat1aRequired} met={aoa.cat1aEarned >= aoa.cat1aRequired} />
-                <div style={{ fontSize: 12, color: T.textMuted, lineHeight: 1.5, marginTop: -4 }}>
-                  Only an AOA-accredited Category 1 sponsor produces 1-A. AMA PRA Category 1 posts here as AOA Category 2 and counts toward the total above, never toward this line.
-                </div>
-                {aoa.cat1aEarned < aoa.cat1aRequired && <SmallSpecialtyNote degreeType={deg} />}
+          // No AOA "national" CME card: AOA CME is a requirement for AOA
+          // board-certified physicians only (https://osteopathic.org/cme/cme-faqs/).
+          // A DO with no board on file gets a short prompt to add one.
+          const aoaCard = deg === "DO" && !boardComps.some(b => b.source === "AOA" && !b.followsParent) && (
+            <div style={cardStyle(T.border)}>
+              <div style={{ fontSize: 16, fontWeight: 700, color: T.text, marginBottom: 2 }}>Board certification</div>
+              <div style={{ fontSize: 13, color: T.textMuted, lineHeight: 1.5 }}>
+                AOA CME is required only for AOA board-certified physicians. If you are board certified, add your board to track its hours and yearly steps.
               </div>
-            );
-          })();
+              <button onClick={() => navigate("more", "settings")} style={{
+                padding: "3px 10px", minHeight: isDesktop ? undefined : TAP_MIN, fontSize: 11, fontWeight: 700, borderRadius: 8, border: "none",
+                backgroundColor: T.accentGlow, color: T.accent, cursor: "pointer", marginTop: 8,
+              }}>Add my board &rarr;</button>
+            </div>
+          );
 
           // DEA MATE Act training: one time, for a DEA registrant. Shown here so
           // courses tagged Opioid Prescribing or Substance Use Disorders visibly

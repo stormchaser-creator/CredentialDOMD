@@ -77,7 +77,7 @@ const FAQ_DATA = [
       },
       {
         q: "What's the difference between MD and DO mode?",
-        a: "Selecting DO enables AOA-specific CME categories (Category 1-A, 1-B, 2-A, 2-B), AOA national requirements tracking, dual-accredited provider filtering, and AOA board certification types. Selecting MD uses AMA PRA categories. You can switch at any time in Settings.",
+        a: "Selecting DO enables AOA-specific CME categories (Category 1-A, 1-B, 2-A, 2-B), AOA board certification tracking, dual-accredited provider filtering, and AOA board certification types. Selecting MD uses AMA PRA categories. You can switch at any time in Settings.",
       },
     ],
   },

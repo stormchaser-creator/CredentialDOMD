@@ -18,7 +18,7 @@ import { afterAppRules, degreeNeedsAppRules, preloadAppRules, APP_RULES_UNAVAILA
 import { normalizeBirthday, formatBirthday } from "../../utils/cmePassport";
 import { generateId, downscalePhoto, avatarInitials } from "../../utils/helpers";
 import {
-  MATE_ACT, AOA_NATIONAL, ABMS_MOC, AOA_OCC,
+  MATE_ACT, ABMS_MOC, AOA_OCC,
   ABMS_SUBSPECIALTIES, AOA_SUBSPECIALTIES, UCNS_CERTS, ABPS_CERTS,
 } from "../../constants/boardRequirements";
 import { getStateReq, getStateEntry, hasSeparateBoards } from "../../constants/stateRequirements";
@@ -1009,8 +1009,8 @@ function SettingsSection({ onUpgrade }) {
 
         {s.degreeType === "DO" && (
           <div style={{ padding: "10px 12px", backgroundColor: T.accentGlow, border: `1px solid ${T.accent}`, borderRadius: 10, marginBottom: 10 }}>
-            <div style={{ fontSize: 14, fontWeight: 700, color: T.accent, marginBottom: 2 }}>AOA National Requirement</div>
-            <div style={{ fontSize: 13, color: T.textMuted }}>{AOA_NATIONAL.hours} hrs / {AOA_NATIONAL.cycle}-yr cycle, min {AOA_NATIONAL.cat1a} hrs AOA Category 1-A</div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: T.accent, marginBottom: 2 }}>AOA CME</div>
+            <div style={{ fontSize: 13, color: T.textMuted }}>Required only for AOA board-certified physicians. Add your board under Board Specialties to track its hours and yearly steps.</div>
           </div>
         )}
 

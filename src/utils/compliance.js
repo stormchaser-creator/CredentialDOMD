@@ -1,5 +1,5 @@
 import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements.js";
-import { topicApplicability, priorCompletionOn, PRIOR_SUFFIX } from "./conditionalCme.js";
+import { topicApplicability, priorCompletionOn, PRIOR_SUFFIX, boardExemptionOn } from "./conditionalCme.js";
 import { isAlertable, isInactive, needsResolution } from "./lifecycle.js";
 import { daysUntilDate, parseDay } from "./dateDays.js";
 import { computeAppCompliance } from "./appCompliance.js";
@@ -286,8 +286,12 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   const firstCycleHours = firstCycleRule?.applied ? firstCycleRule.hours : null;
   const totalRequired = firstCycleHours ?? (entry?.total || 0);
   const cat1Required = firstCycleHours != null ? Math.min(entry?.cat1min || 0, firstCycleHours) : (entry?.cat1min || 0);
-  const totalMet = noGeneralReq || totalHrs >= totalRequired;
-  const cat1Met = cat1Required <= 0 || cat1Hrs >= cat1Required;
+  // The physician's own choice to use the state's board certification
+  // exemption (conditionalCme.js boardExemptionOn), only where the rule data
+  // names one: the general total and Category 1 minimum read as met.
+  const exemptOn = !noGeneralReq && (entry?.moc || "").trim() && !/^no$/i.test(entry.moc.trim()) ? boardExemptionOn(state, opts.topicApplicability) : null;
+  const totalMet = noGeneralReq || !!exemptOn || totalHrs >= totalRequired;
+  const cat1Met = !!exemptOn || cat1Required <= 0 || cat1Hrs >= cat1Required;
   const allTopicsMet = topicResults.every(t => t.met);
   const knownRequirementsMet = totalMet && cat1Met && allTopicsMet && (!mate || mate.met);
   // Split-board fallback numbers remain visible, but cannot certify compliance
@@ -307,11 +311,12 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     totalRequired,
     totalEarned: totalHrs,
     totalMet,
-    hoursRemaining: round2(Math.max(0, totalRequired - totalHrs)),
+    hoursRemaining: exemptOn ? 0 : round2(Math.max(0, totalRequired - totalHrs)),
     cat1Required,
     cat1Earned: cat1Hrs,
     cat1Met,
-    cat1Remaining: round2(Math.max(0, cat1Required - cat1Hrs)),
+    cat1Remaining: exemptOn ? 0 : round2(Math.max(0, cat1Required - cat1Hrs)),
+    ...(exemptOn ? { boardExemption: { usedOn: exemptOn, rule: entry.moc.trim(), source: entry.source || "", sourceUrl: entry.sourceUrl || "" } } : {}),
     cat1OneAOnly: oneAOnly,
     // The exact credit-type strings counted toward the Category 1 minimum,
     // and whether they came from state data (`cat1Accepted`) or the fallback

@@ -20,6 +20,10 @@ export const MATE_ACT = {
 
 // ----------------------------------------------------------------------------
 // 2. AOA National CME Requirement
+// Not shown as a requirement for a DO with no board: AOA CME is a
+// requirement for AOA board-certified physicians only
+// (https://osteopathic.org/cme/cme-faqs/). Each board's own OCC figure is in
+// AOA_OCC.
 // ----------------------------------------------------------------------------
 export const AOA_NATIONAL = {
   hours: 120,
@@ -1632,6 +1636,72 @@ export const AOA_OCC = {
     nonTimeLimited: { hours: 120, cat1: 0, specReq: "" },
     occChecklist: "Annual: unrestricted-license proof + 15-question open-book Longitudinal Assessment (80% = 12/15, two attempts, $225/yr; completing it earns 5.0 Cat 1-B). Every 3 years: at least one QI/practice-performance attestation via the AOA portal.",
     verified: "2026-07",
+  },
+};
+
+// ----------------------------------------------------------------------------
+// 5b. Board certification tasks: the non-CME duties each board sets, as dated
+// recurring tasks (src/utils/boardTasks.js). Keyed "<AOA|ABMS>:<board code>";
+// an AOA discipline (AOA-SUB:AOBS:Neurological Surgery) uses its parent
+// board's list. Only cadences an official page states are here; every other
+// board keeps its `assessment` sentence.
+//   every:  "year" (calendar year) or { years: 3, anchor: "aoaCycle" } (the
+//           fixed AOA cycle, 2025-2027, ...)
+//   due:    "MM-DD" each year, or windows: { YYYY: { from, to } } for a
+//           published year; a year with neither has no dated deadline
+//   startsYearOfExpiration: the board starts the task in the year a
+//           time-limited certificate expires
+// ----------------------------------------------------------------------------
+const AOBS_URL = "https://certification.osteopathic.org/surgery/occ-overview/";
+export const BOARD_TASKS = {
+  "AOA:AOBS": {
+    checked: "2026-11",
+    sourceUrl: AOBS_URL,
+    // AOA certificates issued after 2018 carry no expiration date (Component 3 page).
+    noExpirationIssuedAfter: 2018,
+    noExpirationUrl: "https://certification.osteopathic.org/surgery/occ-overview/component-3/",
+    // Component 2, initial certification: share of the 60 hours owed by the
+    // half year of the AOA cycle the certificate was issued in; a share that
+    // is not a whole or half number is rounded down to the nearest half.
+    firstCycleProration: {
+      shares: [0.83, 0.67, 0.5, 0.33, 0.17, 0],
+      url: "https://certification.osteopathic.org/surgery/occ-overview/component-2/",
+    },
+    tasks: [
+      {
+        id: "la", label: "Longitudinal Assessment", every: "year",
+        windows: { 2026: { from: "2026-01-26", to: "2026-11-15" } },
+        cost: 225,
+        detail: "15 open-book questions, 12 correct to pass, two attempts. Passing earns 5.0 AOA Category 1-B credits.",
+        startsYearOfExpiration: true,
+        source: "https://certification.osteopathic.org/surgery/occ-overview/component-3/",
+      },
+      {
+        id: "license", label: "Proof of active license", every: "year",
+        detail: "Proof of a valid, unrestricted license, once a year.",
+        source: "https://certification.osteopathic.org/surgery/occ-overview/component-1/",
+      },
+      {
+        id: "qi", label: "QI attestation", every: { years: 3, anchor: "aoaCycle" },
+        detail: "At least one quality improvement attestation every 3 years, in the AOA Physician Portal.",
+        source: "https://certification.osteopathic.org/surgery/occ-overview/component-4/",
+      },
+    ],
+  },
+  "ABMS:ABNS": {
+    checked: "2026-07",
+    sourceUrl: "https://www.abns.org/content/for-board-certified-neurosurgeons",
+    tasks: [
+      { id: "alt", label: "Adaptive Learning Tool", every: "year", due: "09-30",
+        detail: "General and Emergency modules, 80% within 2 attempts for CME.",
+        source: "https://www.abns.org/content/for-board-certified-neurosurgeons" },
+      { id: "pledge", label: "CC Pledge and standing questionnaire", every: "year", due: "09-30",
+        source: "https://www.abns.org/content/for-board-certified-neurosurgeons" },
+      { id: "privileges", label: "Privileges attestation", every: "year", due: "09-30",
+        source: "https://www.abns.org/content/for-board-certified-neurosurgeons" },
+      { id: "ihhc", label: "IHHC quality improvement attestation", every: "year", due: "09-30",
+        source: "https://www.abns.org/content/for-board-certified-neurosurgeons" },
+    ],
   },
 };
 

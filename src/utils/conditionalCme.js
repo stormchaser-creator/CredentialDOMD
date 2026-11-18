@@ -19,6 +19,23 @@ export function priorCompletionOn(topic, answers = {}) {
   return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
 }
 
+/**
+ * A state CME exemption through board certification, used only when the
+ * physician chooses it on that state's license (owner, 2026-11-18). Offered
+ * only for the states whose rule data (stateRequirements `moc`) says current
+ * board certification or recertification satisfies or replaces the general
+ * hour requirement; the `moc` text and the state's own source are what the
+ * card shows. Stored as the day they chose it. It covers the general total
+ * and the Category 1 minimum; topic courses stay on the card.
+ */
+export const BOARD_EXEMPTION_FIELD = "Board certification exemption used on";
+export const BOARD_EXEMPTION_STATES = Object.freeze(["KY", "LA", "ME", "NC", "ND", "NH", "TX", "WA"]);
+export function boardExemptionOn(state, answers = {}) {
+  if (!BOARD_EXEMPTION_STATES.includes(state)) return null;
+  const v = answers?.[BOARD_EXEMPTION_FIELD];
+  return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+}
+
 export function topicApplicability(topic, answers = {}) {
   if (topic.informational === true) return "informational";
   if (!topic.condition) return "applies";

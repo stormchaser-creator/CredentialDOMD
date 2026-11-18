@@ -256,7 +256,7 @@ export function buildCases(m) {
     });
 
     // Boards
-    put(`board:${deg}`, () => ({ ids: m.board.boardIdsFromLicenses(data.licenses), comp: m.board.boardComplianceFor(data), aoa: deg === 'DO' ? m.board.aoaNationalEntry(data) : null }));
+    put(`board:${deg}`, () => ({ ids: m.board.boardIdsFromLicenses(data.licenses), comp: m.board.boardComplianceFor(data), aoa: deg === 'DO' && m.board.aoaNationalEntry ? m.board.aoaNationalEntry(data) : null }));
 
     // Vera evidence
     for (const st of keys) {
