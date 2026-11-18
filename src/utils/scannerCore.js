@@ -111,6 +111,22 @@ export function validateResponse(parsed) {
   // A transcript's sessions: each topic checked against the fixed list and
   // the title's own words, and none applied to the whole record from one
   // session (topicSuggest.js normalizeCmeScan).
+  // Only a CME reading keeps sessions; any other type drops them. The list is
+  // capped here as well as in the prompt, and a capped list says so in notes.
+  if (parsed.extracted && typeof parsed.extracted === "object") {
+    const { sessions, sessionsTruncated, ...rest } = parsed.extracted;
+    if (parsed.documentType === "cme" && sessions !== undefined) {
+      const list = Array.isArray(sessions) ? sessions : [];
+      const capped = list.length > MAX_SCAN_SESSIONS;
+      parsed.extracted = { ...rest, sessions: list.slice(0, MAX_SCAN_SESSIONS).map(capSessionTitle) };
+      if (capped || sessionsTruncated === true) {
+        parsed.sessionsTruncated = true;
+        parsed.notes = appendNote(parsed.notes, SESSIONS_TRUNCATED_NOTE);
+      }
+    } else if (sessions !== undefined || sessionsTruncated !== undefined) {
+      parsed.extracted = rest;
+    }
+  }
   if (parsed.documentType === "cme") parsed.extracted = normalizeCmeScan(parsed.extracted);
   parsed.extracted = normalizeScanDates(parsed.extracted);
   return parsed;
@@ -177,7 +193,32 @@ ${categories.length ? `The physician's existing categories (reuse one for an "ot
 // A conference transcript lists many sessions under one certificate. Sent as
 // its own system part so SYSTEM_PROMPT keeps its exact text (the MD and DO
 // goldens hash it). validateResponse checks every session it returns.
-export const CME_SESSIONS_PROMPT = `CME SESSIONS. When a "cme" document lists individual sessions, lectures or activities with their own titles (a conference transcript, a meeting agenda with credit per session), ALSO return extracted.sessions: an array with one object per listed session, in the order printed: { "title": the session title exactly as printed, "hours": the credit printed for that session as a number (omit when none is printed), "topics": an array of values from the topics list above that the session title itself clearly names, or [] }. List every session; do not skip, merge or summarise. A session's topics belong on that session only: leave them out of the top-level "topics" unless the activity as a whole is about that topic. When the document lists no separate sessions, omit "sessions".`;
+export const MAX_SCAN_SESSIONS = 60;
+export const MAX_SCAN_SESSION_TITLE = 120;
+export const CME_SESSIONS_PROMPT = `CME SESSIONS. When a "cme" document lists individual sessions, lectures or activities with their own titles (a conference transcript, a meeting agenda with credit per session), ALSO return extracted.sessions: an array with one object per listed session, in the order printed: { "title": the session title as printed, cut to its first ${MAX_SCAN_SESSION_TITLE} characters, "hours": the credit printed for that session as a number (omit when none is printed), "topics": an array of values from the topics list above that the session title itself clearly names, or [] }. Do not skip, merge or summarise sessions, but list at most ${MAX_SCAN_SESSIONS}: when the document lists more than ${MAX_SCAN_SESSIONS}, stop after the first ${MAX_SCAN_SESSIONS} and also return "sessionsTruncated": true inside extracted. A session's topics belong on that session only: leave them out of the top-level "topics" unless the activity as a whole is about that topic. When the document lists no separate sessions, omit "sessions".`;
+
+export const SESSIONS_TRUNCATED_NOTE = `Only the first ${MAX_SCAN_SESSIONS} sessions were read for topic suggestions.`;
+export const SESSIONS_SKIPPED_NOTE = "This document was too long to list its sessions, so no per-session topic suggestions were made.";
+
+const capSessionTitle = (s) => (s && typeof s === "object" && typeof s.title === "string" && s.title.length > MAX_SCAN_SESSION_TITLE
+  ? { ...s, title: s.title.slice(0, MAX_SCAN_SESSION_TITLE) }
+  : s);
+const appendNote = (notes, line) => {
+  const base = typeof notes === "string" ? notes.trim() : "";
+  if (base.includes(line)) return base;
+  return base ? `${base} ${line}` : line;
+};
+
+/**
+ * Whether a scan asks for the CME sessions list. A caller that already knows
+ * the document is not CME (a receipt, a licence) leaves it out; a CME scan or
+ * one whose type is not known yet (the model classifies it) keeps it.
+ * @param {string | null | undefined} expectedType
+ */
+export const wantsSessions = (expectedType) => expectedType == null || expectedType === "" || expectedType === "cme";
+
+/** True when Gemini stopped at the output cap (geminiResponseText throws on it). */
+export const isCutOffReply = (data) => data?.candidates?.[0]?.finishReason === "MAX_TOKENS";
 
 // What the model is told alongside the file. Kept word for word from the
 // analyzers that used to spell them out inline.
@@ -187,12 +228,37 @@ export const scanPdfText = (degreeType) => `Analyze this document (a medical cre
 /**
  * The generateContent body for one credential scan. `parts` is the file (an
  * inlineData part, or the extracted text) followed by the instruction text.
- * @param {{ degreeType?: string, categories?: Array<string | { name?: string }>, parts: object[] }} input
+ * @param {{ degreeType?: string, categories?: Array<string | { name?: string }>, parts: object[], expectedType?: string | null, sessions?: boolean }} input
  */
-export function scanRequestBody({ degreeType, categories = [], parts }) {
+export function scanRequestBody({ degreeType, categories = [], parts, expectedType, sessions = wantsSessions(expectedType) }) {
+  const system = [{ text: SYSTEM_PROMPT(degreeType, categoryHints(categories)) }];
+  if (sessions) system.push({ text: CME_SESSIONS_PROMPT });
   return {
-    systemInstruction: { parts: [{ text: SYSTEM_PROMPT(degreeType, categoryHints(categories)) }, { text: CME_SESSIONS_PROMPT }] },
+    systemInstruction: { parts: system },
     contents: [{ parts }],
     generationConfig: geminiJsonConfig(8192),
   };
+}
+
+/**
+ * One scan with the cut-off fallback. `send(body)` posts the request and
+ * resolves to the parsed Gemini reply (the caller handles HTTP errors). When
+ * the reply was cut off while the sessions list was asked for, the scan is
+ * sent once more without it, so a long transcript still files as it did
+ * before sessions existed; that result carries sessionsSkipped and a note.
+ * Resolves to validateResponse's result (null when no type was read).
+ * @param {(body: object) => Promise<object>} send
+ * @param {{ degreeType?: string, categories?: Array<string | { name?: string }>, parts: object[], expectedType?: string | null }} input
+ */
+export async function scanWithSessionsFallback(send, { degreeType, categories = [], parts, expectedType } = {}) {
+  const sessions = wantsSessions(expectedType);
+  const first = await send(scanRequestBody({ degreeType, categories, parts, sessions }));
+  if (!(sessions && isCutOffReply(first))) return validateResponse(parseModelJson(first));
+  const second = await send(scanRequestBody({ degreeType, categories, parts, sessions: false }));
+  const result = validateResponse(parseModelJson(second));
+  if (result && result.documentType === "cme") {
+    result.sessionsSkipped = true;
+    result.notes = appendNote(result.notes, SESSIONS_SKIPPED_NOTE);
+  }
+  return result;
 }

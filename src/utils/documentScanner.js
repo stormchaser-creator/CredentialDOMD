@@ -5,7 +5,7 @@ import { GEMINI_MODEL, geminiJsonConfig } from "./geminiModel.js";
 // through the ai-proxy edge function, metered per user.
 
 import { geminiCall, proxyErrorMessage } from "./aiClient";
-import { OTHER_DOC_TYPE, CV_DOC_TYPE, validateResponse, parseModelJson as parseResponse, scanRequestBody, SCAN_IMAGE_TEXT, scanPdfText } from "./scannerCore.js";
+import { OTHER_DOC_TYPE, CV_DOC_TYPE, parseModelJson as parseResponse, SCAN_IMAGE_TEXT, scanPdfText, scanWithSessionsFallback } from "./scannerCore.js";
 import { AGREEMENT_PROMPT } from "./agreementPrompt.js";
 
 // The prompt, the validator and the request shape live in scannerCore.js so the
@@ -80,6 +80,13 @@ function handleApiError(response) {
   throw new Error("Document analysis failed. Please try again.");
 }
 
+// One scan request; HTTP errors throw as before, the parsed reply is returned.
+const sendScan = (apiKey) => async (body) => {
+  const response = await geminiCall(`models/${GEMINI_MODEL}:generateContent`, body, apiKey);
+  if (!response.ok) handleApiError(response);
+  return response.json();
+};
+
 export async function analyzeDocument(imageData, degreeType, apiKey, { categories = [] } = {}) {
   if (!isValidDataUrl(imageData)) {
     throw new Error("Invalid image data. Please try uploading again.");
@@ -87,19 +94,15 @@ export async function analyzeDocument(imageData, degreeType, apiKey, { categorie
 
   const compressed = await compressImage(imageData);
 
-  const response = await geminiCall(`models/${GEMINI_MODEL}:generateContent`, scanRequestBody({
+  // A long CME transcript whose session list would cut the reply off is
+  // read once more without it (scannerCore.js scanWithSessionsFallback).
+  const result = await scanWithSessionsFallback(sendScan(apiKey), {
     degreeType, categories,
     parts: [
       { inlineData: { mimeType: getMediaType(compressed), data: extractBase64(compressed) } },
       { text: SCAN_IMAGE_TEXT },
     ],
-  }), apiKey);
-
-  if (!response.ok) handleApiError(response);
-
-  const json = await response.json();
-  const parsed = parseResponse(json);
-  const result = validateResponse(parsed);
+  });
   if (!result) {
     throw new Error("AI could not identify a document type from this image.");
   }
@@ -111,19 +114,13 @@ export async function analyzePDF(pdfData, degreeType, apiKey, { categories = [] 
     throw new Error("Invalid PDF data. Please try uploading again.");
   }
 
-  const response = await geminiCall(`models/${GEMINI_MODEL}:generateContent`, scanRequestBody({
+  const result = await scanWithSessionsFallback(sendScan(apiKey), {
     degreeType, categories,
     parts: [
       { inlineData: { mimeType: "application/pdf", data: extractBase64(pdfData) } },
       { text: scanPdfText(degreeType) },
     ],
-  }), apiKey);
-
-  if (!response.ok) handleApiError(response);
-
-  const json = await response.json();
-  const parsed = parseResponse(json);
-  const result = validateResponse(parsed);
+  });
   if (!result) {
     throw new Error("AI could not identify a document type from this PDF.");
   }
@@ -139,19 +136,13 @@ export async function analyzeDocText(text, degreeType, apiKey, { categories = []
     throw new Error("No readable text in this document.");
   }
 
-  const response = await geminiCall(`models/${GEMINI_MODEL}:generateContent`, scanRequestBody({
+  const result = await scanWithSessionsFallback(sendScan(apiKey), {
     degreeType, categories,
     parts: [
       { text: `DOCUMENT CONTENT (text extracted from an uploaded Word/Excel file):\n\n${text}` },
       { text: SCAN_IMAGE_TEXT },
     ],
-  }), apiKey);
-
-  if (!response.ok) handleApiError(response);
-
-  const json = await response.json();
-  const parsed = parseResponse(json);
-  const result = validateResponse(parsed);
+  });
   if (!result) {
     throw new Error("AI could not identify a document type from this file.");
   }

@@ -35,31 +35,103 @@ test("a signed name is never read as an ask, in either copy of the matcher", () 
   assert.equal(isSignatureText("555-010-0199"), true);
 });
 
-test("signatureOnly: a name over contact lines is a signature; anything that asks or names a document is not", () => {
-  for (const s of [BODY, NAME, `${NAME}\n555-010-0199`, `${NAME}, DO\nNeurosurgery\n(555) 010-0199`, `Thanks,\n${NAME}\nMedical Staff Office\n555-010-0100`]) {
-    assert.equal(signatureOnly(s), true, s);
-    assert.equal(appPacket.signatureOnly(s), true, s);
+const NAMES = [NAME];
+
+test("signatureOnly: the signer's own name over contact lines is a signature; anything that asks or names a document is not", () => {
+  for (const s of [BODY, NAME, `${NAME}\n555-010-0199`, `${NAME}, DO\n(555) 010-0199`, `Thanks,\n${NAME}\n555-010-0100`, `Dr. ${NAME}, M.D.\nrowan.testa@clinic.example`, "Dr. Rowan Testa"]) {
+    assert.equal(signatureOnly(s, NAMES), true, s);
+    assert.equal(appPacket.signatureOnly(s, NAMES), true, s);
   }
   for (const s of ["", "Please send your DEA\nMorgan", "DEA and CSR please", "CV", "Board Certificate", "555-010-0199", `${NAME}\nCan you sign this?`, `${NAME}\nBLS card`]) {
-    assert.equal(signatureOnly(s), false, JSON.stringify(s));
+    assert.equal(signatureOnly(s, NAMES), false, JSON.stringify(s));
   }
+  // No names to compare with: never a signature.
+  assert.equal(signatureOnly(BODY), false);
+  assert.equal(appPacket.signatureOnly(BODY), false);
+});
+
+test("signatureOnly: a short phrase is not a signature, however it is shaped (review M1)", () => {
+  const phrases = ["Urgent", "Due Friday", "Hospital Application", "Attestation Form", "Mercy Hospital", "Medical Staff Office",
+    "Dr. Smith", "Morgan Smith, MD"];
+  for (const p of phrases) {
+    for (const fn of [signatureOnly, appPacket.signatureOnly]) {
+      assert.equal(fn(p, NAMES), false, p);
+      // Under the physician's own name too: the phrase is something written, not a signature.
+      assert.equal(fn(`${NAME}\n${p}`, NAMES), false, `${NAME} / ${p}`);
+      assert.equal(fn(`${p}\n${NAME}`, NAMES), false, `${p} / ${NAME}`);
+    }
+  }
+  // A surname alone, or another person's name, is not the signer's.
+  assert.equal(signatureOnly("Dr. Testa", NAMES), false);
+  assert.equal(signatureOnly("Dr. Morgan Smith\n555-010-0100", NAMES), false);
+  // A link is somewhere to go, not a contact line.
+  assert.equal(signatureOnly(`${NAME}\nhttps://portal.example/apply`, NAMES), false);
 });
 
 // ── The rules (no model) ─────────────────────────────────────────────────────
 
-const rules = (over = {}) => rulesUnderstanding({ subject: SUBJECT, body: BODY, attachmentNames: [FILE], attachmentCount: 1, forwarded: false, why: "the AI service answered 400", ...over });
+const CME_WORDS = "title: OMED 2026\ncategory: AOA Category 1-A\nhours: 20";
+const rules = (over = {}) => rulesUnderstanding({
+  subject: SUBJECT, body: BODY, attachmentNames: [FILE], attachmentCount: 1, forwarded: false, why: "the AI service answered 400",
+  ownSender: true, signerNames: NAMES, attachmentWords: [CME_WORDS], attachmentTypes: ["cme"], ...over,
+});
 
-test("rules: the physician's own signature-only email is a delivery with nothing asked, whatever the file is named", () => {
-  for (const name of [FILE, "OMED26 CME Attestation and Evaluation.pdf", "CME Attestation.pdf", "scan001.pdf"]) {
-    for (const body of [BODY, `${NAME} MD FACS`, `${NAME}, DO\nNeurosurgery\n555-010-0199`]) {
+test("rules: the physician's own signature-only email over a scanned credential is a delivery with nothing asked", () => {
+  for (const name of [FILE, "OMED26 CME Certificate of Completion.pdf", "scan001.pdf"]) {
+    for (const body of [BODY, `${NAME} MD FACS`, `${NAME}, DO\n555-010-0199`]) {
       const r = rules({ body, attachmentNames: [name] });
       assert.equal(r.intent, "delivery", `${name} / ${JSON.stringify(body)}: ${r.reasons.join(" | ")}`);
       assert.equal(r.unclear, false);
       assert.ok(!r.asks.some((a) => /Testa/.test(a.quote)), JSON.stringify(r.asks));
     }
   }
-  // Before this fix the name came back as the ask, and a file named like a form made it a request.
-  assert.deepEqual(rules({ attachmentNames: ["OMED26 CME Attestation and Evaluation.pdf"] }).asks, []);
+  assert.deepEqual(rules().asks, []);
+  for (const type of ["license", "privilege", "insurance", "education", "healthRecord"]) {
+    assert.equal(rules({ attachmentTypes: [type], attachmentNames: ["scan001.pdf"] }).intent, "delivery", type);
+  }
+});
+
+test("rules: the own-file path needs every condition (review M1)", () => {
+  const notOwn = (over, label) => {
+    const r = rules(over);
+    assert.ok(!r.reasons.some((x) => /physician's own email/.test(x)), `${label}: ${r.reasons.join(" | ")}`);
+  };
+  notOwn({ ownSender: false }, "not the physician's authenticated address");
+  notOwn({ forwarded: true }, "a forward");
+  notOwn({ attachmentNames: ["CME Attestation.pdf"] }, "a file named like a form");
+  notOwn({ attachmentNames: ["OMED26 CME Attestation and Evaluation.pdf"] }, "an attestation with no transcript in its name");
+  notOwn({ attachmentTypes: [] }, "the file was not scanned");
+  notOwn({ attachmentTypes: ["unknown"] }, "the scan read nothing it could name");
+  notOwn({ attachmentTypes: ["other"] }, "a letter");
+  notOwn({ attachmentTypes: ["agreement"] }, "an agreement (could be one to sign)");
+  notOwn({ attachmentWords: [""] }, "an empty scan");
+  notOwn({ attachmentCount: 2, attachmentNames: [FILE, "scan002.pdf"] }, "a second file not scanned");
+  notOwn({ signerNames: [] }, "no name to compare the signature with");
+  notOwn({ signerNames: ["Morgan Smith"] }, "signed by someone else");
+  notOwn({ subject: "Please complete" }, "an asking subject");
+  notOwn({ body: `${NAME}\nUrgent` }, "a short phrase under the name");
+});
+
+// The four emails the M1 review found filed silently. Each was a request on
+// origin/main and must be one again: a short body, a form attached.
+const M1 = [
+  { label: "Dr. Smith, no subject, Reappointment_Application.pdf", subject: "", body: "Dr. Smith", file: "Reappointment_Application.pdf" },
+  { label: "Dr. Smith and a phone, Credentialing Request Form.pdf", subject: "", body: "Dr. Smith\n555-010-0142", file: "Credentialing Request Form.pdf" },
+  { label: "Morgan Smith, MD under Mercy, Attestation_to_sign.pdf", subject: "Mercy", body: "Morgan Smith, MD", file: "Attestation_to_sign.pdf" },
+  { label: "Mercy Hospital under Credentialing, form.pdf", subject: "Credentialing", body: "Mercy Hospital", file: "form.pdf" },
+];
+
+test("rules: the four M1 emails are requests again, whatever the scan or the names say", () => {
+  for (const c of M1) {
+    for (const extra of [
+      { attachmentTypes: [], attachmentWords: [] },
+      { attachmentTypes: ["cme"], attachmentWords: [CME_WORDS] },
+      { signerNames: ["Morgan Smith"], attachmentTypes: ["license"], attachmentWords: ["state: Synthetic"] },
+    ]) {
+      const r = rules({ subject: c.subject, body: c.body, attachmentNames: [c.file], ...extra });
+      assert.equal(r.intent, "request", `${c.label} ${JSON.stringify(extra)}: ${r.intent} / ${r.reasons.join(" | ")}`);
+    }
+  }
 });
 
 test("rules: a third party's signature-only forward, an asking subject, or an attached letter that asks still go the request way", () => {
@@ -77,12 +149,12 @@ test("rules: a third party's signature-only forward, an asking subject, or an at
 
 const parts = { note: "", message: BODY, history: "" };
 const facts = { corpus: null, email: BODY, attachments: [""], refs: new Map(), physicianName: NAME };
-const modelSaid = (asks, role, intent = "request") => verifyUnderstanding({
+const modelSaid = (asks, role, intent = "request", over = {}) => verifyUnderstanding({
   intent,
   asks: asks.map((quote) => ({ quote, kind: "unknown", who: "physician" })),
   attachments: [{ index: 1, role, filing: "CME" }],
   summary: "a CME transcript", confidence: "high", records: [],
-}, { subject: SUBJECT, parts, attachmentCount: 1, facts: { ...facts, corpus: undefined } });
+}, { subject: SUBJECT, parts, attachmentCount: 1, facts: { ...facts, corpus: undefined }, ownSender: true, attachmentNames: [FILE], ...over });
 
 test("model: a signature quoted as an ask is dropped as a signature, and a credential attached makes it a delivery", () => {
   for (const q of [`Dr. ${NAME}`, NAME, "555-010-0199"]) {
@@ -99,6 +171,24 @@ test("model: a signature-only 'request' without a credential to keep goes to the
   const v = modelSaid([`Dr. ${NAME}`], "form_to_complete");
   assert.equal(v.needsRules, true);
   assert.equal(v.dropped[0].why, DROP.signature);
+});
+
+test("model: a signature-only reading is never a delivery when anything else asks or the file may be a form (review M1)", () => {
+  const notDelivered = (v, label) => {
+    assert.notEqual(v.intent, "delivery", label);
+    assert.equal(v.unclear, true, label);
+  };
+  notDelivered(modelSaid([`Dr. ${NAME}`], "credential_for_physician", "request", { ownSender: false }), "not the physician's own address");
+  notDelivered(modelSaid([`Dr. ${NAME}`], "credential_for_physician", "request", { attachmentNames: ["Attestation_to_sign.pdf"] }), "a form-named file");
+  notDelivered(modelSaid([`Dr. ${NAME}`], "credential_for_physician", "request", { attachmentCount: 2 }), "a file the reading gave no role");
+  // An ask in the forwarded history.
+  notDelivered(modelSaid([`Dr. ${NAME}`], "credential_for_physician", "request", {
+    parts: { note: "", message: BODY, history: "Please complete the attached reappointment application by Friday." },
+  }), "an ask in the history");
+  // An ask in the attached letter.
+  notDelivered(modelSaid([`Dr. ${NAME}`], "credential_for_physician", "request", {
+    facts: { ...facts, corpus: undefined, attachments: ["requestLeadIn: Please send the following\nrequestedItem: Current BLS card"] },
+  }), "an ask in the attachment");
 });
 
 test("model: a real ask that carries a phone number or names a document is kept", () => {
@@ -166,4 +256,17 @@ test("end to end, model: a reading that took the signature for an ask still file
   const r = await send();
   assert.equal(r.body.read, "model");
   assertFiledAsCme(r);
+});
+
+test("end to end, rules: a signature-short email from the physician with a form attached stays a request (review M1)", async () => {
+  harness.anthropicReply = FAIL;
+  harness.geminiReply = () => ({ documentType: "other", confidence: "medium", extracted: { title: "Medical staff form" } });
+  const r = await deliver({
+    id: `m1-${++n}`, from: `${NAME} <${ME}>`, to: "docs@credentialdomd.com", subject: "Credentialing", text: "Mercy Hospital",
+    attachments: [{ filename: "form.pdf", contentType: "application/pdf", bytes: new TextEncoder().encode(`%PDF-1.4 m1 ${n}`) }],
+  });
+  assert.equal(r.status, 200);
+  assert.notEqual(r.body.intent, "delivery", JSON.stringify(r.body));
+  assert.equal(rows("document_requests").length, 1, "a request row");
+  assert.equal(rows("cme").length, 0);
 });

@@ -9,6 +9,11 @@ import { sessionTopicSuggestions, hoursLabel, cmeSessionsOf } from "../../utils/
  * a tapped topic goes into the record's topics, and tapping again takes it
  * off. The list of every session read sits underneath.
  *
+ * Accepting a topic accepts every session listed under it: the sessions stay
+ * in the record's session list with the topic, and the engine
+ * (compliance.js sessionTopicHours) counts only those sessions' printed hours
+ * toward the topic, not the whole activity's credit.
+ *
  * sessions: the normalized list (topicSuggest.js). topics: the form's current
  * topics. onToggle(topic): add or remove one. onAcceptAll(topics): add these.
  */
@@ -41,6 +46,11 @@ export default function SessionTopicSuggestions({ sessions, topics, onToggle, on
                     backgroundColor: on ? T.accent : "transparent",
                     color: on ? "#fff" : T.accent,
                   }}>{on ? "✓ " : "+ "}{s.topic}{s.hours != null ? `: ${hoursLabel(s.hours)}` : ""}</button>
+                  {on && s.hours != null && (
+                    <div style={{ ...small, marginTop: 3, marginLeft: 4, color: T.textDim }}>
+                      Counts {hoursLabel(s.hours)} toward {s.topic}, from {s.sessions.length === 1 ? "this session" : "these sessions"}, not the activity&rsquo;s full credit.
+                    </div>
+                  )}
                   {s.sessions.map((x, i) => (
                     <div key={i} style={{ ...small, marginTop: 3, marginLeft: 4 }}>
                       {x.hours != null ? `${hoursLabel(x.hours)} from ` : "From "}&ldquo;{x.title}&rdquo;

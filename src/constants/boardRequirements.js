@@ -1663,8 +1663,11 @@ export const BOARD_TASKS = {
     // Component 2, initial certification: share of the 60 hours owed by the
     // half year of the AOA cycle the certificate was issued in; a share that
     // is not a whole or half number is rounded down to the nearest half.
+    // The last half year is 0 because the chart says so (checked 2026-11-18:
+    // "No requirement until" the next CME cycle); zeroNote carries that.
     firstCycleProration: {
       shares: [0.83, 0.67, 0.5, 0.33, 0.17, 0],
+      zeroNote: "No requirement until the next AOA CME cycle.",
       url: "https://certification.osteopathic.org/surgery/occ-overview/component-2/",
     },
     tasks: [

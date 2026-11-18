@@ -4,13 +4,16 @@
 //
 // Data: BOARD_TASKS in src/constants/boardRequirements.js, only cadences an
 // official page states. Marks: one date per task per period, on the board's
-// Board Certification record (customFields), or on data.settings
-// (boardTaskMarks) when no record is on file. The physician marks a task done
-// and can undo it; nothing is marked automatically.
+// Board Certification record (customFields). Marking a task with no record on
+// file first creates that record (applyBoardTaskMark `create`), because
+// settings.boardTaskMarks is not a synced setting and an online load dropped
+// it. A mark already in settings from before is still read and Undo clears
+// it. The physician marks a task done and can undo it; nothing is marked
+// automatically.
 //
 // Extensions spelled out so pure-node test scripts can import this module.
-import { BOARD_TASKS } from "../constants/boardRequirements.js";
-import { aoaCycle, boardRecordFor } from "./boardCompliance.js";
+import { ABMS_MOC, AOA_OCC, BOARD_TASKS } from "../constants/boardRequirements.js";
+import { aoaCycle, boardRecordFor, effectiveBoardSpecialties } from "./boardCompliance.js";
 import { daysUntilDate, localToday } from "./dateDays.js";
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
@@ -50,9 +53,49 @@ export function taskPeriod(task, now = new Date()) {
   return { label: String(y), start: `${y}-01-01`, end: `${y}-12-31`, due, opens: win?.from || null };
 }
 
-/** Every mark the physician has made for this board: settings first, the record's own win. */
-export function boardTaskMarks(data, record) {
-  return { ...(data?.settings?.boardTaskMarks || {}), ...(record?.customFields || {}) };
+/** Every mark the physician has made for this board: legacy settings first, the records' own win. */
+export function boardTaskMarks(data, ...records) {
+  const out = { ...(data?.settings?.boardTaskMarks || {}) };
+  for (const r of records) Object.assign(out, r?.customFields || {});
+  return out;
+}
+
+/**
+ * An AOA board whose discipline is also picked (AOA:AOBS beside
+ * AOA-SUB:AOBS:Neurological Surgery) shows its tasks once, on the discipline
+ * card: the same Longitudinal Assessment twice with separate marks and two
+ * alerts was one duty counted twice. Returns the parent board id the
+ * discipline card shares marks with, or null.
+ */
+function sharedParentId(data, boardId) {
+  const [kind, code] = String(boardId || "").split(":");
+  if (kind !== "AOA-SUB") return null;
+  return effectiveBoardSpecialties(data).includes(`AOA:${code}`) ? `AOA:${code}` : null;
+}
+function shadowedByDiscipline(data, boardId) {
+  const [kind, code] = String(boardId || "").split(":");
+  if (kind !== "AOA") return false;
+  return effectiveBoardSpecialties(data).some(id => id.startsWith(`AOA-SUB:${code}:`));
+}
+
+/**
+ * The Board Certification record a first mark creates when none is on file,
+ * named so boardIdsFromLicenses and boardRecordFor find it again: type
+ * "Board Certification (AOA)" or "(ABMS)", name "<code> <board or
+ * discipline>". Dates are left blank for the physician to fill in.
+ */
+export function newBoardRecord(boardId, makeId = () => globalThis.crypto.randomUUID()) {
+  const [kind, code, ...rest] = String(boardId || "").split(":");
+  const sub = rest.join(":").trim();
+  const aoa = kind.replace(/-SUB$/, "") === "AOA";
+  const boardName = (aoa ? AOA_OCC : ABMS_MOC)[code]?.name || "";
+  return {
+    id: makeId(),
+    type: aoa ? "Board Certification (AOA)" : "Board Certification (ABMS)",
+    name: `${code} ${sub || boardName}`.trim(),
+    issuedDate: "", expirationDate: "", notes: "",
+    customFields: {},
+  };
 }
 
 /**
@@ -97,14 +140,17 @@ function startsYear(task, boardId, record) {
 export function boardTasksFor(data, board, now = new Date()) {
   const boardId = board?.id;
   const set = boardTaskSet(boardId);
-  if (!set) return null;
+  if (!set || shadowedByDiscipline(data, boardId)) return null;
   const record = boardRecordFor(data?.licenses, boardId);
-  const marks = boardTaskMarks(data, record);
+  const parentId = sharedParentId(data, boardId);
+  const marks = boardTaskMarks(data, parentId ? boardRecordFor(data?.licenses, parentId) : null, record);
   const today = localToday(now);
   const tasks = set.tasks.map(task => {
     const period = taskPeriod(task, now);
     const field = boardTaskField(boardId, task, period.label);
-    const mark = marks[field];
+    // The parent card's mark for the same duty counts here too (and Undo clears it).
+    const alsoFields = parentId ? [boardTaskField(parentId, task, period.label)] : [];
+    const mark = [field, ...alsoFields].map(f => marks[f]).find(m => typeof m === "string" && ISO.test(m));
     const doneOn = typeof mark === "string" && ISO.test(mark) ? mark : null;
     const begins = startsYear(task, boardId, record);
     let status = "due";
@@ -119,27 +165,49 @@ export function boardTasksFor(data, board, now = new Date()) {
       id: task.id, label: task.label, detail: task.detail || "", cost: task.cost ?? null, source: task.source || set.sourceUrl,
       every: task.every, period: period.label, due: period.due, opens: period.opens,
       daysLeft: period.due ? daysUntilDate(period.due, now) : null,
-      doneOn, status, field, startsYear: begins && begins > now.getFullYear() ? begins : null,
+      doneOn, status, field, alsoFields, startsYear: begins && begins > now.getFullYear() ? begins : null,
     };
   });
   return { boardId, recordId: record?.id || null, tasks, noExpiration: noExpirationFor(boardId, record), checked: set.checked, sourceUrl: set.sourceUrl };
 }
 
 /**
- * A mark written as the physician chose it: on the Board Certification
- * record when one is on file, otherwise in settings. `date` null removes it
- * (Undo). Returns { record } or { settings } for the caller to save.
+ * A mark written as the physician chose it, on the board's Board
+ * Certification record. `date` null removes it (Undo) wherever it is: the
+ * record, any record holding a shared parent-card mark (`alsoFields`), and a
+ * legacy settings.boardTaskMarks copy. Returns, for the caller to save:
+ *   records:  edited existing records (editItem)
+ *   create:   a new Board Certification record carrying the mark, when none
+ *             is on file (addItem)
+ *   settings: { boardTaskMarks } with the legacy copy cleared, when it held one
  */
-export function applyBoardTaskMark(data, boardId, field, date) {
-  const record = boardRecordFor(data?.licenses, boardId);
-  const set = (obj) => {
+export function applyBoardTaskMark(data, boardId, field, date, { alsoFields = [], makeId } = {}) {
+  const fields = [field, ...alsoFields];
+  const marking = !!(date && ISO.test(date));
+  const strip = (obj) => {
     const out = { ...(obj || {}) };
-    if (date && ISO.test(date)) out[field] = date;
-    else delete out[field];
+    for (const f of fields) delete out[f];
     return out;
   };
-  if (record) return { record: { ...record, customFields: set(record.customFields) } };
-  return { settings: { boardTaskMarks: set(data?.settings?.boardTaskMarks) } };
+  const has = (obj) => !!obj && fields.some(f => Object.prototype.hasOwnProperty.call(obj, f));
+  const own = boardRecordFor(data?.licenses, boardId);
+  const records = [];
+  for (const l of data?.licenses || []) {
+    if (!l) continue;
+    const mine = own && l.id === own.id;
+    if (!(mine && marking) && !has(l.customFields)) continue;
+    const customFields = strip(l.customFields);
+    if (mine && marking) customFields[field] = date;
+    records.push({ ...l, customFields });
+  }
+  const out = { records };
+  if (marking && !own) {
+    const rec = newBoardRecord(boardId, makeId);
+    out.create = { ...rec, customFields: { [field]: date } };
+  }
+  const legacy = data?.settings?.boardTaskMarks;
+  if (has(legacy)) out.settings = { boardTaskMarks: strip(legacy) };
+  return out;
 }
 
 /**

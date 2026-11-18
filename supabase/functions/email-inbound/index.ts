@@ -277,7 +277,7 @@ import { alertsEnabled, maybeAlertOwner } from "../_shared/intakeAiAlert.mjs";
 // patient records BEFORE they are stored, as the app screens them before upload.
 import { officeText } from "../_shared/officeText.mjs";
 import { screenDocument } from "../_shared/app/utils/phiGuard.js";
-import { scanRequestBody, validateResponse, parseModelJson, SCAN_IMAGE_TEXT, scanPdfText } from "../_shared/app/utils/scannerCore.js";
+import { scanRequestBody, validateResponse, parseModelJson, SCAN_IMAGE_TEXT, scanPdfText, wantsSessions, isCutOffReply, SESSIONS_SKIPPED_NOTE } from "../_shared/app/utils/scannerCore.js";
 import { GEMINI_MODEL } from "../_shared/app/utils/geminiModel.js";
 import { meterUsage } from "../_shared/aiPricing.ts";
 // The support+<ticket id>@ reply address and the quote cut, shared with the
@@ -1351,14 +1351,23 @@ async function scanAttachment(profileId: string, f: Downloaded, ctx: ScanContext
     { inlineData: { mimeType: mime, data: encodeBase64(f.bytes) } },
     { text: `${mime === "application/pdf" ? scanPdfText(ctx.degree) : SCAN_IMAGE_TEXT} ${SCAN_REQUEST_WORDS}` },
   ];
-  const body = scanRequestBody({ degreeType: ctx.degree, categories: ctx.categoryNames, parts });
+  // A long CME transcript whose session list cuts the reply off is read once
+  // more without it, time permitting (scannerCore.js scanWithSessionsFallback).
+  let sessions = wantsSessions(null);
+  let skipped = false;
+  let status: number | null = null;
+  let ok = false;
+  let parsedBody: unknown = null;
+  for (;;) {
+  const left = ctx.deadline - Date.now();
+  const body = scanRequestBody({ degreeType: ctx.degree, categories: ctx.categoryNames, parts, sessions });
   const path = `models/${GEMINI_MODEL}:generateContent`;
   const chars = promptChars(body);
   const startedAt = new Date();
   const abort = new AbortController();
-  const timer = setTimeout(() => abort.abort(), Math.min(SCAN_TIMEOUT_MS, remaining));
-  let status: number | null = null;
-  let ok = false;
+  const timer = setTimeout(() => abort.abort(), Math.min(SCAN_TIMEOUT_MS, left));
+  status = null;
+  ok = false;
   let text = "";
   let type = "application/json";
   try {
@@ -1378,15 +1387,22 @@ async function scanAttachment(profileId: string, f: Downloaded, ctx: ScanContext
   } finally {
     clearTimeout(timer);
   }
-  let parsedBody: unknown = null;
+  parsedBody = null;
   if (/json/i.test(type)) { try { parsedBody = JSON.parse(text); } catch { parsedBody = null; } }
   await logAiUsage(profileId, {
     path, ok, status, prompt_chars: chars, provider: "gemini",
     ...meterUsage("gemini", GEMINI_MODEL, parsedBody, startedAt),
   });
+  if (ok && sessions && isCutOffReply(parsedBody) && ctx.deadline - Date.now() >= 5_000) { sessions = false; skipped = true; continue; }
+  break;
+  }
   if (!ok) return { scan: null, why: `AI service answered ${status}` };
   try {
     const result = validateResponse(parseModelJson(parsedBody));
+    if (result && skipped && result.documentType === "cme") {
+      result.sessionsSkipped = true;
+      result.notes = result.notes ? `${result.notes} ${SESSIONS_SKIPPED_NOTE}` : SESSIONS_SKIPPED_NOTE;
+    }
     return result ? { scan: result, why: "" } : { scan: null, why: "no document type in the reply" };
   } catch (err) {
     return { scan: null, why: err instanceof Error ? err.message.slice(0, 120) : "unreadable reply" };
@@ -1671,6 +1687,7 @@ https://credentialdomd.com`);
       senderAddr: parsed.found ? parsed.from_addr : "", rawText, forwardedBody: parsed.found ? parsed.body_text : null,
       rulesBody: parsed.body_text, attachmentNames: screened.keep.map((f) => f.filename), attachmentCount: screened.keep.length,
       forwarded: parsed.found, files: screened.keep, prescanned, rows: await loadRecordRows(profile.id),
+      ownSender: mayFile && !parsed.found,
     });
     console.log(`inbound ${emailId}: cme, ${readingDetail(read)}`);
     if (read.method === "model") reading = read;
@@ -2313,6 +2330,10 @@ async function understandEmail(profile: MatchedProfile, ctx: ScanContext, admiss
   subject: string; senderName: string | null; senderAddr: string; rawText: string;
   forwardedBody: string | null; rulesBody: string; attachmentNames: string[]; attachmentCount: number;
   forwarded: boolean; files: Downloaded[]; prescanned: Map<Downloaded, ScanOutcome>; rows: RowsBySection;
+  // Sent by the physician from their own address (the mailbox claim that
+  // matched the profile), positively authenticated, and not a forward: the
+  // only email whose signature-only body may be filed without a question.
+  ownSender: boolean;
 }): Promise<Reading> {
   // The note, the sender's message and the history, kept apart: an ask
   // counts only in the sender's own words (verifyUnderstanding).
@@ -2348,6 +2369,7 @@ async function understandEmail(profile: MatchedProfile, ctx: ScanContext, admiss
   const rules = (why: string): Reading => rulesWithFacts(rulesUnderstanding({
     subject: input.subject, body: input.rulesBody, attachmentNames: input.attachmentNames,
     attachmentCount: input.attachmentCount, forwarded: input.forwarded, why, attachmentWords: words, attachmentTypes: types,
+    ownSender: input.ownSender, signerNames: [ctx.physicianName, input.senderName ?? ""],
   }), { message: [parts.note, parts.message].filter(Boolean).join("\n\n"), subject: input.subject, agencies, facts }) as Reading;
   if (!admission.ok) return rules(admission.why);
   try {
@@ -2393,7 +2415,10 @@ async function understandEmail(profile: MatchedProfile, ctx: ScanContext, admiss
       if (!call.ok) { failures.push({ provider: reader.provider, why: call.why ?? "the model call failed", status: call.status ?? null }); continue; }
       const read = readModelReply(call.message);
       if (!read.ok) { failures.push({ provider: reader.provider, why: reader.provider === "workers-ai" ? `Workers AI: ${read.why}` : reader.provider === "gemini" ? `Gemini: ${read.why}` : read.why, status: null }); continue; }
-      const verified = verifyUnderstanding(read.value, { subject: input.subject, parts, attachmentCount: input.files.length, facts, senderName: input.senderName ?? "" }) as Reading;
+      const verified = verifyUnderstanding(read.value, {
+        subject: input.subject, parts, attachmentCount: input.files.length, facts, senderName: input.senderName ?? "",
+        ownSender: input.ownSender, attachmentNames: input.files.map((f) => f.filename),
+      }) as Reading;
       reading = { ...verified, via: reader.provider };
       break;
     }
@@ -2542,6 +2567,7 @@ https://credentialdomd.com`);
     rawText, forwardedBody: parsed.found ? parsed.body_text : null, rulesBody: parsed.body_text,
     attachmentNames: keepable.map((a) => safeFilename(a.filename, "")), attachmentCount: keepable.length,
     forwarded: parsed.found, files, prescanned, rows: await loadRecordRows(profile.id),
+    ownSender: mayFile && !parsed.found,
   });
   const intent = reading.intent;
   const roles = rolesByFile(files, reading);

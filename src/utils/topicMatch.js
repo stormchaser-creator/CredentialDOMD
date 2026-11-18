@@ -146,3 +146,14 @@ export function withTopicAdded(entry, topic) {
   const topics = cmeTopics(entry);
   return { ...entry, topics: topics.includes(topic) ? topics : [...topics, topic] };
 }
+
+/**
+ * The record with exactly this topic taken off its current topics, every
+ * other topic (including ones added after the topic was) left as it is. A
+ * record that never had it comes back unchanged.
+ */
+export function withTopicRemoved(entry, topic) {
+  const topics = cmeTopics(entry);
+  if (!topics.includes(topic)) return entry;
+  return { ...entry, topics: topics.filter(t => t !== topic) };
+}

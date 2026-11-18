@@ -228,7 +228,12 @@ export function boardComplianceFor(data) {
   return computeBoardCompliance({ ...data, settings: { ...(data?.settings || {}), specialties: effectiveBoardSpecialties(data) } });
 }
 
-/** The field on a Board Certification record that turns first-cycle proration off ("No"). */
+/**
+ * The field on a Board Certification record that holds the physician's answer
+ * to "Is <issued date> your first certification date?": "Yes" applies the
+ * first-cycle proration, "No" (a recertification date) keeps the full hours.
+ * Unanswered, the full hours stand and the card asks.
+ */
 export const FIRST_CYCLE_FIELD = "AOA first-cycle proration";
 
 /**
@@ -251,9 +256,14 @@ export function boardRecordFor(licenses, boardId) {
  * An AOA card's hours for this cycle. A board that publishes a first-cycle
  * chart (BOARD_TASKS firstCycleProration, AOBS Component 2) owes a share of
  * its hours when the certificate was issued inside the current cycle: by the
- * half year of issue, rounded down to the nearest half hour. Applied only
- * from the record's issued date, and the physician can turn it off on the
- * record (FIRST_CYCLE_FIELD "No") when the date is a recertification.
+ * half year of issue, rounded down to the nearest half hour. An issued date
+ * can be a recertification date, so the share applies only once the
+ * physician answers Yes on the record (FIRST_CYCLE_FIELD); unanswered or No,
+ * the full hours stand. firstCycle.off is true whenever the share is not
+ * applied (pending or No), so a reader that shows prorated hours only when
+ * !off never shows a number the card is not using. A share of 0 is used only
+ * where the chart publishes it (zeroNote); a 0 the chart does not state falls
+ * back to the smallest published nonzero share.
  */
 function aoaRequirement(b, code, data, id, cyc) {
   const base = b.timeLimited || { hours: 120, cat1: 0 };
@@ -263,10 +273,22 @@ function aoaRequirement(b, code, data, id, cyc) {
   const issued = String(rec?.issuedDate || "").slice(0, 10);
   if (!/^\d{4}-\d{2}-\d{2}$/.test(issued) || issued < `${cyc.start}-01-01` || issued > `${cyc.end}-12-31`) return { req: base, firstCycle: null };
   const half = (Number(issued.slice(0, 4)) - cyc.start) * 2 + (Number(issued.slice(5, 7)) >= 7 ? 1 : 0);
-  const share = chart.shares[half] ?? 0;
+  const published = chart.shares[half];
+  const nonzero = chart.shares.filter(x => x > 0);
+  const minShare = nonzero.length ? Math.min(...nonzero) : 1;
+  const zeroPublished = published === 0 && !!chart.zeroNote;
+  const share = zeroPublished ? 0 : (published > 0 ? published : minShare);
   const hours = Math.floor(base.hours * share * 2) / 2;
   const cat1 = Math.floor((base.cat1 || 0) * share * 2) / 2;
-  const off = /^no$/i.test(String(rec.customFields?.[FIRST_CYCLE_FIELD] ?? ""));
-  const firstCycle = { issued, share, hours, fullHours: base.hours, url: chart.url, recordId: rec.id, off };
-  return { req: off ? base : { ...base, hours, cat1 }, firstCycle };
+  const raw = String(rec.customFields?.[FIRST_CYCLE_FIELD] ?? "").trim();
+  const answer = /^no$/i.test(raw) ? "no" : /^yes$/i.test(raw) ? "yes" : null;
+  const firstCycle = {
+    issued, share, hours, fullHours: base.hours, url: chart.url, recordId: rec.id,
+    off: answer !== "yes", pending: answer === null, answer,
+    zeroNote: share === 0 ? chart.zeroNote : null,
+    nextCycle: `${cyc.end + 1}-${cyc.end + 3}`,
+    // The chart had no nonzero share for this half year and states no 0: the smallest one it does publish.
+    minShareUsed: !(published > 0) && !zeroPublished,
+  };
+  return { req: answer === "yes" ? { ...base, hours, cat1 } : base, firstCycle };
 }

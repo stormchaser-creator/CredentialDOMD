@@ -3,6 +3,7 @@ import { useApp } from "../../context/AppContext";
 import { boardTasksFor, applyBoardTaskMark } from "../../utils/boardTasks";
 import { FIRST_CYCLE_FIELD } from "../../utils/boardCompliance";
 import { localToday } from "../../utils/dateDays";
+import { generateId } from "../../utils/helpers";
 import { TAP_MIN } from "./actionButton";
 
 const dayLabel = iso => new Date(`${iso}T12:00`).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
@@ -20,32 +21,37 @@ function taskStatusText(t) {
 /**
  * A board card's dated tasks (src/utils/boardTasks.js): each with its due
  * date, "Mark done" (date defaults to today and can be changed) and Undo. The
- * physician marks; nothing is marked for them. Also the board's facts that
+ * physician marks; nothing is marked for them. A first mark with no Board
+ * Certification record on file creates that record and stores the mark on
+ * it (settings.boardTaskMarks is not synced). Also the board's facts that
  * change how the card reads: a certificate with no expiration date, and a
- * first-cycle proration they can turn off.
+ * first-cycle proration applied only once the physician says the issued
+ * date is their first certification.
  */
 export default function BoardTasks({ board }) {
-  const { data, editItem, updateSettings, theme: T } = useApp();
+  const { data, addItem, editItem, updateSettings, theme: T } = useApp();
   const [marking, setMarking] = useState(null);
   const [day, setDay] = useState("");
   const info = boardTasksFor(data, board);
   const fc = board.firstCycle;
   if (!info && !fc) return null;
 
-  const save = (field, date) => {
-    const out = applyBoardTaskMark(data, board.id, field, date);
-    if (out.record) editItem("licenses", out.record);
-    else updateSettings(out.settings);
+  const save = (t, date) => {
+    const out = applyBoardTaskMark(data, board.id, t.field, date, { alsoFields: t.alsoFields, makeId: generateId });
+    if (out.create) addItem("licenses", out.create);
+    for (const rec of out.records) editItem("licenses", rec);
+    if (out.settings) updateSettings(out.settings);
     setMarking(null);
   };
-  const setProration = (off) => {
+  // "Yes": the issued date is the first certification, so the chart's share applies. "No": full hours.
+  const setFirstCycle = (answer) => {
     const rec = (data.licenses || []).find(l => l.id === fc.recordId);
     if (!rec) return;
-    const customFields = { ...(rec.customFields || {}) };
-    if (off) customFields[FIRST_CYCLE_FIELD] = "No";
-    else delete customFields[FIRST_CYCLE_FIELD];
-    editItem("licenses", { ...rec, customFields });
+    editItem("licenses", { ...rec, customFields: { ...(rec.customFields || {}), [FIRST_CYCLE_FIELD]: answer } });
   };
+  const owedText = (f) => f.hours === 0
+    ? `no CME hours this cycle; the board's hours start with the ${f.nextCycle} cycle`
+    : `${f.hours} of ${f.fullHours} hours this cycle${f.minShareUsed ? " (the smallest share the board's chart lists)" : ""}`;
   const stop = e => e.stopPropagation();
   const btn = (primary) => ({
     padding: "3px 10px", minHeight: TAP_MIN, fontSize: 11, fontWeight: 700, borderRadius: 8, border: "none", cursor: "pointer",
@@ -64,9 +70,12 @@ export default function BoardTasks({ board }) {
       )}
       {fc && (
         <div style={{ ...small, marginBottom: 8 }}>
-          {fc.off
-            ? <>Using the full {fc.fullHours} hours this cycle.<button style={btn(false)} onClick={() => setProration(false)}>Use first-cycle hours</button></>
-            : <>First cycle: certified {dayLabel(fc.issued)}, so you owe {fc.hours} of {fc.fullHours} hours this cycle.<button style={btn(false)} onClick={() => setProration(true)}>Not my first certificate</button></>}
+          {fc.pending
+            ? <>Is {dayLabel(fc.issued)} your first certification date?<button style={btn(false)} onClick={() => setFirstCycle("Yes")}>Yes</button><button style={btn(false)} onClick={() => setFirstCycle("No")}>No</button>
+                <div>Counting the full {fc.fullHours} hours for now. If this is your first certificate, you may owe {fc.hours === 0 ? "no hours this cycle" : fc.hours}: confirm.</div></>
+            : fc.off
+              ? <>Using the full {fc.fullHours} hours this cycle.<button style={btn(false)} onClick={() => setFirstCycle("Yes")}>Use first-cycle hours</button></>
+              : <>First cycle: certified {dayLabel(fc.issued)}, so you owe {owedText(fc)}.<button style={btn(false)} onClick={() => setFirstCycle("No")}>Not my first certificate</button></>}
         </div>
       )}
       {info?.tasks.map(t => (
@@ -78,11 +87,11 @@ export default function BoardTasks({ board }) {
           {t.detail && <div style={{ fontSize: 11.5, color: T.textDim, marginTop: 2, lineHeight: 1.4 }}>{t.detail}</div>}
           <div style={{ marginTop: 4 }}>
             {t.doneOn
-              ? <button style={btn(false)} onClick={() => save(t.field, null)}>Undo</button>
+              ? <button style={btn(false)} onClick={() => save(t, null)}>Undo</button>
               : marking === t.field
                 ? <span style={small}>
                     Done on <input type="date" value={day} max={localToday()} onChange={e => setDay(e.target.value)} aria-label={`Date ${t.label} was done`} style={{ fontSize: 16, padding: "2px 6px", borderRadius: 6, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text }} />
-                    <button style={btn(true)} disabled={!/^\d{4}-\d{2}-\d{2}$/.test(day)} onClick={() => save(t.field, day)}>Save</button>
+                    <button style={btn(true)} disabled={!/^\d{4}-\d{2}-\d{2}$/.test(day)} onClick={() => save(t, day)}>Save</button>
                     <button style={btn(false)} onClick={() => setMarking(null)}>Cancel</button>
                   </span>
                 : <button style={btn(false)} onClick={() => { setDay(localToday()); setMarking(t.field); }}>Mark done</button>}

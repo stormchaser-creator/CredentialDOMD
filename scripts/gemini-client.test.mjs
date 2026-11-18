@@ -122,8 +122,12 @@ for (const [name, run, reply, ceiling, check] of examples) {
 }
 assert.equal(opusCalls, 0, "Explicit Gemini skips Anthropic even with a key");
 assert.equal(calls[0].key, "personal-test-key", "Personal key forwarded unchanged");
-assert.equal(calls[2].key, "", "Shared route remains selected by an empty key");
-assert.equal(calls[2].body.contents[0].parts[0].inlineData.mimeType, "application/pdf");
+// calls: image (0), image cut off (1) and its retry without the session list
+// (2, scannerCore.js scanWithSessionsFallback), then the PDF scan (3).
+assert.equal(calls[3].key, "", "Shared route remains selected by an empty key");
+assert.equal(calls[1].key, calls[2].key, "A cut-off credential scan is retried once on the same route");
+assert.equal(calls[3].body.contents[0].parts[0].inlineData.mimeType, "application/pdf");
+assert.ok(JSON.stringify(calls[1].body).length > JSON.stringify(calls[2].body).length, "The retry leaves the session list out");
 passed += 4;
 
 opusReply = { reply: "Synthetic Anthropic answer", actions: [] };

@@ -76,7 +76,7 @@
  * confidence (requestPacket.ts oneTapReady).
  */
 import { KINDS, parseAsks, asksSomething, hasAskForm, asksInSubject, isListItem, classifyAsk, isSignatureText, signatureOnly } from "./requestPacket.ts";
-import { classifyIntent, currentMessage } from "./intakeIntent.mjs";
+import { classifyIntent, currentMessage, attachmentRole } from "./intakeIntent.mjs";
 import { decodeEntities, normalizeForQuote, quoteKey, quoteOccurs } from "./quoteText.mjs";
 import { RECORDS_SCHEMA, RECORDS_PROMPT, verifyRecords, attachmentText, rulesRecords, attachmentWordsIdentify, requestedInWords } from "./intakeFacts.mjs";
 
@@ -645,7 +645,7 @@ const RANK = { high: 3, medium: 2, low: 1 };
  *               recordsReview that the email names another clinician, so
  *               its facts are only offered
  */
-export function verifyUnderstanding(value, { subject = "", parts = null, emailText = "", attachmentCount = 0, facts = null, senderName = "" } = {}) {
+export function verifyUnderstanding(value, { subject = "", parts = null, emailText = "", attachmentCount = 0, facts = null, senderName = "", ownSender = false, attachmentNames = [] } = {}) {
   const p = parts && typeof parts === "object" ? parts : { note: "", message: String(emailText ?? ""), history: "" };
   const subj = normalizeForQuote(subject);
   const message = indexUnits(p.message);
@@ -754,18 +754,29 @@ export function verifyUnderstanding(value, { subject = "", parts = null, emailTe
 
   const askedFor = modelIntent === "request" || modelIntent === "mixed";
   // Called a request on the strength of a signature alone, in an email in
-  // which nothing asks (no asking sentence, no asking subject): nothing was
-  // asked. With a file the reading took for the physician's own, the email
-  // is that file, filed like any delivery and never answered with a
-  // question; otherwise the rules read it, as for a reading with no evidence.
+  // which nothing asks (no asking sentence in the subject, the message or
+  // the quoted history, and nothing asked in an attached letter): nothing
+  // was asked.
+  const attachmentAsked = attached.some((r) => r.items.length > 0 || !!r.leadIn);
   const onlySignature = askedFor && !asks.length && dropped.length > 0
-    && dropped.every((d) => d.why === DROP.signature) && !listAsked;
-  const unclear = !asks.length && askedFor && !(onlySignature && keepsFiles);
+    && dropped.every((d) => d.why === DROP.signature) && !listAsked && !historyAsked && !attachmentAsked;
+  // Filed like any delivery, and never answered with a question, only when
+  // it is plainly the physician's own file: sent from their own
+  // authenticated address (ownSender, set by the host), every attachment
+  // read as their own credential and none named like a form to fill in
+  // (intakeIntent.mjs attachmentRole). Otherwise the rules read it, as for a
+  // reading with no evidence, and they keep a form or an unread file with
+  // the request.
+  const formNamed = (Array.isArray(attachmentNames) ? attachmentNames : []).some((n) => attachmentRole(n) === "form");
+  const ownCredentials = attachmentCount > 0 && attachments.length === attachmentCount
+    && attachments.every((a) => a.role === "credential_for_physician");
+  const ownDelivery = onlySignature && ownSender === true && ownCredentials && !formNamed;
+  const unclear = !asks.length && askedFor && !ownDelivery;
   // Called a request, and every ask it listed (if it listed any) was words
   // the email does not hold: the model's reading is no evidence either way,
   // so the rules read the email instead.
   const needsRules = unclear && (onlySignature || dropped.every((d) => d.why === DROP.notOwnWords));
-  let intent = onlySignature && keepsFiles ? "delivery" : finalIntent(modelIntent, asks.length > 0, keepsFiles);
+  let intent = ownDelivery ? "delivery" : finalIntent(modelIntent, asks.length > 0, keepsFiles);
   if (unclear) intent = modelIntent === "mixed" || keepsFiles ? "mixed" : "request";
   if (unclear) cap("medium");
   // Facts to enter only from an email that asks for nothing: a request's
@@ -848,6 +859,12 @@ export function asksToSign(asks) {
 // a copy of this certificate to the credentialing office") asks nothing.
 export const LETTER_SCAN_TYPES = Object.freeze(["other", "unknown"]);
 
+// The scanner's types (scannerCore.js VALID_DOC_TYPES) that are a
+// physician's own finished credential: what a signature-only email from the
+// physician may be filed as without a question. Not "agreement" (a contract
+// can be one to sign), "other", "unknown", a receipt or a CV.
+export const OWN_CREDENTIAL_SCAN_TYPES = Object.freeze(["cme", "license", "privilege", "insurance", "education", "healthRecord"]);
+
 /**
  * The asks the rules read in the attachments' words (intakeFacts.mjs
  * attachmentText, one string per attachment): each requested item the host
@@ -904,7 +921,7 @@ const cleanSubjectLine = (s) => String(s ?? "").replace(/^\s*(?:(?:re|fwd?|fw|tr
  * rules' delivery then rests on the file names or the thin note alone).
  * "For my file." says the file is to keep, so it stays a delivery.
  */
-export function rulesUnderstanding({ subject = "", body = "", attachmentNames = [], attachmentCount, forwarded = false, why = "", attachmentWords = [], attachmentTypes = [] } = {}) {
+export function rulesUnderstanding({ subject = "", body = "", attachmentNames = [], attachmentCount, forwarded = false, why = "", attachmentWords = [], attachmentTypes = [], ownSender = false, signerNames = [] } = {}) {
   const rules = classifyIntent({ subject, body, attachmentNames, attachmentCount, forwarded });
   const parsed = parseAsks(body, subject);
   const own = new Set(parsed.map((a) => quoteKey(a)));
@@ -926,14 +943,29 @@ export function rulesUnderstanding({ subject = "", body = "", attachmentNames = 
   const asks = fromFiles.length ? parsed.filter((a) => classifyAsk(a).kind !== "unknown" || !(quiet || POINTS_ATTACHED_RE.test(a))) : parsed;
   const asking = asks.length > 0 || fromFiles.length > 0 || asksSomething(body, subject);
   const askForm = hasAskForm(cleanSubjectLine(subject)) || askUnits(message).some((u) => !u.item && hasAskForm(u.text) && !OFFER_RE.test(u.text));
-  // The physician's own email (no third party's header block) whose whole
-  // body is a signature, under a subject that asks nothing, with a file
-  // attached and no letter among the files that asks: the file is what the
-  // email is about, so it is filed. Neither the name nor the subject is an
-  // ask ("OMED CME" over a CME transcript, 2026-11-17), whatever the file
-  // is named.
-  const ownFile = !forwarded && (Number.isFinite(attachmentCount) ? attachmentCount : attachmentNames.length) > 0
-    && signatureOnly(body) && !read.length && !asksInSubject(subject)
+  // The physician's own file ("OMED CME" over a CME transcript, signed
+  // "Dr. <name>" and a phone number, 2026-11-17): neither the name nor the
+  // subject is an ask, and the file is filed. Every one of these must hold,
+  // or the email is read as below (a genuine request signed with a short
+  // body must never be filed silently):
+  //   - sent from the physician's own authenticated address (ownSender, set
+  //     by the host), with no third party's header block;
+  //   - no file named like a form to fill in ("Reappointment_Application",
+  //     "Attestation_to_sign", "form.pdf"): the form rule comes first;
+  //   - every file scanned, and read as the physician's own credential
+  //     (OWN_CREDENTIAL_SCAN_TYPES) with words in the reading;
+  //   - the body only the physician's or the sender's own name and contact
+  //     lines (requestPacket.ts signatureOnly), and no ask in the subject or
+  //     in an attached letter.
+  const count = Number.isFinite(attachmentCount) ? attachmentCount : attachmentNames.length;
+  const types = Array.isArray(attachmentTypes) ? attachmentTypes : [];
+  const wordsOf = Array.isArray(attachmentWords) ? attachmentWords : [];
+  const ownCredentials = count > 0 && types.length === count
+    && types.every((t, i) => OWN_CREDENTIAL_SCAN_TYPES.includes(String(t ?? "")) && String(wordsOf[i] ?? "").trim() !== "");
+  const formNamed = (Array.isArray(attachmentNames) ? attachmentNames : []).some((n) => attachmentRole(n) === "form");
+  const ownFile = ownSender === true && !forwarded && !formNamed && ownCredentials
+    && signatureOnly(body, signerNames) && !read.length && !asksInSubject(subject)
+    && !hasAskForm(cleanSubjectLine(subject))
     && classifyIntent({ subject, body: "", attachmentCount: 1 }).requestScore === 0;
   let intent;
   let unclear = false;

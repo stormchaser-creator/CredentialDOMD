@@ -1,5 +1,6 @@
 import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements.js";
-import { topicApplicability, priorCompletionOn, specialtyPrefill, PRIOR_SUFFIX, boardExemptionOn } from "./conditionalCme.js";
+import { topicApplicability, priorCompletionOn, specialtyPrefill, PRIOR_SUFFIX, boardExemptionOn, currentBoardCertificationOnFile } from "./conditionalCme.js";
+import { cmeSessionsOf } from "./topicSuggest.js";
 import { isAlertable, isInactive, needsResolution } from "./lifecycle.js";
 import { daysUntilDate, parseDay } from "./dateDays.js";
 import { computeAppCompliance } from "./appCompliance.js";
@@ -223,7 +224,19 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
       && (!t.acceptedCategories || t.acceptedCategories.includes(c.category)));
     const informational = t.informational === true;
     const priorCompleted = !informational && t.period === "lifetime" ? priorCompletionOn(t.topic, opts.priorCompletion || opts.topicApplicability) : null;
-    const earned = informational ? null : round2(tagged.reduce((s, c) => s + hours(c), 0));
+    // A record whose stored session list (topicSuggest.js) has sessions that
+    // carry this topic with hours counts only those sessions toward it: one
+    // 1.5 h session inside a 60 h conference is 1.5 h of the topic, not 60.
+    // The record's full hours still count toward the general total. A record
+    // without such sessions (a whole-course tag) counts whole, as before.
+    const fromSessions = [];
+    const topicHours = (c) => {
+      const s = sessionTopicHours(c, tags);
+      if (!s) return hours(c);
+      fromSessions.push({ id: c.id ?? null, title: c.title || "", hours: s.hours, sessions: s.sessions, courseHours: hours(c) });
+      return s.hours;
+    };
+    const earned = informational ? null : round2(tagged.reduce((s, c) => s + topicHours(c), 0));
     const checklist = !informational && !(t.hours > 0);
     // Per-topic provenance, falling back to the rule set's own citation and
     // URL. `citeInherited` / `sourceInherited` are what let the UI say "this
@@ -263,6 +276,7 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
       checklist,
       met: informational ? null : (checklist ? tagged.length > 0 : earned >= t.hours) || !!priorCompleted,
       ...(priorCompleted ? { priorCompletedOn: priorCompleted } : {}),
+      ...(fromSessions.length ? { fromSessions } : {}),
       note: t.note,
       period,
       periodLabel: informational ? "Course curriculum guidance" : topicPeriodLabel(period, cycleYears),
@@ -298,7 +312,12 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   // The physician's own choice to use the state's board certification
   // exemption (conditionalCme.js boardExemptionOn), only where the rule data
   // names one: the general total and Category 1 minimum read as met.
-  const exemptOn = !noGeneralReq && (entry?.moc || "").trim() && !/^no$/i.test(entry.moc.trim()) ? boardExemptionOn(state, opts.topicApplicability) : null;
+  // It holds only for the renewal it was chosen for (the license expiration
+  // stored with it), only once a narrower state condition is confirmed, and
+  // only while a current board certification is on file (complianceFor
+  // passes boardCertCurrent; a direct caller that omits it is not checked).
+  const exemptOn = !noGeneralReq && (entry?.moc || "").trim() && !/^no$/i.test(entry.moc.trim()) && opts.boardCertCurrent !== false
+    ? boardExemptionOn(state, opts.topicApplicability, opts.licenseExpiration) : null;
   const totalMet = noGeneralReq || !!exemptOn || totalHrs >= totalRequired;
   const cat1Met = !!exemptOn || cat1Required <= 0 || cat1Hrs >= cat1Required;
   const allTopicsMet = topicResults.every(t => t.met);
@@ -677,6 +696,26 @@ export function statePriorCompletions(licenses, state) {
   return out;
 }
 
+/**
+ * The hours a record's stored sessions give one topic: the sessions that
+ * carry any of the topic's tags and print hours, summed (each session once),
+ * never more than the record's own hours when it has them. Null when no such
+ * session exists, so the record counts whole.
+ */
+export function sessionTopicHours(c, tags) {
+  const hit = cmeSessionsOf(c).filter(s => typeof s.hours === "number" && s.topics.some(t => tags.includes(t.topic)));
+  if (!hit.length) return null;
+  const sum = round2(hit.reduce((a, s) => a + s.hours, 0));
+  const whole = parseFloat(c?.hours) || 0;
+  return { hours: whole > 0 ? Math.min(sum, whole) : sum, sessions: hit.length };
+}
+
+/** "1.5 h from 1 session of Annual Meeting" for one fromSessions item. */
+export function sessionCountText(f) {
+  const n = f.sessions;
+  return `${f.hours} h from ${n} session${n === 1 ? "" : "s"} of ${f.title || "this course"}`;
+}
+
 export function complianceFor(data, state, kind) {
   if (isAdvancedPractice(data.settings.degreeType)) return appComplianceFor(data, state, kind);
   const lic = findStateLicense(data.licenses, state);
@@ -694,6 +733,7 @@ export function complianceFor(data, state, kind) {
     priorCompletion: statePriorCompletions(data.licenses, state),
     hasDEA: hasDEARegistration(data.licenses) && state === mateCardState(data),
     mateAttestedOn: mateAttestationDate(data.licenses),
+    boardCertCurrent: currentBoardCertificationOnFile(data.licenses),
   });
 }
 

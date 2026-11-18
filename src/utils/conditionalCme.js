@@ -1,3 +1,6 @@
+import { isInactive } from "./lifecycle.js";
+import { boardIdsFromLicenses } from "./boardCompliance.js";
+import { noExpirationFor } from "./boardTasks.js";
 import { ABMS_MOC, ABMS_SUBSPECIALTIES, AOA_OCC, AOA_SUBSPECIALTIES, ABPS_CERTS } from "../constants/boardRequirements.js";
 
 // Applicability is a physician-supplied fact on the license, never inferred
@@ -35,10 +38,81 @@ export function priorCompletionOn(topic, answers = {}) {
  */
 export const BOARD_EXEMPTION_FIELD = "Board certification exemption used on";
 export const BOARD_EXEMPTION_STATES = Object.freeze(["KY", "LA", "ME", "NC", "ND", "NH", "TX", "WA"]);
-export function boardExemptionOn(state, answers = {}) {
+/**
+ * The license expiration date the choice was made for. The exemption covers
+ * that one renewal: once the license's expiration changes (a renewal, or a
+ * new license record), the stored choice no longer matches and lapses, and
+ * the card offers it again.
+ */
+export const BOARD_EXEMPTION_RENEWAL_FIELD = "Board certification exemption for license expiring";
+/** The day the physician confirmed the state's narrower condition (BOARD_EXEMPTION_CONDITIONS). */
+export const BOARD_EXEMPTION_CONDITION_FIELD = "Board certification exemption condition confirmed on";
+/**
+ * States whose `moc` rule text is narrower than "board certified": the
+ * statement the physician confirms before the exemption applies. Each one
+ * restates that state's stateRequirements `moc` text and adds nothing to it
+ * (tests/board-exemption-renewal.test.mjs checks the key words are still in
+ * the rule text).
+ */
+export const BOARD_EXEMPTION_CONDITIONS = Object.freeze({
+  LA: "I was certified or recertified by an ABMS member board or AOA-recognized specialty board within the past year.",
+  TX: "I was board certified or recertified within 36 months before this renewal, or I hold current ABMS MOC or AOA OCC. This presumes compliance for one renewal only.",
+  KY: "I passed an ABMS or AOA board certification or recertification exam in this CME cycle.",
+  NH: "I passed an ABMS board exam.",
+  ME: "My ABMS certification is current with MOC. A lifetime certificate does not qualify.",
+});
+const ISO_DAY = /^\d{4}-\d{2}-\d{2}$/;
+/**
+ * The day the physician chose the exemption, or null. Only for the renewal it
+ * was chosen for (licenseExpiration must equal the stored expiration), and
+ * for a state with a narrower condition only once that condition is
+ * confirmed. A choice stored without the renewal it was made for (before
+ * 2026-11-18 evening) lapses and is offered again.
+ */
+export function boardExemptionOn(state, answers = {}, licenseExpiration = null) {
   if (!BOARD_EXEMPTION_STATES.includes(state)) return null;
   const v = answers?.[BOARD_EXEMPTION_FIELD];
-  return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+  if (typeof v !== "string" || !ISO_DAY.test(v)) return null;
+  const forRenewal = answers?.[BOARD_EXEMPTION_RENEWAL_FIELD];
+  if (!licenseExpiration || typeof forRenewal !== "string" || forRenewal !== String(licenseExpiration)) return null;
+  if (BOARD_EXEMPTION_CONDITIONS[state]) {
+    const c = answers?.[BOARD_EXEMPTION_CONDITION_FIELD];
+    if (typeof c !== "string" || !ISO_DAY.test(c)) return null;
+  }
+  return v;
+}
+
+/**
+ * True when a current board certification record is on file: a record whose
+ * type names board certification, not superseded or historical, and not past
+ * its expiration date. A certificate with no expiration date counts, and so
+ * does an AOA certificate the board says has none (issued after 2018,
+ * boardTasks.js noExpirationFor), whatever date was typed on it.
+ */
+export function currentBoardCertificationOnFile(licenses, today = null) {
+  const now = today || (() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  })();
+  return (licenses || []).some(l => {
+    if (!l || !/board certification/i.test(l.type || "") || isInactive(l)) return false;
+    const exp = String(l.expirationDate || "").slice(0, 10);
+    if (!ISO_DAY.test(exp) || exp >= now) return true;
+    return boardIdsFromLicenses([l]).some(id => noExpirationFor(id, l));
+  });
+}
+
+/** The customFields a choice writes (value: the day chosen) or clears (null). */
+export function boardExemptionFields(customFields, state, value, licenseExpiration, conditionConfirmedOn = null) {
+  const out = { ...(customFields || {}) };
+  delete out[BOARD_EXEMPTION_FIELD];
+  delete out[BOARD_EXEMPTION_RENEWAL_FIELD];
+  delete out[BOARD_EXEMPTION_CONDITION_FIELD];
+  if (!value) return out;
+  out[BOARD_EXEMPTION_FIELD] = value;
+  if (licenseExpiration) out[BOARD_EXEMPTION_RENEWAL_FIELD] = String(licenseExpiration);
+  if (BOARD_EXEMPTION_CONDITIONS[state] && conditionConfirmedOn) out[BOARD_EXEMPTION_CONDITION_FIELD] = conditionConfirmedOn;
+  return out;
 }
 
 // An answer the physician has stored, "Not sure" included: anything but a

@@ -962,28 +962,64 @@ export function isSignatureText(line: unknown): boolean {
   return NOISE_LINE_RE.test(t) || isSignatureLine(t);
 }
 
+// A signed name with its title and degrees taken off, lower case, in words:
+// "Dr. Rowan Testa, DO" -> ["rowan", "testa"].
+const SIGNED_TITLE_RE = /^(?:dr\.?|doctor)\s+/i;
+const SIGNED_DEGREES_RE = new RegExp(`(?:(?:\\s*,\\s*|\\s+)${DEGREE_SUFFIX})+[.,]*$`);
+function nameWords(text: unknown): string[] {
+  const t = String(text ?? "").replace(/^[*_]+|[*_]+$/g, "").trim()
+    .replace(SIGNED_TITLE_RE, "").replace(SIGNED_DEGREES_RE, "").replace(/[.,]+$/, "");
+  return t.toLowerCase().replace(/[^a-z' -]/g, " ").replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
+}
+
 /**
- * Is a message nothing but a signature: no line in it other than a name
- * (bare, titled or with a degree), a sign-off, a job title or department
- * line under the name, or contact details, and no line the rules can name a
- * document kind in? Empty is not a signature. At most eight lines, so a
- * letter is never read as one. The physician's own email of 2026-11-17
- * ("Dr. <name>" over a phone number, a CME transcript attached) is one: it
- * asks for nothing, and the file is what it is about.
+ * Is this line the signer's own name: one of the names given (the
+ * physician's, the sender's display name), whole or first and last, with or
+ * without "Dr." and degrees? A surname alone ("Dr. Smith") is not enough,
+ * and a line that is not one of those names ("Mercy Hospital", "Urgent") is
+ * never a name, whatever its shape.
  */
-export function signatureOnly(text: unknown): boolean {
+function isOwnName(line: string, names: unknown[]): boolean {
+  const w = nameWords(line);
+  if (w.length < 2 || w.length > 4) return false;
+  return names.some((n) => {
+    const b = nameWords(n);
+    if (b.length < 2) return false;
+    const whole = w.join(" ") === b.join(" ");
+    const firstLast = w.length === 2 && w[0] === b[0] && w[1] === b[b.length - 1];
+    return whole || firstLast;
+  });
+}
+
+/**
+ * Is a message nothing but a signature: the signer's own name (the
+ * physician's or the sender's display name, passed in names, with or
+ * without a title and degrees), a sign-off, or contact lines (phone, email
+ * address, street address), and nothing else? Empty is not a signature, a
+ * message with no name in it is not one, and neither is any line that is not
+ * one of those: a short phrase ("Urgent", "Due Friday", "Mercy Hospital",
+ * "Attestation Form", "Medical Staff Office") is something the sender wrote,
+ * not a signature. At most eight lines, so a letter is never read as one.
+ * The physician's own email of 2026-11-17 ("Dr. <name>" over a phone
+ * number, a CME transcript attached) is one.
+ */
+export function signatureOnly(text: unknown, names: unknown[] = []): boolean {
+  const own = (Array.isArray(names) ? names : []).filter((n) => String(n ?? "").trim());
+  if (!own.length) return false;
   const lines = String(text ?? "").replace(/\r\n?/g, "\n").replace(/\u00a0/g, " ").split("\n").map((l) => l.trim()).filter(Boolean);
   if (!lines.length || lines.length > 8) return false;
   let named = false;
   for (const l of lines) {
-    if (NOISE_LINE_RE.test(l) || SIGNATURE_RE.test(l)) continue;
+    if (SIGNATURE_RE.test(l)) continue;
     if (/[?]/.test(l) || hasAskForm(l) || ASK_SENTENCE_RE.test(l) || l.length > 60) return false;
     const bare = l.replace(/^[*_]+|[*_]+$/g, "").replace(/[.,]$/, "").trim();
     if (classifyAsk(cleanAsk(bare) || bare).kind !== "unknown") return false;
-    if (isSignatureLine(bare) || NAME_LINE_RE.test(bare)) { named = true; continue; }
-    // A title or department line under the name ("Neurosurgery", "Medical
-    // Staff Office"): a few capitalised words, nothing that names a kind.
-    if (named && /^[A-Z][A-Za-z&'/-]*(?:\s+(?:of|and|&|the|[A-Z][A-Za-z&'/-]*)){0,5}$/.test(bare)) continue;
+    if (isOwnName(l, own)) { named = true; continue; }
+    // A sign-off, with or without the name after it ("Thanks, Rowan").
+    if (SIGNOFF_RE.test(bare) && !/https?:\/\/|\bwww\./i.test(bare)) continue;
+    // A contact line: a phone number, an email address, a street address.
+    // Never a link: "portal.example/apply" is somewhere to go, not a signature.
+    if (NOISE_LINE_RE.test(l) && !/https?:\/\/|\bwww\./i.test(l)) continue;
     return false;
   }
   return named;

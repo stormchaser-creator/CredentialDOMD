@@ -1,7 +1,7 @@
 import { jsPDF } from "jspdf";
 import autoTable from "jspdf-autotable";
 import { formatDate } from "./helpers.js";
-import { complianceFor, findStateLicense, cycleBucket, cmeTopics } from "./compliance";
+import { complianceFor, findStateLicense, cycleBucket, cmeTopics, sessionCountText } from "./compliance";
 import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements";
 import { STATE_NAMES } from "../constants/states";
 import { boardComplianceFor } from "./boardCompliance";
@@ -14,7 +14,7 @@ import { shareAtHandoff, shareNotStartedMessage } from "./shareHandoff.js";
 import { fileShareText } from "./shareText.js";
 import { professionCopy } from "../constants/professionCopy.js";
 import { isPhysicianDegree } from "../constants/professions.js";
-import { conditionDescription, specialtyNames } from "./conditionalCme.js";
+import { conditionDescription, specialtyNames, currentBoardCertificationOnFile } from "./conditionalCme.js";
 
 // A conditional rule the physician answered No, or one their board
 // specialties settled as No (California geriatric rule): the row says which.
@@ -403,7 +403,7 @@ export function stateTranscriptModel(data, state, { certFiles = null, kind } = {
       // file, rather than silently applying it: the physician (or their board)
       // decides whether it is claimed. Only shown when the state names one.
       (() => {
-        const hasBoardCert = (data.licenses || []).some(l => /board certification/i.test(l.type || ""));
+        const hasBoardCert = currentBoardCertificationOnFile(data.licenses);
         const moc = plain(req.moc || "").trim();
         if (comp.boardExemption) return `Board certification exemption used (you chose it on ${formatDate(comp.boardExemption.usedOn)}): ${plain(comp.boardExemption.rule)}. The total and Category 1 hours are counted as met.`;
         return hasBoardCert && moc && !/^no$/i.test(moc)
@@ -622,6 +622,8 @@ export function stateRequirementRows(model) {
     // Met by the physician's own confirmation, not by logged hours: say so,
     // as the MATE row does for an affirmation.
     if (t.priorCompletedOn) rule = `${rule ? `${rule} ` : ""}Completed before logging in this app; confirmed by the physician on ${t.priorCompletedOn}.`;
+    // Hours counted from a course's sessions, not its full credit (compliance.js sessionTopicHours).
+    if (t.fromSessions?.length) rule = `${rule ? `${rule} ` : ""}Counted: ${t.fromSessions.map(f => plain(sessionCountText(f))).join("; ")}.`;
     rows.push({
       name: t.topic,
       rule,
