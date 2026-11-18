@@ -5,6 +5,9 @@ import { GEMINI_MODEL, geminiJsonConfig, geminiResponseText } from "./geminiMode
 import { complianceFor, complianceListFor, findStateLicense, cmeTopics } from "./compliance";
 import { isAdvancedPractice, isKnownDegree } from "../constants/professions.js";
 import { certificationCards } from "./certCompliance.js";
+import { boardComplianceFor } from "./boardCompliance.js";
+import { datedBoardSteps } from "./boardTasks.js";
+import { reminderLeadDays } from "./reminderPreferences.js";
 import { NCCPA_ACTIVITY_FIELD, PHARMACOLOGY_HOURS_FIELD } from "../constants/credentialTypes.js";
 import { academicYearOf, caseWRVU } from "./caseLogReport";
 import { CPT_DESCS } from "../constants/cptDescs";
@@ -69,6 +72,23 @@ function renewalItemsOpen(comp) {
  */
 export function travelNumberShared(doc) {
   return !!doc;
+}
+
+/**
+ * The physician's dated board certification steps still ahead (an AOA QI
+ * attestation, a Longitudinal Assessment), each with its due date, however
+ * far off: "when is my QI attestation due" is answered from these
+ * (boardTasks.js datedBoardSteps). A step done, marked not required, past
+ * its date with no mark, or not started yet is not listed. Empty for a PA
+ * or NP (no physician board).
+ */
+export function boardStepsSnapshot(data, now = new Date()) {
+  try {
+    return datedBoardSteps(data, boardComplianceFor(data), reminderLeadDays(data?.settings?.reminderLeadDays), now).map(s => ({
+      board: s.boardLabel, step: s.name, due: s.due, ...(s.opens ? { opens: s.opens } : {}), daysLeft: s.daysLeft,
+      period: s.period, every: s.periodWord, inReminderWindow: s.alerted, source: s.source,
+    }));
+  } catch { return []; }
 }
 
 /** Compact, privacy-lean snapshot of the user's data for grounding. */
@@ -173,6 +193,8 @@ export function buildSnapshot(data, allTrackedStates = []) {
     privileges: short(data.privileges, p => ({ id: p.id, type: p.type, name: p.name, facility: p.facility, expires: p.expirationDate, ...lifecycleSnapshot(p) })),
     insurance: short(data.insurance, i => ({ id: i.id, type: i.type, provider: i.provider, expires: i.expirationDate, ...lifecycleSnapshot(i) })),
     cmeSummary: { entries: (data.cme || []).length, byState: cmeByState },
+    // Sent only when there is one, so a snapshot without board steps is unchanged.
+    ...(() => { const steps = boardStepsSnapshot(data); return steps.length ? { boardSteps: steps } : {}; })(),
     // A PA's NCCPA cycle and an NP's certifier cycles, computed by the same
     // engine as Home's cards (weighted NCCPA credit included), so Vera never
     // rebuilds the main national obligation from partial raw rows.
@@ -369,6 +391,12 @@ TRAVEL & IDS: snapshot.travelDocs holds the user's own saved numbers: an EIN (a 
 EIN or Tax ID), passport, driver's license, Known Traveler, loyalty and rental memberships and
 airline credits, with their notes. When asked for one of these numbers, give the number from
 the record directly. If the record has no number, say so and propose ONE open_record action.
+
+BOARD STEPS: snapshot.boardSteps lists each dated board certification step still ahead (a QI
+attestation, a Longitudinal Assessment) with its due date, however far off. When asked when one
+is due, give that date from the list. A step not listed is done, marked not required, past its
+date with no mark, or has no published date: say its board card on Home shows where it stands,
+and never supply a date the list does not hold.
 
 NAVIGATION: when the user asks to see, open, go to, show, or "take me to" a record or a
 section ("take me to UMC privileges", "open my DEA", "show the Mercy contract"),

@@ -1204,6 +1204,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
 
   /* ─── HOME PAGE ──────────────────────────────────────────── */
   const openFromSearch = (sec, id, dest) => {
+    // A board step is not a record: its board card on the CME page lists it.
+    if (sec.key === "boardSteps") { setTab("credentials"); setSubPage("cme"); return; }
     if (sec.tab === "credentials") { setTab("credentials"); setSubPage(dest || sec.sub); setAutoEditTarget({ sec: sec.key, id }); return; }
     if (sec.tab === "documents") { setTab("documents"); setSubPage(null); return; }
     if (sec.tab === "locum") { setLocumSeed({ sub: sec.sub, id }); setTab("locum"); setSubPage(sec.sub); return; }

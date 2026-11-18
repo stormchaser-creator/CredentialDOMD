@@ -466,7 +466,8 @@ function AssistantSection({ onFileTicket, initialQuestion, onSeedConsumed, reque
           const sub = target.sec.key === "customRecords"
             ? `custom:${(records.customRecords || []).find(r => r?.id === target.id)?.categoryId || "unsorted"}`
             : target.sec.sub;
-          navTo = [target.sec.tab, sub, target.id ? { sec: target.sec.key, id: target.id } : null];
+          // A board step is no record to open: its board card on the CME page lists it.
+          navTo = [target.sec.tab, sub, target.id && target.sec.key !== "boardSteps" ? { sec: target.sec.key, id: target.id } : null];
           result.actions = (result.actions || []).map(a => a.kind === "open_record" ? { ...a, done: true, summary: `Opened ${target.sec.label}${target.id ? "" : " (record not found, showing the section)"}` } : a);
         } else {
           result.actions = (result.actions || []).map(a => a.kind === "open_record" ? { ...a, dismissed: true } : a);

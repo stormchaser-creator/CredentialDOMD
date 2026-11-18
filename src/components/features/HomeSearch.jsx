@@ -3,6 +3,9 @@ import { useApp } from "../../context/AppContext";
 import { describeItem } from "../../utils/helpers";
 import { LIFECYCLE_SECTIONS, lifecycleNote } from "../../utils/lifecycle";
 import { categoryLabelFor } from "../../utils/customCategories.js";
+import { boardComplianceFor } from "../../utils/boardCompliance.js";
+import { datedBoardSteps } from "../../utils/boardTasks.js";
+import { reminderLeadDays } from "../../utils/reminderPreferences.js";
 
 /**
  * HomeSearch: one box at the top of Home that finds anything you have
@@ -43,6 +46,22 @@ export const SECTIONS = [
   // category, so the hit carries its destination (see searchRecords).
   { key: "customRecords", label: "Your categories", tab: "credentials", sub: null },
 ];
+
+// Dated board certification steps (an AOA QI attestation, a Longitudinal
+// Assessment) are not records of their own, so they are found here and open
+// the CME page, where each board card lists its steps. Kept out of SECTIONS:
+// that list names the record sections the app opens a record in.
+const BOARD_STEPS_SECTION = { key: "boardSteps", label: "Board steps", tab: "credentials", sub: "cme" };
+
+/** The dated board steps still ahead as search hits (boardTasks.js datedBoardSteps). */
+function boardStepHits(data, toks) {
+  let steps = [];
+  try { steps = datedBoardSteps(data, boardComplianceFor(data), reminderLeadDays(data?.settings?.reminderLeadDays)); } catch { return []; }
+  return steps.filter(st => {
+    const hay = `${st.name} ${st.boardLabel} board step ${acronyms(st.label).join(" ")}`.toLowerCase();
+    return toks.every(t => hay.includes(t));
+  }).map(st => ({ id: `board-step:${st.boardId}:${st.taskId}`, label: st.name, sub: `due ${st.due}` }));
+}
 
 // Fields worth matching on, beyond whatever describeItem prints.
 const TEXT_FIELDS = ["name", "type", "title", "facility", "state", "city", "provider", "institution", "issuer", "issuingAuthority",
@@ -121,6 +140,8 @@ export function searchRecords(data, q, { limitPerSection = 6 } = {}) {
     }
     if (hits.length) out.push({ sec, hits, total: items.filter(it => it && !it.deleted).length });
   }
+  const steps = boardStepHits(data, toks);
+  if (steps.length) out.push({ sec: BOARD_STEPS_SECTION, hits: steps.slice(0, limitPerSection), total: steps.length });
   return out;
 }
 

@@ -304,3 +304,42 @@ export function boardTaskAlerts(data, boards, lead, now = new Date()) {
     return { state: b.code, issues, daysLeft: soonest.daysLeft, renewal: soonest.due, key: `board:${b.id}`, kind: "board", label: b.label };
   });
 }
+
+/**
+ * Every dated board step still ahead: status "due" or "upcoming" with a due
+ * date on or after today, on every board card that has task data (the same
+ * cards openBoardTasks reads). A step that is done, marked not required, past
+ * its date with no mark ("unconfirmed") or not started yet for this
+ * certificate is left out. Each is listed with its date like a dated
+ * credential, wherever the app lists deadlines (the Notification Center's
+ * upcoming list, Home search, Vera), however far off it is.
+ * `alerted` is true for a step inside the reminder lead window, which
+ * openBoardTasks already alerts; the rest are listed, never alerted.
+ * Sorted by due date. [{ boardId, boardLabel, taskId, label, name, due,
+ * opens, daysLeft, status, period, periodWord, source, alerted }]
+ */
+export function datedBoardSteps(data, boards, lead, now = new Date()) {
+  const alerted = new Set();
+  for (const { board, tasks } of openBoardTasks(data, boards, lead, now)) for (const x of tasks) alerted.add(`${board.id}|${x.id}`);
+  const out = [];
+  for (const b of boards || []) {
+    if (b.followsParent || b.source === "CERT" || b.body) continue;
+    const t = boardTasksFor(data, b, now);
+    if (!t) continue;
+    for (const x of t.tasks) {
+      if (x.status !== "due" && x.status !== "upcoming") continue;
+      if (!x.due || !ISO.test(x.due) || x.daysLeft == null || x.daysLeft < 0) continue;
+      out.push({
+        boardId: b.id, boardLabel: b.label || certName(b.id), taskId: x.id, label: x.label,
+        name: boardTaskName(b.id, x), due: x.due, opens: x.opens, daysLeft: x.daysLeft, status: x.status,
+        period: x.period, periodWord: x.periodWord, source: x.source, alerted: alerted.has(`${b.id}|${x.id}`),
+      });
+    }
+  }
+  return out.sort((a, b) => a.due.localeCompare(b.due) || a.name.localeCompare(b.name));
+}
+
+/** The dated board steps outside the alerts: listed as upcoming deadlines, never alerted. */
+export function upcomingBoardSteps(data, boards, lead, now = new Date()) {
+  return datedBoardSteps(data, boards, lead, now).filter(s => !s.alerted);
+}

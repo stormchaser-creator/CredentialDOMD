@@ -6,6 +6,8 @@ import { generateAlerts, buildNotificationMessage, composeEmail, textAlert, rece
 import { getItemLabel, formatDate } from "../../utils/helpers";
 import { daysUntilDate } from "../../utils/dateDays.js";
 import { emailRemindersOn, reminderLeadDays } from "../../utils/reminderPreferences";
+import { boardComplianceFor } from "../../utils/boardCompliance";
+import { upcomingBoardSteps } from "../../utils/boardTasks";
 
 function NotificationCenter({ open, onClose }) {
   const { data, updateSettings, addItem, theme: T } = useApp();
@@ -25,6 +27,9 @@ function NotificationCenter({ open, onClose }) {
   const s = data.settings;
   const alerts = useMemo(() => generateAlerts(data), [data]);
   const msg = useMemo(() => alerts ? buildNotificationMessage(data, alerts) : null, [data, alerts]);
+  // Dated board steps outside the alerts (a QI attestation due next year):
+  // listed with their dates, never counted, alerted or sent (boardTasks.js).
+  const upcoming = useMemo(() => upcomingBoardSteps(data, boardComplianceFor(data), reminderLeadDays(data.settings.reminderLeadDays)), [data]);
 
   const hasEmail = s.email?.includes("@");
   const hasPhone = s.phone?.length >= 7;
@@ -38,6 +43,25 @@ function NotificationCenter({ open, onClose }) {
     addItem("notificationLog", { id: crypto.randomUUID(), date: new Date().toISOString(), method, alertCount: alerts?.count || 0 });
   };
 
+  const upcomingList = upcoming.length > 0 && (
+    <div style={{ marginBottom: 14, textAlign: "left" }}>
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", marginBottom: 6 }}>Upcoming deadlines</div>
+      {upcoming.map(st => (
+        <div key={`${st.boardId}|${st.taskId}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 12px", borderRadius: 10, backgroundColor: T.input, marginBottom: 4, border: `1px solid ${T.border}` }}>
+          <div style={{ minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 600, color: T.text, overflowWrap: "anywhere" }}>{st.name}</div>
+            <div style={{ fontSize: 11, color: T.textDim }}>{st.status === "upcoming" && st.opens ? `Opens ${fmtDate(st.opens)}, due ${fmtDate(st.due)}` : `Due ${fmtDate(st.due)}`} {"\u00b7"} Board step</div>
+          </div>
+          <div style={{ textAlign: "right", flexShrink: 0 }}>
+            <div style={{ fontSize: 16, fontWeight: 800, color: T.text }}>{st.daysLeft}</div>
+            <div style={{ fontSize: 10, color: T.textDim }}>days</div>
+          </div>
+        </div>
+      ))}
+      <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.45 }}>Listed so you can plan. None of these raises an alert yet: a step alerts once it is due within your {reminderLeadDays(s.reminderLeadDays)} day reminder window.</div>
+    </div>
+  );
+
   if (!open) return null;
 
   return (
@@ -49,6 +73,7 @@ function NotificationCenter({ open, onClose }) {
             <div style={{ fontSize: 17, fontWeight: 700, color: T.success, marginBottom: 4 }}>All Clear</div>
             <div style={{ fontSize: 14, color: T.textMuted }}>No expiring credentials or CME gaps detected.</div>
             {s.lastNotified && <div style={{ fontSize: 12, color: T.textDim, marginTop: 12 }}>Last notified: {fmtDate(s.lastNotified)}</div>}
+            {upcomingList && <div style={{ marginTop: 18 }}>{upcomingList}</div>}
           </div>
         ) : (
           <>
@@ -130,6 +155,8 @@ function NotificationCenter({ open, onClose }) {
                 ))}
               </div>
             )}
+
+            {upcomingList}
 
             {/* Escalation info */}
             <div style={{ padding: "12px 14px", borderRadius: 10, backgroundColor: T.input, marginBottom: 14, border: `1px solid ${T.border}` }}>
