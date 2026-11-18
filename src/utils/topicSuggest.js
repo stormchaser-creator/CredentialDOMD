@@ -177,3 +177,36 @@ export function normalizeCmeScan(extracted) {
 export function hoursLabel(h) {
   return typeof h === "number" ? `${h} h` : "";
 }
+
+const round2h = (n) => Math.round(n * 100) / 100;
+
+/**
+ * The hours a record's stored sessions give one topic (any of `tags`): the
+ * sessions that carry it, each once, their printed hours summed, never more
+ * than the record's own hours. A carrying session with no printed credit
+ * counts 0 and is reported in `unknown`: one session of a 60 h conference is
+ * never 60 h of a topic. Null when no stored session carries the topic, so a
+ * whole-course tag counts the whole course.
+ */
+export function sessionTopicHours(c, tags) {
+  const hit = cmeSessionsOf(c).filter(s => s.topics.some(t => tags.includes(t.topic)));
+  if (!hit.length) return null;
+  const known = hit.filter(s => typeof s.hours === "number");
+  const sum = round2h(known.reduce((a, s) => a + s.hours, 0));
+  const whole = parseFloat(c?.hours) || 0;
+  const unknown = hit.length - known.length;
+  return { hours: whole > 0 ? Math.min(sum, whole) : sum, sessions: hit.length, ...(unknown ? { unknown } : {}) };
+}
+
+/** A record's hours toward a topic: its sessions' when they carry it, else the whole record. */
+export function topicHoursOf(c, tags) {
+  const s = sessionTopicHours(c, tags);
+  return s ? s.hours : (parseFloat(c?.hours) || 0);
+}
+
+/** "1.5 h from 1 session of Annual Meeting" for one fromSessions item. */
+export function sessionCountText(f) {
+  const n = f.sessions;
+  const base = `${f.hours} h from ${n} session${n === 1 ? "" : "s"} of ${f.title || "this course"}`;
+  return f.unknown ? `${base} (${f.unknown === n ? "no" : `${f.unknown} without`} credit printed per session, so ${f.unknown === n ? "it counts" : "those count"} 0 h; log the session's hours as its own entry to count it)` : base;
+}

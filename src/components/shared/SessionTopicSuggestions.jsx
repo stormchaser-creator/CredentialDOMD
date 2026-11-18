@@ -51,6 +51,11 @@ export default function SessionTopicSuggestions({ sessions, topics, onToggle, on
                       Counts {hoursLabel(s.hours)} toward {s.topic}, from {s.sessions.length === 1 ? "this session" : "these sessions"}, not the activity&rsquo;s full credit.
                     </div>
                   )}
+                  {on && s.hours == null && (
+                    <div style={{ ...small, marginTop: 3, marginLeft: 4, color: T.textDim }}>
+                      The transcript prints no credit for {s.sessions.length === 1 ? "this session" : "these sessions"}, so {s.topic} counts 0 h from it. Log the session&rsquo;s hours as its own entry to count it.
+                    </div>
+                  )}
                   {s.sessions.map((x, i) => (
                     <div key={i} style={{ ...small, marginTop: 3, marginLeft: 4 }}>
                       {x.hours != null ? `${hoursLabel(x.hours)} from ` : "From "}&ldquo;{x.title}&rdquo;

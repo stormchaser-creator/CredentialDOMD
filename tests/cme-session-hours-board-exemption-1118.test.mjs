@@ -36,7 +36,7 @@ test('H2: one qualifying session in a 60 h conference counts 1.5 h toward the to
   assert.equal(sessionCountText(row.fromSessions[0]), '1.5 h from 1 session of Synthetic Annual Spine Meeting');
 });
 
-test('H2: a whole-course tag with no qualifying session, or sessions without hours, counts the whole course (unchanged)', () => {
+test('H2: a whole-course tag with no qualifying session counts the whole course; a qualifying session without printed hours counts 0', () => {
   const plain = { id: 'p', title: 'Prescribing controlled substances', category: 'AMA PRA Category 1', hours: '5', date: '2026-06-10', topics: ['Controlled Substances'] };
   const row = ky([plain]);
   assert.equal(row.earned, 5);
@@ -44,7 +44,7 @@ test('H2: a whole-course tag with no qualifying session, or sessions without hou
   const unrelated = conference({ customFields: { [CME_SESSIONS_FIELD]: [{ title: 'Cervical myelopathy update', hours: 2 }] } });
   assert.equal(ky([unrelated]).earned, 60);
   const noHours = conference({ customFields: { [CME_SESSIONS_FIELD]: [{ title: 'Intoxication and withdrawal from psychostimulants' }] } });
-  assert.equal(ky([noHours]).earned, 60);
+  assert.equal(ky([noHours]).earned, 0, 'one session of a 60 h conference is never 60 h of the topic');
 });
 
 test('H2: sessions are counted once, capped at the course hours, and a scan topic on a session counts', () => {

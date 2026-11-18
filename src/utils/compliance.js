@@ -1,6 +1,6 @@
 import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements.js";
 import { topicApplicability, priorCompletionOn, specialtyPrefill, PRIOR_SUFFIX, boardExemptionOn, currentBoardCertificationOnFile } from "./conditionalCme.js";
-import { cmeSessionsOf } from "./topicSuggest.js";
+import { sessionTopicHours, topicHoursOf } from "./topicSuggest.js";
 import { isAlertable, isInactive, needsResolution } from "./lifecycle.js";
 import { daysUntilDate, parseDay } from "./dateDays.js";
 import { computeAppCompliance } from "./appCompliance.js";
@@ -233,7 +233,7 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     const topicHours = (c) => {
       const s = sessionTopicHours(c, tags);
       if (!s) return hours(c);
-      fromSessions.push({ id: c.id ?? null, title: c.title || "", hours: s.hours, sessions: s.sessions, courseHours: hours(c) });
+      fromSessions.push({ id: c.id ?? null, title: c.title || "", hours: s.hours, sessions: s.sessions, ...(s.unknown ? { unknown: s.unknown } : {}), courseHours: hours(c) });
       return s.hours;
     };
     const earned = informational ? null : round2(tagged.reduce((s, c) => s + topicHours(c), 0));
@@ -299,7 +299,7 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   if (opts.hasDEA) {
     const mateHrs = round2((cmeEntries || [])
       .filter(c => cmeTopics(c).some(t => MATE_TOPICS.includes(t)))
-      .reduce((s, c) => s + hours(c), 0));
+      .reduce((s, c) => s + topicHoursOf(c, MATE_TOPICS), 0));
     mate = opts.mateAttestedOn
       ? { required: 0, earned: mateHrs, met: true, via: "registration", attestedOn: opts.mateAttestedOn }
       : { required: MATE_HOURS, earned: mateHrs, met: mateHrs >= MATE_HOURS };
@@ -696,25 +696,7 @@ export function statePriorCompletions(licenses, state) {
   return out;
 }
 
-/**
- * The hours a record's stored sessions give one topic: the sessions that
- * carry any of the topic's tags and print hours, summed (each session once),
- * never more than the record's own hours when it has them. Null when no such
- * session exists, so the record counts whole.
- */
-export function sessionTopicHours(c, tags) {
-  const hit = cmeSessionsOf(c).filter(s => typeof s.hours === "number" && s.topics.some(t => tags.includes(t.topic)));
-  if (!hit.length) return null;
-  const sum = round2(hit.reduce((a, s) => a + s.hours, 0));
-  const whole = parseFloat(c?.hours) || 0;
-  return { hours: whole > 0 ? Math.min(sum, whole) : sum, sessions: hit.length };
-}
-
-/** "1.5 h from 1 session of Annual Meeting" for one fromSessions item. */
-export function sessionCountText(f) {
-  const n = f.sessions;
-  return `${f.hours} h from ${n} session${n === 1 ? "" : "s"} of ${f.title || "this course"}`;
-}
+export { sessionTopicHours, sessionCountText } from "./topicSuggest.js";
 
 export function complianceFor(data, state, kind) {
   if (isAdvancedPractice(data.settings.degreeType)) return appComplianceFor(data, state, kind);

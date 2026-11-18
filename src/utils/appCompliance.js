@@ -13,6 +13,7 @@
 // falls back to a physician rule or a default.
 import { ruleSetFor, DEFAULT_APP_RULES } from "./ruleResolver.js";
 import { topicApplicability } from "./conditionalCme.js";
+import { topicHoursOf } from "./topicSuggest.js";
 import {
   MATE_TOPICS, MATE_HOURS, MS_PER_DAY, cmeTopics, parseLocalDate, inWindow, showDate, topicPeriodLabel, round2, taggedOutsidePeriod,
 } from "./cmeCore.js";
@@ -261,7 +262,7 @@ export function computeAppCompliance(cmeEntries, state, degreeType, opts = {}) {
       ? round2(pool.reduce((s, c) => s + pharmacologyHoursOf(c), 0))
       : t.measure === "total"
         ? round2(pool.filter((c) => !t.acceptedCategories || t.acceptedCategories.includes(c.category)).reduce((s, c) => s + hours(c), 0))
-        : round2(tagged.reduce((s, c) => s + hours(c), 0));
+        : round2(tagged.reduce((s, c) => s + topicHoursOf(c, tags), 0));
     const checklist = verified && !(t.hours > 0);
     const coveredByCert = lieuApplies && t.coveredByCertification === true;
     const met = !verified ? null : coveredByCert ? true : windowPending ? null : checklist ? tagged.length > 0 : earned >= t.hours;
@@ -358,7 +359,7 @@ export function computeAppCompliance(cmeEntries, state, degreeType, opts = {}) {
   // ── MATE Act (one-time, DEA registrants), on the primary practice card ──
   let mate = null;
   if (opts.hasDEA && opts.mateApplies !== false) {
-    const earned = round2((cmeEntries || []).filter((c) => cmeTopics(c).some((t) => MATE_TOPICS.includes(t))).reduce((s, c) => s + hours(c), 0));
+    const earned = round2((cmeEntries || []).filter((c) => cmeTopics(c).some((t) => MATE_TOPICS.includes(t))).reduce((s, c) => s + topicHoursOf(c, MATE_TOPICS), 0));
     const school = yes(opts.deaAnswers?.[QUESTION_FIELDS.mateSchool]);
     // A DEA registration issued or renewed on or after 2023-06-27 carries the
     // one-time affirmation (compliance.js mateAttestationDate): no hours due.

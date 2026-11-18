@@ -88,7 +88,7 @@ test('with no Board Certification record a mark creates the record (synced), nev
   const out = applyBoardTaskMark(data, b.id, t.tasks[0].field, '2026-05-01', { makeId: () => 'new1' });
   assert.equal(out.settings, undefined, 'settings.boardTaskMarks is not a synced setting');
   assert.deepEqual(out.records, []);
-  assert.deepEqual(out.create, { id: 'new1', type: 'Board Certification (ABMS)', name: 'ABNS Neurological Surgery', issuedDate: '', expirationDate: '', notes: '', customFields: { 'ABNS Adaptive Learning Tool done for 2026': '2026-05-01' } });
+  assert.deepEqual(out.create, { id: 'new1', type: 'Board Certification (ABMS)', name: 'ABNS Neurological Surgery', issuedDate: '', expirationDate: '', noExpiration: true, notes: 'Added when you marked a board step done. If your certificate shows an expiration date, add it here.', customFields: { 'ABNS Adaptive Learning Tool done for 2026': '2026-05-01' } });
   assert.deepEqual(boardIdsFromLicenses([out.create]), ['ABMS:ABNS']);
   const after = { ...data, licenses: [out.create] };
   assert.equal(boardTasksFor(after, b, at('2026-05-02')).tasks[0].status, 'done');

@@ -93,7 +93,12 @@ export function newBoardRecord(boardId, makeId = () => globalThis.crypto.randomU
     id: makeId(),
     type: aoa ? "Board Certification (AOA)" : "Board Certification (ABMS)",
     name: `${code} ${sub || boardName}`.trim(),
-    issuedDate: "", expirationDate: "", notes: "",
+    // Made by the app to hold a step's Done mark, not by the physician: no
+    // date is known, so it must not raise a "no expiration date" warning.
+    // Continuous certification has no end date while its steps are met; a
+    // certificate that does expire gets its date added on the record.
+    issuedDate: "", expirationDate: "", noExpiration: true,
+    notes: "Added when you marked a board step done. If your certificate shows an expiration date, add it here.",
     customFields: {},
   };
 }
