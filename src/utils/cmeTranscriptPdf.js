@@ -14,6 +14,13 @@ import { shareAtHandoff, shareNotStartedMessage } from "./shareHandoff.js";
 import { fileShareText } from "./shareText.js";
 import { professionCopy } from "../constants/professionCopy.js";
 import { isPhysicianDegree } from "../constants/professions.js";
+import { conditionDescription, specialtyNames } from "./conditionalCme.js";
+
+// A conditional rule the physician answered No, or one their board
+// specialties settled as No (California geriatric rule): the row says which.
+const notApplicableStatus = (topic) => topic.applicabilitySource === "specialty"
+  ? `Not applicable (from your specialty: ${specialtyNames(topic.applicabilityPrefill)})`
+  : "Not applicable (selected)";
 
 /**
  * Board-ready CME transcript PDF.
@@ -559,10 +566,10 @@ function appRequirementRows(model) {
     if (topic.applicability === "applies" || topic.status === "unverified") continue;
     rows.push({
       name: `${topic.topic} (conditional)`,
-      rule: [topic.condition?.description, topic.cite, topic.url].filter(Boolean).join(" "),
+      rule: [conditionDescription(topic), topic.cite, topic.url].filter(Boolean).join(" "),
       required: topic.applicability === "unknown" ? `${topic.checklist ? "Any activity" : fmtHrs(topic.required)} if applicable` : "Not applied",
       earned: "-", met: null,
-      status: topic.applicability === "unknown" ? "Confirm applicability" : "Not applicable (selected)",
+      status: topic.applicability === "unknown" ? "Confirm applicability" : notApplicableStatus(topic),
     });
   }
   for (const c of comp.credentialChecks || []) {
@@ -627,11 +634,11 @@ export function stateRequirementRows(model) {
     if (topic.applicability === "applies") continue;
     rows.push({
       name: `${topic.topic} (conditional)`,
-      rule: `${topic.condition.description} ${topic.cite}; checked ${topic.checkedOn}. ${topic.url}`,
+      rule: `${conditionDescription(topic)} ${topic.cite}; checked ${topic.checkedOn}. ${topic.url}`,
       required: topic.applicability === "unknown" ? `${topic.required} if applicable` : "Not applied",
       earned: "-",
       met: null,
-      status: topic.applicability === "unknown" ? "Confirm applicability" : "Not applicable (selected)",
+      status: topic.applicability === "unknown" ? "Confirm applicability" : notApplicableStatus(topic),
     });
   }
   if (comp.mate) {

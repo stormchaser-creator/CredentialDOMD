@@ -114,6 +114,8 @@ export function buildSnapshot(data, allTrackedStates = []) {
         assessmentStatus: comp.assessmentStatus,
         evidence: calculationEvidence(comp, data.settings.degreeType, today),
         pendingApplicability: comp.conditionalTopics.filter(t => t.applicability === "unknown").map(t => ({ topic: t.topic, condition: t.condition.description })),
+        // Answered No from board specialties, not by the physician; still editable.
+        ...(comp.conditionalTopics.some(t => t.applicabilitySource === "specialty") ? { prefilledApplicability: comp.conditionalTopics.filter(t => t.applicabilitySource === "specialty").map(t => ({ topic: t.topic, answer: "No", fromSpecialties: t.applicabilityPrefill?.specialties || [], changeable: true })) } : {}),
         ...(st === "OH" ? { verifiedRuleContext: ohioCmeContext(comp) } : {}),
       };
     } catch { /* state without rules */ }

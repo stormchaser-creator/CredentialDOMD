@@ -1,5 +1,5 @@
 import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements.js";
-import { topicApplicability, priorCompletionOn, PRIOR_SUFFIX, boardExemptionOn } from "./conditionalCme.js";
+import { topicApplicability, priorCompletionOn, specialtyPrefill, PRIOR_SUFFIX, boardExemptionOn } from "./conditionalCme.js";
 import { isAlertable, isInactive, needsResolution } from "./lifecycle.js";
 import { daysUntilDate, parseDay } from "./dateDays.js";
 import { computeAppCompliance } from "./appCompliance.js";
@@ -240,12 +240,21 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     const cite = t.cite || entry?.source || "";
     const entryUrl = entry?.sourceUrl || "";
     const url = t.url || entryUrl;
+    // An unanswered condition the physician's board specialties settle as No
+    // (California geriatric rule for a neurosurgeon) carries its source, so
+    // the card says where the answer came from. Absent otherwise, which
+    // keeps every other row byte-identical.
+    const applicability = topicApplicability(t, opts.topicApplicability, opts.specialties);
+    const answer = t.condition ? opts.topicApplicability?.[t.condition.field] : undefined;
+    const prefill = t.condition && applicability === "not-applicable" && answer !== false && answer !== "No"
+      ? specialtyPrefill(t.condition, opts.specialties) : null;
     return {
       topic: t.topic,
       ...(tags.length > 1 ? { alsoTopics: tags.slice(1) } : {}),
       informational,
       condition: t.condition || null,
-      applicability: topicApplicability(t, opts.topicApplicability),
+      applicability,
+      ...(prefill ? { applicabilitySource: "specialty", applicabilityPrefill: prefill } : {}),
       checkedOn: t.checkedOn || null,
       effectiveFrom: t.effectiveFrom || null,
       effectiveThrough: t.effectiveThrough || null,
@@ -677,6 +686,9 @@ export function complianceFor(data, state, kind) {
     licenseIssued: lic?.issuedDate || null,
     cycleStart: lic?.cmeCycleStart || null,
     topicApplicability: lic?.customFields || {},
+    // Board specialties prefill a condition they settle as No (California
+    // geriatric rule); an answer on the license always wins.
+    specialties: data.settings.specialties || [],
     // A one-time confirmation must survive a renewal, which arrives as a new
     // licence record: read it from every medical licence held in the state.
     priorCompletion: statePriorCompletions(data.licenses, state),

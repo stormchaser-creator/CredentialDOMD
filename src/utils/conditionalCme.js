@@ -1,5 +1,10 @@
+import { ABMS_MOC, ABMS_SUBSPECIALTIES, AOA_OCC, AOA_SUBSPECIALTIES, ABPS_CERTS } from "../constants/boardRequirements.js";
+
 // Applicability is a physician-supplied fact on the license, never inferred
-// from specialty, DEA registration, an employer name or an AI response.
+// from DEA registration, an employer name or an AI response. The one
+// exception is specialtyPrefill below: when the physician's own board
+// specialties make a condition logically false, the question starts
+// pre-answered No (shown with its source), and any stored answer wins.
 export const OHIO_PAIN_CLINIC_FIELD = "Ohio pain clinic CME applies";
 export const CA_GERIATRIC_FIELD = "California geriatric CME applies";
 
@@ -36,13 +41,105 @@ export function boardExemptionOn(state, answers = {}) {
   return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
 }
 
-export function topicApplicability(topic, answers = {}) {
+// An answer the physician has stored, "Not sure" included: anything but a
+// missing or blank value. Only an unanswered question is ever prefilled.
+export const NOT_SURE = "Not sure";
+const answered = (v) => v !== undefined && v !== null && v !== "";
+
+export function topicApplicability(topic, answers = {}, specialties) {
   if (topic.informational === true) return "informational";
   if (!topic.condition) return "applies";
   const answer = answers?.[topic.condition.field];
   if (answer === true || answer === "Yes") return "applies";
   if (answer === false || answer === "No") return "not-applicable";
+  if (!answered(answer) && specialtyPrefill(topic.condition, specialties)) return "not-applicable";
   return "unknown";
+}
+
+// ── Prefill from board specialties ──
+// Only a condition listed here is ever prefilled, and only to No: each entry
+// says which specialties could make the condition true. A percentage-of-
+// patients question is never answered Yes from a specialty.
+const IM_FM_BOARDS = new Set(["ABIM", "ABFM", "AOBIM", "AOBFP"]);
+const IM_FM_NAME = /internal medicine|family (medicine|practice)|geriatric|hospital medicine/i;
+// ABPS boards whose holders are clearly not general internists or family
+// physicians. Any other ABPS board (Hospital Medicine, Urgent Care,
+// Administrative Medicine and the like) does not settle it.
+const ABPS_SETTLING = new Set(["Anesthesiology", "Dermatology", "Diagnostic Radiology", "Emergency Medicine", "General Surgery",
+  "Obstetrics & Gynecology", "Ophthalmology", "Orthopedic Surgery", "Plastic & Reconstructive Surgery", "Psychiatry", "Radiation Oncology"]);
+
+/**
+ * One board specialty id from Profile ("ABMS:ABNS",
+ * "AOA-SUB:AOBS:Neurological Surgery", "UCNS:...", "ABPS:...") read for the
+ * California geriatric rule: "imfm" (could be a general internist or family
+ * physician), "other" (a recognized board that is neither), "neutral" (a
+ * secondary certification that says nothing on its own, UCNS) or "unknown"
+ * (not recognized, so nothing is settled).
+ */
+export function classifySpecialty(id) {
+  if (typeof id !== "string") return { kind: "unknown", name: "" };
+  const [src, ...rest] = id.split(":");
+  if (src === "ABMS" || src === "AOA") {
+    const code = rest.join(":");
+    const b = (src === "ABMS" ? ABMS_MOC : AOA_OCC)[code];
+    if (!b) return { kind: "unknown", name: code };
+    return { kind: IM_FM_BOARDS.has(code) || IM_FM_NAME.test(b.name) ? "imfm" : "other", name: b.name };
+  }
+  if (src === "ABMS-SUB" || src === "AOA-SUB") {
+    const [parentCode, ...nameParts] = rest;
+    const name = nameParts.join(":");
+    const s = (src === "ABMS-SUB" ? ABMS_SUBSPECIALTIES : AOA_SUBSPECIALTIES).find(x => x.parentCode === parentCode && x.name === name);
+    if (!s) return { kind: "unknown", name };
+    const boards = [s.parentCode, ...(s.coSponsors || [])];
+    return { kind: boards.some(b => IM_FM_BOARDS.has(b)) || IM_FM_NAME.test(`${s.name} ${s.parent}`) ? "imfm" : "other", name: s.name };
+  }
+  if (src === "ABPS") {
+    const name = rest.join(":");
+    if (!ABPS_CERTS.some(c => c.name === name)) return { kind: "unknown", name };
+    return { kind: ABPS_SETTLING.has(name) ? "other" : "imfm", name };
+  }
+  if (src === "UCNS") return { kind: "neutral", name: rest.join(":") };
+  return { kind: "unknown", name: id };
+}
+
+const PREFILL_RULES = {
+  // Both must be true: a general internist or family physician AND more than
+  // 25% of patients aged 65 or older. Board specialties can settle only the
+  // first half, and only as No.
+  [CA_GERIATRIC_FIELD]: { because: "the rule covers only general internists and family physicians" },
+};
+
+/**
+ * The prefilled answer for an unanswered condition, or null. Returns
+ * { answer: "No", source: "specialty", specialties: [names], because } only
+ * when every specialty on the profile is recognized, none could make the
+ * physician a general internist or family physician, and at least one
+ * primary board says what they are. Anything uncertain stays unanswered.
+ */
+export function specialtyPrefill(condition, specialties) {
+  const rule = condition?.field ? PREFILL_RULES[condition.field] : null;
+  if (!rule || !Array.isArray(specialties) || specialties.length === 0) return null;
+  const read = specialties.map(classifySpecialty);
+  if (read.some(r => r.kind === "unknown" || r.kind === "imfm")) return null;
+  const names = [...new Set(read.filter(r => r.kind === "other").map(r => r.name))];
+  if (!names.length) return null;
+  return { answer: "No", source: "specialty", specialties: names, because: rule.because };
+}
+
+/** "Neurological Surgery" or "Neurological Surgery and Spine Surgery". */
+export function specialtyNames(prefill) {
+  const n = prefill?.specialties || [];
+  return n.length > 1 ? `${n.slice(0, -1).join(", ")} and ${n[n.length - 1]}` : (n[0] || "");
+}
+
+/**
+ * The condition's description for display. A row prefilled from specialty
+ * drops the rule data's "the app does not infer it from your specialty"
+ * sentence, which no longer holds for that row.
+ */
+export function conditionDescription(topic) {
+  const d = topic?.condition?.description || "";
+  return topic?.applicabilitySource === "specialty" ? d.replace(/\s*Select your answer;[^.]*\./, "").trim() : d;
 }
 
 /** Small deterministic context pilot, grounded in the same rule data as UI. */
