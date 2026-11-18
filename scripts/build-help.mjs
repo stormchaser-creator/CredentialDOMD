@@ -21,7 +21,11 @@ export function validateHelp(help) {
     for (const field of ['title', 'category', 'summary', 'verifiedScope', 'availability', 'success']) {
       if (typeof article[field] !== 'string' || !article[field].trim()) throw new Error(`Missing ${field}: ${article.id}`);
     }
-    if (article.updatedAt !== help.updatedAt || !article.audience?.length || !article.steps?.length || !article.notes?.length || !article.sourceRefs?.length) throw new Error(`Missing guide evidence: ${article.id}`);
+    // Each article keeps the date it was last reviewed; the page date is the
+    // newest of them. Restamping an unchanged article would claim a review
+    // that did not happen.
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(article.updatedAt) || article.updatedAt > help.updatedAt) throw new Error(`Invalid guide date: ${article.id}`);
+    if (!article.audience?.length || !article.steps?.length || !article.notes?.length || !article.sourceRefs?.length) throw new Error(`Missing guide evidence: ${article.id}`);
     if (article.sourceRefs.some(ref => !/^(src|supabase)\/[a-zA-Z0-9_./-]+$/.test(ref) || ref.includes('..'))) throw new Error(`Invalid source reference: ${article.id}`);
   }
   for (const article of help.articles) {

@@ -1817,7 +1817,7 @@
         },
         {
           "question": "Does board certification count toward my CME?",
-          "answer": "Yes. Passing an ABMS or AOA board certification or recertification exam counts as 60 hours of Category 1 CME and satisfies the full 3 year cycle (201 KAR 9:310). In CredentialDOMD, once a current board certification is on file, you can choose to use this exemption for one renewal."
+          "answer": "Yes. Passing an ABMS or AOA board certification or recertification exam counts as 60 hours of Category 1 CME and satisfies the full 3 year cycle (201 KAR 9:310). Required topics, such as the 4.5 hours of controlled substance CME for prescribers, must still be completed separately. In CredentialDOMD, once a current board certification is on file and your state license has its expiration date, you can choose to use this exemption for one renewal."
         }
       ],
       "sources": [
@@ -1925,7 +1925,7 @@
         },
         {
           "question": "Does board certification count toward my CME?",
-          "answer": "Yes. The annual CME requirement does not apply to a physician certified or recertified by an ABMS member board or AOA recognized specialty board within the past year (LAC 46:XLV.447.A.3). The initial renewal Laws and Rules course and the controlled substance CME are still required. In CredentialDOMD, once a current board certification is on file, you can choose to use this exemption for one renewal."
+          "answer": "Yes. The annual CME requirement does not apply to a physician certified or recertified by an ABMS member board or AOA recognized specialty board within the past year (LAC 46:XLV.447.A.3). The initial renewal Laws and Rules course and the controlled substance CME are still required. In CredentialDOMD, once a current board certification is on file and your state license has its expiration date, you can choose to use this exemption for one renewal."
         }
       ],
       "sources": [
@@ -3071,7 +3071,7 @@
         },
         {
           "question": "Does board certification count toward my CME?",
-          "answer": "Yes. Passing an ABMS board exam counts as 100 hours of Category 1 CME (N.H. Rev. Stat. \u00a7 329:16-g). In CredentialDOMD, once a current board certification is on file, you can choose to use this exemption for one renewal."
+          "answer": "Yes. Passing an ABMS board exam counts as 100 hours of Category 1 CME (N.H. Code Admin. R. Med 402.01(g)). The 3 hour pain management or opioid requirement still applies. In CredentialDOMD, once a current board certification is on file and your state license has its expiration date, you can choose to use this exemption for one renewal."
         }
       ],
       "sources": [
@@ -3493,7 +3493,7 @@
         },
         {
           "question": "Does board certification count toward my CME?",
-          "answer": "Yes. Recertification or MOC through an ABMS, AOA, or RCPSC board satisfies the entire CME requirement (N.C. Admin. Code tit. 21, r. 32R.0101). In CredentialDOMD, once a current board certification is on file, you can choose to use this exemption for one renewal."
+          "answer": "Yes. Physicians participating in recertification or MOC through an ABMS, AOA, or RCPSC board are exempt from reporting CME hours while participating in MOC (N.C. Admin. Code tit. 21, r. 32R.0101). The board does not clearly say whether this waives the 3 hours of controlled substance CME for prescribers, so confirm with the board. In CredentialDOMD, once a current board certification is on file and your state license has its expiration date, you can choose to use this exemption for one renewal."
         }
       ],
       "sources": [
@@ -3600,7 +3600,7 @@
         },
         {
           "question": "Does board certification count toward my CME?",
-          "answer": "Yes. Physicians with ABMS, AOA, or RCPSC certification or MOC are exempt from the CME requirement (N.D. Admin. Code 50-04-01-02). In CredentialDOMD, once a current board certification is on file, you can choose to use this exemption for one renewal."
+          "answer": "Yes. Physicians with ABMS, AOA, or RCPSC certification or MOC are exempt from the CME requirement (N.D. Admin. Code 50-04-01-02). In CredentialDOMD, once a current board certification is on file and your state license has its expiration date, you can choose to use this exemption for one renewal."
         }
       ],
       "sources": [
@@ -4543,7 +4543,7 @@
         },
         {
           "question": "Does board certification count toward my CME?",
-          "answer": "Yes, for one renewal. Board certification or recertification within 36 months before your renewal presumes CME compliance for that renewal, and current ABMS MOC or AOA OCC is also accepted. It covers the ethics hours but not human trafficking, and whether it covers the opioid hours depends on your specialty board (Tex. Admin. Code tit. 22, \u00a7 161.35). In CredentialDOMD, once a current board certification is on file, you can choose to use this exemption for one renewal."
+          "answer": "Yes, for one renewal. Board certification or recertification within 36 months before your renewal presumes CME compliance for that renewal, and current ABMS MOC or AOA OCC is also accepted. It covers the ethics hours but not human trafficking, and whether it covers the opioid hours depends on your specialty board (Tex. Admin. Code tit. 22, \u00a7 161.35). In CredentialDOMD, once a current board certification is on file and your state license has its expiration date, you can choose to use this exemption for one renewal."
         }
       ],
       "sources": [
@@ -4961,7 +4961,7 @@
         },
         {
           "question": "Does board certification count toward my CME?",
-          "answer": "Yes. MDs: ABMS certification in the last 4 years, or participation in ABMS MOC, is accepted in place of the 200 hours (an AMA PRA award earned in 2 of the last 4 years also qualifies). DOs: ABOMS or ABMS certification or recertification within the last 6 years satisfies the 150 hours (so does a current AOA CME certificate or an AMA PRA award), and the state's required topics are still required (chapters 246-919 and 246-853 WAC). In CredentialDOMD, once a current board certification is on file, you can choose to use this exemption for one renewal."
+          "answer": "Yes. MDs: ABMS certification in the last 4 years, or participation in ABMS MOC, is accepted in place of the 200 hours (an AMA PRA award earned in 2 of the last 4 years also qualifies). DOs: ABOMS or ABMS certification or recertification within the last 6 years satisfies the 150 hours (so does a current AOA CME certificate or an AMA PRA award), and the state's required topics are still required (chapters 246-919 and 246-853 WAC). In CredentialDOMD, once a current board certification is on file and your state license has its expiration date, you can choose to use this exemption for one renewal."
         }
       ],
       "sources": [

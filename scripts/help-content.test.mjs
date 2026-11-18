@@ -52,6 +52,13 @@ test('guide validation rejects duplicate IDs, missing evidence and broken relati
   const broken = structuredClone(help);
   broken.articles[0].related = ['missing-guide'];
   assert.throws(() => validateHelp(broken), /related guide/);
+  const future = structuredClone(help);
+  future.articles[0].updatedAt = '2999-01-01';
+  assert.throws(() => validateHelp(future), /guide date/);
+  const undated = structuredClone(help);
+  undated.articles[0].updatedAt = 'recently';
+  assert.throws(() => validateHelp(undated), /guide date/);
+  assert.ok(help.articles.some(article => article.updatedAt === help.updatedAt), 'the page date is the newest article review');
 });
 
 test('product prose renders as text, not executable markup', () => {
