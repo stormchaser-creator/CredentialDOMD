@@ -9,6 +9,7 @@
 // is a relative path with its extension.
 
 import { identifierReason, sanitizeText } from "./customCategories.js";
+import { normalizeCmeSessions, CME_SESSIONS_FIELD } from "./topicSuggest.js";
 
 const isBlank = (v) => v == null || v === "" || (Array.isArray(v) && v.length === 0);
 
@@ -62,6 +63,18 @@ export function splitScanned(extracted, allowedKeys = null) {
   };
   for (const [k, v] of Object.entries(extracted)) {
     if (isBlank(v) || k === "suggestedCategory") continue;
+    // A CME transcript's session list is never a column: kept whole as
+    // customFields[CME_SESSIONS_FIELD] (topicSuggest.js), not flattened to
+    // text, minus any title the identifier gate stops.
+    if (k === "sessions" && Array.isArray(v) && !(allowed && allowed.has(k))) {
+      const list = normalizeCmeSessions(v).filter((s) => {
+        const why = identifierReason("Session title", s.title);
+        if (why) withheld.push({ label: "Session title", reason: why });
+        return !why;
+      });
+      if (list.length) extras[CME_SESSIONS_FIELD] = list;
+      continue;
+    }
     if (k === "facts" && Array.isArray(v)) {
       for (const f of v) if (f && typeof f === "object" && !isBlank(f.value)) putExtra(f.label, f.value);
       continue;

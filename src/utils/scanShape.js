@@ -11,6 +11,7 @@
 
 import { STATES } from "../constants/states.js";
 import { canonicalScanFields } from "./snapOption.js";
+import { normalizeCmeSessions, CME_SESSIONS_FIELD } from "./topicSuggest.js";
 
 // Record kinds whose State must be one of the form's own options, and the
 // kinds whose Type must be. Privilege and policy types are snapped but not
@@ -70,11 +71,21 @@ export function scanShapeIssues(docType, edited, typeOptions) {
  * an NP certificate's "including M pharmacology" into `pharmacologyHours`,
  * which is not a column (an unknown key rejects the whole row), so it moves
  * to customFields["Pharmacology Hours"], where the APRN and certification
- * cards read it (DESIGN 3.7). Every other entry is returned as it came.
+ * cards read it (DESIGN 3.7). A transcript's `sessions` is not a column
+ * either: it moves to customFields[CME_SESSIONS_FIELD], so the record keeps
+ * why each suggested topic was offered (topicSuggest.js). Every other entry
+ * is returned as it came.
  */
 export function cmeEntryFromScan(entry) {
-  if (!entry || typeof entry !== "object" || !Object.hasOwn(entry, "pharmacologyHours")) return entry;
-  const { pharmacologyHours, ...rest } = entry;
+  if (!entry || typeof entry !== "object") return entry;
+  let out = entry;
+  if (Object.hasOwn(out, "sessions")) {
+    const { sessions, ...rest } = out;
+    const list = normalizeCmeSessions(sessions);
+    out = list.length ? { ...rest, customFields: { ...(rest.customFields || {}), [CME_SESSIONS_FIELD]: list } } : rest;
+  }
+  if (!Object.hasOwn(out, "pharmacologyHours")) return out;
+  const { pharmacologyHours, ...rest } = out;
   const n = parseFloat(pharmacologyHours);
   if (!Number.isFinite(n) || n < 0) return rest;
   return { ...rest, customFields: { ...(rest.customFields || {}), "Pharmacology Hours": String(n) } };

@@ -19,6 +19,7 @@
 import { geminiJsonConfig, geminiResponseText } from "./geminiModel.js";
 import { normalizeScanDates } from "./scanDates.js";
 import { RECEIPT_DOC_TYPE, RECEIPT_CATEGORIES, normalizeReceipt } from "./receiptScan.js";
+import { normalizeCmeScan } from "./topicSuggest.js";
 import {
   ALL_LICENSE_TYPES, LICENSE_TYPES_PA, LICENSE_TYPES_NP, CME_CATEGORIES_PA, CME_CATEGORIES_NP, CME_CATEGORIES_MD,
   EDUCATION_TYPES, EDUCATION_TYPES_PA, EDUCATION_TYPES_NP,
@@ -110,6 +111,10 @@ export function validateResponse(parsed) {
   // rather than trusting the model's formatting.
   if (parsed.documentType === RECEIPT_DOC_TYPE) parsed.extracted = normalizeReceipt(parsed.extracted);
   if (parsed.documentType === OTHER_DOC_TYPE) parsed.extracted = normalizeOther(parsed.extracted);
+  // A transcript's sessions: each topic checked against the fixed list and
+  // the title's own words, and none applied to the whole record from one
+  // session (topicSuggest.js normalizeCmeScan).
+  if (parsed.documentType === "cme") parsed.extracted = normalizeCmeScan(parsed.extracted);
   parsed.extracted = normalizeScanDates(parsed.extracted);
   return parsed;
 }
@@ -172,6 +177,11 @@ Use YYYY-MM-DD dates. Omit fields that are not visible. Use 2-letter state abbre
 If the document is a curriculum vitae or resume (a multi-section document listing this physician's own education, training, positions, licenses, publications and memberships), classify it as "cv", extract NOTHING, and return { "documentType": "cv", "confidence": "high", "extracted": {}, "notes": "" }. It is read elsewhere.
 ${categories.length ? `The physician's existing categories (reuse one for an "other" document when it fits): ${categories.map(c => `"${c}"`).join(", ")}.\n` : ""}IMPORTANT: the "name" field is a DISPLAY LABEL describing the credential itself (e.g. "CO Medical License", "DEA Registration", "MMR Vaccination", "DO Diploma - PCOM") — NEVER the physician's own name. Do not put a person's name in "name".`;
 
+// A conference transcript lists many sessions under one certificate. Sent as
+// its own system part so SYSTEM_PROMPT keeps its exact text (the MD and DO
+// goldens hash it). validateResponse checks every session it returns.
+export const CME_SESSIONS_PROMPT = `CME SESSIONS. When a "cme" document lists individual sessions, lectures or activities with their own titles (a conference transcript, a meeting agenda with credit per session), ALSO return extracted.sessions: an array with one object per listed session, in the order printed: { "title": the session title exactly as printed, "hours": the credit printed for that session as a number (omit when none is printed), "topics": an array of values from the topics list above that the session title itself clearly names, or [] }. List every session; do not skip, merge or summarise. A session's topics belong on that session only: leave them out of the top-level "topics" unless the activity as a whole is about that topic. When the document lists no separate sessions, omit "sessions".`;
+
 // What the model is told alongside the file. Kept word for word from the
 // analyzers that used to spell them out inline.
 export const SCAN_IMAGE_TEXT = "Analyze this document (a medical credential or an expense receipt). Return only JSON.";
@@ -184,7 +194,7 @@ export const scanPdfText = (degreeType) => `Analyze this document (a medical cre
  */
 export function scanRequestBody({ degreeType, categories = [], parts }) {
   return {
-    systemInstruction: { parts: [{ text: SYSTEM_PROMPT(degreeType, categoryHints(categories)) }] },
+    systemInstruction: { parts: [{ text: SYSTEM_PROMPT(degreeType, categoryHints(categories)) }, { text: CME_SESSIONS_PROMPT }] },
     contents: [{ parts }],
     generationConfig: geminiJsonConfig(8192),
   };
