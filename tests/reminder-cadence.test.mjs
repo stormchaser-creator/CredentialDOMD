@@ -717,12 +717,13 @@ test('send-reminders under node: snooze, the app\'s columns and the daily cadenc
     assert.equal(sent.length, 2);
   });
 
-  await t.test('a failed board read sends the credential digest without the steps and forgets nothing', async () => {
+  await t.test('a failed board read sends the credential digest without the steps, and holds a member told a step', async () => {
     sent.length = 0;
     const lic = { id: 'lic-board-fail', user_id: uid(30003), type: 'State Medical License', state: 'ZZ', expiration_date: '2026-10-19' };
     const told = await reminderFingerprint([{ id: 'lic-held', exp: lic.expiration_date, table: 'licenses' }, { id: 'board:AOA:AOBS:la:2026', exp: '2026-11-15', table: 'board' }]);
+    // No snooze and Monthly: without the hold the list reads as changed and sends at once.
     const held = profile(30004, { degree_type: 'DO', reminder_email_fingerprint: told, reminder_emailed_at: '2026-09-21T13:00:05.000Z',
-      snoozed_until: '2026-10-30T13:00:00.000Z' });
+      notify_freq_days: 30 });
     const p = profile(30003, { degree_type: 'DO' });
     const tables = { profiles: [p, held], licenses: [lic, boardRecord(30003), { ...lic, id: 'lic-held', user_id: uid(30004) }, boardRecord(30004)], alert_acks: [], notification_log: [] };
     const { byProfile, log } = await runAt('2026-09-22T13:00:03.000Z', tables, { fail: ['licenses:board'] });
@@ -730,7 +731,9 @@ test('send-reminders under node: snooze, the app\'s columns and the daily cadenc
     assert.equal(byProfile[uid(30003)].count, 1, 'without the board step');
     assert.doesNotMatch(sent[0].text, /Longitudinal Assessment|Mark it done/);
     assert.match(sent[0].text, /Oct 19, 2026/);
-    assert.deepEqual(byProfile[uid(30004)], { profile: uid(30004), sent: false, reason: 'snoozed' });
+    assert.deepEqual(byProfile[uid(30004)], { profile: uid(30004), sent: false, error: 'records_unavailable' }, 'held, as a failed credential table holds');
+    assert.equal(sent.length, 1, 'only the member never told a step is emailed');
+    assert.equal(tables.profiles[1].reminder_emailed_at, '2026-09-21T13:00:05.000Z', 'the held member\'s cadence is untouched');
     assert.equal(log.filter(l => l.table === 'profiles' && l.op === 'update' && l.payload?.reminder_email_fingerprint && !l.payload.reminder_emailed_at).length, 0, 'the held run does not forget the told step');
     assert.equal(tables.profiles[1].reminder_email_fingerprint, told);
   });

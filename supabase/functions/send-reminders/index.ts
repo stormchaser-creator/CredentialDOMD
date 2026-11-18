@@ -42,7 +42,7 @@ import appBoardLinks from "./appBoardLinks.json" with { type: "json" };
 import { renewalLineFor } from "../_shared/reminderRenewalLine.mjs";
 import { remindable, reminderLabel, withCurrentCategoryNames, reminderGreeting, reminderHeadline } from "../_shared/reminderRows.mjs";
 import { reminderRecipientsQuery, reminderLeadDays, notifyFreqDays } from "../_shared/reminderRecipients.mjs";
-import { reminderEmailDecision, reminderFingerprint, reminderToldStill } from "../_shared/reminderCadence.mjs";
+import { reminderEmailDecision, reminderFingerprint, reminderToldBoard, reminderToldStill } from "../_shared/reminderCadence.mjs";
 import { readAllPages, groupsOf, readReminderGroup } from "../_shared/reminderReads.mjs";
 import { reminderBoardItems } from "../_shared/reminderBoardSteps.mjs";
 import { drainReminderQueue, reminderDeadline } from "../_shared/reminderQueue.mjs";
@@ -197,6 +197,14 @@ async function handle(req: Request, queueJob: { id: string; lease_token: string 
           boardFailed = true;
           console.error("reminder board steps failed", p.id, (e as Error)?.message);
         }
+      }
+      // A member already told a board step is held, as a failed credential
+      // table holds them: without the steps the list reads as changed, an
+      // email would go out at once and drop them, and the next full read would
+      // send again. A member never told one gets the digest as usual.
+      if (boardFailed && reminderToldBoard(p.reminder_email_fingerprint)) {
+        results.push({ profile: p.id, sent: false, error: "records_unavailable" });
+        continue;
       }
       const fp = await reminderFingerprint(items);
       // A run that sends nothing forgets the told items it no longer lists, so

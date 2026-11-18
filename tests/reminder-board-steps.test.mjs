@@ -9,7 +9,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { reminderBoardItems, boardDataFor, specialtiesOf } from '../supabase/functions/_shared/reminderBoardSteps.mjs';
-import { reminderFingerprint, reminderEmailDecision } from '../supabase/functions/_shared/reminderCadence.mjs';
+import { reminderFingerprint, reminderEmailDecision, reminderToldBoard, reminderToldStill } from '../supabase/functions/_shared/reminderCadence.mjs';
 import { readReminderGroup } from '../supabase/functions/_shared/reminderReads.mjs';
 import { RECIPIENT_COLUMNS } from '../supabase/functions/_shared/reminderRecipients.mjs';
 import { boardComplianceFor } from '../src/utils/boardCompliance.js';
@@ -176,6 +176,28 @@ test('send-reminders adds the steps after the records, never lets them block the
   assert.doesNotMatch(fn.slice(fn.indexOf('if (read.acksFailed || read.failed.size)'), fn.indexOf('const lead = reminderLeadDays')), /boards/, 'a board failure never refuses the digest');
   assert.match(fn, /"\\n      Mark it done in the app when finished\."/, 'the hint, once, on the first step');
   assert.match(fn, /i === firstBoard \?/);
+});
+
+test('a told board step, then a failed board read, holds the member: no send and nothing stored', async () => {
+  const now = at('2026-10-01');
+  const cred = { id: 'synthetic-license', table: 'licenses', exp: '2026-12-01' };
+  const steps = reminderBoardItems(profile(), [boardRow()], { lead: 90, now });
+  assert.ok(steps.length, 'the synthetic board has a step due');
+  const told = await reminderFingerprint([cred, ...steps]);
+  const member = { reminder_email_fingerprint: told, reminder_emailed_at: new Date(Date.now() - 86400000).toISOString() };
+  // Without the hold, the run that could not read the boards would send at once.
+  const credOnly = await reminderFingerprint([cred]);
+  assert.deepEqual(reminderEmailDecision(member, { fingerprint: credOnly, freqDays: 30 }), { send: true, reason: 'list changed' });
+  assert.equal(reminderToldBoard(told), true, 'a told board step is seen');
+  assert.equal(reminderToldBoard(credOnly), false, 'a credential-only list is not held');
+  assert.equal(reminderToldBoard(credOnly.split(';')[0]), false, 'a bare legacy hash is not held');
+  assert.equal(reminderToldBoard(null), false, 'a member never emailed is not held');
+  assert.notEqual(reminderToldStill(told, credOnly), null, 'and a held run would otherwise forget the step');
+  // The function holds before any decision, send or stored change.
+  const hold = fn.indexOf('if (boardFailed && reminderToldBoard(p.reminder_email_fingerprint))');
+  assert.ok(hold > 0, 'send-reminders checks the told board steps on a failed board read');
+  assert.ok(hold < fn.indexOf('const fp = await reminderFingerprint(items);'), 'before the fingerprint and decision');
+  assert.match(fn.slice(hold, hold + 200), /error: "records_unavailable" \}\);\s*continue;/, 'as a failed credential table does');
 });
 
 test('the shared copies of the board code are the app\'s', () => {

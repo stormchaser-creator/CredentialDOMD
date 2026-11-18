@@ -122,7 +122,9 @@ function readFingerprint(value) {
  * due>", src/utils/notifications.js) counts its steps under "board:<soonest
  * due>", the section and date the email gives a board step
  * (reminderBoardSteps.mjs). A step of the same board due later than the
- * soonest is not accounted for and reads as new, so it is sent.
+ * soonest is not accounted for and reads as new, so it is sent. Known
+ * limitation: under a banner snooze, such a later step wakes the email until
+ * the app's board part carries each step's due date.
  */
 function bannerCounts(alertsFingerprint) {
   const counts = new Map();
@@ -196,6 +198,18 @@ export function reminderToldStill(stored, fingerprint) {
   const kept = emailed.items.filter(i => listed.has(i.id));
   if (kept.length === emailed.items.length) return null;
   return `${emailed.hash};${kept.map(i => i.token).join(',')}`;
+}
+
+/**
+ * Whether the stored fingerprint's told items include a board certification
+ * step (section "board", reminderBoardSteps.mjs). A run whose board read
+ * failed cannot list those steps, so it must not decide or store anything for
+ * such a member: its list would read as changed and send at once, and then
+ * again when the read works.
+ */
+export function reminderToldBoard(stored) {
+  const emailed = readFingerprint(stored);
+  return !!emailed.items && emailed.items.some(i => i.sec === 'board');
 }
 
 /**
