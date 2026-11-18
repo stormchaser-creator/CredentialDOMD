@@ -794,12 +794,61 @@ const NAME_LINE_RE = /^[A-Z][a-z'-]+(?: [A-Z][a-z'-]+){0,2}(?:, ?[A-Z][A-Za-z.]{
 const DEGREE_SUFFIX = "(?:DO|MD|D\\.O\\.|M\\.D\\.|PhD|Ph\\.D\\.|MBA|MHA|MPH|MS|MSN|BSN|RN|NP|PA|PA-C|APRN|FNP|CRNA|CPCS|CPMSM|CPMS|CPC|CPHQ|FACS|FAANS|FACOS|FACP|FAAFP|FACEP|JD|DDS|DMD|DPM)";
 const PERSON_SIGNATURE_RE = new RegExp(`^(?:[Dd]r\\.?\\s+)?(?:[A-Z]\\.\\s*){0,3}[A-Z][A-Za-z'-]+(?:\\s+(?:[A-Z]\\.|[A-Z][A-Za-z'-]+)){0,3}\\s*,\\s*${DEGREE_SUFFIX}(?:\\s*,\\s*${DEGREE_SUFFIX})*[.,]?$`);
 const HEADER_COPY_RE = /^(?:to|cc|bcc|from|sent|date|subject|reply-to)\s*:/i;
+// The same name signed without a comma or with a title instead of a degree:
+// "Dr. Rowan Testa", "Rowan Testa MD FACS", "Doctor R. Testa, DO". On
+// 2026-11-17 the owner mailed docs@ a CME transcript with nothing in the body
+// but "Dr. <name>" and a phone number; the name line was read as the one
+// thing asked for and he was emailed "<name>: not recognized. What did they
+// mean?".
+const PERSON_NAME = "(?:[A-Z]\\.\\s*){0,3}[A-Z][A-Za-z'-]+(?:\\s+(?:[A-Z]\\.|[A-Z][A-Za-z'-]+)){0,3}";
+const TITLED_NAME_RE = new RegExp(`^(?:Dr\\.?|Doctor)\\s+${PERSON_NAME}(?:\\s*,?\\s+${DEGREE_SUFFIX}|\\s*,\\s*${DEGREE_SUFFIX})*[.,]?$`);
+const NAME_DEGREES_RE = new RegExp(`^${PERSON_NAME}(?:\\s+${DEGREE_SUFFIX})+(?:\\s*,?\\s*${DEGREE_SUFFIX})*[.,]?$`);
 
 function isSignatureLine(line) {
   const t = String(line ?? "").trim().replace(/^[*_]+|[*_]+$/g, "").trim();
   if (!t) return false;
   if (HEADER_COPY_RE.test(t) || SIGNOFF_RE.test(t)) return true;
-  return PERSON_SIGNATURE_RE.test(t) && classifyAsk(cleanAsk(t)).kind === "unknown";
+  return (PERSON_SIGNATURE_RE.test(t) || TITLED_NAME_RE.test(t) || NAME_DEGREES_RE.test(t)) && classifyAsk(cleanAsk(t)).kind === "unknown";
+}
+
+/**
+ * Is this line part of a signature block, never something asked for: a
+ * person's name signed with a title or a degree, a sign-off, a copied
+ * header, or a contact line (phone, address, link, email address)? A bare
+ * name with nothing around it is not caught here (it could be a kind the
+ * rules cannot name); signatureOnly reads a whole message for that.
+ */
+export function isSignatureText(line) {
+  const t = String(line ?? "").trim();
+  if (!t) return false;
+  return NOISE_LINE_RE.test(t) || isSignatureLine(t);
+}
+
+/**
+ * Is a message nothing but a signature: no line in it other than a name
+ * (bare, titled or with a degree), a sign-off, a job title or department
+ * line under the name, or contact details, and no line the rules can name a
+ * document kind in? Empty is not a signature. At most eight lines, so a
+ * letter is never read as one. The physician's own email of 2026-11-17
+ * ("Dr. <name>" over a phone number, a CME transcript attached) is one: it
+ * asks for nothing, and the file is what it is about.
+ */
+export function signatureOnly(text) {
+  const lines = String(text ?? "").replace(/\r\n?/g, "\n").replace(/\u00a0/g, " ").split("\n").map((l) => l.trim()).filter(Boolean);
+  if (!lines.length || lines.length > 8) return false;
+  let named = false;
+  for (const l of lines) {
+    if (NOISE_LINE_RE.test(l) || SIGNATURE_RE.test(l)) continue;
+    if (/[?]/.test(l) || hasAskForm(l) || ASK_SENTENCE_RE.test(l) || l.length > 60) return false;
+    const bare = l.replace(/^[*_]+|[*_]+$/g, "").replace(/[.,]$/, "").trim();
+    if (classifyAsk(cleanAsk(bare) || bare).kind !== "unknown") return false;
+    if (isSignatureLine(bare) || NAME_LINE_RE.test(bare)) { named = true; continue; }
+    // A title or department line under the name ("Neurosurgery", "Medical
+    // Staff Office"): a few capitalised words, nothing that names a kind.
+    if (named && /^[A-Z][A-Za-z&'/-]*(?:\s+(?:of|and|&|the|[A-Z][A-Za-z&'/-]*)){0,5}$/.test(bare)) continue;
+    return false;
+  }
+  return named;
 }
 
 /**
