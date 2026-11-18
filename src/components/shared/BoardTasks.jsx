@@ -11,7 +11,7 @@ const dayLabel = iso => new Date(`${iso}T12:00`).toLocaleDateString(undefined, {
 function taskStatusText(t) {
   if (t.status === "done") return `Done ${dayLabel(t.doneOn)}`;
   if (t.status === "not-yet") return `Starts in ${t.startsYear}, the year your certificate expires`;
-  if (t.status === "overdue") return `Overdue since ${dayLabel(t.due)}`;
+  if (t.status === "unconfirmed") return `Due ${dayLabel(t.due)}. Done it? Mark it done`;
   if (t.status === "upcoming") return `Opens ${dayLabel(t.opens)}, due ${dayLabel(t.due)}`;
   if (!t.due) return `Due in ${t.period}. The board has not posted the date yet`;
   return `Due ${dayLabel(t.due)}${t.daysLeft != null ? ` (${t.daysLeft} day${t.daysLeft === 1 ? "" : "s"})` : ""}`;
@@ -52,7 +52,7 @@ export default function BoardTasks({ board }) {
     backgroundColor: primary ? T.accent : T.accentGlow, color: primary ? "#fff" : T.accent, marginLeft: 4,
   });
   const small = { fontSize: 12, color: T.textMuted, lineHeight: 1.45 };
-  const color = s => s === "done" ? T.success : s === "overdue" ? T.danger || T.warning : s === "not-yet" ? T.textDim : T.warning;
+  const color = s => s === "done" ? T.success : s === "unconfirmed" ? T.warning : s === "not-yet" ? T.textDim : T.warning;
 
   return (
     <div onClick={stop} style={{ marginTop: 8 }}>

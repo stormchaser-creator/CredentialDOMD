@@ -47,9 +47,9 @@ test('AOBS: Longitudinal Assessment due Nov 15 2026, $225; license yearly; QI by
   assert.equal(by.qi.due, '2027-12-31');
 });
 
-test('before the window opens the assessment is upcoming; after Nov 15 unmarked it is overdue', () => {
+test('before the window opens the assessment is upcoming; after Nov 15 unmarked it is asked, not overdue', () => {
   assert.equal(boardTasksFor(doData(), aobs(doData()), at('2026-01-10')).tasks[0].status, 'upcoming');
-  assert.equal(boardTasksFor(doData(), aobs(doData()), at('2026-11-18')).tasks[0].status, 'overdue');
+  assert.equal(boardTasksFor(doData(), aobs(doData()), at('2026-11-18')).tasks[0].status, 'unconfirmed');
 });
 
 test('a year with no published window has no dated deadline', () => {
@@ -143,7 +143,7 @@ test('the physician can turn proration off on the record (a recertification date
   assert.equal(b.firstCycle.off, true);
 });
 
-test('alerts: an overdue or soon-due task is listed until marked done', () => {
+test('alerts: a soon-due task is listed until marked done; a passed one is not', () => {
   const data = doData();
   const boards = boardComplianceFor(data);
   const soon = boardTaskAlerts(data, boards, 90, at('2026-10-01'));
@@ -151,6 +151,7 @@ test('alerts: an overdue or soon-due task is listed until marked done', () => {
   assert.deepEqual(soon[0].issues, ['Longitudinal Assessment: due 2026-11-15']);
   assert.equal(soon[0].key, 'board:AOA:AOBS');
   assert.equal(boardTaskAlerts(data, boards, 30, at('2026-10-01')).length, 0, 'outside the lead window');
+  assert.equal(boardTaskAlerts(data, boards, 90, at('2026-11-18')).length, 0, 'a passed date with no mark is asked on the card, never alerted');
   const field = 'AOBS Longitudinal Assessment done for 2026';
   const done = { ...data, licenses: [{ ...data.licenses[0], customFields: { [field]: '2026-09-01' } }] };
   assert.equal(boardTaskAlerts(done, boardComplianceFor(done), 90, at('2026-10-01')).length, 0);

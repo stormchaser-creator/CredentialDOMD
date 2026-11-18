@@ -1,11 +1,6 @@
 {
-  "reason": "Board certification as its own item (2026-11-18). (1) alerts:MD and alerts:DO: board certification tasks now raise alerts through the same CME-gap list when overdue or due inside the reminder lead window. At the frozen date (2026-10-01) the ABNS fixture's four annual tasks (due Sept 30, existing ABNS entry verified 2026-07) are overdue, and the AOBS fixture's Longitudinal Assessment (2026 window closes Nov 15, certification.osteopathic.org/surgery/occ-overview/component-3/) is due in 45 days; each adds one entry, the count and fingerprint follow. Every other alert line is unchanged. (2) board:DO: the AOA 'national 120 hours' entry for every DO is removed (AOA CME is a requirement for AOA board-certified physicians only, https://osteopathic.org/cme/cme-faqs/); the case now reads aoa: null. The AOBS card itself (ids, comp) is byte-identical.",
+  "reason": "Board certification as its own item (2026-11-18). (1) alerts:DO: board certification tasks raise an alert when due inside the reminder lead window (never for a date that passed with no mark: that is asked on the card). At the frozen date (2026-10-01) the AOBS fixture's Longitudinal Assessment (2026 window closes Nov 15, certification.osteopathic.org/surgery/occ-overview/component-3/) is due in 45 days and adds one entry; the count and fingerprint follow. alerts:MD is unchanged: the ABNS fixture's tasks (due Sept 30) have passed with no mark. (2) board:DO: the AOA 'national 120 hours' entry for every DO is removed (AOA CME is a requirement for AOA board-certified physicians only, https://osteopathic.org/cme/cme-faqs/); the case now reads aoa: null. The AOBS card itself (ids, comp) is byte-identical.",
   "entries": [
-    {
-      "key": "alerts:MD",
-      "originalHash": "1aeaf7639338056573246b4d5ae7cbbb5830779b1cffb02a6d12682a035fd351",
-      "reviewedHash": "d90a16c74f88dcfdb26c36feb52455b83763a846bc6bf6ce511f11da934d95c3"
-    },
     {
       "key": "alerts:DO",
       "originalHash": "3b668690e3004ea7685b9cf3f6780fd90b06c6bbd00ec4bb992f8b63a7cbb7c6",

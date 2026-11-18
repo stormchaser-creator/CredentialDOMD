@@ -5,6 +5,7 @@
 // and every suggestion carries its reason. Nothing is tagged until the
 // physician taps "Count this course".
 import { cmeTopics, topicTags, inWindow } from "./cmeCore.js";
+import { cmeSessionsOf } from "./topicSuggest.js";
 
 // Topic -> the words in a course that name it. Each term is matched as a
 // whole word (or word start, for "opioid" catching "opioids"). Kept small and
@@ -69,6 +70,8 @@ function courseTexts(c) {
     const text = typeof s === "string" ? s : typeof s?.title === "string" ? s.title : "";
     if (text) out.push({ field: "session list", text });
   }
+  // The session list a scanned transcript keeps (topicSuggest.js).
+  for (const sess of cmeSessionsOf(c)) if (sess.title) out.push({ field: "session list", text: sess.title });
   for (const [k, v] of Object.entries(c?.customFields || {})) {
     if (/session/i.test(k) && typeof v === "string") out.push({ field: "session list", text: v });
   }

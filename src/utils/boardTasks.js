@@ -86,7 +86,8 @@ function startsYear(task, boardId, record) {
 
 /**
  * The tasks for one board card, each with:
- *   status: "done" (marked in this period), "overdue" (past the due date),
+ *   status: "done" (marked in this period), "unconfirmed" (the date passed
+ *           with no mark: asked, never alerted),
  *           "upcoming" (the window has not opened), "not-yet" (the board has
  *           not started it for this certificate), or "due"
  *   due, daysLeft (null when the board has not published a date), doneOn,
@@ -109,7 +110,10 @@ export function boardTasksFor(data, board, now = new Date()) {
     let status = "due";
     if (doneOn) status = "done";
     else if (begins && begins > now.getFullYear()) status = "not-yet";
-    else if (period.due && today > period.due) status = "overdue";
+    // Past the date with no mark: the app cannot tell a missed step from one
+    // done before it was tracked here, so it asks instead of alarming
+    // (2026-11-18: every unmarked ABNS task read overdue on day one).
+    else if (period.due && today > period.due) status = "unconfirmed";
     else if (period.opens && today < period.opens) status = "upcoming";
     return {
       id: task.id, label: task.label, detail: task.detail || "", cost: task.cost ?? null, source: task.source || set.sourceUrl,
@@ -140,7 +144,8 @@ export function applyBoardTaskMark(data, boardId, field, date) {
 
 /**
  * Board tasks that belong in the alerts (the bell, the banner, the reminder
- * message): overdue, or due inside the reminder lead window. A task with no
+ * message): due inside the reminder lead window. A date that passed with no
+ * mark is asked on the card, never alerted. A task with no
  * published date, already done, or not started yet raises nothing.
  */
 export function boardTaskAlerts(data, boards, lead, now = new Date()) {
@@ -149,9 +154,9 @@ export function boardTaskAlerts(data, boards, lead, now = new Date()) {
     if (b.followsParent || b.source === "CERT" || b.body) continue;
     const t = boardTasksFor(data, b, now);
     if (!t) continue;
-    const open = t.tasks.filter(x => (x.status === "overdue" || x.status === "due") && x.daysLeft != null && x.daysLeft <= lead);
+    const open = t.tasks.filter(x => x.status === "due" && x.daysLeft != null && x.daysLeft >= 0 && x.daysLeft <= lead);
     if (!open.length) continue;
-    const issues = open.map(x => x.status === "overdue" ? `${x.label}: overdue since ${x.due}` : `${x.label}: due ${x.due}`);
+    const issues = open.map(x => `${x.label}: due ${x.due}`);
     const soonest = open.reduce((a, x) => (x.due < a.due ? x : a), open[0]);
     out.push({ state: b.code, issues, daysLeft: soonest.daysLeft, renewal: soonest.due, key: `board:${b.id}`, kind: "board", label: b.label });
   }
