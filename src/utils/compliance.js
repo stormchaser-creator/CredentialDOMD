@@ -1,5 +1,5 @@
 import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements.js";
-import { topicApplicability } from "./conditionalCme.js";
+import { topicApplicability, priorCompletionOn, PRIOR_SUFFIX } from "./conditionalCme.js";
 import { isAlertable, isInactive, needsResolution } from "./lifecycle.js";
 import { daysUntilDate, parseDay } from "./dateDays.js";
 import { computeAppCompliance } from "./appCompliance.js";
@@ -198,10 +198,9 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   // end. Without this a satisfied one-time or 6-year topic ages out of the
   // cycle window and is wrongly re-demanded every renewal.
   //
-  // Residual limitation: a one-time mandate the physician completed BEFORE
-  // they started logging CME in the app still shows unmet; a per-topic
-  // "attest completed" override stored per user is the follow-on for that.
-  // The periodicity fix alone stops satisfied credits from aging out.
+  // A one-time mandate completed BEFORE the physician started logging CME is
+  // met by their own confirmation on the state license (priorCompletionOn,
+  // 2026-11-18). Per-cycle topics cannot be confirmed away.
   const evaluatedTopics = (entry?.topics || []).map(t => {
     let pool, period;
     if (t.period === "lifetime") {
@@ -223,6 +222,7 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     const tagged = pool.filter(c => cmeTopics(c).some(x => tags.includes(x))
       && (!t.acceptedCategories || t.acceptedCategories.includes(c.category)));
     const informational = t.informational === true;
+    const priorCompleted = !informational && t.period === "lifetime" ? priorCompletionOn(t.topic, opts.priorCompletion || opts.topicApplicability) : null;
     const earned = informational ? null : round2(tagged.reduce((s, c) => s + hours(c), 0));
     const checklist = !informational && !(t.hours > 0);
     // Per-topic provenance, falling back to the rule set's own citation and
@@ -252,7 +252,8 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
       required: t.hours || 0,
       earned,
       checklist,
-      met: informational ? null : checklist ? tagged.length > 0 : earned >= t.hours,
+      met: informational ? null : (checklist ? tagged.length > 0 : earned >= t.hours) || !!priorCompleted,
+      ...(priorCompleted ? { priorCompletedOn: priorCompleted } : {}),
       note: t.note,
       period,
       periodLabel: informational ? "Course curriculum guidance" : topicPeriodLabel(period, cycleYears),
@@ -645,6 +646,23 @@ const hasAprnLicense = (licenses) => (licenses || []).some(l => l && !isInactive
  * Convenience: compliance for a state using everything we know — the state
  * license's expiration anchors the window, DEA registration adds MATE Act.
  */
+/**
+ * The one-time-topic confirmations (priorCompletionField keys) on any of the
+ * state's medical licence records, current, renewed or superseded, so one
+ * made on the old record still counts after a renewal. Earliest date wins.
+ */
+export function statePriorCompletions(licenses, state) {
+  const out = {};
+  for (const l of licenses || []) {
+    if (!l || l.state !== state || !ofKind(l, "medical")) continue;
+    for (const [k, v] of Object.entries(l.customFields || {})) {
+      if (!k.endsWith(PRIOR_SUFFIX) || typeof v !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(v)) continue;
+      if (!out[k] || v < out[k]) out[k] = v;
+    }
+  }
+  return out;
+}
+
 export function complianceFor(data, state, kind) {
   if (isAdvancedPractice(data.settings.degreeType)) return appComplianceFor(data, state, kind);
   const lic = findStateLicense(data.licenses, state);
@@ -654,6 +672,9 @@ export function complianceFor(data, state, kind) {
     licenseIssued: lic?.issuedDate || null,
     cycleStart: lic?.cmeCycleStart || null,
     topicApplicability: lic?.customFields || {},
+    // A one-time confirmation must survive a renewal, which arrives as a new
+    // licence record: read it from every medical licence held in the state.
+    priorCompletion: statePriorCompletions(data.licenses, state),
     hasDEA: hasDEARegistration(data.licenses) && state === mateCardState(data),
     mateAttestedOn: mateAttestationDate(data.licenses),
   });

@@ -1,4 +1,5 @@
 import ConditionalCmeTopics from "../shared/ConditionalCmeTopics";
+import PriorCompletion from "../shared/PriorCompletion";
 import AppCardDetails from "../shared/AppCardDetails";
 import { cmeAssessmentLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE, appCardTitle, certificationMetLine, mateStatusText } from "../../utils/cmePresentation";
 import { useState, useMemo, useCallback, useEffect, useRef, memo } from "react";
@@ -664,6 +665,7 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
                     sourceInherited={tr.sourceInherited}
                     citeInherited={tr.citeInherited}
                   />
+                  {tr.period === "lifetime" && !comp.profession && <PriorCompletion state={comp.state} topic={tr} />}
                   {!tr.met && (
                     <button onClick={() => navigate("credentials", `findCme:${tr.topic}`)} style={{
                       padding: "3px 10px", minHeight: isDesktop ? undefined : TAP_MIN, fontSize: 11, fontWeight: 700, borderRadius: 8, border: "none",

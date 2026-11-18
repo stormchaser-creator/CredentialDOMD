@@ -599,6 +599,9 @@ export function stateRequirementRows(model) {
       ? "counted across all dates, not just this cycle"
       : (t.period && t.period.years ? `counted over the last ${t.period.years} years, not just this cycle` : "");
     if (periodNote) rule = rule ? `${rule} (${periodNote})` : periodNote[0].toUpperCase() + periodNote.slice(1);
+    // Met by the physician's own confirmation, not by logged hours: say so,
+    // as the MATE row does for an affirmation.
+    if (t.priorCompletedOn) rule = `${rule ? `${rule} ` : ""}Completed before logging in this app; confirmed by the physician on ${t.priorCompletedOn}.`;
     rows.push({
       name: t.topic,
       rule,

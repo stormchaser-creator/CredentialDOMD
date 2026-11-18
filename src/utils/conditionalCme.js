@@ -3,6 +3,22 @@
 export const OHIO_PAIN_CLINIC_FIELD = "Ohio pain clinic CME applies";
 export const CA_GERIATRIC_FIELD = "California geriatric CME applies";
 
+/**
+ * A one-time mandate the physician completed before logging CME in the app
+ * (owner, 2026-11-18: "I did the pain management course years ago"). Stored
+ * on the state license's customFields as the day they confirmed it, like the
+ * applicability answers above. Only a one-time ("lifetime") topic can be
+ * confirmed this way; a per-cycle topic is owed again every renewal.
+ */
+export const PRIOR_SUFFIX = " (one-time) confirmed completed on";
+export function priorCompletionField(topic) {
+  return `${topic}${PRIOR_SUFFIX}`;
+}
+export function priorCompletionOn(topic, answers = {}) {
+  const v = answers?.[priorCompletionField(topic)];
+  return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : null;
+}
+
 export function topicApplicability(topic, answers = {}) {
   if (topic.informational === true) return "informational";
   if (!topic.condition) return "applies";
