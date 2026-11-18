@@ -1,5 +1,5 @@
 import { getStateEntry, hasSeparateBoards } from "../constants/stateRequirements.js";
-import { topicApplicability, priorCompletionOn, specialtyPrefill, PRIOR_SUFFIX, boardExemptionOn, currentBoardCertificationOnFile } from "./conditionalCme.js";
+import { topicApplicability, priorCompletionOn, specialtyPrefill, PRIOR_SUFFIX, boardExemptionOn, BOARD_EXEMPTION_COVERS, currentBoardCertificationOnFile } from "./conditionalCme.js";
 import { sessionTopicHours, topicHoursOf } from "./topicSuggest.js";
 import { isAlertable, isInactive, needsResolution } from "./lifecycle.js";
 import { daysUntilDate, parseDay } from "./dateDays.js";
@@ -317,9 +317,19 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
   // only while a current board certification is on file (complianceFor
   // passes boardCertCurrent; a direct caller that omits it is not checked).
   const exemptOn = !noGeneralReq && (entry?.moc || "").trim() && !/^no$/i.test(entry.moc.trim()) && opts.boardCertCurrent !== false
-    ? boardExemptionOn(state, opts.topicApplicability, opts.licenseExpiration) : null;
+    ? boardExemptionOn(state, opts.topicApplicability, opts.licenseExpiration, degreeType) : null;
   const totalMet = noGeneralReq || !!exemptOn || totalHrs >= totalRequired;
   const cat1Met = !!exemptOn || cat1Required <= 0 || cat1Hrs >= cat1Required;
+  // A topic the state's rule says the exemption also covers (Texas: ethics,
+  // per the TMB CME chart; never human trafficking) reads as met, with the
+  // rule named. Every other topic still counts logged hours.
+  const covers = exemptOn ? BOARD_EXEMPTION_COVERS[state] : null;
+  if (covers) {
+    for (let i = 0; i < topicResults.length; i++) {
+      const t = topicResults[i];
+      if (!t.met && covers.topics.includes(t.topic)) topicResults[i] = { ...t, met: true, note: covers.note, metByBoardExemption: true };
+    }
+  }
   const allTopicsMet = topicResults.every(t => t.met);
   const knownRequirementsMet = totalMet && cat1Met && allTopicsMet && (!mate || mate.met);
   // Split-board fallback numbers remain visible, but cannot certify compliance

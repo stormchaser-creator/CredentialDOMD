@@ -22,6 +22,8 @@ const reviewedPaPainTags = JSON.parse(readFileSync(new URL('./golden/ticket-5389
 const reviewedCmeAudit = JSON.parse(readFileSync(new URL('./golden/cme-audit-first-cycle-mate.json', import.meta.url), 'utf8'));
 // Board certification tasks raise alerts; no AOA national entry for a DO (reviewed case by case).
 const reviewedBoardTasks = JSON.parse(readFileSync(new URL('./golden/board-tasks-1118.json', import.meta.url), 'utf8'));
+// WA DO rule text names MOC participation (WAC 246-853-080(2)(b)); text only (reviewed case by case).
+const reviewedWaDoExemption = JSON.parse(readFileSync(new URL('./golden/board-exemption-wa-do-1118.json', import.meta.url), 'utf8'));
 const full = JSON.parse(readFileSync(new URL('./golden/md-do-full.json', import.meta.url), 'utf8'));
 
 test('goldens were captured at the base commit', () => {
@@ -31,7 +33,7 @@ test('goldens were captured at the base commit', () => {
 
 test('every MD and DO calculation matches its golden; only exact reviewed display copy, reference URLs and rule fixes differ', async () => {
   const { hashes, full: now } = await computeGolden();
-  const reviewed = [...reviewedCopy.entries, ...reviewedReferences.entries, ...reviewedPaPainTags.entries, ...reviewedCmeAudit.entries, ...reviewedBoardTasks.entries];
+  const reviewed = [...reviewedCopy.entries, ...reviewedReferences.entries, ...reviewedPaPainTags.entries, ...reviewedCmeAudit.entries, ...reviewedBoardTasks.entries, ...reviewedWaDoExemption.entries];
   const allowed = new Map(reviewed.map(entry => [entry.key, entry]));
   assert.equal(allowed.size, reviewed.length, 'reviewed cases cannot silently replace another exception');
   for (const entry of allowed.values()) {

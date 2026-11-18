@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { computeCompliance, complianceFor, sessionTopicHours, sessionCountText } from '../src/utils/compliance.js';
 import {
   BOARD_EXEMPTION_FIELD, BOARD_EXEMPTION_RENEWAL_FIELD, BOARD_EXEMPTION_CONDITION_FIELD, BOARD_EXEMPTION_CONDITIONS,
-  boardExemptionOn, boardExemptionFields, currentBoardCertificationOnFile,
+  boardExemptionOn, boardExemptionFields, currentBoardCertificationOnFile, boardExemptionCondition,
 } from '../src/utils/conditionalCme.js';
 import { CME_SESSIONS_FIELD } from '../src/utils/topicSuggest.js';
 import { withTopicAdded, withTopicRemoved } from '../src/utils/topicMatch.js';
@@ -82,12 +82,12 @@ test('M2: the exemption applies only for the renewal it was chosen for', () => {
   assert.deepEqual(boardExemptionFields(answers, 'ND', null, EXP), {});
 });
 
-test('M2: LA, TX, KY, NH and ME need their condition confirmed', () => {
-  for (const st of ['LA', 'TX', 'KY', 'NH', 'ME']) {
-    assert.ok(BOARD_EXEMPTION_CONDITIONS[st], st);
+test('M2: LA, TX, KY, NH, ME (MD) and WA need their condition confirmed', () => {
+  for (const [st, deg] of [['LA', 'MD'], ['TX', 'MD'], ['KY', 'DO'], ['NH', 'MD'], ['ME', 'MD'], ['WA', 'MD'], ['WA', 'DO']]) {
+    assert.ok(boardExemptionCondition(st, deg), `${st} ${deg}`);
     const unconfirmed = { [BOARD_EXEMPTION_FIELD]: '2026-11-18', [BOARD_EXEMPTION_RENEWAL_FIELD]: EXP };
-    assert.equal(boardExemptionOn(st, unconfirmed, EXP), null, `${st} unconfirmed`);
-    assert.equal(boardExemptionOn(st, chosen(st), EXP), '2026-11-18', `${st} confirmed`);
+    assert.equal(boardExemptionOn(st, unconfirmed, EXP, deg), null, `${st} ${deg} unconfirmed`);
+    assert.equal(boardExemptionOn(st, chosen(st), EXP, deg), '2026-11-18', `${st} ${deg} confirmed`);
   }
   const tx = computeCompliance(lowCme, 'TX', 'MD', { licenseExpiration: EXP, topicApplicability: chosen('TX') });
   assert.equal(tx.totalMet, true);
@@ -96,10 +96,14 @@ test('M2: LA, TX, KY, NH and ME need their condition confirmed', () => {
 
 test('M2: each condition restates its state rule text and invents nothing', () => {
   const words = { LA: ['within the past year', 'ABMS member board', 'AOA-recognized'], TX: ['36 months', 'one renewal', 'ABMS MOC', 'AOA OCC'],
-    KY: ['passing an ABMS or AOA board certification or recertification exam'], NH: ['ABMS board exam'], ME: ['ABMS certification with MOC', 'lifetime certs excluded'] };
+    KY: ['passing an ABMS or AOA board certification or recertification exam'], NH: ['ABMS board exam'], ME: ['ABMS certification with MOC', 'lifetime certs excluded'],
+    WA: ['ABMS cert in last 4 yrs', 'ABMS MOC participation'] };
   for (const [st, list] of Object.entries(words)) {
     const moc = getStateEntry(st, 'MD').moc;
     for (const w of list) assert.ok(moc.includes(w), `${st} rule text still says "${w}"`);
+  }
+  for (const w of ['ABOMS or ABMS cert/recert within last 6 yrs', 'ABOMS or ABMS MOC participation']) {
+    assert.ok(getStateEntry('WA', 'DO').moc.includes(w), `WA DO rule text still says "${w}"`);
   }
 });
 
