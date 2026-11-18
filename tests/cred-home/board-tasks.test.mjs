@@ -22,16 +22,21 @@ const doData = (lic = {}, extra = {}) => ({
   licenses: [{ id: 'bc', type: 'Board Certification (AOA)', name: 'AOBS Surgery', ...lic }],
   cme: [],
 });
+// Each board's own site (ABOP's manual is hosted on manula.com under its own path).
+const OFFICIAL = /^https:\/\/(certification\.osteopathic\.org|www\.abns\.org|www\.abai\.org|www\.theaba\.org|www\.abcrs\.org|www\.abderm\.org|www\.abem\.org|www\.theabfm\.org|www\.abmgg\.org|www\.abnm\.org|www\.abog\.org|www\.abop\.org|www\.manula\.com\/manuals\/american-board-of-ophthal|www\.abos\.org|www\.abohns\.org|abpath\.org|www\.abp\.org|www\.abpmr\.org|www\.abplasticsurgery\.org|www\.theabpm\.org|abpn\.org|www\.theabr\.org|www\.absurgery\.org|www\.abts\.org|abu\.org)\//;
 const aobs = (data) => boardComplianceFor(data).find(b => b.id === 'AOA:AOBS');
 
 test('every task has an id, a label, a cadence and an official source URL', () => {
   for (const [key, set] of Object.entries(BOARD_TASKS)) {
     assert.match(key, /^(AOA|ABMS):[A-Za-z_]+$/);
-    assert.match(set.sourceUrl, /^https:\/\/(certification\.osteopathic\.org|www\.abns\.org)\//);
+    assert.match(set.sourceUrl, OFFICIAL, `${key} sourceUrl`);
+    assert.equal(set.checked, '2026-11', `${key} checked`);
     for (const t of set.tasks) {
       assert.ok(t.id && t.label, `${key} task`);
       assert.ok(t.every === 'year' || (t.every.years > 0), `${key} ${t.id} cadence`);
-      assert.match(t.source, /^https:\/\//, `${key} ${t.id} source`);
+      assert.match(t.source, OFFICIAL, `${key} ${t.id} source`);
+      // A step the app cannot date says the board's rule instead of a date.
+      if (t.every !== 'year' && !t.every.anchor) assert.ok(t.dueRule, `${key} ${t.id} dueRule`);
     }
   }
 });
@@ -147,10 +152,10 @@ test('AOBS and its Neurological Surgery discipline both picked: tasks once, on t
   assert.deepEqual(boardTasksFor(solo, soloCard, at('2026-03-01')).tasks[0].alsoFields, []);
 });
 
-test('ABNS: four annual tasks due Sept 30', () => {
+test('ABNS: four annual tasks due Sept 30 (2026-11 page: dues included, no privileges attestation)', () => {
   const data = { settings: { degreeType: 'MD', specialties: [] }, licenses: [{ id: 'n', type: 'Board Certification (ABMS)', name: 'ABNS Neurological Surgery' }], cme: [] };
   const t = boardTasksFor(data, boardComplianceFor(data)[0], at('2026-06-01'));
-  assert.deepEqual(t.tasks.map(x => x.label), ['Adaptive Learning Tool', 'CC Pledge and standing questionnaire', 'Privileges attestation', 'IHHC quality improvement attestation']);
+  assert.deepEqual(t.tasks.map(x => x.label), ['Adaptive Learning Tool', 'CC Pledge and standing questionnaire', 'IHHC quality improvement attestation', 'Annual CC dues']);
   assert.ok(t.tasks.every(x => x.due === '2026-09-30'));
 });
 
@@ -163,8 +168,8 @@ test('the Neurological Surgery discipline card uses the AOBS tasks with its own 
   assert.equal(boardRecordFor(data.licenses, card.id).id, 'bc');
 });
 
-test('a board with no task data keeps its sentence and gets no tasks', () => {
-  const data = { settings: { degreeType: 'MD', specialties: ['ABMS:ABA'] }, licenses: [], cme: [] };
+test('a board with no task data keeps its sentence and gets no tasks (ABIM: no official page could be read)', () => {
+  const data = { settings: { degreeType: 'MD', specialties: ['ABMS:ABIM'] }, licenses: [], cme: [] };
   assert.equal(boardTasksFor(data, boardComplianceFor(data)[0]), null);
   assert.ok(boardComplianceFor(data)[0].assessment);
 });

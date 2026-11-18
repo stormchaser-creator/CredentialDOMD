@@ -28,9 +28,16 @@ export function boardTaskKey(boardId) {
   return `${String(kind || "").replace(/-SUB$/, "")}:${code}`;
 }
 
-/** The task set for a board card, or null when the board has none. */
+/**
+ * The task set for a board card, or null when the board has none. A
+ * discipline card (AOA-SUB) uses its parent board's set only when the set
+ * says its disciplines share the same steps (`disciplines: true`, AOBS): an
+ * AOBIM subspecialty has its own assessment, not the internal medicine one.
+ */
 export function boardTaskSet(boardId) {
-  return BOARD_TASKS[boardTaskKey(boardId)] || null;
+  const set = BOARD_TASKS[boardTaskKey(boardId)] || null;
+  if (set && /-SUB$/.test(String(boardId || "").split(":")[0]) && !set.disciplines) return null;
+  return set;
 }
 
 /** The certificate's short name in a mark: "AOBS", "AOBS Neurological Surgery", "ABNS". */
@@ -67,16 +74,33 @@ export function boardTaskField(boardId, task, periodLabel) {
   return `${boardTaskName(boardId, task)} done for ${periodLabel}`;
 }
 
-/** The period a task is in today, its due date (null when not published) and when it opens. */
-export function taskPeriod(task, now = new Date()) {
+/**
+ * The period a task is in today, its due date (null when it cannot be
+ * computed) and when it opens. `record` is the board's certificate record,
+ * read only by a task tied to the certificate's expiration date.
+ */
+export function taskPeriod(task, now = new Date(), record = null) {
   const y = now.getFullYear();
-  if (task.every && typeof task.every === "object" && task.every.anchor === "aoaCycle") {
+  const every = task.every && typeof task.every === "object" ? task.every : null;
+  if (every?.anchor === "aoaCycle") {
     const c = aoaCycle(now);
-    return { label: `${c.start}-${c.end}`, start: `${c.start}-01-01`, end: `${c.end}-12-31`, due: `${c.end}-12-31`, opens: null };
+    const due = task.due ? `${c.end}-${task.due}` : `${c.end}-12-31`;
+    return { label: `${c.start}-${c.end}`, start: `${c.start}-01-01`, end: `${c.end}-12-31`, due, opens: null };
   }
+  if (every?.anchor === "certExpiration") {
+    // The cycle ends on the certificate's expiration date; `due` (with
+    // dueYearOffset) is a fixed day in a year counted from the expiration
+    // year (ABOS: Dec 1 of year 9 of 10). No date on file: no due date.
+    const exp = String(record?.expirationDate || "").slice(0, 10);
+    if (!ISO.test(exp) || record?.noExpiration === true) return { label: "current cycle", start: null, end: null, due: null, opens: null };
+    const due = task.due ? `${Number(exp.slice(0, 4)) + (task.dueYearOffset || 0)}-${task.due}` : exp;
+    return { label: `cycle ending ${exp}`, start: null, end: exp, due, opens: null };
+  }
+  if (every) return { label: "current cycle", start: null, end: null, due: null, opens: null };
   const win = task.windows?.[y];
   const due = win?.to || (task.due ? `${y}-${task.due}` : null);
-  return { label: String(y), start: `${y}-01-01`, end: `${y}-12-31`, due, opens: win?.from || null };
+  const opens = win?.from || (!win && task.opens ? `${y}-${task.opens}` : null);
+  return { label: String(y), start: `${y}-01-01`, end: `${y}-12-31`, due, opens };
 }
 
 /** Every mark the physician has made for this board: legacy settings first, the records' own win. */
@@ -95,12 +119,12 @@ export function boardTaskMarks(data, ...records) {
  */
 function sharedParentId(data, boardId) {
   const [kind, code] = String(boardId || "").split(":");
-  if (kind !== "AOA-SUB") return null;
+  if (kind !== "AOA-SUB" || !BOARD_TASKS[`AOA:${code}`]?.disciplines) return null;
   return effectiveBoardSpecialties(data).includes(`AOA:${code}`) ? `AOA:${code}` : null;
 }
 function shadowedByDiscipline(data, boardId) {
   const [kind, code] = String(boardId || "").split(":");
-  if (kind !== "AOA") return false;
+  if (kind !== "AOA" || !BOARD_TASKS[`AOA:${code}`]?.disciplines) return false;
   return effectiveBoardSpecialties(data).some(id => id.startsWith(`AOA-SUB:${code}:`));
 }
 
@@ -194,7 +218,7 @@ export function boardTasksFor(data, board, now = new Date()) {
   const marks = boardTaskMarks(data, parentId ? boardRecordFor(data?.licenses, parentId) : null, record);
   const today = localToday(now);
   const tasks = set.tasks.map(task => {
-    const period = taskPeriod(task, now);
+    const period = taskPeriod(task, now, record);
     const field = boardTaskField(boardId, task, period.label);
     // The parent card's mark for the same duty counts here too (and Undo clears it).
     const alsoFields = parentId ? [boardTaskField(parentId, task, period.label)] : [];
@@ -213,6 +237,7 @@ export function boardTasksFor(data, board, now = new Date()) {
     else if (period.opens && today < period.opens) status = "upcoming";
     return {
       id: task.id, label: task.label, detail: task.detail || "", cost: task.cost ?? null, source: task.source || set.sourceUrl,
+      dueRule: period.due ? "" : (task.dueRule || (task.every?.anchor === "certExpiration" ? "By your certificate's expiration date. Add that date to the board certification record to see it here." : "")),
       every: task.every, period: period.label, due: period.due, opens: period.opens,
       daysLeft: period.due ? daysUntilDate(period.due, now) : null,
       doneOn, notRequiredOn, status, field, alsoFields, startsYear: begins && begins > now.getFullYear() ? begins : null,

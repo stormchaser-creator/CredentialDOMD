@@ -15,6 +15,7 @@ function taskStatusText(t) {
   if (t.status === "not-yet") return `Starts in ${t.startsYear}, the year your certificate expires`;
   if (t.status === "unconfirmed") return `Due ${dayLabel(t.due)}. Done it? Mark it done`;
   if (t.status === "upcoming") return `Opens ${dayLabel(t.opens)}, due ${dayLabel(t.due)}`;
+  if (!t.due && t.dueRule) return t.dueRule;
   if (!t.due) return `Due in ${t.period}. The board has not posted the date yet`;
   return `Due ${dayLabel(t.due)}${t.daysLeft != null ? ` (${t.daysLeft} day${t.daysLeft === 1 ? "" : "s"})` : ""}`;
 }
