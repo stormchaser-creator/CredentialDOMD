@@ -11,7 +11,7 @@
 import { MEMBER_VIEW_SECTIONS, MEMBER_VIEW_PROFILE_FIELDS, memberViewSection } from "../../supabase/functions/_shared/memberView.mjs";
 import { describeItem, getStatusColor, getStatusLabel, formatDate, isNonExpiring, plainDashes, titleAfterType, titleWithType } from "./helpers.js";
 import { reminderLeadDays } from "./reminderPreferences.js";
-import { LIFECYCLE_LABELS, LIFECYCLE_SECTIONS, isAlertable, isInactive, lifecycleNote, BOARD_APP_MADE_FIELD } from "./lifecycle.js";
+import { LIFECYCLE_LABELS, LIFECYCLE_SECTIONS, isAlertable, isInactive, lifecycleNote, BOARD_APP_MADE_FIELD, awaitsBoardDate } from "./lifecycle.js";
 import { complianceListFor, resolvePendingLicense, undatedLicenseOnFile } from "./compliance.js";
 import { cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, rollingWindowLabel, appCardTitle, appRenewalLine, anchoredRenewalLine } from "./cmePresentation.js";
 import { timedBlockLabel } from "./coverageBlocks.js";
@@ -163,6 +163,9 @@ export function recordDetails(sectionKey, item, snapshot) {
       }
       continue;
     }
+    // A board record the app made, still awaiting its date, never claims
+    // "Does not expire" (a record from the 11-18 release carries the flag).
+    if (field.key === "noExpiration" && awaitsBoardDate(item)) continue;
     const value = formatValue(field, item[field.key], snapshot);
     if (value) out.push({ label: field.label, value });
   }

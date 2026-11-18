@@ -123,7 +123,7 @@ export function newBoardRecord(boardId, makeId = () => globalThis.crypto.randomU
   };
 }
 
-/** True for a certificate issued on the old time-limited exam track (issued in or before the set's last year for it). */
+/** True for a certificate on the old exam track: issued in or before the set's last year for it, the track whose assessment starts in the expiration year. */
 function onOldExamTrack(set, record) {
   const through = set?.oldExamTrackIssuedThrough;
   const issued = String(record?.issuedDate || "").slice(0, 10);
@@ -149,8 +149,9 @@ export function validThruFor(boardId, record) {
 
 /**
  * The year a task starts, for a task the board starts in the year a
- * certificate on the old time-limited exam track expires. A later
- * certificate's valid-thru date (the end of the current OCC cycle) never
+ * certificate on the old exam track (issued in or before the set's
+ * oldExamTrackIssuedThrough year) expires. A later certificate is time-limited
+ * as well, but its valid-thru date (the end of the current OCC cycle) never
  * delays the task: the board gives every diplomate the assessment each year.
  */
 function startsYear(task, boardId, record) {

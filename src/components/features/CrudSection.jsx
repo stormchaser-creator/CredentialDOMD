@@ -20,7 +20,7 @@ import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring
 import { reminderLeadDays } from "../../utils/reminderPreferences";
 import { docMime } from "../../utils/inboxDocs";
 import { FIELD_TYPES as COLUMN_TYPES } from "../../utils/sectionFields.js";
-import { LIFECYCLE_SECTIONS, isAlertable, isInactive, lifecycleNote, withFormField } from "../../utils/lifecycle";
+import { LIFECYCLE_SECTIONS, isAlertable, isInactive, lifecycleNote, withFormField, awaitsBoardDate, boardFormStart } from "../../utils/lifecycle";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
 import { splitScanned } from "../../utils/docPrefill";
 import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
@@ -133,7 +133,9 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
   const arrivedByLink = useRef(false);
 
   const openAdd = useCallback(() => { setLockWrong(false); setLockMsg(""); setForm({}); setEditItem(null); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setContactMsg(null); setShowForm(true); }, []);
-  const openEdit = useCallback((item) => { setLockWrong(false); setLockMsg(""); setForm({ ...item }); setEditItem(item); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setContactMsg(null); setShowForm(true); }, []);
+  // A legacy app-made board record opens with "does not expire" unticked
+  // (lifecycle.boardFormStart): that flag was the app's, never the physician's.
+  const openEdit = useCallback((item) => { setLockWrong(false); setLockMsg(""); setForm({ ...boardFormStart(sectionKey, item) }); setEditItem(item); setAttachedDocs([]); setScanMsg(null); setScanIsError(false); setModalCameraOpen(false); setContactMsg(null); setShowForm(true); }, [sectionKey]);
   // Desk width: `n` opens the same Add form the header button opens.
   useDeskAddShortcut(openAdd);
 
@@ -1162,6 +1164,8 @@ function CrudSection({ title, sectionKey, items, fields, onAdd, onEdit, onDelete
             {fields.filter(f => viewItem[f.key]
               // A checkbox shows only when ticked: a cached "No" is a truthy string.
               && !(f.type === "checkbox" && !isTicked(viewItem[f.key]))
+              // A board record awaiting its date has no "does not expire" to claim.
+              && !(f.key === "noExpiration" && awaitsBoardDate(viewItem))
               && !(f.key === "name" && clearsPersonName(sectionKey, viewItem, data.settings.name))
               && !(f.type === "choice" && f.defaultValue && viewItem[f.key] === f.defaultValue)).map(f => (
               <div key={f.key} style={{ display: "flex", flexDirection: !isDesktop || f.type === "textarea" ? "column" : "row", justifyContent: "space-between", gap: !isDesktop || f.type === "textarea" ? 6 : 12, padding: "9px 0", borderBottom: `1px solid ${T.border}` }}>

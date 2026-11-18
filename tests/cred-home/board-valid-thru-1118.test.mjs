@@ -187,3 +187,66 @@ test('the card offers the choice, the links and the calm date request; no copy c
     assert.doesNotMatch(read(f), /—/, `${f}: no em dashes`);
   }
 });
+
+// Review of the board-portal-truth branch (2026-11-18).
+import { recordDetails as viewerDetails } from '../../src/utils/memberViewer.js';
+import { recordDetails as archiveDetails } from '../../src/utils/readOnlyArchive.js';
+import { boardFormStart, normalizeLifecycle } from '../../src/utils/lifecycle.js';
+
+test('a legacy record never reads "Does not expire" to an administrator, in the archive, or in the form', () => {
+  const viewer = viewerDetails('licenses', LEGACY, { member: {}, documents: [] });
+  assert.equal(viewer.some(r => /does not expire/i.test(r.label) || /does not expire/i.test(r.value)), false, JSON.stringify(viewer));
+  const archive = archiveDetails('licenses', LEGACY, {});
+  assert.equal(archive.some(r => /expire/i.test(r.label) && /yes|true/i.test(r.value)), false, JSON.stringify(archive));
+  // A lifetime diplomate's own tick still shows to the administrator.
+  const own = { id: 'l', type: 'Board Certification (AOA)', name: 'AOBS Surgery', noExpiration: true, notes: 'Lifetime certificate' };
+  assert.equal(viewerDetails('licenses', own, { member: {}, documents: [] }).some(r => r.label === 'Does not expire'), true);
+  // The edit form opens with the box unticked and the app's marker in its place.
+  const start = boardFormStart('licenses', LEGACY);
+  assert.equal(start.noExpiration, false);
+  assert.equal(start.customFields[BOARD_APP_MADE_FIELD], 'Added when you marked a board step');
+  assert.equal(awaitsBoardDate(start), true, 'still calm');
+  assert.equal(boardFormStart('licenses', own), own, 'a record of the physician\'s own opens as it is');
+  const src = read('src/components/features/CrudSection.jsx');
+  assert.match(src, /boardFormStart\(sectionKey, item\)/);
+  assert.match(src, /f\.key === "noExpiration" && awaitsBoardDate\(viewItem\)/, 'the detail view hides the flag too');
+});
+
+test('the app marker is hidden in the read-only records view', () => {
+  const rec = newBoardRecord('AOA:AOBS', () => 'm');
+  const rows = archiveDetails('licenses', rec, {});
+  assert.equal(rows.some(r => /app made/i.test(r.label) || /Added when you marked a board step$/.test(r.value)), false, JSON.stringify(rows));
+});
+
+test('a date on an app-made record makes it the physician\'s own: clearing it later raises the banner', () => {
+  const rec = { ...newBoardRecord('AOA:AOBS', () => 'm'), expirationDate: '2027-12-31' };
+  const saved = normalizeLifecycle('licenses', rec);
+  assert.equal(BOARD_APP_MADE_FIELD in saved.customFields, false, 'marker dropped on the write that brings the date');
+  const cleared = normalizeLifecycle('licenses', { ...saved, expirationDate: '' });
+  assert.equal(awaitsBoardDate(cleared), false);
+  assert.equal(warnsMissingDate(cleared), true);
+  // A legacy record given a date loses the app's "does not expire" with it.
+  const legacyDated = normalizeLifecycle('licenses', { ...LEGACY, expirationDate: '2027-12-31' });
+  assert.equal(legacyDated.noExpiration, false);
+  // No date: nothing changes.
+  assert.deepEqual(normalizeLifecycle('licenses', newBoardRecord('AOA:AOBS', () => 'm')).customFields, { [BOARD_APP_MADE_FIELD]: 'Added when you marked a board step' });
+  // A marked record the physician ticks "does not expire" on is lifetime by their word.
+  const ticked = { ...newBoardRecord('AOA:AOBS', () => 'm'), noExpiration: true };
+  assert.equal(awaitsBoardDate(ticked), false);
+  assert.equal(isNonExpiring(ticked, 'licenses'), true);
+});
+
+test('"Not required for me" alone never puts a current board certification on file; a Done mark does', () => {
+  const data = { settings: { degreeType: 'MD', specialties: ['ABMS:ABNS'] }, licenses: [], cme: [] };
+  const b = boardComplianceFor(data)[0];
+  const field = boardTasksFor(data, b, at('2026-05-01')).tasks[0].field;
+  const notReq = applyBoardTaskMark(data, b.id, field, notRequiredMark('2026-05-01'), { makeId: () => 'n1' }).create;
+  assert.equal(currentBoardCertificationOnFile([notReq], '2026-11-18'), false);
+  const done = applyBoardTaskMark(data, b.id, field, '2026-05-01', { makeId: () => 'n2' }).create;
+  assert.equal(currentBoardCertificationOnFile([done], '2026-11-18'), true);
+  // A legacy record made by a Done mark still counts, as it did.
+  const legacyDone = { ...LEGACY, customFields: { [field]: '2026-03-01' } };
+  assert.equal(currentBoardCertificationOnFile([legacyDone], '2026-11-18'), true);
+  // A record of the physician's own with no date counts, as before.
+  assert.equal(currentBoardCertificationOnFile([{ type: 'Board Certification (ABMS)', name: 'ABNS' }], '2026-11-18'), true);
+});

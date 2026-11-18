@@ -1650,8 +1650,12 @@ export const AOA_OCC = {
 //   due:    "MM-DD" each year, or windows: { YYYY: { from, to } } for a
 //           published year; a year with neither has no dated deadline
 //   startsYearOfExpiration: the board starts the task in the year a
-//           certificate on the old time-limited exam track expires (one
-//           issued in or before oldExamTrackIssuedThrough)
+//           certificate on the old exam track expires: one issued in or
+//           before oldExamTrackIssuedThrough, the track whose assessment
+//           starts in the expiration year. Later certificates are
+//           time-limited too (the portal says so of a 2025 one); what sets
+//           the tracks apart is when the assessment starts, not whether the
+//           certificate expires
 //   oldExamTrackIssuedThrough: the last issue year on that old track; a
 //           later certificate starts the task at once, whatever date it shows
 //   validThru: the AOA "valid thru" date. Every AOA certificate on the
