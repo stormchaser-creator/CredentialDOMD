@@ -75,7 +75,7 @@
  * reaches a third party on one tap unless every ask is matched with high
  * confidence (requestPacket.ts oneTapReady).
  */
-import { KINDS, parseAsks, asksSomething, hasAskForm, asksInSubject, isListItem, classifyAsk } from "./requestPacket.ts";
+import { KINDS, parseAsks, asksSomething, hasAskForm, asksInSubject, isListItem, classifyAsk, isSignatureText, signatureOnly } from "./requestPacket.ts";
 import { classifyIntent, currentMessage } from "./intakeIntent.mjs";
 import { decodeEntities, normalizeForQuote, quoteKey, quoteOccurs } from "./quoteText.mjs";
 import { RECORDS_SCHEMA, RECORDS_PROMPT, verifyRecords, attachmentText, rulesRecords, attachmentWordsIdentify, requestedInWords } from "./intakeFacts.mjs";
@@ -161,7 +161,8 @@ An ask is something the sender asks the PHYSICIAN to do or send. For each ask, q
 - a statement, explanation or policy that applies to everyone ("Proof of coverage is required for every provider", "The policy covers emergency care"), even when it names a document;
 - an offer of help ("let us know if you have questions");
 - something the sender or someone else will do;
-- a document that is attached, enclosed or already provided (the attachment itself is not an ask; an ask written in its words can be).
+- a document that is attached, enclosed or already provided (the attachment itself is not an ask; an ask written in its words can be);
+- a signature: a name, title, degree, phone number or address under or instead of a message. An email whose body is only a signature, with a certificate, transcript or other credential attached, asks for nothing: it is a delivery of that document.
 Set who to "physician" only when the physician must act; "sender" when the sender will act; "someone_else" otherwise. Choose the kind that names the document asked for, or "unknown" when none fits. When the email asks for nothing, asks is empty.
 
 For every attachment listed, give its role:
@@ -448,7 +449,33 @@ export const DROP = Object.freeze({
   history: "only in the quoted history",
   notAsking: "not worded as an ask",
   identifier: "carries an identifying number",
+  signature: "a signature line, not an ask",
 });
+
+// A name with its title and degrees taken off, for comparing a quote with
+// the physician's or the sender's own name.
+const DEGREE_WORD_RE = /\b(?:dr|doctor|do|md|d\.o|m\.d|phd|facs|faans|facos|facp|faafp|facep|mph|mba|mha|ms|pa-c|np|rn|aprn)\b\.?/gi;
+const bareName = (s) => String(s ?? "").toLowerCase().replace(DEGREE_WORD_RE, " ").replace(/[^a-z' -]/g, " ").replace(/\s+/g, " ").trim();
+
+/**
+ * Is a quoted "ask" the sender's signature: a name signed with a title or a
+ * degree, a contact line, or the physician's or the sender's own name? On
+ * 2026-11-17 a CME transcript mailed to docs@ with only "Dr. <name>" and a
+ * phone number in the body came back as a request for "<name>".
+ */
+function signatureQuote(quote, names) {
+  // "Please fax your DEA to 555-0100" carries a phone number and is an ask.
+  if (hasAskForm(quote) || classifyAsk(quote).kind !== "unknown") return false;
+  if (isSignatureText(quote)) return true;
+  const q = bareName(quote);
+  if (!q || q.split(" ").length > 4) return false;
+  return names.some((n) => {
+    const b = bareName(n);
+    if (!b) return false;
+    const last = b.split(" ").pop();
+    return q === b || (q.split(" ").length >= 2 && q.split(" ").pop() === last && b.includes(q.split(" ")[0]));
+  });
+}
 
 // The sender's message points at the thread under it.
 const POINTS_BELOW_RE = /\b(?:below|see (?:my|our|the) (?:previous|last|earlier|prior)|per (?:my|our) (?:previous|last|earlier|prior)|following up|follow(?:ing)?-up|as (?:mentioned|requested|noted) (?:below|previously|earlier|before)|reminder|resending|re-sending|trailing)\b/i;
@@ -618,7 +645,7 @@ const RANK = { high: 3, medium: 2, low: 1 };
  *               recordsReview that the email names another clinician, so
  *               its facts are only offered
  */
-export function verifyUnderstanding(value, { subject = "", parts = null, emailText = "", attachmentCount = 0, facts = null } = {}) {
+export function verifyUnderstanding(value, { subject = "", parts = null, emailText = "", attachmentCount = 0, facts = null, senderName = "" } = {}) {
   const p = parts && typeof parts === "object" ? parts : { note: "", message: String(emailText ?? ""), history: "" };
   const subj = normalizeForQuote(subject);
   const message = indexUnits(p.message);
@@ -675,6 +702,7 @@ export function verifyUnderstanding(value, { subject = "", parts = null, emailTe
     const quote = String(a?.quote ?? "").replace(/\s+/g, " ").trim().slice(0, MAX_QUOTE_CHARS);
     const drop = (why) => dropped.push({ quote, why });
     if (a?.who !== "physician") { drop(DROP.notPhysician); continue; }
+    if (signatureQuote(quote, [facts?.physicianName, senderName])) { drop(DROP.signature); continue; }
     const q = quoteKey(quote);
     if (q.length < 3 || !/[a-z0-9]/.test(q)) { drop(DROP.notOwnWords); continue; }
     // Every place the words occur, and whether any of them asks.
@@ -725,12 +753,19 @@ export function verifyUnderstanding(value, { subject = "", parts = null, emailTe
   if (asks.length && (modelIntent === "informational" || modelIntent === "delivery")) cap("low");
 
   const askedFor = modelIntent === "request" || modelIntent === "mixed";
-  const unclear = !asks.length && askedFor;
+  // Called a request on the strength of a signature alone, in an email in
+  // which nothing asks (no asking sentence, no asking subject): nothing was
+  // asked. With a file the reading took for the physician's own, the email
+  // is that file, filed like any delivery and never answered with a
+  // question; otherwise the rules read it, as for a reading with no evidence.
+  const onlySignature = askedFor && !asks.length && dropped.length > 0
+    && dropped.every((d) => d.why === DROP.signature) && !listAsked;
+  const unclear = !asks.length && askedFor && !(onlySignature && keepsFiles);
   // Called a request, and every ask it listed (if it listed any) was words
   // the email does not hold: the model's reading is no evidence either way,
   // so the rules read the email instead.
-  const needsRules = unclear && dropped.every((d) => d.why === DROP.notOwnWords);
-  let intent = finalIntent(modelIntent, asks.length > 0, keepsFiles);
+  const needsRules = unclear && (onlySignature || dropped.every((d) => d.why === DROP.notOwnWords));
+  let intent = onlySignature && keepsFiles ? "delivery" : finalIntent(modelIntent, asks.length > 0, keepsFiles);
   if (unclear) intent = modelIntent === "mixed" || keepsFiles ? "mixed" : "request";
   if (unclear) cap("medium");
   // Facts to enter only from an email that asks for nothing: a request's
@@ -891,8 +926,26 @@ export function rulesUnderstanding({ subject = "", body = "", attachmentNames = 
   const asks = fromFiles.length ? parsed.filter((a) => classifyAsk(a).kind !== "unknown" || !(quiet || POINTS_ATTACHED_RE.test(a))) : parsed;
   const asking = asks.length > 0 || fromFiles.length > 0 || asksSomething(body, subject);
   const askForm = hasAskForm(cleanSubjectLine(subject)) || askUnits(message).some((u) => !u.item && hasAskForm(u.text) && !OFFER_RE.test(u.text));
+  // The physician's own email (no third party's header block) whose whole
+  // body is a signature, under a subject that asks nothing, with a file
+  // attached and no letter among the files that asks: the file is what the
+  // email is about, so it is filed. Neither the name nor the subject is an
+  // ask ("OMED CME" over a CME transcript, 2026-11-17), whatever the file
+  // is named.
+  const ownFile = !forwarded && (Number.isFinite(attachmentCount) ? attachmentCount : attachmentNames.length) > 0
+    && signatureOnly(body) && !read.length && !asksInSubject(subject)
+    && classifyIntent({ subject, body: "", attachmentCount: 1 }).requestScore === 0;
   let intent;
   let unclear = false;
+  if (ownFile) {
+    return {
+      method: "rules", why: String(why || ""), intent: "delivery", rulesIntent: rules.intent,
+      reasons: [...rules.reasons, "the physician's own email: a signature over a file, and nothing asked"],
+      asks: [], dropped: [], attachments: [], summary: plainSummary(cleanSubjectLine(subject), 150) ? `"${plainSummary(cleanSubjectLine(subject), 150)}"` : "",
+      confidence: "keyword", unclear: false, settled: false, askForm: false, mentions: [],
+      records: [], recordsDropped: [], recordsReview: false,
+    };
+  }
   if (delivery) intent = "delivery";
   else if (rules.intent === "delivery") intent = "mixed";
   else {

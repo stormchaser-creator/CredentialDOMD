@@ -2393,7 +2393,7 @@ async function understandEmail(profile: MatchedProfile, ctx: ScanContext, admiss
       if (!call.ok) { failures.push({ provider: reader.provider, why: call.why ?? "the model call failed", status: call.status ?? null }); continue; }
       const read = readModelReply(call.message);
       if (!read.ok) { failures.push({ provider: reader.provider, why: reader.provider === "workers-ai" ? `Workers AI: ${read.why}` : reader.provider === "gemini" ? `Gemini: ${read.why}` : read.why, status: null }); continue; }
-      const verified = verifyUnderstanding(read.value, { subject: input.subject, parts, attachmentCount: input.files.length, facts }) as Reading;
+      const verified = verifyUnderstanding(read.value, { subject: input.subject, parts, attachmentCount: input.files.length, facts, senderName: input.senderName ?? "" }) as Reading;
       reading = { ...verified, via: reader.provider };
       break;
     }

@@ -52,11 +52,16 @@ test("a plain covering note with no pointer still lets the letter's request thro
 });
 
 test("an unnamed scan under an empty note, a signature or FYI: the letter's asks, and no junk asks from the note", () => {
-  for (const [body, name, subject] of [["", "scan001.pdf", ""], ["Dr. Smith", "scan001.pdf", "Reappointment file"], ["FYI", "Hospital_Letter.pdf", "Reappointment file"], ["", "Hospital_Letter.pdf", ""]]) {
+  for (const [body, name, subject] of [["", "scan001.pdf", ""], ["Dr. Smith", "scan001.pdf", ""], ["FYI", "Hospital_Letter.pdf", "Reappointment file"], ["", "Hospital_Letter.pdf", ""]]) {
     const r = read({ body, name, subject });
     assert.equal(r.rulesIntent, "delivery", `${name} / ${body}`);
     assert.equal(r.intent, "mixed", `${name} / ${body}`);
     assert.deepEqual(quotes(r), ASKED, `${name} / ${body}`);
+  }
+  // A signature is no note at all (2026-11-18): under a subject it reads as
+  // an empty note does, the subject standing in, as "Morgan Smith" always did.
+  for (const body of ["", "Dr. Smith", "Morgan Smith"]) {
+    assert.deepEqual(quotes(read({ body, name: "scan001.pdf", subject: "Reappointment file" })), ["Reappointment file", ...ASKED], body);
   }
   // Forwarded with nothing written above it reads the same.
   assert.deepEqual(fromFile(read({ body: "", name: "scan001.pdf", subject: "", forwarded: true })), ASKED);
