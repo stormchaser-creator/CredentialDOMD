@@ -1,0 +1,219 @@
+{
+  "reason": "State duties beside the medical license (2026-11-18). (1) rules:getStateReq and rules:getStateEntry for AL, DE, KY and PA (MD and DO): a one-time topic whose rule counts from licensure gains a `within` object (data only; the compliance engine does not read it, so no engine output for AL, KY or PA moves). AL Ethics (professional boundaries): within 12 months of licensure, dated only after the Dec 31, 2025 deadline for existing licensees (albme.gov licensure-cme-requirement). KY Pediatric Abusive Head Trauma: within 5 years of licensure for the boards KRS 311.601(2)(b) names. PA Organ and Tissue Donation: within 5 years of initial licensure for a license issued on or after May 1, 2026 (49 Pa. Code 16.19(c)(1)(ii); DO 25.271(a)(6)(i)(B)); the PA keys were already reviewed for ticket 53890221 and name that output as previousReviewedHash. DE Delaware Controlled Substance Law: within the first year of a new Delaware CSR (24 Del. Admin. Code UCSA Regs. 3.1.2). (2) engine:DE:* and evidence:DE (MD and DO): the DE Controlled Substances topic note adds that the 2 hours are attested at each CSR renewal (registrations expire June 30 of odd years; dpr.delaware.gov/boards/controlledsubstances/renewal), not at the license renewal, and that the app counts them in the license window. Only that note text moves; every hour, window and met flag is unchanged.",
+  "entries": [
+    {
+      "key": "rules:getStateReq:AL:MD",
+      "originalHash": "0b9306e54be47c25286877727adda213da0c32350a259b6983788d1ee17c743b",
+      "reviewedHash": "645065f8198433cb55d813fc7e2519484e034c62f4547cc6dc21fca1ac67ac80"
+    },
+    {
+      "key": "rules:getStateEntry:AL:MD",
+      "originalHash": "30ee92b3c21561736e4b31e2bc9931df2fb5a57dc7ad106aff9a6aec0ee2b193",
+      "reviewedHash": "878129bdedbb7dcf5059f866c5c8f03a4c81e4cb525fa71436213cc311016576"
+    },
+    {
+      "key": "rules:getStateReq:DE:MD",
+      "originalHash": "9a628f21837ffa3fb46ce292eadb206fd77158dd707bc7bf1f350ef4d01f9314",
+      "reviewedHash": "1576381c51ba5b2a6928fc9230b456e7b6de4aabbf31da24923e8d46ea150ce1"
+    },
+    {
+      "key": "rules:getStateEntry:DE:MD",
+      "originalHash": "b47bc6c004ff6699cd07f4ddd44a71eabf2540bab55d4496c30ec98be7148f8b",
+      "reviewedHash": "3d5e8f0d56e5e1172d25481640428660a143e2683c3da1359f8ac5bcc53ddc6d"
+    },
+    {
+      "key": "rules:getStateReq:KY:MD",
+      "originalHash": "df176e00fa9b9aa23c2d09cdd16e0fc2ef2e6c8ad960204af1cc076581b37378",
+      "reviewedHash": "d3d78a0c959b8c72e664c3b959143bc8fe747a22ee3ee3775c12128ed566c664"
+    },
+    {
+      "key": "rules:getStateEntry:KY:MD",
+      "originalHash": "f9c90f23f3f7c4f07a461a3797f9626721375c96b0760608b9ae000f8daf544c",
+      "reviewedHash": "e9bdd5e712c388af1c6073273337b2ec91ec58c50a0c7428e2baa3dd3e6dbbb4"
+    },
+    {
+      "key": "rules:getStateReq:PA:MD",
+      "originalHash": "204e9258698f8201bbb713c065e89e633fec00cf9cdd268bf14e5cc1e5dbbc13",
+      "previousReviewedHash": "dabd0eb6bcd784c9fbb5cb0328ccce758b1ee6d7011dfc43405cc49c296271be",
+      "reviewedHash": "a8fba3b361e4364e732537865ba657e7b0022a4636b09e7cda7a6fcfdedd27e1"
+    },
+    {
+      "key": "rules:getStateEntry:PA:MD",
+      "originalHash": "3243bbbab13fe784e0d48751373af93369fca85c05bf16b62c5d539edf66d279",
+      "previousReviewedHash": "85d8683aaaa0f0bd2149c8c6ec09f9a4a1714a42fedb096497bde19ada148be6",
+      "reviewedHash": "6dd680cc18ddd7fafb81cfa458b4b5ef3237ae7d37bff5ceab5b8617dd422f21"
+    },
+    {
+      "key": "engine:DE:MD:empty:rolling",
+      "originalHash": "b216f2793ca9860ca0af365d8814523110a4732c91ce4ecff4b0693aa0f461d7",
+      "reviewedHash": "e42712c69e487bbd65c554a2fbe1fd75881ca2c77fd6439221a1dde1a4c57d60"
+    },
+    {
+      "key": "engine:DE:MD:empty:anchored",
+      "originalHash": "ab69108649db9e1897fdc9a1d5ca5af7099c4351f645afd2b2b6bcdae969ac11",
+      "reviewedHash": "bb700637368e0763c8b1dc72a9c392c527fcd4251d8152cdfbc4cefebf37f30b"
+    },
+    {
+      "key": "engine:DE:MD:empty:custom",
+      "originalHash": "c45eeab1ed322becc296305c7756b2cde53d24318b193940ff378ed7a19e2a29",
+      "reviewedHash": "9a9f9849f4e348089bdf92fc3215d73e4ad7ad6a9ebf0db2d8e84dfe94e60423"
+    },
+    {
+      "key": "engine:DE:MD:empty:badStart",
+      "originalHash": "5672dbba2b62c5c8b49ec0842ee75fc8febc556e60b644d3d51ee22b3742882f",
+      "reviewedHash": "3023e3cb703c5c1464bc7d47746990762c3dd16558937724f341c73b15e44daf"
+    },
+    {
+      "key": "engine:DE:MD:mixed:rolling",
+      "originalHash": "16f3788cb7f18015fe2749738a908ee4c986f037ba0be0b4a8c3e942a0356015",
+      "reviewedHash": "6f6e23092266c3b1899abaee3f322b3e93d166bc06aba5c4483079074ec3a78e"
+    },
+    {
+      "key": "engine:DE:MD:mixed:anchored",
+      "originalHash": "affa03cc540daa2c0903277a388e00ea26e6ee3d75e1d233a4947fba0237685a",
+      "reviewedHash": "cab3bb2a33e7cec38590a661e96274eec06a4dab26dac6d684a2e6c919846f35"
+    },
+    {
+      "key": "engine:DE:MD:mixed:custom",
+      "originalHash": "9b05227e0f85373e6a653173df41067f721c6a407cff22aeb5396c4adae22b67",
+      "reviewedHash": "ae8955ab51181afc98913f84843de054bbac16f7ef35a4b5f4ae2fa5892be248"
+    },
+    {
+      "key": "engine:DE:MD:mixed:badStart",
+      "originalHash": "6df1e75328147a3cc8ca90c338f139ebcece02b7a8498969c302d6b880896071",
+      "reviewedHash": "5df048bfdac2cc4233449fc266348d080d123fa5b732318166c933f661a7ceed"
+    },
+    {
+      "key": "engine:DE:MD:boundary:rolling",
+      "originalHash": "2fcc057640e1817a3157d7030dbe8c38af1fc8a57fbd2fe232798deef9807b4e",
+      "reviewedHash": "1b7ed26fb683863ce022d9d68ddfa2948d61038c6bd5cf7930606973a8188e46"
+    },
+    {
+      "key": "engine:DE:MD:boundary:anchored",
+      "originalHash": "afbf33cea53512cbfc62d279e53612e998add3b441db50dbe0a29ef84d3c3946",
+      "reviewedHash": "e039ab04dfa59486b52f89a2898feaf9f2e12ac07fc0a456eb07ea92fd75571c"
+    },
+    {
+      "key": "engine:DE:MD:boundary:custom",
+      "originalHash": "09d40ef2976a5f8fa4122dc973327a7af1458ddfb662381f2d82a0afa842fc8f",
+      "reviewedHash": "2bbb857f707a43629790fa2204cd1010c707570d7b8da5f1695af7807c4d45fa"
+    },
+    {
+      "key": "engine:DE:MD:boundary:badStart",
+      "originalHash": "6ac59995d345a1a69940e9492f3c40632f5bd62601d1894281d49fe9b52ce2b7",
+      "reviewedHash": "67eabd2ead8c97fa3947a2e944dbdcdfb1408f031794ef63f57d9c5d64e52ff4"
+    },
+    {
+      "key": "evidence:DE:MD",
+      "originalHash": "ab4052409c49ce359908db4fb2577c80262ac8fb1ac23f0ec00a979e8c118888",
+      "reviewedHash": "288a646b8b6eb1c5c0562cb3a7891ebfa3706d004654d223c7d6ca8539c067a1"
+    },
+    {
+      "key": "rules:getStateReq:AL:DO",
+      "originalHash": "0b9306e54be47c25286877727adda213da0c32350a259b6983788d1ee17c743b",
+      "reviewedHash": "645065f8198433cb55d813fc7e2519484e034c62f4547cc6dc21fca1ac67ac80"
+    },
+    {
+      "key": "rules:getStateEntry:AL:DO",
+      "originalHash": "30ee92b3c21561736e4b31e2bc9931df2fb5a57dc7ad106aff9a6aec0ee2b193",
+      "reviewedHash": "878129bdedbb7dcf5059f866c5c8f03a4c81e4cb525fa71436213cc311016576"
+    },
+    {
+      "key": "rules:getStateReq:DE:DO",
+      "originalHash": "9a628f21837ffa3fb46ce292eadb206fd77158dd707bc7bf1f350ef4d01f9314",
+      "reviewedHash": "1576381c51ba5b2a6928fc9230b456e7b6de4aabbf31da24923e8d46ea150ce1"
+    },
+    {
+      "key": "rules:getStateEntry:DE:DO",
+      "originalHash": "b47bc6c004ff6699cd07f4ddd44a71eabf2540bab55d4496c30ec98be7148f8b",
+      "reviewedHash": "3d5e8f0d56e5e1172d25481640428660a143e2683c3da1359f8ac5bcc53ddc6d"
+    },
+    {
+      "key": "rules:getStateReq:KY:DO",
+      "originalHash": "df176e00fa9b9aa23c2d09cdd16e0fc2ef2e6c8ad960204af1cc076581b37378",
+      "reviewedHash": "d3d78a0c959b8c72e664c3b959143bc8fe747a22ee3ee3775c12128ed566c664"
+    },
+    {
+      "key": "rules:getStateEntry:KY:DO",
+      "originalHash": "f9c90f23f3f7c4f07a461a3797f9626721375c96b0760608b9ae000f8daf544c",
+      "reviewedHash": "e9bdd5e712c388af1c6073273337b2ec91ec58c50a0c7428e2baa3dd3e6dbbb4"
+    },
+    {
+      "key": "rules:getStateReq:PA:DO",
+      "originalHash": "bba02af13af6b6c526b8b7f968a6fb5a041076ad461fd72413aa21158c0e91db",
+      "previousReviewedHash": "6aa96ad37f3e5bc0dbe64c087ef593cc7c2db7ae007223f036e626b588a357b1",
+      "reviewedHash": "cea4556c49d6a58466fce099bbb694745d4f85383dd06012697cf2e8466970fc"
+    },
+    {
+      "key": "rules:getStateEntry:PA:DO",
+      "originalHash": "31febd95710c5eb4c6b225223074b2110280098eb4f58572d891947d8f024566",
+      "previousReviewedHash": "87088004ebca582286432765519ef894f7c0f4c8dbe5ad13d0faf92b7ea4bc22",
+      "reviewedHash": "2605a8b37439692223df76af70a60cb2598b1f2ecd95826c21a27bcf19320731"
+    },
+    {
+      "key": "engine:DE:DO:empty:rolling",
+      "originalHash": "f86ac776b6c4875e637c4500ed4f5bbd67244bd45c1e1b39f62f59c5140d660f",
+      "reviewedHash": "1fcebaf70bdcbff6d23ece989c0ef25f7b81dd9b3cf2b279b0f2d51e6af4288d"
+    },
+    {
+      "key": "engine:DE:DO:empty:anchored",
+      "originalHash": "a0b77cc1f8bd4471858b18233c96cdb0e2691fe9a60ee01485e2c07dea8c36fd",
+      "reviewedHash": "cdbe4bd39aa94eb6052e310d495fe06207a0e7e58d71e426b7003b4d0305dff7"
+    },
+    {
+      "key": "engine:DE:DO:empty:custom",
+      "originalHash": "024a462873b4622c6c1681dd826861b3b7345cd02539cd620dc31aa5c01b817f",
+      "reviewedHash": "e7d8162fb73ae42498f92deacefb6ce0036825396d8b2935133a6bc4e82e21bd"
+    },
+    {
+      "key": "engine:DE:DO:empty:badStart",
+      "originalHash": "705218e0fffcfcccf0a46c6e241900f7aa19811c501e3c78d083bef428ef233f",
+      "reviewedHash": "19fa3c4781749bf18bca94eeeb2165a742b49f89d5c58d6af8b93f9b2b8fcf77"
+    },
+    {
+      "key": "engine:DE:DO:mixed:rolling",
+      "originalHash": "df33dfd62ba2342693bc7a2698b017b7b3e804443f61b8ba3b426fd64e81f526",
+      "reviewedHash": "566cb9375edc97a12c20af232a87ed90c73b28876261f7c0e5b6f76bb230d488"
+    },
+    {
+      "key": "engine:DE:DO:mixed:anchored",
+      "originalHash": "038ef2af68571b4b19b8a15a8d8084ace02377b5c3f72b5c172483f2c7cefa60",
+      "reviewedHash": "4fc331a32e79f54acb2262557bde6926c2fc7a599149ea8cce0bd5ca00b67378"
+    },
+    {
+      "key": "engine:DE:DO:mixed:custom",
+      "originalHash": "b4119b17f386389a1141847cc7ed972afd846ccb4c46496889d8cd17200e02df",
+      "reviewedHash": "927c153a618bd622d7c7d865df386a22069a3d91ff6328f214797bf12b529328"
+    },
+    {
+      "key": "engine:DE:DO:mixed:badStart",
+      "originalHash": "cf448013c6828a40ce8be6b7e838bea826cfa85153367780a333527c97e58fe2",
+      "reviewedHash": "8b15da8e4e57e0ae3b3260f4358f06112ee0639dddcd321d73d584d2db8b6610"
+    },
+    {
+      "key": "engine:DE:DO:boundary:rolling",
+      "originalHash": "181bfe7a5699fed9e1c2134252d44dbdb415f6cff974c2449e6eb5cf779b1d2c",
+      "reviewedHash": "4fa75a9eaf9c1a624950ec1da4ed65900e9d9dab199dc7d3ad176944977f47cc"
+    },
+    {
+      "key": "engine:DE:DO:boundary:anchored",
+      "originalHash": "8093425a793f16e602844cbe2e55d0767a037989d22fe4c32a4ee3f28a12fd73",
+      "reviewedHash": "7cc11163a2d18b02ddb2bd3794838276e4958785ac7f2586235962c6b4e54277"
+    },
+    {
+      "key": "engine:DE:DO:boundary:custom",
+      "originalHash": "99faba22b8447f81f2b15d969c6b793aec62be2fc69f2a5aed11ee556fd98908",
+      "reviewedHash": "f1af439ef8f44fc1e5b8a250e3a6628230f26113ac308d10f67d3fcdbeba5d7e"
+    },
+    {
+      "key": "engine:DE:DO:boundary:badStart",
+      "originalHash": "e7c38088faf87b18e50e947d1902a78955a47503311b9b86571d3e3b39b94b40",
+      "reviewedHash": "0d99a5c75752dc385d409f46a087c3ad965af30757899a341b26bcd9349b76d7"
+    },
+    {
+      "key": "evidence:DE:DO",
+      "originalHash": "f3896453b835a86d65cdaf3d25920f41ca0eb5e081217e71cf5f48a5333ffeba",
+      "reviewedHash": "476d4b37fffabec05d5801ee561411e20e1227bd4ab49b666d79b69b4f97a649"
+    }
+  ]
+}

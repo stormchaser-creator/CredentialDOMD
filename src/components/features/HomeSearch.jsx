@@ -5,6 +5,7 @@ import { LIFECYCLE_SECTIONS, lifecycleNote } from "../../utils/lifecycle";
 import { categoryLabelFor } from "../../utils/customCategories.js";
 import { boardComplianceFor } from "../../utils/boardCompliance.js";
 import { datedBoardSteps } from "../../utils/boardTasks.js";
+import { datedLicensureDeadlines } from "../../utils/stateDuties.js";
 import { reminderLeadDays } from "../../utils/reminderPreferences.js";
 
 /**
@@ -46,6 +47,20 @@ export const SECTIONS = [
   // category, so the hit carries its destination (see searchRecords).
   { key: "customRecords", label: "Your categories", tab: "credentials", sub: null },
 ];
+
+// One-time state topics due within a set time of licensure (stateDuties.js):
+// found the same way, opening the CME page where the state card lists them.
+const STATE_DEADLINES_SECTION = { key: "stateDeadlines", label: "State deadlines", tab: "credentials", sub: "cme" };
+
+/** The dated licensure deadlines still ahead as search hits. */
+function licensureHits(data, toks) {
+  let list = [];
+  try { list = datedLicensureDeadlines(data, reminderLeadDays(data?.settings?.reminderLeadDays)); } catch { return []; }
+  return list.filter(d => {
+    const hay = `${d.name} ${d.topic} ${d.state} state deadline one-time ${acronyms(d.topic).join(" ")}`.toLowerCase();
+    return toks.every(t => hay.includes(t));
+  }).map(d => ({ id: `state-deadline:${d.state}:${d.topic}`, label: d.name, sub: `due ${d.due}` }));
+}
 
 // Dated board certification steps (an AOA QI attestation, a Longitudinal
 // Assessment) are not records of their own, so they are found here and open
@@ -142,6 +157,8 @@ export function searchRecords(data, q, { limitPerSection = 6 } = {}) {
   }
   const steps = boardStepHits(data, toks);
   if (steps.length) out.push({ sec: BOARD_STEPS_SECTION, hits: steps.slice(0, limitPerSection), total: steps.length });
+  const deadlines = licensureHits(data, toks);
+  if (deadlines.length) out.push({ sec: STATE_DEADLINES_SECTION, hits: deadlines.slice(0, limitPerSection), total: deadlines.length });
   return out;
 }
 

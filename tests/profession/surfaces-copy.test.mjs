@@ -84,7 +84,7 @@ test('matrix: an MD row is the physician layout, unchanged', async () => {
 
 test('App: licences carry their record questions, cards their details, and Home names the PA or NP licence', () => {
   const app = read('src/App.jsx');
-  assert.match(app, /renderExtra=\{item => <><RenewalInfo item=\{item\} \/><RecordQuestions item=\{item\} \/><\/>\}/);
+  assert.match(app, /renderExtra=\{item => <><RenewalInfo item=\{item\} \/><CsrRuleNote item=\{item\} \/>\{\/medical license\/i\.test\(item\.type \|\| ""\) && !isInactive\(item\) && <StateCsrPrompt state=\{item\.state\} \/>\}<RecordQuestions item=\{item\} \/><\/>\}/);
   assert.match(app, /<ConditionalCmeTopics comp=\{comp\} \/>\n\s+<AppCardDetails comp=\{comp\} lic=\{lic\} \/>/);
   assert.match(app, /"profession \(MD, DO, PA or NP, which decides the rules that apply\)"/);
   assert.match(app, /!isAdvancedPractice\(s\.degreeType\) && !\(s\.specialties \|\| \[\]\)\.length/, 'a PA or NP is never asked for a board specialty');

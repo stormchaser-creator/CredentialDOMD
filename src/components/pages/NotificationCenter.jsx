@@ -8,6 +8,7 @@ import { daysUntilDate } from "../../utils/dateDays.js";
 import { emailRemindersOn, reminderLeadDays } from "../../utils/reminderPreferences";
 import { boardComplianceFor } from "../../utils/boardCompliance";
 import { upcomingBoardSteps } from "../../utils/boardTasks";
+import { datedLicensureDeadlines } from "../../utils/stateDuties";
 
 function NotificationCenter({ open, onClose }) {
   const { data, updateSettings, addItem, theme: T } = useApp();
@@ -29,7 +30,15 @@ function NotificationCenter({ open, onClose }) {
   const msg = useMemo(() => alerts ? buildNotificationMessage(data, alerts) : null, [data, alerts]);
   // Dated board steps outside the alerts (a QI attestation due next year):
   // listed with their dates, never counted, alerted or sent (boardTasks.js).
-  const upcoming = useMemo(() => upcomingBoardSteps(data, boardComplianceFor(data), reminderLeadDays(data.settings.reminderLeadDays)), [data]);
+  // State one-time topics due within a set time of licensure join them, by
+  // date, while outside the lead window (stateDuties.js).
+  const upcoming = useMemo(() => {
+    const lead = reminderLeadDays(data.settings.reminderLeadDays);
+    const steps = upcomingBoardSteps(data, boardComplianceFor(data), lead).map(st => ({ ...st, key: `${st.boardId}|${st.taskId}`, what: "Board step" }));
+    let state = [];
+    try { state = datedLicensureDeadlines(data, lead).filter(d => !d.alerted).map(d => ({ key: `licensure|${d.state}|${d.topic}`, name: d.name, due: d.due, daysLeft: d.daysLeft, status: "due", what: `State requirement, within ${d.within} of ${d.from === "csr" ? "registration" : "licensure"}` })); } catch { state = []; }
+    return [...steps, ...state].sort((a, b) => a.due.localeCompare(b.due) || a.name.localeCompare(b.name));
+  }, [data]);
 
   const hasEmail = s.email?.includes("@");
   const hasPhone = s.phone?.length >= 7;
@@ -47,10 +56,10 @@ function NotificationCenter({ open, onClose }) {
     <div style={{ marginBottom: 14, textAlign: "left" }}>
       <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", marginBottom: 6 }}>Upcoming deadlines</div>
       {upcoming.map(st => (
-        <div key={`${st.boardId}|${st.taskId}`} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 12px", borderRadius: 10, backgroundColor: T.input, marginBottom: 4, border: `1px solid ${T.border}` }}>
+        <div key={st.key} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "10px 12px", borderRadius: 10, backgroundColor: T.input, marginBottom: 4, border: `1px solid ${T.border}` }}>
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 600, color: T.text, overflowWrap: "anywhere" }}>{st.name}</div>
-            <div style={{ fontSize: 11, color: T.textDim }}>{st.status === "upcoming" && st.opens ? `Opens ${fmtDate(st.opens)}, due ${fmtDate(st.due)}` : `Due ${fmtDate(st.due)}`} {"\u00b7"} Board step</div>
+            <div style={{ fontSize: 11, color: T.textDim }}>{st.status === "upcoming" && st.opens ? `Opens ${fmtDate(st.opens)}, due ${fmtDate(st.due)}` : `Due ${fmtDate(st.due)}`} {"\u00b7"} {st.what}</div>
           </div>
           <div style={{ textAlign: "right", flexShrink: 0 }}>
             <div style={{ fontSize: 16, fontWeight: 800, color: T.text }}>{st.daysLeft}</div>
@@ -58,7 +67,7 @@ function NotificationCenter({ open, onClose }) {
           </div>
         </div>
       ))}
-      <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.45 }}>Listed so you can plan. None of these raises an alert yet: a step alerts once it is due within your {reminderLeadDays(s.reminderLeadDays)} day reminder window.</div>
+      <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.45 }}>Listed so you can plan. None of these raises an alert yet: each alerts once it is due within your {reminderLeadDays(s.reminderLeadDays)} day reminder window.</div>
     </div>
   );
 

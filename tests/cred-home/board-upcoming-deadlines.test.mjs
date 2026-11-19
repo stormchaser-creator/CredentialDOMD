@@ -126,12 +126,13 @@ test('Home search finds a board step by its name and opens the CME page', async 
   assert.equal(g.hits[0].label, 'AOBS QI attestation');
   assert.equal(g.hits[0].sub, 'due 2027-12-31');
   assert.equal(g.sec.sub, 'cme');
-  assert.match(read('src/App.jsx'), /sec\.key === "boardSteps"\) \{ setTab\("credentials"\); setSubPage\("cme"\); return; \}/);
+  assert.match(read('src/App.jsx'), /sec\.key === "boardSteps" \|\| sec\.key === "stateDeadlines"\) \{ setTab\("credentials"\); setSubPage\("cme"\); return; \}/);
 });
 
 test('the Notification Center lists upcoming board steps apart from the alerts, never counted', () => {
   const src = read('src/components/pages/NotificationCenter.jsx');
-  assert.match(src, /upcomingBoardSteps\(data, boardComplianceFor\(data\), reminderLeadDays\(data\.settings\.reminderLeadDays\)\)/);
+  assert.match(src, /const lead = reminderLeadDays\(data\.settings\.reminderLeadDays\);/);
+  assert.match(src, /upcomingBoardSteps\(data, boardComplianceFor\(data\), lead\)/);
   assert.match(src, /Upcoming deadlines/);
   // Shown with All Clear too, and never added to the alert count.
   assert.match(src, /\{upcomingList && <div style=\{\{ marginTop: 18 \}\}>\{upcomingList\}<\/div>\}/);

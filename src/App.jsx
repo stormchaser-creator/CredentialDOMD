@@ -104,6 +104,7 @@ import {
 import { boardComplianceFor } from "./utils/boardCompliance";
 import { boardTaskSet } from "./utils/boardTasks";
 import BoardTasks from "./components/shared/BoardTasks";
+import { StateCsrPrompt, CsrRuleNote } from "./components/shared/StateDuties";
 import { certificationCards, certificationRingComps } from "./utils/certCompliance";
 import { licenseFields, licenseTypeTab, privilegeFields, insuranceFields } from "./utils/credentialForms";
 import { isAlertable, isInactive, lifecycleNote, needsResolution, LIFECYCLE_LABELS, lifecycleOf, awaitsBoardDate } from "./utils/lifecycle";
@@ -349,6 +350,10 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   // default from the cases themselves (defaultCaseLogYear), below.
   const [caseLogYearPick, setCaseLogYear] = useState(null);
   const [caseDraft, setCaseDraft] = useState(null);
+  // A new licence record opened prefilled from elsewhere (a state card's
+  // "Add it" for its controlled substance registration): the physician
+  // reviews and saves; nothing is written without their tap.
+  const [licenseDraft, setLicenseDraft] = useState(null);
   const { data, loaded, appRulesLaunchFailed, retryAppRules, recordsLoadIssue, identityWaiting, loadedFrom, theme: T, isDark, toggleTheme, isDesktop, allTrackedStates, addItem, editItem, updateSettings, deleteItem, toggleFavorite, user, authChecked, offlineMode, signOut, isPro, plan, hasSubscription, isFreeBeta, isLifetime, limitedLaunch, credentialReadOnly, manage, userIdRef } = useApp();
   const phoneContentRef = useRef(null);
   // Each section opens at its heading. Keep this scroller mounted so saves,
@@ -652,6 +657,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   // handleNavigate; open the record itself. (Must stay above the loading
   // early-returns: hooks cannot be conditional.)
   useEffect(() => {
+    if (navRecord?.sec === "licenses" && navRecord.prefill) { setLicenseDraft(navRecord.prefill); return; }
     if (!navRecord?.id) return;
     const sec = SECTIONS.find(x => x.key === navRecord.sec);
     if (!sec) return;
@@ -1205,7 +1211,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
   /* ─── HOME PAGE ──────────────────────────────────────────── */
   const openFromSearch = (sec, id, dest) => {
     // A board step is not a record: its board card on the CME page lists it.
-    if (sec.key === "boardSteps") { setTab("credentials"); setSubPage("cme"); return; }
+    if (sec.key === "boardSteps" || sec.key === "stateDeadlines") { setTab("credentials"); setSubPage("cme"); return; }
     if (sec.tab === "credentials") { setTab("credentials"); setSubPage(dest || sec.sub); setAutoEditTarget({ sec: sec.key, id }); return; }
     if (sec.tab === "documents") { setTab("documents"); setSubPage(null); return; }
     if (sec.tab === "locum") { setLocumSeed({ sub: sec.sub, id }); setTab("locum"); setSubPage(sec.sub); return; }
@@ -2704,7 +2710,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
           { key: "dea", label: "DEA / CSR", match: i => /dea|controlled substance/i.test(i.type || "") },
           { key: "board", label: "Board Certs", match: i => /board/i.test(i.type || "") },
           { key: "life", label: "Life Support", match: i => /\b(bls|acls|atls|pals|nrp)\b|life support/i.test(i.type || "") },
-        ]} items={data.licenses} {...crud("licenses")} onShare={openShare} emptyIcon={"\ud83e\udea3"} emptyTitle="No licenses" emptySub={data.settings.degreeType === "PA" ? "Add your physician assistant license, DEA, and certifications." : data.settings.degreeType === "NP" ? "Add your APRN and RN licenses, DEA, and certifications." : data.settings.degreeType ? "Add your medical licenses, DEA, and certifications." : "Add your licenses, DEA, and certifications."} fields={licenseFields({ degreeType: data.settings.degreeType, records: data.licenses, physicianName: data.settings.name })} renderExtra={item => <><RenewalInfo item={item} /><RecordQuestions item={item} /></>} />
+        ]} items={data.licenses} {...crud("licenses")} onShare={openShare} emptyIcon={"\ud83e\udea3"} emptyTitle="No licenses" emptySub={data.settings.degreeType === "PA" ? "Add your physician assistant license, DEA, and certifications." : data.settings.degreeType === "NP" ? "Add your APRN and RN licenses, DEA, and certifications." : data.settings.degreeType ? "Add your medical licenses, DEA, and certifications." : "Add your licenses, DEA, and certifications."} fields={licenseFields({ degreeType: data.settings.degreeType, records: data.licenses, physicianName: data.settings.name })} prefillItem={licenseDraft} onPrefillDone={() => setLicenseDraft(null)} renderExtra={item => <><RenewalInfo item={item} /><CsrRuleNote item={item} />{/medical license/i.test(item.type || "") && !isInactive(item) && <StateCsrPrompt state={item.state} />}<RecordQuestions item={item} /></>} />
       </>);
     }
     if (sub === "cme") return <CMESection onShare={openShare} {...crudTarget("cme")} />;

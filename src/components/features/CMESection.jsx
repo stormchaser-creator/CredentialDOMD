@@ -1,5 +1,6 @@
 import ConditionalCmeTopics from "../shared/ConditionalCmeTopics";
 import PriorCompletion from "../shared/PriorCompletion";
+import StateDuties from "../shared/StateDuties";
 import TopicCourseMatches from "../shared/TopicCourseMatches";
 import AppCardDetails from "../shared/AppCardDetails";
 import { cmeAssessmentLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE, appCardTitle, certificationMetLine, mateStatusText } from "../../utils/cmePresentation";
@@ -685,6 +686,10 @@ function CMESection({ onShare, autoOpen, onAutoOpenDone, onAutoEditClosed, autoV
                   )}
                 </div>
               ))}
+              {/* The state's own controlled substance registration and its
+                  one-time topics due within a set time of licensure
+                  (src/utils/stateDuties.js): asked, prefilled, never created. */}
+              {!comp.profession && <StateDuties state={st} />}
               {/* Board/MOC exemption: surfaced (not auto-applied) when a Board
                   Certification record is on file and the state names one, so
                   the physician can claim it rather than the app silently

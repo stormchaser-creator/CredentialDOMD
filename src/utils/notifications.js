@@ -10,6 +10,7 @@ import { daysUntilDate, localToday } from "./dateDays.js";
 import { certificationCards } from "./certCompliance.js";
 import { boardComplianceFor } from "./boardCompliance.js";
 import { boardTaskAlerts } from "./boardTasks.js";
+import { licensureDeadlineAlerts } from "./stateDuties.js";
 
 /** The active acknowledgment for an item, if its snooze date hasn't passed.
  *  An acknowledged alert stays quiet until then — "seen it, nothing to do
@@ -129,6 +130,12 @@ export function generateAlerts(data) {
   // overdue or due inside the same lead window, until marked done
   // (src/utils/boardTasks.js). A physician's board only, never a PA's or NP's.
   for (const t of boardTaskAlerts(data, boardComplianceFor(data), lead, now)) cmeIssues.push(t);
+
+  // One-time state topics due within a set time of licensure (Alabama's
+  // boundaries course, 12 months), unmet and due inside the same lead window
+  // (src/utils/stateDuties.js). A date that passed, or one the app cannot
+  // compute for want of an issue date, is asked on the state card instead.
+  for (const t of licensureDeadlineAlerts(data, lead, now)) cmeIssues.push(t);
 
   const count = expired.length + soon.length + cmeIssues.length;
   if (count === 0) return null;

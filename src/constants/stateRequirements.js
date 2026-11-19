@@ -55,13 +55,48 @@ export const STATE_REQS_META = {
   reviewMethod: "primary-source recheck, every jurisdiction, 2026-08-17",
 };
 
+// LICENSURE-RELATIVE one-time topics (2026-11-18). A one-time topic whose
+// rule says "within N months/years of licensure" carries `within`, read by
+// src/utils/stateDuties.js to list a dated deadline (and alert only inside
+// the reminder lead window). Shape:
+//   { months | years, from: "license" | "csr",
+//     issuedOnOrAfter?: ISO, issuedAfter?: ISO  // the rule covers only these issue dates
+//     dueAfter?: ISO       // an earlier deadline covered licensees whose date falls on or before it
+//     specialties?: [ids]  // the rule names these boards (Profile specialty ids)
+//     cite, url }          // the page read for the timing, with a short quote here
+// The compliance engine does not read it: the topic is still met by logged
+// CME or the physician's own "I already completed this".
+
+// "New licensees will be required to complete the course within twelve
+// months of licensure." Existing licensees: "must be completed by December
+// 31, 2025." (albme.gov licensure-cme-requirement, read 2026-11-18)
+const AL_BOUNDARIES_WITHIN = Object.freeze({ months: 12, from: "license", dueAfter: "2025-12-31", cite: "Alabama Board of Medical Examiners, Licensure CME Requirement", url: "https://www.albme.gov/resources/licensees/continuing-medical-education/licensure-cme-requirement" });
+// KRS 311.601(2)(b): pediatricians (including medicine and pediatrics),
+// radiologists, family practitioners and physicians in emergency medicine or
+// urgent care, "within five (5) years of licensure". Dated only for a
+// physician whose Profile names one of these boards; urgent care is a
+// setting no board names, so it stays the topic's note.
+const KY_PAHT_WITHIN = Object.freeze({ years: 5, from: "license", specialties: Object.freeze(["ABMS:ABP", "ABMS:ABR", "ABMS:ABFM", "ABMS:ABEM", "AOA:AOBP", "AOA:AOBR", "AOA:AOBFP", "AOA:AOBEM"]), cite: "KRS 311.601(2)(b)", url: "https://apps.legislature.ky.gov/law/statutes/statute.aspx?id=54804" });
+// 49 Pa. Code 16.19(c)(1)(ii): "A medical doctor who obtains a license on or
+// after May 1, 2026, shall verify completion of the 2 credit hours within 5
+// years of initial licensure." (i) and (iii) count from a renewal or a
+// reactivation, which the records do not date, so only (ii) is dated.
+const PA_MD_ORGAN_WITHIN = Object.freeze({ years: 5, from: "license", issuedOnOrAfter: "2026-05-01", cite: "49 Pa. Code \u00a7 16.19(c)(1)(ii)", url: "https://www.pacodeandbulletin.gov/Display/pacode?file=/secure/pacode/data/049/chapter16/s16.19.html" });
+// 49 Pa. Code 25.271(a)(6)(i)(B): the same for an osteopathic physician.
+const PA_DO_ORGAN_WITHIN = Object.freeze({ years: 5, from: "license", issuedOnOrAfter: "2026-05-01", cite: "49 Pa. Code \u00a7 25.271(a)(6)(i)(B)", url: "https://www.pacodeandbulletin.gov/Display/pacode?file=/secure/pacode/data/049/chapter25/s25.271.html" });
+// 24 Del. Admin. Code, Uniform Controlled Substances Act Regulations 3.1.2:
+// a practitioner with a new registration after July 1, 2013 attests to the
+// one hour course "within the first year of obtaining registration".
+// Counted from the Delaware CSR record's issue date.
+const DE_CS_LAW_WITHIN = Object.freeze({ years: 1, from: "csr", issuedAfter: "2013-07-01", cite: "24 Del. Admin. Code Uniform Controlled Substances Act Regs. 3.1.2", url: "https://archive.regulations.delaware.gov/AdminCode/title24/Uniform%20Controlled%20Substances%20Act%20Regulations.pdf" });
+
 export const STATE_REQS = {
   AK: { total: 50, cycle: 2, cat1min: 50, cat1note: "All AMA Cat 1 or AOA Cat 1/2", topics: [
     { topic: "Opioid Prescribing", hours: 2.0, note: "2 hrs pain management & opioid use/addiction (DEA holders)" },
   ], notes: "2 hrs pain management & opioid use/addiction (DEA holders)", rollover: "No (max 15 hrs exemption per 5 yrs)", moc: "ABMS/AOA initial cert or recert accepted", source: "Alaska Admin. Code tit. 12, \u00a7 40.200", verified: "2026-08", sourceUrl: "https://www.commerce.alaska.gov/web/portals/5/pub/med0077.pdf" },
   AL: { total: 25, cycle: 1, cat1min: 25, cat1note: "All AMA PRA Cat 1", topics: [
     { topic: "Controlled Substances", hours: 2.0, note: "2 hrs controlled substance prescribing every 2 yrs (ACSC holders). Alabama's CME cycle is 1 year, so this is not owed every cycle.", period: { years: 2 }, cite: "Ala. Admin. Code r. 540-X-4-.09(8)" },
-    { topic: "Ethics", hours: 2.0, note: "Board-designated professional boundaries course, one-time. ALBME designates a 2-hour on-demand course, Navigating Professional Boundaries in Medicine. Existing licensees by 12/31/2025, new licensees within 12 months of license issue; residents/fellows on limited license exempt.", period: "lifetime", cite: "Alabama Board of Medical Examiners, CME requirement" },
+    { topic: "Ethics", hours: 2.0, note: "Board-designated professional boundaries course, one-time. ALBME designates a 2-hour on-demand course, Navigating Professional Boundaries in Medicine. Existing licensees by 12/31/2025, new licensees within 12 months of license issue; residents/fellows on limited license exempt.", period: "lifetime", cite: "Alabama Board of Medical Examiners, CME requirement", within: AL_BOUNDARIES_WITHIN },
   ], notes: "2 hrs controlled substance prescribing every 2 yrs (ACSC holders); Board-designated professional boundaries course (one-time; existing licensees by 12/31/2025, new licensees within 12 months of license issue; residents/fellows on limited license exempt). ALBME designates a 2-hr on-demand course. The controlled substance hours are due every 2 yrs, not every 1-yr cycle.", rollover: "No", moc: "ABMS cert/MoC accepted as equivalent", source: "Ala. Admin. Code r. 540-X-14-.02; r. 540-X-4-.09(8) (controlled substance CME)", verified: "2026-08", sourceUrl: "https://www.albme.gov/resources/licensees/continuing-medical-education/licensure-cme-requirement" },
   AR: { total: 20, cycle: 1, cat1min: 10, cat1note: "50% must be Cat 1 in primary practice area", topics: [
     { topic: "Opioid Prescribing", hours: 1.0, note: "1 hr/yr prescribing opioids/benzodiazepines" },
@@ -148,8 +183,8 @@ export const STATE_REQS = {
     { topic: "Pharmacology", hours: 0, note: "1 pharmacology course" },
   ], notes: "2 hrs LGBTQ cultural competency; 1 pharmacology course", rollover: "No", moc: "No", source: "D.C. Mun. Regs. tit.17, \u00a7 4607.4", verified: "2026-08", sourceUrl: "https://dchealth.dc.gov/bomed" },
   DE: { total: 40, cycle: 2, cat1min: 40, cat1note: "All AMA or AOA Cat 1", topics: [
-    { topic: "Controlled Substances", hours: 2.0, note: "2 hrs controlled substance prescribing, chronic pain, or related topics biennially, required of every Delaware controlled substance registration (CSR) holder", cite: "24 Del. Admin. Code Uniform Controlled Substances Act Regs. 3.1" },
-    { topic: "Delaware Controlled Substance Law", hours: 1.0, note: "One-time 1 hr course on Delaware controlled substance law, within the first year of CSR registration. Was described only inside the biennial line, so it was never checked on its own.", period: "lifetime", cite: "24 Del. Admin. Code Uniform Controlled Substances Act Regs. 3.1" },
+    { topic: "Controlled Substances", hours: 2.0, note: "2 hrs controlled substance prescribing, chronic pain, or related topics biennially, required of every Delaware controlled substance registration (CSR) holder. It is attested at each CSR renewal (registrations expire June 30 of odd years), not at the medical license renewal; the app counts it in your license window.", cite: "24 Del. Admin. Code Uniform Controlled Substances Act Regs. 3.1" },
+    { topic: "Delaware Controlled Substance Law", hours: 1.0, note: "One-time 1 hr course on Delaware controlled substance law, within the first year of CSR registration. Was described only inside the biennial line, so it was never checked on its own.", period: "lifetime", cite: "24 Del. Admin. Code Uniform Controlled Substances Act Regs. 3.1", within: DE_CS_LAW_WITHIN },
   ], notes: "2 hrs controlled substance prescribing, chronic pain, or related topics biennially (every Delaware CSR holder); one-time 1 hr Delaware controlled substance law course within the first year of CSR registration", rollover: "No", moc: "No", source: "24 Del. Admin. Code 1700-12.0; 24 DE Admin Code Uniform Controlled Substances Act Regulations 3.1; 24 Del. C. 1713(d)", verified: "2026-08", sourceUrl: "https://dpr.delaware.gov/boards/medicalpractice/continuing-education-and-audit-information/", upcoming: [
     "Alzheimer's/dementia CE (24 Del. C. 1713(d)): 2 hrs of the 40 required at the 2027 renewal (cycle ending March 31, 2027) and each renewal after; exempt with attestation if no direct care of adults age 26+, no practice in Delaware, or previously completed in a prior period (so effectively one-time once done). Not yet reflected in Board regulation 1700-12.0.",
   ] },
@@ -197,7 +232,7 @@ export const STATE_REQS = {
   KY: { total: 60, cycle: 3, cat1min: 30, cat1note: "30 hrs Cat 1", topics: [
     { topic: "Controlled Substances", hours: 4.5, note: "4.5 hrs Cat 1 KASPER/pain mgmt/addiction per cycle (controlled substance prescribers, prorated 3 or 1.5 hrs if first authorized mid-cycle)" },
     { topic: "Domestic Violence", hours: 3.0, note: "3 hrs domestic violence, one-time, within 3 yrs of initial licensure. Primary care physicians licensed after July 1, 1996: family/general practice, pediatrics, internal medicine, emergency medicine, OB/GYN, preventive medicine/public health.", period: "lifetime", cite: "Kentucky Board of Medical Licensure, CME requirements" },
-    { topic: "Pediatric Abusive Head Trauma", hours: 1.0, note: "1 hr pediatric abusive head trauma, one-time, within 5 yrs of licensure (pediatrics, radiology, family medicine, emergency medicine, urgent care)", period: "lifetime", cite: "Kentucky Board of Medical Licensure, CME requirements" },
+    { topic: "Pediatric Abusive Head Trauma", hours: 1.0, note: "1 hr pediatric abusive head trauma, one-time, within 5 yrs of licensure (pediatrics, radiology, family medicine, emergency medicine, urgent care)", period: "lifetime", cite: "Kentucky Board of Medical Licensure, CME requirements", within: KY_PAHT_WITHIN },
   ], notes: "4.5 hrs Cat 1 KASPER/pain mgmt/addiction per cycle (controlled substance prescribers, prorated 3 or 1.5 hrs if first authorized mid-cycle); 3 hrs domestic violence one-time (primary care); 1 hr pediatric abusive head trauma one-time (peds, radiology, FM, EM, urgent care); 12 hrs Cat 1 addiction medicine per cycle for buprenorphine prescribers (201 KAR 9:270)", rollover: "No", moc: "Yes (passing an ABMS or AOA board certification or recertification exam counts as 60 hrs Cat 1, satisfies full cycle)", source: "201 KAR 9:310", verified: "2026-08", sourceUrl: "https://kbml.ky.gov/cme/Pages/default.aspx" },
   LA: { total: 20, cycle: 1, cat1min: 20, cat1note: "All Cat 1", topics: [
     { topic: "Controlled Substances", hours: 3.0, note: "One-time 3 hr CDS prescribing CME, completed before the first renewal (CDS holders; exemption if no CDS prescribed in the prior year)", period: "lifetime", cite: "La. Admin. Code tit. 46, pt. XLV \u00a7 4005", url: "https://lsbme.la.gov/content/board-approved-cme-courses-cds-requirements" },
@@ -342,14 +377,14 @@ export const STATE_REQS = {
     { topic: "Patient Safety", hours: 12.0, note: "12 hrs patient safety/risk management" },
     { topic: "Child Abuse Recognition", hours: 2.0, note: "2 hrs child abuse recognition and reporting" },
     { topic: "Pain Management", hours: 2.0, note: "2 hrs pain management, identification of addiction, or prescribing/dispensing opioids; applies only if you hold or use a DEA registration", alsoTopics: ["Opioid Prescribing", "Substance Use Disorders"] },
-    { topic: "Organ and Tissue Donation", hours: 2.0, note: "2 hrs organ and tissue donation and recovery process, one time within 5 years of initial licensure or of renewal/reactivation, Cat 1 or 2, counts toward the 100. The rule says so verbatim: this is a one-time requirement.", period: "lifetime", cite: "49 Pa. Code \u00a7 16.19 (one-time requirement)" },
+    { topic: "Organ and Tissue Donation", hours: 2.0, note: "2 hrs organ and tissue donation and recovery process, one time within 5 years of initial licensure or of renewal/reactivation, Cat 1 or 2, counts toward the 100. The rule says so verbatim: this is a one-time requirement.", period: "lifetime", cite: "49 Pa. Code \u00a7 16.19 (one-time requirement)", within: PA_MD_ORGAN_WITHIN },
   ], notes: "12 hrs patient safety/risk management; 2 hrs child abuse recognition and reporting; 2 hrs pain management/addiction/opioid prescribing (DEA registrants); 2 hrs organ and tissue donation one time within 5 years of licensure or renewal (eff. May 1, 2026)", rollover: "No", moc: "ABMS cert documentation accepted for Cat 1", source: "Pa. Code tit. 49, \u00a7 16.19", verified: "2026-08", sourceUrl: "https://www.pacodeandbulletin.gov/Display/pacode?file=/secure/pacode/data/049/chapter16/s16.19.html", upcoming: [
     "Organ and tissue donation 2-hr one-time CE, effective 2026-05-01 (already in force); first deadline for existing licensees is within 5 years of their next renewal, i.e., MD renewal 12/31/2026 -> due by 2031",
   ] }, do: { total: 100, cycle: 2, cat1min: 20, cat1note: "20 hrs Cat 1-A", topics: [
     { topic: "Patient Safety", hours: 12.0, note: "12 hrs patient safety/risk management" },
     { topic: "Child Abuse Recognition", hours: 2.0, note: "2 hrs child abuse recognition and reporting" },
     { topic: "Pain Management", hours: 2.0, note: "2 hrs pain management, identification of addiction, or prescribing/dispensing opioids", alsoTopics: ["Opioid Prescribing", "Substance Use Disorders"] },
-    { topic: "Organ and Tissue Donation", hours: 2.0, note: "2 hrs organ and tissue donation and recovery process, one time within 5 years of initial licensure or of renewal, AOA Cat 1 or 2, counts toward the 100. Chapter 25 mirrors the Board of Medicine rule at 49 Pa. Code 16.19, which states the one-time wording verbatim.", period: "lifetime", cite: "49 Pa. Code \u00a7 25.271 (mirrors \u00a7 16.19)" },
+    { topic: "Organ and Tissue Donation", hours: 2.0, note: "2 hrs organ and tissue donation and recovery process, one time within 5 years of initial licensure or of renewal, AOA Cat 1 or 2, counts toward the 100. Chapter 25 mirrors the Board of Medicine rule at 49 Pa. Code 16.19, which states the one-time wording verbatim.", period: "lifetime", cite: "49 Pa. Code \u00a7 25.271 (mirrors \u00a7 16.19)", within: PA_DO_ORGAN_WITHIN },
   ], notes: "12 hrs patient safety/risk management; 2 hrs child abuse recognition and reporting; 2 hrs pain management/addiction/opioid prescribing; 2 hrs organ and tissue donation one time within 5 years of licensure or renewal (eff. May 1, 2026)", rollover: "No", moc: "No", source: "Pa. Code tit. 49, \u00a7 25.271", verified: "2026-08", sourceUrl: "https://www.pacodeandbulletin.gov/Display/pacode?file=/secure/pacode/data/049/chapter25/s25.271.html", upcoming: [
     "Organ and tissue donation 2-hr one-time CE, effective 2026-05-01 (already in force); first deadline for existing licensees is within 5 years of their next renewal",
   ] } },

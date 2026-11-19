@@ -1,0 +1,252 @@
+// State duties beside the medical license: the state controlled substance
+// registration a state issues on its own (src/constants/stateControlledSubstance.js),
+// and one-time state topics due within a set time of licensure (`within` on a
+// topic in src/constants/stateRequirements.js).
+//
+// Everything here is read-only. The app asks, prefills and lists; it never
+// creates a record or marks anything done. The physician's one answer, "I
+// don't prescribe controlled substances here", is stored on the state's
+// medical license (customFields, CSR_DECLINED_FIELD) and Undo clears it.
+//
+// Alerts: a licensure deadline alerts only inside the reminder lead window,
+// only while the topic is unmet, and only when the issue date it counts from
+// is on file. A date that passed with no completion on file is asked on the
+// card, never alerted (the app cannot tell a missed course from one done
+// before it was logged here). A registration prompt never alerts.
+//
+// Extensions spelled out so pure-node test scripts can import this module.
+import { STATE_CSR, STATE_CSR_TYPE } from "../constants/stateControlledSubstance.js";
+import { getStateEntry } from "../constants/stateRequirements.js";
+import { isPhysicianDegree } from "../constants/professions.js";
+import { complianceFor } from "./compliance.js";
+import { isInactive } from "./lifecycle.js";
+import { daysUntilDate, localToday } from "./dateDays.js";
+
+const ISO = /^\d{4}-\d{2}-\d{2}$/;
+const iso = (v) => { const s = String(v || "").slice(0, 10); return ISO.test(s) ? s : null; };
+const pad = (n) => String(n).padStart(2, "0");
+
+/** The customFields key on a state medical license that records "I don't prescribe controlled substances here". */
+export const CSR_DECLINED_FIELD = "No state controlled substance registration (not prescribing here)";
+
+/** The state's registration rule, or null. */
+export function stateCsrRule(state) {
+  return Object.hasOwn(STATE_CSR, state || "") ? STATE_CSR[state] : null;
+}
+
+/**
+ * The next expiration a fixed rule gives, on or after today, or null when
+ * the rule fixes no date. { month: 12, day: 31, everyYears: 1 } on
+ * 2026-11-18 is 2026-12-31; { month: 6, day: 30, everyYears: 2, years: "odd" }
+ * is 2027-06-30.
+ */
+export function nextFixedExpiry(rule, now = new Date()) {
+  const e = rule?.expires;
+  if (!e || !e.month || !e.day) return null;
+  const today = localToday(now);
+  for (let y = now.getFullYear(); y <= now.getFullYear() + 4; y++) {
+    if (e.everyYears === 2 && e.years === "odd" && y % 2 === 0) continue;
+    if (e.everyYears === 2 && e.years === "even" && y % 2 !== 0) continue;
+    if (e.everyYears !== 1 && e.everyYears !== 2) return null;
+    if (e.everyYears === 2 && !e.years) return null;
+    const d = `${y}-${pad(e.month)}-${pad(e.day)}`;
+    if (d >= today) return d;
+  }
+  return null;
+}
+
+const isMedical = (l) => /medical license/i.test(l?.type || "");
+const isCsr = (l) => String(l?.type || "") === STATE_CSR_TYPE;
+
+/** The state medical licenses in force (not historical or superseded). */
+function currentMedical(licenses, state) {
+  return (licenses || []).filter(l => l && l.state === state && isMedical(l) && !isInactive(l));
+}
+
+/** The State Controlled Substance records for the state, newest expiration first. */
+export function csrRecordsFor(licenses, state) {
+  return (licenses || []).filter(l => l && l.state === state && isCsr(l) && !isInactive(l))
+    .sort((a, b) => String(b.expirationDate || "").localeCompare(String(a.expirationDate || "")));
+}
+
+/** The day the physician chose "I don't prescribe controlled substances here", or null. */
+export function csrDeclinedOn(licenses, state) {
+  for (const l of currentMedical(licenses, state)) {
+    const v = iso(l.customFields?.[CSR_DECLINED_FIELD]);
+    if (v) return v;
+  }
+  return null;
+}
+
+/** The new-record draft "Add it" opens: type, state, name and, where the rule fixes it, the next expiration. */
+export function csrPrefill(state, now = new Date()) {
+  const rule = stateCsrRule(state);
+  if (!rule) return null;
+  const exp = nextFixedExpiry(rule, now);
+  return { type: STATE_CSR_TYPE, state, name: rule.short, ...(exp ? { expirationDate: exp } : {}) };
+}
+
+/**
+ * The registration card for one state, for an MD or DO with a medical
+ * license in force there, or null (no rule, no license, not a physician):
+ *   status "on-file"  a State Controlled Substance record for the state is
+ *                     on file; it alerts like any record. `fixedNext` is the
+ *                     date the rule gives, shown beside it.
+ *   status "declined" the physician said they do not prescribe here (`on`)
+ *   status "ask"      neither: a calm prompt with `prefill` for Add it
+ */
+export function csrCard(data, state, now = new Date()) {
+  if (!isPhysicianDegree(data?.settings?.degreeType)) return null;
+  const rule = stateCsrRule(state);
+  if (!rule || !currentMedical(data?.licenses, state).length) return null;
+  const base = { state, rule, fixedNext: nextFixedExpiry(rule, now) };
+  const records = csrRecordsFor(data.licenses, state);
+  if (records.length) return { ...base, status: "on-file", record: records[0] };
+  const on = csrDeclinedOn(data.licenses, state);
+  if (on) return { ...base, status: "declined", on };
+  return { ...base, status: "ask", prefill: csrPrefill(state, now) };
+}
+
+/** Every state a physician holds a medical license in, in license order. */
+function licensedStates(data) {
+  return [...new Set((data?.licenses || []).filter(l => l && isMedical(l) && !isInactive(l) && l.state).map(l => l.state))];
+}
+
+/** The registration cards for every licensed state with a rule. */
+export function csrCards(data, now = new Date()) {
+  return licensedStates(data).map(st => csrCard(data, st, now)).filter(Boolean);
+}
+
+/**
+ * The edits that store or clear "I don't prescribe controlled substances
+ * here" (`on` an ISO day, or null for Undo): the state's current medical
+ * licenses, for the caller to save with editItem. Set on the first one;
+ * cleared from every one that holds it.
+ */
+export function csrDeclineEdits(licenses, state, on) {
+  const out = [];
+  const meds = currentMedical(licenses, state);
+  meds.forEach((l, i) => {
+    const has = l.customFields && Object.hasOwn(l.customFields, CSR_DECLINED_FIELD);
+    if (on && i === 0) out.push({ ...l, customFields: { ...(l.customFields || {}), [CSR_DECLINED_FIELD]: on } });
+    else if (!on && has) {
+      const customFields = { ...l.customFields };
+      delete customFields[CSR_DECLINED_FIELD];
+      out.push({ ...l, customFields });
+    }
+  });
+  return out;
+}
+
+// ── Licensure-relative one-time deadlines ──
+
+/** ISO day N months (or years) after `from`, clamped to the month's last day. */
+export function addPeriod(from, { months = 0, years = 0 }) {
+  const d = iso(from);
+  if (!d) return null;
+  const [y, m, day] = d.split("-").map(Number);
+  const total = (m - 1) + months + years * 12;
+  const ty = y + Math.floor(total / 12);
+  const tm = ((total % 12) + 12) % 12;
+  const last = new Date(ty, tm + 1, 0).getDate();
+  return `${ty}-${pad(tm + 1)}-${pad(Math.min(day, last))}`;
+}
+
+/** The earliest issue date on the state's medical license records (initial licensure, as near as the records show). */
+export function stateLicenseIssued(licenses, state) {
+  const days = (licenses || []).filter(l => l && l.state === state && isMedical(l)).map(l => iso(l.issuedDate)).filter(Boolean).sort();
+  return days[0] || null;
+}
+
+/** The earliest issue date on the state's controlled substance records. */
+export function stateCsrIssued(licenses, state) {
+  const days = (licenses || []).filter(l => l && l.state === state && isCsr(l)).map(l => iso(l.issuedDate)).filter(Boolean).sort();
+  return days[0] || null;
+}
+
+/** True when a specialty id on the profile is one the rule names (a board, or a subspecialty of it). */
+function specialtyMatches(ids, specialties) {
+  return (specialties || []).some(id => {
+    const [src, code] = String(id || "").split(":");
+    const parent = src.replace(/-SUB$/, "");
+    return ids.includes(`${parent}:${code}`);
+  });
+}
+
+function phrase(w) {
+  if (w.months) return `${w.months} month${w.months === 1 ? "" : "s"}`;
+  return `${w.years} year${w.years === 1 ? "" : "s"}`;
+}
+
+/**
+ * The licensure-relative one-time deadlines for one state, for an MD or DO
+ * with a medical license in force there. Each:
+ *   { state, topic, hours, from ("license" | "csr"), within (text), anchor
+ *     (the issue date it counts from, or null), due, daysLeft, status,
+ *     cite, url }
+ * status:
+ *   "due"        a date ahead, the topic unmet: listed; alerted inside the lead window
+ *   "past"       the date passed, the topic unmet: asked on the card, never alerted
+ *   "needs-date" the issue date it counts from is not on file: asked calmly
+ * A met topic, a topic that does not apply (a specialty or issue-date rule
+ * that excludes this physician) or a state without the rule gives nothing.
+ */
+export function licensureDeadlinesFor(data, state, now = new Date()) {
+  const deg = data?.settings?.degreeType;
+  if (!isPhysicianDegree(deg) || !currentMedical(data?.licenses, state).length) return [];
+  const topics = (getStateEntry(state, deg)?.topics || []).filter(t => t.within && t.period === "lifetime");
+  if (!topics.length) return [];
+  let comp = null;
+  try { comp = complianceFor(data, state); } catch { return []; }
+  const out = [];
+  for (const t of topics) {
+    const w = t.within;
+    const result = (comp?.topicResults || []).find(r => r.topic === t.topic);
+    if (!result || result.met) continue;
+    if (w.specialties && !specialtyMatches(w.specialties, data.settings.specialties)) continue;
+    if (w.from === "csr" && !csrRecordsFor(data.licenses, state).length) continue;
+    const anchor = w.from === "csr" ? stateCsrIssued(data.licenses, state) : stateLicenseIssued(data.licenses, state);
+    const base = {
+      state, topic: t.topic, hours: t.hours || 0, from: w.from, within: phrase(w), anchor,
+      cite: w.cite || t.cite || "", url: w.url || t.url || "",
+    };
+    if (!anchor) { out.push({ ...base, due: null, daysLeft: null, status: "needs-date" }); continue; }
+    if (w.issuedOnOrAfter && anchor < w.issuedOnOrAfter) continue;
+    if (w.issuedAfter && anchor <= w.issuedAfter) continue;
+    const due = addPeriod(anchor, w);
+    // A rule with an earlier deadline for existing licensees (Alabama: by
+    // December 31, 2025) dates only what falls after it.
+    if (w.dueAfter && due <= w.dueAfter) continue;
+    const daysLeft = daysUntilDate(due, now);
+    out.push({ ...base, due, daysLeft, status: daysLeft < 0 ? "past" : "due" });
+  }
+  return out;
+}
+
+/** Every licensed state's licensure deadlines. */
+export function licensureDeadlines(data, now = new Date()) {
+  return licensedStates(data).flatMap(st => licensureDeadlinesFor(data, st, now));
+}
+
+/** The name a deadline is listed under: "AL Ethics (one-time)". */
+export function licensureDeadlineName(d) {
+  return `${d.state} ${d.topic} (one-time)`;
+}
+
+/**
+ * The dated licensure deadlines still ahead, sorted by date, each with
+ * `alerted` (inside the reminder lead window, so generateAlerts raises it).
+ */
+export function datedLicensureDeadlines(data, lead, now = new Date()) {
+  return licensureDeadlines(data, now).filter(d => d.status === "due")
+    .map(d => ({ ...d, name: licensureDeadlineName(d), alerted: d.daysLeft <= lead }))
+    .sort((a, b) => a.due.localeCompare(b.due) || a.name.localeCompare(b.name));
+}
+
+/** The alert entries (generateAlerts cmeIssues shape) for deadlines inside the lead window. */
+export function licensureDeadlineAlerts(data, lead, now = new Date()) {
+  return datedLicensureDeadlines(data, lead, now).filter(d => d.alerted).map(d => ({
+    state: d.state, issues: [`${d.topic} (one-time, within ${d.within} of ${d.from === "csr" ? "your registration" : "licensure"}): due ${d.due}`],
+    daysLeft: d.daysLeft, renewal: d.due, key: `licensure:${d.state}:${d.topic}`, kind: "licensure", label: licensureDeadlineName(d),
+  }));
+}

@@ -7,6 +7,7 @@ import { isAdvancedPractice, isKnownDegree } from "../constants/professions.js";
 import { certificationCards } from "./certCompliance.js";
 import { boardComplianceFor } from "./boardCompliance.js";
 import { datedBoardSteps } from "./boardTasks.js";
+import { csrCards, licensureDeadlines } from "./stateDuties.js";
 import { reminderLeadDays } from "./reminderPreferences.js";
 import { NCCPA_ACTIVITY_FIELD, PHARMACOLOGY_HOURS_FIELD } from "../constants/credentialTypes.js";
 import { academicYearOf, caseWRVU } from "./caseLogReport";
@@ -89,6 +90,34 @@ export function boardStepsSnapshot(data, now = new Date()) {
       period: s.period, every: s.periodWord, inReminderWindow: s.alerted, source: s.source,
     }));
   } catch { return []; }
+}
+
+/**
+ * The state duties beside the medical licenses (stateDuties.js), for an MD
+ * or DO: each licensed state's own controlled substance registration (on
+ * file, declined by the physician, or not yet asked) with its rule and
+ * source, and the one-time topics due within a set time of licensure, with
+ * the date when the issue date it counts from is on file. Null when there
+ * are none, so a snapshot without them is unchanged.
+ */
+export function stateDutiesSnapshot(data, now = new Date()) {
+  try {
+    const registrations = csrCards(data, now).map(c => ({
+      state: c.state, registration: c.rule.name, agency: c.rule.agency,
+      status: c.status === "on-file" ? "on file" : c.status === "declined" ? "physician said they do not prescribe controlled substances here" : "not on file",
+      ...(c.status === "on-file" ? { recordId: c.record.id, expires: c.record.expirationDate || null } : {}),
+      rule: c.rule.expiryRule, ...(c.fixedNext ? { nextByRule: c.fixedNext } : {}),
+      ...(c.rule.hardStop ? { hardStop: c.rule.hardStop } : {}),
+      prerequisites: c.rule.prerequisites || [], ...(c.rule.recurringNote ? { recurring: c.rule.recurringNote } : {}),
+      source: c.rule.sourceUrl,
+    }));
+    const deadlines = licensureDeadlines(data, now).map(d => ({
+      state: d.state, topic: d.topic, hours: d.hours, within: `${d.within} of ${d.from === "csr" ? "the state controlled substance registration" : "licensure"}`,
+      status: d.status === "due" ? "due" : d.status === "past" ? "date passed with no completion on file" : "issue date not on file",
+      ...(d.anchor ? { countedFrom: d.anchor } : {}), ...(d.due ? { due: d.due, daysLeft: d.daysLeft } : {}), source: d.url,
+    }));
+    return registrations.length || deadlines.length ? { registrations, deadlines } : null;
+  } catch { return null; }
 }
 
 /** Compact, privacy-lean snapshot of the user's data for grounding. */
@@ -195,6 +224,7 @@ export function buildSnapshot(data, allTrackedStates = []) {
     cmeSummary: { entries: (data.cme || []).length, byState: cmeByState },
     // Sent only when there is one, so a snapshot without board steps is unchanged.
     ...(() => { const steps = boardStepsSnapshot(data); return steps.length ? { boardSteps: steps } : {}; })(),
+    ...(() => { const duties = stateDutiesSnapshot(data); return duties ? { stateDuties: duties } : {}; })(),
     // A PA's NCCPA cycle and an NP's certifier cycles, computed by the same
     // engine as Home's cards (weighted NCCPA credit included), so Vera never
     // rebuilds the main national obligation from partial raw rows.
@@ -397,6 +427,15 @@ attestation, a Longitudinal Assessment) with its due date, however far off. When
 is due, give that date from the list. A step not listed is done, marked not required, past its
 date with no mark, or has no published date: say its board card on Home shows where it stands,
 and never supply a date the list does not hold.
+
+STATE DUTIES: snapshot.stateDuties.registrations lists each licensed state that issues its own
+controlled substance registration, apart from the medical license and the DEA: whether one is on
+file, its rule, the next date the rule gives, prerequisites such as PDMP registration, and the
+source. When one is not on file, say the state issues it and that the state card on the CME page
+can add it; never say the physician holds or needs one beyond what the list says.
+snapshot.stateDuties.deadlines lists one-time state topics due within a set time of licensure, with
+the due date when the issue date it counts from is on file. Give only those dates; when the issue
+date is not on file, say adding it to the license shows the date.
 
 NAVIGATION: when the user asks to see, open, go to, show, or "take me to" a record or a
 section ("take me to UMC privileges", "open my DEA", "show the Mercy contract"),

@@ -26,6 +26,10 @@ const reviewedBoardTasks = JSON.parse(readFileSync(new URL('./golden/board-tasks
 const reviewedWaDoExemption = JSON.parse(readFileSync(new URL('./golden/board-exemption-wa-do-1118.json', import.meta.url), 'utf8'));
 // TX rule source also names Tex. Occ. Code 156.052 and the TMB CME hours chart; source text only (reviewed case by case).
 const reviewedTxExemptionSource = JSON.parse(readFileSync(new URL('./golden/board-exemption-tx-source-1118.json', import.meta.url), 'utf8'));
+// State duties (2026-11-18): licensure-relative `within` on AL, DE, KY and PA
+// one-time topics, and the DE controlled substance CE note (reviewed case by case).
+// A key already reviewed above names that output as previousReviewedHash.
+const reviewedStateDuties = JSON.parse(readFileSync(new URL('./golden/state-duties-1118.json', import.meta.url), 'utf8'));
 const full = JSON.parse(readFileSync(new URL('./golden/md-do-full.json', import.meta.url), 'utf8'));
 
 test('goldens were captured at the base commit', () => {
@@ -35,9 +39,15 @@ test('goldens were captured at the base commit', () => {
 
 test('every MD and DO calculation matches its golden; only exact reviewed display copy, reference URLs and rule fixes differ', async () => {
   const { hashes, full: now } = await computeGolden();
-  const reviewed = [...reviewedCopy.entries, ...reviewedReferences.entries, ...reviewedPaPainTags.entries, ...reviewedCmeAudit.entries, ...reviewedBoardTasks.entries, ...reviewedWaDoExemption.entries, ...reviewedTxExemptionSource.entries];
-  const allowed = new Map(reviewed.map(entry => [entry.key, entry]));
-  assert.equal(allowed.size, reviewed.length, 'reviewed cases cannot silently replace another exception');
+  const reviewed = [...reviewedCopy.entries, ...reviewedReferences.entries, ...reviewedPaPainTags.entries, ...reviewedCmeAudit.entries, ...reviewedBoardTasks.entries, ...reviewedWaDoExemption.entries, ...reviewedTxExemptionSource.entries, ...reviewedStateDuties.entries];
+  // A later review of a key replaces an earlier one only by naming the
+  // reviewed output it replaces; otherwise a key is reviewed once.
+  const allowed = new Map();
+  for (const entry of reviewed) {
+    const prior = allowed.get(entry.key);
+    assert.equal(entry.previousReviewedHash, prior ? prior.reviewedHash : undefined, `${entry.key}: reviewed cases cannot silently replace another exception`);
+    allowed.set(entry.key, entry);
+  }
   for (const entry of allowed.values()) {
     assert.equal(golden.hashes[entry.key], entry.originalHash, `${entry.key}: the original baseline is retained`);
     assert.equal(hashes[entry.key], entry.reviewedHash, `${entry.key}: only the exact reviewed output is accepted`);
