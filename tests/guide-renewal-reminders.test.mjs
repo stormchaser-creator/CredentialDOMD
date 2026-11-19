@@ -272,10 +272,12 @@ test('signup bounds, claim stages, the 6 day bound and unsubscribe', { skip: pgS
   assert.ok((await rowsOf(pg, 'many@example.invalid')).every(r => r.stopped));
   await pg.sql(`update public.guide_renewal_reminders set last_sent_at = null where email = 'many@example.invalid'`);
   assert.deepEqual((await claim(pg)).filter(r => r.email === 'many@example.invalid'), []);
-  await signup(pg, 'many@example.invalid', 'CA', 'current_date + 3');
+  // A state whose reminder has not gone out yet (the sweep above sent two of the twelve).
+  const fresh = states.find(s => !got.some(r => r.email === 'many@example.invalid' && r.state === s));
+  await signup(pg, 'many@example.invalid', fresh, 'current_date + 3');
   const lifted = (await rowsOf(pg, 'many@example.invalid')).filter(r => !r.stopped).map(r => r.state);
-  assert.deepEqual(lifted, ['CA']);
-  assert.deepEqual((await claim(pg)).filter(r => r.email === 'many@example.invalid').map(r => r.state), ['CA']);
+  assert.deepEqual(lifted, [fresh]);
+  assert.deepEqual((await claim(pg)).filter(r => r.email === 'many@example.invalid').map(r => r.state), [fresh]);
 
   // ── The global throttle: 20 new rows in 10 minutes, then PT429; old rows do not count.
   await pg.sql(`update public.guide_renewal_reminders set created_at = now() - interval '1 hour'`);
