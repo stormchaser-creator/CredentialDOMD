@@ -4,7 +4,7 @@
 // Deterministic and explainable: a fixed keyword map, whole-word matching,
 // and every suggestion carries its reason. Nothing is tagged until the
 // physician taps "Count this course".
-import { cmeTopics, topicTags, inWindow } from "./cmeCore.js";
+import { cmeTopics, topicTags, inWindow, topicPeriodBounds } from "./cmeCore.js";
 import { cmeSessionsOf } from "./topicSuggest.js";
 
 // Topic -> the words in a course that name it. Each term is matched as a
@@ -86,17 +86,9 @@ function courseTexts(c) {
 export function topicCountingPool(comp, tr, entries) {
   const list = entries || [];
   if (tr?.period === "lifetime") return list;
-  const end = comp?.windowEnd ? new Date(comp.windowEnd) : null;
-  if (!end || Number.isNaN(end.getTime())) return [];
-  let start;
-  if (tr?.period && typeof tr.period === "object" && tr.period.years > 0) {
-    start = new Date(end);
-    start.setFullYear(start.getFullYear() - tr.period.years);
-  } else {
-    start = comp?.windowStart ? new Date(comp.windowStart) : null;
-  }
-  if (!start || Number.isNaN(start.getTime())) return [];
-  return list.filter(c => inWindow(c, start, end));
+  // The CSR period (Delaware) included, from the engine row itself.
+  const b = topicPeriodBounds(tr, comp?.windowStart, comp?.windowEnd);
+  return b ? list.filter(c => inWindow(c, b.start, b.end)) : [];
 }
 
 /**

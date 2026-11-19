@@ -97,7 +97,9 @@ export function generateAlerts(data) {
         if (!comp.totalMet && !comp.noGeneralReq && comp.totalRequired != null) issues.push(`${comp.totalEarned}/${comp.totalRequired} total hrs`);
         if (!comp.cat1Met && comp.cat1Required > 0) issues.push(`Cat 1: ${comp.cat1Earned}/${comp.cat1Required} hrs`);
         // A PA or NP course with no stated hours reads "not recorded", never "0/0 hrs".
-        comp.topicResults.filter(t => t.met === false).forEach(t => issues.push(comp.profession && t.checklist ? `${t.topic}: completion not recorded` : `${t.topic}: ${t.earned}/${t.required} hrs`));
+        // A topic counted in the CSR period (Delaware) is due at the CSR's
+        // expiration, not the license renewal: alerted on its own below.
+        comp.topicResults.filter(t => t.met === false && !t.period?.registrationEnd).forEach(t => issues.push(comp.profession && t.checklist ? `${t.topic}: completion not recorded` : `${t.topic}: ${t.earned}/${t.required} hrs`));
       }
       // The renewal date the gap counts toward, when a license anchors it:
       // a fixed date, unlike daysLeft, which changes every day.
@@ -111,6 +113,17 @@ export function generateAlerts(data) {
       else if (days == null) days = licDays;
       const app = kind && kind !== "medical";
       if (issues.length) cmeIssues.push({ state: st, issues, daysLeft: days, renewal, ...(app ? { key, kind, label: appCardTitle(comp) } : {}) });
+    }
+    // CME the state controlled substance registration requires (Delaware),
+    // due at the registration's expiration. Only from a registration on
+    // file (registrationSource "record"): without one the app cannot tell a
+    // holder from a physician who never registered, and the state card asks.
+    const csrGaps = (comp.topicResults || []).filter(t => t.met === false && t.period?.registrationEnd && t.period.registrationSource === "record");
+    for (const t of csrGaps) {
+      const due = t.period.registrationEnd;
+      const left = daysUntilDate(due, now);
+      if (left == null || left > lead) continue;
+      cmeIssues.push({ state: st, issues: [`${t.topic}: ${t.earned}/${t.required} hrs (controlled substance registration)`], daysLeft: left, renewal: due, key: `csr:${st}:${t.topic}`, kind: "csr", label: `${st} controlled substance registration CME` });
     }
   });
 

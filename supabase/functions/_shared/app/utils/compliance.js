@@ -775,6 +775,8 @@ function csrExpirationOnFile(licenses, state) {
 
 /** Whether the physician said "I don't prescribe controlled substances here" on a current state medical license. */
 function csrDeclinedHere(licenses, state) {
+  // A registration on file outranks the answer, as on the state card.
+  if ((licenses || []).some(l => l && l.state === state && String(l.type || "") === STATE_CSR_TYPE && !isInactive(l))) return false;
   return (licenses || []).some(l => l && l.state === state && ofKind(l, "medical") && !isInactive(l)
     && /^\d{4}-\d{2}-\d{2}/.test(String(l.customFields?.[CSR_DECLINED_FIELD] || "")));
 }

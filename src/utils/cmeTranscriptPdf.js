@@ -619,6 +619,7 @@ export function stateRequirementRows(model) {
     // MATE row does, or the "earned" number looks inconsistent with the cycle.
     const periodNote = t.period === "lifetime"
       ? "counted across all dates, not just this cycle"
+      : t.period?.registrationEnd ? `counted over the controlled substance registration period ending ${t.period.registrationEnd}, not the license cycle`
       : (t.period && t.period.years ? `counted over the last ${t.period.years} years, not just this cycle` : "");
     if (periodNote) rule = rule ? `${rule} (${periodNote})` : periodNote[0].toUpperCase() + periodNote.slice(1);
     // Met by the physician's own confirmation, not by logged hours: say so,

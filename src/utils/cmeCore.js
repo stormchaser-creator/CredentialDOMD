@@ -68,6 +68,33 @@ export function cycleBucket(entry, start, end) {
   return "in";
 }
 
+/**
+ * The { start, end } a topic row's hours are counted over, as the engine
+ * counts them: the CSR period for `{ registrationEnd, years }` (Delaware),
+ * the N years ending at the window end for `{ years: N }`, otherwise the
+ * renewal window. Null for a one-time topic (every date counts) or bad dates.
+ */
+export function topicPeriodBounds(tr, windowStart, windowEnd) {
+  if (!tr || tr.period === "lifetime") return null;
+  const p = tr.period;
+  let end = windowEnd ? new Date(windowEnd) : null;
+  let start;
+  if (p && typeof p === "object" && p.registrationEnd) {
+    end = parseLocalDate(p.registrationEnd);
+    if (!end) return null;
+    start = new Date(end);
+    start.setFullYear(start.getFullYear() - p.years);
+  } else if (p && typeof p === "object" && p.years > 0) {
+    if (!end || Number.isNaN(end.getTime())) return null;
+    start = new Date(end);
+    start.setFullYear(start.getFullYear() - p.years);
+  } else {
+    start = windowStart ? new Date(windowStart) : null;
+  }
+  if (!start || !end || Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) return null;
+  return { start, end };
+}
+
 export function inWindow(entry, start, end) {
   return cycleBucket(entry, start, end) === "in";
 }
@@ -232,8 +259,7 @@ export function stillCountingTopics(entry, topicResults, windowEnd) {
     if (t.informational || !t.period) return false;
     if (!topicTags(t).some(x => tags.includes(x))) return false;
     if (t.period === "lifetime") return true;
-    const start = new Date(windowEnd);
-    start.setFullYear(start.getFullYear() - t.period.years);
-    return inWindow(entry, start, windowEnd);
+    const b = topicPeriodBounds(t, null, windowEnd);
+    return !!b && inWindow(entry, b.start, b.end);
   }).map(topicTagsLabel);
 }

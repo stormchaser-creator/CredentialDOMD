@@ -222,3 +222,51 @@ test('"Add it" for a registration that expires with the license prefills the cur
   const lapsed = csrCard({ ...data, licenses: [{ ...lic, expirationDate: '2026-01-31' }] }, 'MI', at('2026-11-19'));
   assert.equal(lapsed?.prefill?.expirationDate, undefined, 'a passed license date is not offered');
 });
+
+// ── Review fixes: helpers, alert date, a record outranks "don't prescribe" ──
+
+const deData = (cme, extra = {}) => ({
+  settings: { degreeType: 'MD', specialties: [], reminderLeadDays: 90, primaryState: 'DE' },
+  licenses: [
+    { id: 'l1', type: 'State Medical License', state: 'DE', expirationDate: '2027-03-31', ...extra },
+    { id: 'c1', type: STATE_CSR_TYPE, state: 'DE', expirationDate: '2027-06-30' },
+  ],
+  cme,
+});
+
+test('the course suggestions and the CME math panel count the CSR period, as the engine does', async () => {
+  const { topicCountingPool } = await import('../../src/utils/topicMatch.js');
+  const { stillCountingTopics } = await import('../../src/utils/cmeCore.js');
+  const before = cs('2025-05-01'), after = cs('2027-05-01');
+  const comp = complianceFor(deData([before, after]), 'DE');
+  const row = deTopic(comp);
+  assert.deepEqual(topicCountingPool(comp, row, [before, after]).map(c => c.id), [after.id]);
+  assert.deepEqual(stillCountingTopics(after, comp.topicResults, comp.windowEnd).length, 1);
+  assert.deepEqual(stillCountingTopics(before, comp.topicResults, comp.windowEnd).length, 0);
+});
+
+test('a registration on file outranks an earlier "I don\'t prescribe here"', () => {
+  const comp = complianceFor(deData([], { customFields: { [CSR_DECLINED_FIELD]: '2026-11-19' } }), 'DE');
+  assert.ok(deTopic(comp), 'the CSR topic applies again');
+});
+
+test('the DE CSR CME gap alerts at the registration date, never inside the license gap', async () => {
+  const { build } = await import('esbuild');
+  const out = await build({ entryPoints: [fileURLToPath(new URL('../../src/utils/notifications.js', import.meta.url))], bundle: true, platform: 'node', format: 'esm', write: false, logLevel: 'silent' });
+  const { generateAlerts } = await import(`data:text/javascript;base64,${Buffer.from(out.outputFiles[0].text).toString('base64')}`);
+  const RealDate = Date;
+  const freeze = (iso) => { globalThis.Date = class extends RealDate { constructor(...a) { super(...(a.length ? a : [`${iso}T12:00:00`])); } static now() { return new RealDate(`${iso}T12:00:00`).getTime(); } }; };
+  try {
+    // Mid April 2027: the license renewed (window to 2029) but the CSR runs to 2027-06-30.
+    freeze('2027-04-15');
+    const renewed = deData([], { expirationDate: '2029-03-31' });
+    const a = generateAlerts(renewed);
+    const csr = (a?.cmeIssues || []).find(ci => ci.kind === 'csr');
+    assert.ok(csr, 'alerted on its own');
+    assert.equal(csr.renewal, '2027-06-30');
+    assert.ok(!(a.cmeIssues || []).some(ci => ci.kind !== 'csr' && ci.issues.some(x => /Controlled Substances/.test(x))), 'not in the license gap');
+    // No registration on file: the card asks; nothing is alerted.
+    const noRecord = { ...renewed, licenses: renewed.licenses.filter(l => l.type !== STATE_CSR_TYPE) };
+    assert.ok(!(generateAlerts(noRecord)?.cmeIssues || []).some(ci => ci.kind === 'csr'));
+  } finally { globalThis.Date = RealDate; }
+});
