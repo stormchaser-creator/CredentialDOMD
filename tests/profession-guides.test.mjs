@@ -15,7 +15,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { buildProfessionGuides, PROFESSIONS } from '../scripts/build-profession-guides.mjs';
+import { buildProfessionGuides, PROFESSIONS, REMINDER_GUIDES_FILE, reminderGuidesJson } from '../scripts/build-profession-guides.mjs';
 import { renderPublicLaunch } from '../scripts/public-launch-render.mjs';
 import { PROFESSION_GUIDE_DIRS, addGuidePagesToSitemap } from '../scripts/package-site.mjs';
 import { PA_STATE_RULES } from '../src/constants/paStateRules.js';
@@ -134,4 +134,20 @@ test('every guide passes the paid launch renderer, and only indexable ones reach
   for (const p of pages.filter(p => !p.indexable)) assert.ok(!sitemap.includes(p.path), `${p.path} must stay out of the sitemap`);
   assert.throws(() => addGuidePagesToSitemap(sitemap, [routes[0]]), /Duplicate/);
   assert.throws(() => addGuidePagesToSitemap(base, ['/states/../x']), /Invalid guide route/);
+});
+
+test('indexable guides carry the reminder form for their own profession and state; the sender facts are current', () => {
+  assert.equal(read(REMINDER_GUIDES_FILE), reminderGuidesJson(pages), `${REMINDER_GUIDES_FILE} is stale; run node scripts/build-profession-guides.mjs`);
+  for (const page of pages) {
+    const forms = (page.html.match(/<form class="reminder-form"/g) || []).length;
+    assert.equal(forms, page.indexable ? 1 : 0, `${page.file}: reminder form`);
+    if (!page.indexable) { assert.doesNotMatch(page.html, /guide_reminder_signup/, page.file); continue; }
+    assert.ok(page.html.includes(`var ABBR = '${page.state}';`), `${page.file}: state`);
+    assert.ok(page.html.includes(`p_state: ABBR, p_profession: '${page.profession}',`), `${page.file}: profession`);
+    assert.match(page.html, new RegExp(`Get a reminder before your [A-Za-z .]+ ${PROFESSIONS[page.profession].noun} license renews`), page.file);
+    assert.doesNotMatch(/<input type="checkbox" name="updates"[^>]*>/.exec(page.html)[0], /checked/, `${page.file}: the product news box starts unticked`);
+    // Nothing unverified reaches the email facts.
+    assert.ok(page.reminder.lines.every(([, value]) => value !== 'Not yet verified'), page.file);
+    assert.equal(page.reminder.guide, `https://credentialdomd.com${page.path}`);
+  }
 });

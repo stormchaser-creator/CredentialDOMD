@@ -1,0 +1,2019 @@
+{
+ "pa": {
+  "AL": {
+   "name": "Alabama",
+   "guide": "https://credentialdomd.com/states/physician-assistant/alabama",
+   "board": "Alabama Board of Medical Examiners",
+   "boardUrl": "https://www.albme.gov/licensing/pa-aa/license-registration",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every year"
+    ],
+    [
+     "Continuing education",
+     "50 hours every 2 years"
+    ]
+   ]
+  },
+  "AK": {
+   "name": "Alaska",
+   "guide": "https://credentialdomd.com/states/physician-assistant/alaska",
+   "board": "Alaska State Medical Board",
+   "boardUrl": "https://www.commerce.alaska.gov/web/cbpl/ProfessionalLicensing/StateMedicalBoard.aspx",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "Current national certification"
+    ]
+   ]
+  },
+  "AZ": {
+   "name": "Arizona",
+   "guide": "https://credentialdomd.com/states/physician-assistant/arizona",
+   "board": "Arizona Regulatory Board of Physician Assistants",
+   "boardUrl": "https://www.azpa.gov/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "40 hours every 2 years"
+    ]
+   ]
+  },
+  "AR": {
+   "name": "Arkansas",
+   "guide": "https://credentialdomd.com/states/physician-assistant/arkansas",
+   "board": "Arkansas State Medical Board",
+   "boardUrl": "https://www.armedicalboard.org/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every year"
+    ],
+    [
+     "Continuing education",
+     "20 hours every year"
+    ]
+   ]
+  },
+  "CA": {
+   "name": "California",
+   "guide": "https://credentialdomd.com/states/physician-assistant/california",
+   "board": "Physician Assistant Board of California (PAB)",
+   "boardUrl": "https://www.pab.ca.gov/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "Continuing education",
+     "50 hours every 2 years"
+    ]
+   ]
+  },
+  "CO": {
+   "name": "Colorado",
+   "guide": "https://credentialdomd.com/states/physician-assistant/colorado",
+   "board": "Colorado Medical Board (Division of Professions and Occupations, DORA)",
+   "boardUrl": "https://dpo.colorado.gov/Medical",
+   "checked": "October 2026",
+   "lines": []
+  },
+  "CT": {
+   "name": "Connecticut",
+   "guide": "https://credentialdomd.com/states/physician-assistant/connecticut",
+   "board": "Connecticut Department of Public Health (licensing) with the Connecticut Medical Examining Board (discipline)",
+   "boardUrl": "https://portal.ct.gov/dph/practitioner-licensing--investigations/physician-assistant/physician-assistant-licensure",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every year"
+    ],
+    [
+     "Continuing education",
+     "Current national certification"
+    ]
+   ]
+  },
+  "DE": {
+   "name": "Delaware",
+   "guide": "https://credentialdomd.com/states/physician-assistant/delaware",
+   "board": "Delaware Board of Medical Licensure and Discipline, with the Regulatory Council for Physician Associates (Division of Professional Regulation)",
+   "boardUrl": "https://dpr.delaware.gov/boards/medicalpractice/renewal/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "100 hours every 2 years"
+    ]
+   ]
+  },
+  "DC": {
+   "name": "District of Columbia",
+   "guide": "https://credentialdomd.com/states/physician-assistant/district-of-columbia",
+   "board": "District of Columbia Board of Medicine (DC Health)",
+   "boardUrl": "https://dchealth.dc.gov/bomed",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "100 hours every 2 years"
+    ]
+   ]
+  },
+  "FL": {
+   "name": "Florida",
+   "guide": "https://credentialdomd.com/states/physician-assistant/florida",
+   "board": "Florida Board of Medicine (Council on Physician Assistants)",
+   "boardUrl": "https://flboardofmedicine.gov/physician-assistant-renewal/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "100 hours every 2 years"
+    ]
+   ]
+  },
+  "GA": {
+   "name": "Georgia",
+   "guide": "https://credentialdomd.com/states/physician-assistant/georgia",
+   "board": "Georgia Composite Medical Board",
+   "boardUrl": "https://medicalboard.georgia.gov/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "Continuing education",
+     "40 hours every 2 years"
+    ]
+   ]
+  },
+  "HI": {
+   "name": "Hawaii",
+   "guide": "https://credentialdomd.com/states/physician-assistant/hawaii",
+   "board": "Hawaii Medical Board (DCCA Professional and Vocational Licensing)",
+   "boardUrl": "https://cca.hawaii.gov/pvl/boards/medical/physician-assistant-renewal-requirements/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "Continuing education",
+     "40 hours every 2 years"
+    ]
+   ]
+  },
+  "ID": {
+   "name": "Idaho",
+   "guide": "https://credentialdomd.com/states/physician-assistant/idaho",
+   "board": "Idaho State Board of Medicine (Physician Assistant Advisory Committee), Division of Occupational and Professional Licenses",
+   "boardUrl": "https://dopl.idaho.gov/paac/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "Current national certification"
+    ]
+   ]
+  },
+  "IL": {
+   "name": "Illinois",
+   "guide": "https://credentialdomd.com/states/physician-assistant/illinois",
+   "board": "Illinois Department of Financial and Professional Regulation (IDFPR), Illinois State Medical Board",
+   "boardUrl": "https://idfpr.illinois.gov/profs/physicianassistant.html",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "50 hours every 2 years"
+    ]
+   ]
+  },
+  "IN": {
+   "name": "Indiana",
+   "guide": "https://credentialdomd.com/states/physician-assistant/indiana",
+   "board": "Indiana Physician Assistant Committee and Medical Licensing Board of Indiana, Indiana Professional Licensing Agency",
+   "boardUrl": "https://www.in.gov/pla/professions/physician-assistant-home/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "Current national certification"
+    ]
+   ]
+  },
+  "IA": {
+   "name": "Iowa",
+   "guide": "https://credentialdomd.com/states/physician-assistant/iowa",
+   "board": "Iowa Board of Physician Associates (Department of Inspections, Appeals, and Licensing)",
+   "boardUrl": "https://dial.iowa.gov/licenses/health-professions/physician-associates",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "100 hours every 2 years"
+    ]
+   ]
+  },
+  "KS": {
+   "name": "Kansas",
+   "guide": "https://credentialdomd.com/states/physician-assistant/kansas",
+   "board": "Kansas State Board of Healing Arts",
+   "boardUrl": "https://www.ksbha.ks.gov/professions/physician-assistant-p-a",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every year"
+    ],
+    [
+     "Continuing education",
+     "One of several options"
+    ]
+   ]
+  },
+  "KY": {
+   "name": "Kentucky",
+   "guide": "https://credentialdomd.com/states/physician-assistant/kentucky",
+   "board": "Kentucky Board of Medical Licensure",
+   "boardUrl": "https://kbml.ky.gov/ah/Pages/Physician-Assistant.aspx",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "100 hours every 2 years"
+    ]
+   ]
+  },
+  "LA": {
+   "name": "Louisiana",
+   "guide": "https://credentialdomd.com/states/physician-assistant/louisiana",
+   "board": "Louisiana State Board of Medical Examiners (LSBME)",
+   "boardUrl": "https://www.lsbme.la.gov/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every year"
+    ],
+    [
+     "Continuing education",
+     "Current national certification"
+    ]
+   ]
+  },
+  "ME": {
+   "name": "Maine",
+   "guide": "https://credentialdomd.com/states/physician-assistant/maine",
+   "board": "Maine Board of Licensure in Medicine (or Maine Board of Osteopathic Licensure; PA may be licensed by either)",
+   "boardUrl": "https://www.maine.gov/md/licensure/pa-license",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "100 hours every 2 years"
+    ]
+   ]
+  },
+  "MD": {
+   "name": "Maryland",
+   "guide": "https://credentialdomd.com/states/physician-assistant/maryland",
+   "board": "Maryland Board of Physicians",
+   "boardUrl": "https://www.mbp.state.md.us/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "50 hours every 2 years"
+    ]
+   ]
+  },
+  "MA": {
+   "name": "Massachusetts",
+   "guide": "https://credentialdomd.com/states/physician-assistant/massachusetts",
+   "board": "Massachusetts Board of Registration of Physician Assistants",
+   "boardUrl": "https://www.mass.gov/how-to/renew-your-physician-assistant-license",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "Continuing education",
+     "100 hours every 2 years"
+    ]
+   ]
+  },
+  "MI": {
+   "name": "Michigan",
+   "guide": "https://credentialdomd.com/states/physician-assistant/michigan",
+   "board": "Michigan Task Force on Physician's Assistants (LARA Bureau of Professional Licensing)",
+   "boardUrl": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/pa/physician-assistant-licensing-guide-and-faqs",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 3 years"
+    ],
+    [
+     "Continuing education",
+     "No general hour requirement"
+    ]
+   ]
+  },
+  "MN": {
+   "name": "Minnesota",
+   "guide": "https://credentialdomd.com/states/physician-assistant/minnesota",
+   "board": "Minnesota Board of Medical Practice",
+   "boardUrl": "https://mn.gov/boards/medical-practice/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every year"
+    ],
+    [
+     "Continuing education",
+     "50 hours every 2 years"
+    ]
+   ]
+  },
+  "MS": {
+   "name": "Mississippi",
+   "guide": "https://credentialdomd.com/states/physician-assistant/mississippi",
+   "board": "Mississippi State Board of Medical Licensure",
+   "boardUrl": "https://www.msbml.ms.gov/licensure/pa-renewal",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every year"
+    ],
+    [
+     "Continuing education",
+     "100 hours every 2 years"
+    ]
+   ]
+  },
+  "MO": {
+   "name": "Missouri",
+   "guide": "https://credentialdomd.com/states/physician-assistant/missouri",
+   "board": "Missouri State Board of Registration for the Healing Arts (Advisory Commission for Physician Assistants)",
+   "boardUrl": "https://pr.mo.gov/physicianassistants.asp",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "Continuing education",
+     "Current national certification"
+    ]
+   ]
+  },
+  "MT": {
+   "name": "Montana",
+   "guide": "https://credentialdomd.com/states/physician-assistant/montana",
+   "board": "Montana Board of Medical Examiners",
+   "boardUrl": "https://boards.bsd.dli.mt.gov/medical-examiners/license-information/physician-assistant",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ]
+   ]
+  },
+  "NE": {
+   "name": "Nebraska",
+   "guide": "https://credentialdomd.com/states/physician-assistant/nebraska",
+   "board": "Nebraska DHHS Licensure Unit, Board of Medicine and Surgery (Physician Assistant)",
+   "boardUrl": "https://dhhs.ne.gov/licensure/pages/physician-assistant.aspx",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "50 hours every 2 years"
+    ]
+   ]
+  },
+  "NV": {
+   "name": "Nevada",
+   "guide": "https://credentialdomd.com/states/physician-assistant/nevada",
+   "board": "Nevada State Board of Medical Examiners (PAs supervised by MDs; PAs supervised by DOs are licensed by the Nevada State Board of Osteopathic Medicine under NRS 633)",
+   "boardUrl": "https://medboard.nv.gov/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "40 hours every 2 years"
+    ]
+   ]
+  },
+  "NH": {
+   "name": "New Hampshire",
+   "guide": "https://credentialdomd.com/states/physician-assistant/new-hampshire",
+   "board": "New Hampshire Board of Medicine (via the Office of Professional Licensure and Certification); PAs are titled Physician Associates under RSA 328-D",
+   "boardUrl": "https://www.oplc.nh.gov/applications-physician-associate",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "100 hours every 2 years"
+    ]
+   ]
+  },
+  "NJ": {
+   "name": "New Jersey",
+   "guide": "https://credentialdomd.com/states/physician-assistant/new-jersey",
+   "board": "New Jersey State Board of Medical Examiners, Physician Assistant Advisory Committee",
+   "boardUrl": "https://www.njconsumeraffairs.gov/pa",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "50 hours every 2 years"
+    ]
+   ]
+  },
+  "NM": {
+   "name": "New Mexico",
+   "guide": "https://credentialdomd.com/states/physician-assistant/new-mexico",
+   "board": "New Mexico Medical Board",
+   "boardUrl": "https://www.nmmb.state.nm.us/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "Current national certification"
+    ]
+   ]
+  },
+  "NY": {
+   "name": "New York",
+   "guide": "https://credentialdomd.com/states/physician-assistant/new-york",
+   "board": "New York State Education Department, Office of the Professions (State Board for Medicine)",
+   "boardUrl": "https://www.op.nysed.gov/professions/physician-assistants",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 3 years"
+    ]
+   ]
+  },
+  "NC": {
+   "name": "North Carolina",
+   "guide": "https://credentialdomd.com/states/physician-assistant/north-carolina",
+   "board": "North Carolina Medical Board",
+   "boardUrl": "https://www.ncmedboard.org/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every year"
+    ],
+    [
+     "Continuing education",
+     "50 hours every 2 years"
+    ]
+   ]
+  },
+  "ND": {
+   "name": "North Dakota",
+   "guide": "https://credentialdomd.com/states/physician-assistant/north-dakota",
+   "board": "North Dakota Board of Medicine",
+   "boardUrl": "https://www.ndbom.org/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "Current national certification"
+    ]
+   ]
+  },
+  "OH": {
+   "name": "Ohio",
+   "guide": "https://credentialdomd.com/states/physician-assistant/ohio",
+   "board": "State Medical Board of Ohio",
+   "boardUrl": "https://med.ohio.gov/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "100 hours every 2 years"
+    ]
+   ]
+  },
+  "OK": {
+   "name": "Oklahoma",
+   "guide": "https://credentialdomd.com/states/physician-assistant/oklahoma",
+   "board": "Oklahoma State Board of Medical Licensure and Supervision (Physician Assistant Advisory Committee)",
+   "boardUrl": "https://www.okmedicalboard.org/physician_assistants",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every year"
+    ],
+    [
+     "Continuing education",
+     "20 hours every year"
+    ]
+   ]
+  },
+  "OR": {
+   "name": "Oregon",
+   "guide": "https://credentialdomd.com/states/physician-assistant/oregon",
+   "board": "Oregon Medical Board",
+   "boardUrl": "https://www.oregon.gov/omb/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "60 hours every 2 years"
+    ]
+   ]
+  },
+  "PA": {
+   "name": "Pennsylvania",
+   "guide": "https://credentialdomd.com/states/physician-assistant/pennsylvania",
+   "board": "Pennsylvania State Board of Medicine (PAs supervised by MDs); State Board of Osteopathic Medicine licenses PAs supervised by DOs",
+   "boardUrl": "https://www.pa.gov/agencies/dos/department-and-offices/bpoa/boards-commissions/medicine",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "Current national certification"
+    ]
+   ]
+  },
+  "RI": {
+   "name": "Rhode Island",
+   "guide": "https://credentialdomd.com/states/physician-assistant/rhode-island",
+   "board": "Rhode Island Board of Licensure for Physician Assistants (RI Department of Health)",
+   "boardUrl": "https://health.ri.gov/licensing/physician-assistant",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "25 hours every year"
+    ]
+   ]
+  },
+  "SC": {
+   "name": "South Carolina",
+   "guide": "https://credentialdomd.com/states/physician-assistant/south-carolina",
+   "board": "South Carolina Board of Medical Examiners (LLR), advised by the Physician Assistant Committee",
+   "boardUrl": "https://llr.sc.gov/med/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "Current national certification"
+    ]
+   ]
+  },
+  "SD": {
+   "name": "South Dakota",
+   "guide": "https://credentialdomd.com/states/physician-assistant/south-dakota",
+   "board": "South Dakota Board of Medical and Osteopathic Examiners (SDBMOE), with a Physician Assistant Council",
+   "boardUrl": "https://sdbmoe.gov/professions-physician-assistant-pa/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every year"
+    ],
+    [
+     "Continuing education",
+     "30 hours every year"
+    ]
+   ]
+  },
+  "TN": {
+   "name": "Tennessee",
+   "guide": "https://credentialdomd.com/states/physician-assistant/tennessee",
+   "board": "Tennessee Board of Physician Assistants (formerly the Committee on Physician Assistants of the Board of Medical Examiners)",
+   "boardUrl": "https://www.tn.gov/health/licensure/pa.html",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "100 hours every 2 years"
+    ]
+   ]
+  },
+  "TX": {
+   "name": "Texas",
+   "guide": "https://credentialdomd.com/states/physician-assistant/texas",
+   "board": "Texas Physician Assistant Board (administered by the Texas Medical Board)",
+   "boardUrl": "https://www.tmb.texas.gov/apply-renew/physician-assistant",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "40 hours every 2 years"
+    ]
+   ]
+  },
+  "UT": {
+   "name": "Utah",
+   "guide": "https://credentialdomd.com/states/physician-assistant/utah",
+   "board": "Utah Division of Professional Licensing (DOPL), Physician Assistant Licensing Board",
+   "boardUrl": "https://commerce.utah.gov/dopl/physician-assistant/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "40 hours every 2 years"
+    ]
+   ]
+  },
+  "VT": {
+   "name": "Vermont",
+   "guide": "https://credentialdomd.com/states/physician-assistant/vermont",
+   "board": "Vermont Board of Medical Practice (Department of Health)",
+   "boardUrl": "https://www.healthvermont.gov/systems/board-medical-practice",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "100 hours every 2 years"
+    ]
+   ]
+  },
+  "VA": {
+   "name": "Virginia",
+   "guide": "https://credentialdomd.com/states/physician-assistant/virginia",
+   "board": "Virginia Board of Medicine (Department of Health Professions)",
+   "boardUrl": "https://www.dhp.virginia.gov/Boards/Medicine/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "Current national certification"
+    ]
+   ]
+  },
+  "WA": {
+   "name": "Washington",
+   "guide": "https://credentialdomd.com/states/physician-assistant/washington",
+   "board": "Washington Medical Commission",
+   "boardUrl": "https://wmc.wa.gov/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "100 hours every 2 years"
+    ]
+   ]
+  },
+  "WV": {
+   "name": "West Virginia",
+   "guide": "https://credentialdomd.com/states/physician-assistant/west-virginia",
+   "board": "West Virginia Board of Medicine (PAs collaborating with osteopathic physicians may instead be licensed by the WV Board of Osteopathic Medicine)",
+   "boardUrl": "https://wvbom.wv.gov/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "100 hours every 2 years"
+    ]
+   ]
+  },
+  "WI": {
+   "name": "Wisconsin",
+   "guide": "https://credentialdomd.com/states/physician-assistant/wisconsin",
+   "board": "Wisconsin Physician Assistant Affiliated Credentialing Board (attached to the Medical Examining Board; administered by DSPS)",
+   "boardUrl": "https://dsps.wi.gov/a-z-professions-list/physician-assistant-pa/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every 2 years"
+    ],
+    [
+     "Continuing education",
+     "30 hours every 2 years"
+    ]
+   ]
+  },
+  "WY": {
+   "name": "Wyoming",
+   "guide": "https://credentialdomd.com/states/physician-assistant/wyoming",
+   "board": "Wyoming Board of Medicine (with a physician assistant advisory council)",
+   "boardUrl": "https://wyomedboard.wyo.gov/physician-assistants",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "License renews",
+     "every year"
+    ],
+    [
+     "Continuing education",
+     "60 hours every 3 years"
+    ]
+   ]
+  }
+ },
+ "np": {
+  "AL": {
+   "name": "Alabama",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/alabama",
+   "board": "Alabama Board of Nursing (collaboration jointly with the Alabama Board of Medical Examiners)",
+   "boardUrl": "https://www.abn.alabama.gov/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "24 contact hours every 2 years"
+    ]
+   ]
+  },
+  "AK": {
+   "name": "Alaska",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/alaska",
+   "board": "Alaska Board of Nursing",
+   "boardUrl": "https://www.commerce.alaska.gov/web/cbpl/ProfessionalLicensing/BoardofNursing.aspx",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "One of several options"
+    ]
+   ]
+  },
+  "AZ": {
+   "name": "Arizona",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/arizona",
+   "board": "Arizona State Board of Nursing",
+   "boardUrl": "https://www.azbn.gov/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 4 years"
+    ],
+    [
+     "RN continuing education",
+     "No general hour requirement"
+    ]
+   ]
+  },
+  "AR": {
+   "name": "Arkansas",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/arkansas",
+   "board": "Arkansas State Board of Nursing (ASBN)",
+   "boardUrl": "https://healthy.arkansas.gov/boards-commissions/boards/nursing-arkansas-state-board/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "One of several options"
+    ]
+   ]
+  },
+  "CA": {
+   "name": "California",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/california",
+   "board": "California Board of Registered Nursing (BRN)",
+   "boardUrl": "https://www.rn.ca.gov/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN continuing education",
+     "No general hour requirement"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "30 contact hours every 2 years"
+    ]
+   ]
+  },
+  "CO": {
+   "name": "Colorado",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/colorado",
+   "board": "Colorado State Board of Nursing (Division of Professions and Occupations, DORA)",
+   "boardUrl": "https://dpo.colorado.gov/Nursing",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "No general hour requirement"
+    ],
+    [
+     "RN continuing education",
+     "No general hour requirement"
+    ]
+   ]
+  },
+  "CT": {
+   "name": "Connecticut",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/connecticut",
+   "board": "Connecticut Department of Public Health with the Connecticut State Board of Examiners for Nursing",
+   "boardUrl": "https://portal.ct.gov/dph/practitioner-licensing--investigations/aprn/advanced-practice-registered-nurse-licensure",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every year"
+    ],
+    [
+     "APRN continuing education",
+     "50 contact hours every 2 years"
+    ],
+    [
+     "RN license renews",
+     "every year"
+    ],
+    [
+     "RN continuing education",
+     "No general hour requirement"
+    ]
+   ]
+  },
+  "DE": {
+   "name": "Delaware",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/delaware",
+   "board": "Delaware Board of Nursing (Division of Professional Regulation)",
+   "boardUrl": "https://dpr.delaware.gov/boards/nursing/renewal/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "30 contact hours every 2 years"
+    ]
+   ]
+  },
+  "DC": {
+   "name": "District of Columbia",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/district-of-columbia",
+   "board": "District of Columbia Board of Nursing (DC Health)",
+   "boardUrl": "https://dchealth.dc.gov/bon",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "15 contact hours every 2 years"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "24 contact hours every 2 years"
+    ]
+   ]
+  },
+  "FL": {
+   "name": "Florida",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/florida",
+   "board": "Florida Board of Nursing",
+   "boardUrl": "https://floridasnursing.gov/advanced-practice-registered-nurse-renewal/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN continuing education",
+     "24 contact hours every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "24 contact hours every 2 years"
+    ]
+   ]
+  },
+  "GA": {
+   "name": "Georgia",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/georgia",
+   "board": "Georgia Board of Nursing",
+   "boardUrl": "https://sos.ga.gov/page/nursing-renewal-information",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN continuing education",
+     "One of several options"
+    ]
+   ]
+  },
+  "HI": {
+   "name": "Hawaii",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/hawaii",
+   "board": "Hawaii Board of Nursing (DCCA Professional and Vocational Licensing)",
+   "boardUrl": "https://cca.hawaii.gov/pvl/boards/nursing/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "30 contact hours every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "One of several options"
+    ]
+   ]
+  },
+  "ID": {
+   "name": "Idaho",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/idaho",
+   "board": "Idaho Board of Nursing, Division of Occupational and Professional Licenses",
+   "boardUrl": "https://dopl.idaho.gov/bon/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "No general hour requirement"
+    ]
+   ]
+  },
+  "IL": {
+   "name": "Illinois",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/illinois",
+   "board": "Illinois Department of Financial and Professional Regulation (IDFPR), Board of Nursing",
+   "boardUrl": "https://idfpr.illinois.gov/profs/nursing.html",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "80 contact hours every 2 years"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "20 contact hours every 2 years"
+    ]
+   ]
+  },
+  "IN": {
+   "name": "Indiana",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/indiana",
+   "board": "Indiana State Board of Nursing, Indiana Professional Licensing Agency",
+   "boardUrl": "https://www.in.gov/pla/professions/nursing-home/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "30 contact hours every 2 years"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "No general hour requirement"
+    ]
+   ]
+  },
+  "IA": {
+   "name": "Iowa",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/iowa",
+   "board": "Iowa Board of Nursing (Department of Inspections, Appeals, and Licensing)",
+   "boardUrl": "https://dial.iowa.gov/licenses/health-professions/nursing-professional-midwifery",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 3 years"
+    ],
+    [
+     "RN continuing education",
+     "36 contact hours every 3 years"
+    ]
+   ]
+  },
+  "KS": {
+   "name": "Kansas",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/kansas",
+   "board": "Kansas State Board of Nursing",
+   "boardUrl": "https://ksbn.kansas.gov/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "30 contact hours every 2 years"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "30 contact hours every 2 years"
+    ]
+   ]
+  },
+  "KY": {
+   "name": "Kentucky",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/kentucky",
+   "board": "Kentucky Board of Nursing",
+   "boardUrl": "https://kbn.ky.gov/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every year"
+    ],
+    [
+     "RN continuing education",
+     "One of several options"
+    ]
+   ]
+  },
+  "LA": {
+   "name": "Louisiana",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/louisiana",
+   "board": "Louisiana State Board of Nursing (LSBN)",
+   "boardUrl": "https://www.lsbn.state.la.us/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "One of several options"
+    ]
+   ]
+  },
+  "ME": {
+   "name": "Maine",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/maine",
+   "board": "Maine State Board of Nursing",
+   "boardUrl": "https://www.maine.gov/boardofnursing/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN continuing education",
+     "50 contact hours every 2 years"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "No general hour requirement"
+    ]
+   ]
+  },
+  "MD": {
+   "name": "Maryland",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/maryland",
+   "board": "Maryland Board of Nursing",
+   "boardUrl": "https://health.maryland.gov/mbon/Pages/default.aspx",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "One of several options"
+    ]
+   ]
+  },
+  "MA": {
+   "name": "Massachusetts",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/massachusetts",
+   "board": "Massachusetts Board of Registration in Nursing",
+   "boardUrl": "https://www.mass.gov/how-to/renew-your-nursing-license",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN continuing education",
+     "15 contact hours every 2 years"
+    ]
+   ]
+  },
+  "MI": {
+   "name": "Michigan",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/michigan",
+   "board": "Michigan Board of Nursing (LARA Bureau of Professional Licensing)",
+   "boardUrl": "https://www.michigan.gov/lara/bureau-list/bpl/health/hp-lic-health-prof/nursing/nursing-licensing-guide-and-faqs",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "25 contact hours every 2 years"
+    ]
+   ]
+  },
+  "MN": {
+   "name": "Minnesota",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/minnesota",
+   "board": "Minnesota Board of Nursing",
+   "boardUrl": "https://mn.gov/boards/nursing/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "24 contact hours every 2 years"
+    ]
+   ]
+  },
+  "MS": {
+   "name": "Mississippi",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/mississippi",
+   "board": "Mississippi Board of Nursing",
+   "boardUrl": "https://www.msbn.ms.gov/licensure/advanced-practice-registered-nurse",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "No general hour requirement"
+    ]
+   ]
+  },
+  "MO": {
+   "name": "Missouri",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/missouri",
+   "board": "Missouri State Board of Nursing",
+   "boardUrl": "https://pr.mo.gov/nursing.asp",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ]
+   ]
+  },
+  "MT": {
+   "name": "Montana",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/montana",
+   "board": "Montana Board of Nursing",
+   "boardUrl": "https://boards.bsd.dli.mt.gov/nursing/license-information/aprn",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "No general hour requirement"
+    ]
+   ]
+  },
+  "NE": {
+   "name": "Nebraska",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/nebraska",
+   "board": "Nebraska DHHS Licensure Unit, Nebraska State Board of Nursing / APRN Board",
+   "boardUrl": "https://dhhs.ne.gov/licensure/Pages/Nurse-Licensing-Renewal-and-Continuing-Education.aspx",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "One of several options"
+    ]
+   ]
+  },
+  "NV": {
+   "name": "Nevada",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/nevada",
+   "board": "Nevada State Board of Nursing",
+   "boardUrl": "https://nevadanursingboard.org/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "45 contact hours every 2 years"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "30 contact hours every 2 years"
+    ]
+   ]
+  },
+  "NH": {
+   "name": "New Hampshire",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/new-hampshire",
+   "board": "New Hampshire Board of Nursing (via the Office of Professional Licensure and Certification)",
+   "boardUrl": "https://www.oplc.nh.gov/board-nursing-laws-and-rules",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "30 contact hours every 2 years"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "30 contact hours every 2 years"
+    ]
+   ]
+  },
+  "NJ": {
+   "name": "New Jersey",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/new-jersey",
+   "board": "New Jersey Board of Nursing",
+   "boardUrl": "https://www.njconsumeraffairs.gov/nur",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "30 contact hours every 2 years"
+    ]
+   ]
+  },
+  "NM": {
+   "name": "New Mexico",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/new-mexico",
+   "board": "New Mexico Board of Nursing",
+   "boardUrl": "https://www.bon.nm.gov/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "30 contact hours every 2 years"
+    ]
+   ]
+  },
+  "NY": {
+   "name": "New York",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/new-york",
+   "board": "New York State Education Department, Office of the Professions (State Board for Nursing)",
+   "boardUrl": "https://www.op.nysed.gov/professions/nurse-practitioners",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 3 years"
+    ],
+    [
+     "RN license renews",
+     "every 3 years"
+    ]
+   ]
+  },
+  "NC": {
+   "name": "North Carolina",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/north-carolina",
+   "board": "North Carolina Board of Nursing (NP approval jointly with the North Carolina Medical Board)",
+   "boardUrl": "https://www.ncbon.com/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every year"
+    ],
+    [
+     "APRN continuing education",
+     "50 contact hours every 2 years"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "One of several options"
+    ]
+   ]
+  },
+  "ND": {
+   "name": "North Dakota",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/north-dakota",
+   "board": "North Dakota Board of Nursing",
+   "boardUrl": "https://www.ndbon.org/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "12 contact hours every 2 years"
+    ]
+   ]
+  },
+  "OH": {
+   "name": "Ohio",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/ohio",
+   "board": "Ohio Board of Nursing",
+   "boardUrl": "https://nursing.ohio.gov/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "24 contact hours every 2 years"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "24 contact hours every 2 years"
+    ]
+   ]
+  },
+  "OK": {
+   "name": "Oklahoma",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/oklahoma",
+   "board": "Oklahoma Board of Nursing",
+   "boardUrl": "https://oklahoma.gov/nursing.html",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "One of several options"
+    ]
+   ]
+  },
+  "OR": {
+   "name": "Oregon",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/oregon",
+   "board": "Oregon State Board of Nursing",
+   "boardUrl": "https://www.oregon.gov/osbn/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "No general hour requirement"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "No general hour requirement"
+    ]
+   ]
+  },
+  "PA": {
+   "name": "Pennsylvania",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/pennsylvania",
+   "board": "Pennsylvania State Board of Nursing",
+   "boardUrl": "https://www.pa.gov/agencies/dos/department-and-offices/bpoa/boards-commissions/nursing",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "30 contact hours every 2 years"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "30 contact hours every 2 years"
+    ]
+   ]
+  },
+  "RI": {
+   "name": "Rhode Island",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/rhode-island",
+   "board": "Rhode Island Board of Nurse Registration and Nursing Education (RI Department of Health)",
+   "boardUrl": "https://health.ri.gov/licensing/nurses",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN continuing education",
+     "10 contact hours every 2 years"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "10 contact hours every 2 years"
+    ]
+   ]
+  },
+  "SC": {
+   "name": "South Carolina",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/south-carolina",
+   "board": "South Carolina State Board of Nursing (LLR)",
+   "boardUrl": "https://llr.sc.gov/nurse/aprn.aspx",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "One of several options"
+    ]
+   ]
+  },
+  "SD": {
+   "name": "South Dakota",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/south-dakota",
+   "board": "South Dakota Board of Nursing (CNP practice also governed by SDCL 36-9A)",
+   "boardUrl": "https://www.sdbon.org/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "No general hour requirement"
+    ]
+   ]
+  },
+  "TN": {
+   "name": "Tennessee",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/tennessee",
+   "board": "Tennessee Board of Nursing",
+   "boardUrl": "https://www.tn.gov/health/licensure/nurs.html",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "One of several options"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "One of several options"
+    ]
+   ]
+  },
+  "TX": {
+   "name": "Texas",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/texas",
+   "board": "Texas Board of Nursing",
+   "boardUrl": "https://www.bon.texas.gov/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "20 contact hours every 2 years"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "20 contact hours every 2 years"
+    ]
+   ]
+  },
+  "UT": {
+   "name": "Utah",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/utah",
+   "board": "Utah Division of Professional Licensing (DOPL), Board of Nursing and Certified Nurse Midwives",
+   "boardUrl": "https://commerce.utah.gov/dopl/nursing/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "One of several options"
+    ]
+   ]
+  },
+  "VT": {
+   "name": "Vermont",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/vermont",
+   "board": "Vermont State Board of Nursing (Office of Professional Regulation, Secretary of State)",
+   "boardUrl": "https://sos.vermont.gov/nursing/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "One of several options"
+    ]
+   ]
+  },
+  "VA": {
+   "name": "Virginia",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/virginia",
+   "board": "Virginia Board of Nursing and Committee of the Joint Boards of Nursing and Medicine (Department of Health Professions)",
+   "boardUrl": "https://www.dhp.virginia.gov/Boards/Nursing/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "One of several options"
+    ]
+   ]
+  },
+  "WA": {
+   "name": "Washington",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/washington",
+   "board": "Washington State Board of Nursing (formerly Nursing Care Quality Assurance Commission)",
+   "boardUrl": "https://nursing.wa.gov/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "30 contact hours every 2 years"
+    ],
+    [
+     "RN license renews",
+     "every year"
+    ],
+    [
+     "RN continuing education",
+     "8 contact hours every year"
+    ]
+   ]
+  },
+  "WV": {
+   "name": "West Virginia",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/west-virginia",
+   "board": "West Virginia Board of Registered Nurses (WV RN Board)",
+   "boardUrl": "https://wvrnboard.wv.gov/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "24 contact hours every 2 years"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "12 contact hours every 2 years"
+    ]
+   ]
+  },
+  "WI": {
+   "name": "Wisconsin",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/wisconsin",
+   "board": "Wisconsin Board of Nursing (administered by DSPS)",
+   "boardUrl": "https://dsps.wi.gov/a-z-professions-list/advanced-practice-registered-nurse-aprn/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "16 contact hours every 2 years"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "No general hour requirement"
+    ]
+   ]
+  },
+  "WY": {
+   "name": "Wyoming",
+   "guide": "https://credentialdomd.com/states/nurse-practitioner/wyoming",
+   "board": "Wyoming State Board of Nursing (WSBN)",
+   "boardUrl": "https://wsbn.wyo.gov/",
+   "checked": "October 2026",
+   "lines": [
+    [
+     "APRN license renews",
+     "every 2 years"
+    ],
+    [
+     "APRN continuing education",
+     "Current national certification"
+    ],
+    [
+     "RN license renews",
+     "every 2 years"
+    ],
+    [
+     "RN continuing education",
+     "One of several options"
+    ]
+   ]
+  }
+ }
+}

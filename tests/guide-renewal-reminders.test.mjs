@@ -25,6 +25,9 @@ import { GUIDE_REMINDERS, OPT_OUT_LISTS, mintUnsubscribeToken, verifyUnsubscribe
 const read = rel => fs.readFileSync(new URL(`../${rel}`, import.meta.url), 'utf8');
 const MIGRATION_PATH = 'supabase/migrations/20261119120000_guide_renewal_reminders.sql';
 const ROLLBACK_PATH = 'docs/rollback/20261119120000_guide_renewal_reminders.rollback.sql';
+const PROFESSIONS_PATH = 'supabase/migrations/20261119180000_guide_reminder_professions.sql';
+const PROFESSIONS_ROLLBACK_PATH = 'docs/rollback/20261119180000_guide_reminder_professions.rollback.sql';
+const PROFESSION_GUIDES = JSON.parse(read('supabase/functions/send-guide-reminders/professionGuides.json'));
 const GUIDES = JSON.parse(read('supabase/functions/send-guide/stateGuides.json'));
 const SECRET = 'test-secret-test-secret-test-secret-0123';
 const ID = '11111111-2222-4333-8444-555555555555';
@@ -296,4 +299,85 @@ test('signup bounds, claim stages, the 6 day bound and unsubscribe', { skip: pgS
   await pg.sql(read(ROLLBACK_PATH));
   assert.equal((await pg.tryRun(`select public.guide_reminder_signup('z@example.invalid', 'TX', current_date + 30, false, null, null)`)).ok, false);
   assert.equal(Number(await pg.sql(`select count(*) from public.guide_renewal_reminders`)), before);
+});
+
+test('the PA and NP reminder email is the approved wording, built only from verified facts', () => {
+  const base = { to: 'reader@example.invalid', stage: 90, renewalDate: '2029-04-30', unsubscribeUrl: 'https://credentialdomd.com/api/unsubscribe?t=abc' };
+  const pa = buildGuideReminderEmail({ ...base, profession: 'pa', guide: PROFESSION_GUIDES.pa.TX });
+  assert.equal(pa.subject, 'Your Texas physician assistant license renews April 30, 2029');
+  assert.equal(pa.text, [
+    'You asked for a reminder about your Texas physician assistant license. You told us it renews on April 30, 2029, which is about three months from now.',
+    '',
+    'License renews: every 2 years',
+    'Continuing education: 40 hours every 2 years',
+    'Board: Texas Physician Assistant Board (administered by the Texas Medical Board)',
+    PROFESSION_GUIDES.pa.TX.boardUrl,
+    '',
+    "The full Texas physician assistant guide has the required topics, the certification and practice rules and the board's own sources, checked October 2026:",
+    'https://credentialdomd.com/states/physician-assistant/texas',
+    '',
+    'Eric Whitney, DO',
+    'CredentialDOMD',
+    '',
+    'You are receiving this because you asked for a Texas renewal reminder at credentialdomd.com. Stop these reminders: https://credentialdomd.com/api/unsubscribe?t=abc',
+  ].join('\n'));
+  const np = buildGuideReminderEmail({ ...base, profession: 'np', guide: PROFESSION_GUIDES.np.TX });
+  assert.equal(np.subject, 'Your Texas nurse practitioner license renews April 30, 2029');
+  assert.match(np.text, /about your Texas nurse practitioner license\./);
+  assert.match(np.text, /APRN license renews: every 2 years\nAPRN continuing education: 20 contact hours every 2 years\nRN license renews: every 2 years\nRN continuing education: 20 contact hours every 2 years\nBoard: Texas Board of Nursing\n/);
+  assert.match(np.text, /The full Texas nurse practitioner guide has the required topics/);
+  // A value that is not verified is left out, never printed as such.
+  const ca = buildGuideReminderEmail({ ...base, profession: 'np', guide: PROFESSION_GUIDES.np.CA });
+  assert.doesNotMatch(ca.text, /APRN license renews/);
+  assert.match(ca.text, /RN license renews: every 2 years/);
+  // Every PA and NP entry builds at every stage, with no fee, no unverified wording and no physician wording.
+  for (const profession of ['pa', 'np']) {
+    assert.equal(Object.keys(PROFESSION_GUIDES[profession]).length, 51);
+    for (const [st, guide] of Object.entries(PROFESSION_GUIDES[profession])) for (const stage of [90, 30, 7]) {
+      const m = buildGuideReminderEmail({ ...base, stage, profession, guide, productUpdates: true, mailingAddress: '1 Example Way, Springfield, CA 90000' });
+      assert.doesNotMatch(m.text, /not yet verified|medical license|Fee:|Renew at:|undefined|null/i, `${profession} ${st}`);
+      assert.doesNotMatch(m.text.replace(/https?:\/\/\S+/g, ''), /[\u2013\u2014]/, `${profession} ${st}`);
+      assert.match(m.html, /Stop these reminders/, `${profession} ${st}`);
+    }
+  }
+  assert.throws(() => buildGuideReminderEmail({ ...base, profession: 'dentist', guide: PROFESSION_GUIDES.pa.TX }), /profession/);
+  assert.throws(() => buildGuideReminderEmail({ ...base, profession: 'pa', guide: GUIDES.TX }), /state guide/, 'a physician entry is not a PA guide');
+  assert.match(read('supabase/functions/send-guide-reminders/index.ts'), /profession === "physician" \? \(stateGuides as Record<string, any>\)\[row\.state\] : \(professionGuides as Record<string, any>\)\[profession\]\?\.\[row\.state\]/);
+});
+
+test('a PA or NP signup is its own row; physician pages that send no profession still work', { skip: pgSkip(), timeout: withSlotWait(180000) }, async t => {
+  for (const rel of [PROFESSIONS_PATH, PROFESSIONS_ROLLBACK_PATH]) assert.doesNotMatch(read(rel), /^\s*(begin|commit|rollback)\s*;/im, `${rel} has a top-level transaction statement`);
+  const pg = await startPostgres(57223, 'gr-prof') // a longer label makes the socket path too long to bind;
+  t.after(() => pg.close());
+  await pg.sql(BASE);
+  // What the migration restates and this file does not exercise.
+  await pg.sql(`create table public.owner_notify_stub(); create or replace function public.owner_notify_rows(p_since timestamptz) returns void language sql as 'select'`);
+  await pg.sql(read(MIGRATION_PATH));
+  await signup(pg, 'old@example.invalid', 'CO', 'current_date + 200', true);
+  const applied = await pg.tryRun(read(PROFESSIONS_PATH).replace(/create or replace function public\.owner_notify_rows[\s\S]*?end \$fn\$;/, '').replace(/revoke all on function public\.owner_notify_rows[^;]*;/, ''));
+  assert.equal(applied.ok, true, applied.err);
+  assert.equal(await pg.sql(`select count(*) from pg_proc where proname = 'guide_reminder_signup'`), '1', 'one signup function, so a call by name is never ambiguous');
+  const named = (email, extra = '') => pg.tryRun(`set role anon; select public.guide_reminder_signup(p_email => '${email}', p_state => 'CO', p_renewal_date => current_date + 30, p_product_updates => false, p_source => '/states/x', p_flags => null${extra})`);
+  // A physician guide sends six named arguments and no profession.
+  assert.equal((await named('old@example.invalid')).ok, true);
+  assert.equal((await named('same@example.invalid')).ok, true);
+  assert.equal((await named('same@example.invalid', ", p_profession => 'pa'")).ok, true);
+  assert.equal((await named('same@example.invalid', ", p_profession => 'NP'")).ok, true);
+  assert.equal((await named('same@example.invalid', ", p_profession => 'dentist'")).ok, false);
+  assert.deepEqual(await pg.rows(`select profession, count(*)::int n from public.guide_renewal_reminders group by 1 order by 1`), [{ profession: 'np', n: 1 }, { profession: 'pa', n: 1 }, { profession: 'physician', n: 2 }]);
+  // The existing row was updated, not duplicated, and the claim hands the profession to the sender.
+  assert.equal((await rowsOf(pg, 'old@example.invalid')).length, 1);
+  await pg.sql(`update public.guide_reminder_settings set enabled = true`);
+  const got = await claim(pg);
+  assert.ok(got.every(r => ['physician', 'pa', 'np'].includes(r.profession)));
+  assert.equal(got.filter(r => r.email === 'same@example.invalid').length, 2, 'at most two rows for one address in a sweep');
+  // Unsubscribing stops every profession's reminders to that address.
+  await pg.sql(`select public.guide_reminder_unsubscribe('${got.find(r => r.email === 'same@example.invalid').id}', 'page')`);
+  assert.ok((await rowsOf(pg, 'same@example.invalid')).every(r => r.stopped));
+  // The rollback restores the six argument signup and keeps the rows.
+  const rolled = await pg.tryRun(read(PROFESSIONS_ROLLBACK_PATH).replace(/create or replace function public\.owner_notify_rows[\s\S]*?end \$fn\$;/, '').replace(/revoke all on function public\.owner_notify_rows[^;]*;/, ''));
+  assert.equal(rolled.ok, true, rolled.err);
+  assert.equal((await named('after@example.invalid')).ok, true);
+  assert.equal((await named('after@example.invalid', ", p_profession => 'pa'")).ok, false);
+  assert.equal(Number(await pg.sql(`select count(*) from public.guide_renewal_reminders where profession <> 'physician'`)), 2);
 });

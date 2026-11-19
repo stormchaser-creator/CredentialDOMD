@@ -238,7 +238,34 @@ function shell() {
   const beacon = between('<!-- First-party visit beacon', '<!--/email_off-->');
   const redirect = /<script id="https-redirect">[\s\S]*?<\/script>/.exec(t)?.[0];
   if (!redirect) throw Error('state template is missing the https redirect');
-  return { style, nav, footer, beacon, redirect };
+  // The renewal reminder form and its script, the same ones the physician
+  // guides carry (guide_reminder_signup). reminderParts() fits them to a page.
+  const reminderForm = between('<!-- RENEWAL REMINDER', '<!-- GUIDE EMAIL CAPTURE (primary) -->');
+  const reminderScript = between('<!-- Renewal reminder signup', '<script>\n// FAQ Accordion');
+  return { style, nav, footer, beacon, redirect, reminderForm, reminderScript };
+}
+
+/** One exact replacement, or the build stops: the physician template changed under us. */
+function swap(text, from, to) {
+  if (text.split(from).length !== 2) throw Error(`state template reminder block changed: expected one "${from}"`);
+  return text.replace(from, to);
+}
+/** The reminder form and script for one PA or NP page: its license name, state and profession. */
+function reminderParts(parts, m) {
+  const form = swap(parts.reminderForm, 'before your {{STATE_NAME}} license renews', `before your ${esc(m.state.name)} ${esc(m.P.noun)} license renews`);
+  let script = swap(parts.reminderScript, "var ABBR = '{{STATE_ABBREVIATION}}';", `var ABBR = '${m.state.abbreviation}';`);
+  script = swap(script, 'p_state: ABBR,', `p_state: ABBR, p_profession: '${m.profession}',`);
+  if (/\{\{[A-Z_]+\}\}/.test(form + script)) throw Error('unfilled placeholder in the reminder form');
+  return { form, script };
+}
+
+/** What the reminder email says about one license: only values the data marks verified. */
+function reminderEntry(m) {
+  return {
+    name: m.state.name, guide: `https://credentialdomd.com${m.path}`, board: m.board, boardUrl: httpsUrl(m.boardUrl),
+    checked: monthYear(m.verified),
+    lines: m.glance.filter(([label, value]) => label !== 'Board' && label !== 'License' && value !== CE_UNVERIFIED),
+  };
 }
 
 /** Everything one page says, before it becomes HTML. Exported for the tests. */
@@ -283,6 +310,8 @@ export function guideModel(profession, state, { index = ledgerIndex(state.abbrev
 
 function renderPage(m, parts) {
   const { state, P, profession } = m;
+  // No reminder on a page that has no verified rules to remind about.
+  const reminder = m.indexable ? reminderParts(parts, m) : { form: '', script: '' };
   const other = profession === 'pa' ? PROFESSIONS.np : PROFESSIONS.pa;
   const when = monthYear(m.verified);
   const url = `https://credentialdomd.com${m.path}`;
@@ -369,6 +398,7 @@ ${m.glance.map(([k, v]) => `      <div class="fact-item">\n        <span class="
   </div>
 </section>
 
+${reminder.form}
 ${m.sections.join('\n\n')}
 
 ${m.practiceHtml}
@@ -397,7 +427,7 @@ ${m.openHtml}
 ${sources}
 
 ${footer}
-${parts.beacon}<!--/email_off--></body>
+${reminder.script}${parts.beacon}<!--/email_off--></body>
 </html>
 `;
 }
@@ -410,14 +440,23 @@ export function buildProfessionGuides() {
   for (const profession of Object.keys(PROFESSIONS)) {
     for (const state of states) {
       const m = guideModel(profession, state);
-      pages.push({ file: m.file, path: m.path, html: renderPage(m, parts), indexable: m.indexable, updatedAt: `${m.verified}-01`, profession, state: state.abbreviation });
+      pages.push({ file: m.file, path: m.path, html: renderPage(m, parts), indexable: m.indexable, updatedAt: `${m.verified}-01`, profession, state: state.abbreviation, reminder: reminderEntry(m) });
     }
   }
   return pages;
 }
 
+/** The facts the reminder sender needs, by profession and state. */
+export const REMINDER_GUIDES_FILE = 'supabase/functions/send-guide-reminders/professionGuides.json';
+export function reminderGuidesJson(pages) {
+  const out = { pa: {}, np: {} };
+  for (const page of pages) out[page.profession][page.state] = page.reminder;
+  return JSON.stringify(out, null, 1) + '\n';
+}
+
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const pages = buildProfessionGuides();
+  const built = buildProfessionGuides();
+  const pages = [...built, { file: REMINDER_GUIDES_FILE, html: reminderGuidesJson(built), indexable: true }];
   const check = process.argv.includes('--check');
   let stale = 0;
   for (const page of pages) {
@@ -428,5 +467,5 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
     if (!check) { fs.mkdirSync(path.dirname(full), { recursive: true }); fs.writeFileSync(full, page.html); }
   }
   if (check && stale) { console.error(`${stale} profession guide pages are stale; run node scripts/build-profession-guides.mjs`); process.exit(1); }
-  console.log(`${pages.length} profession guides, ${pages.filter(p => !p.indexable).length} kept out of search, ${check ? 'all current' : `${stale} written`}`);
+  console.log(`${built.length} profession guides, ${built.filter(p => !p.indexable).length} kept out of search, ${check ? 'all current' : `${stale} written`}`);
 }

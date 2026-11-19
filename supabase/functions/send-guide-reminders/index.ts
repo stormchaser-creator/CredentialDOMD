@@ -22,6 +22,7 @@
 import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import stateGuides from "../send-guide/stateGuides.json" with { type: "json" };
+import professionGuides from "./professionGuides.json" with { type: "json" };
 import { GUIDE_REMINDERS, UNSUBSCRIBE_BASE, listUnsubscribeHeaders, unsubscribeUrl } from "../_shared/emailUnsubscribe.mjs";
 import { buildGuideReminderEmail, guideReminderKey } from "../_shared/guideReminderEmail.mjs";
 
@@ -61,8 +62,10 @@ async function handle(req: Request) {
     if (Date.now() > deadline - 12000) { deferred = rows.length - index; break; }
     let outcome: "sent" | "retry" | "refused" = "retry";
     try {
+      const profession = row.profession === "pa" || row.profession === "np" ? row.profession : "physician";
+      // A physician assistant or nurse practitioner gets the facts their own guide shows.
       // deno-lint-ignore no-explicit-any
-      const guide = (stateGuides as Record<string, any>)[row.state];
+      const guide = profession === "physician" ? (stateGuides as Record<string, any>)[row.state] : (professionGuides as Record<string, any>)[profession]?.[row.state];
       // The shared modules are plain JavaScript; their inferred parameter types are too narrow.
       // deno-lint-ignore no-explicit-any
       const linkArgs: any = { profileId: row.id, list: GUIDE_REMINDERS, secret, base };
@@ -70,7 +73,7 @@ async function handle(req: Request) {
       // deno-lint-ignore no-explicit-any
       const mailArgs: any = {
         to: row.email, stage: row.stage, renewalDate: row.renewal_date,
-        productUpdates: row.product_updates === true, guide, unsubscribeUrl: url, mailingAddress,
+        productUpdates: row.product_updates === true, guide, unsubscribeUrl: url, mailingAddress, profession,
       };
       const message = buildGuideReminderEmail(mailArgs);
       if (calls++) await new Promise(resolve => setTimeout(resolve, 1100));

@@ -23,6 +23,7 @@ const MIGRATION = fs.readFileSync(path.join(root, 'supabase/migrations/202610312
 // Renewal reminders asked for on a state guide, and the owner notice for them.
 const REMINDERS = fs.readFileSync(path.join(root, 'supabase/migrations/20261119120000_guide_renewal_reminders.sql'), 'utf8');
 const REMINDER_NOTICE = fs.readFileSync(path.join(root, 'supabase/migrations/20261119150000_owner_notify_renewal_reminders.sql'), 'utf8');
+const REMINDER_PROFESSIONS = fs.readFileSync(path.join(root, 'supabase/migrations/20261119180000_guide_reminder_professions.sql'), 'utf8');
 const REMINDER_NOTICE_ROLLBACK = fs.readFileSync(path.join(root, 'docs/rollback/20261119150000_owner_notify_renewal_reminders.rollback.sql'), 'utf8');
 const ROLLBACK = fs.readFileSync(path.join(root, 'docs/rollback/20261031200000_owner_email_kinds.rollback.sql'), 'utf8');
 const PORT = '58789';
@@ -80,6 +81,8 @@ test('the owner email claims signups, guides, payments and fixes only', { skip: 
   await pg.sql(REMINDERS);
   await pg.sql(REMINDER_NOTICE);
   await pg.sql(REMINDER_NOTICE); // idempotent
+  await pg.sql(REMINDER_PROFESSIONS);
+  await pg.sql(REMINDER_PROFESSIONS); // idempotent
   const claim = () => pg.value('public.owner_notify_claim(100)');
   const ledgered = () => pg.value(`(select count(*) from public.owner_notify_ledger)`);
   const before = await ledgered();
@@ -94,10 +97,14 @@ print(json.dumps(list(m.TEXT_KINDS)))`])).stdout);
   await t.test('a renewal reminder signup is reported once, with its state, date and product news answer', async () => {
     await pg.sql(`select public.guide_reminder_signup('reader@example.test', 'CO', date '2031-04-30', true, '/states/colorado', null);
                   select public.guide_reminder_signup('plain@example.test', 'TX', date '2031-05-31', false, '/states/texas', null);
-                  select public.guide_reminder_signup('bot@example.test', 'TX', date '2031-05-31', true, '/states/texas', 'honeypot')`);
+                  select public.guide_reminder_signup('bot@example.test', 'TX', date '2031-05-31', true, '/states/texas', 'honeypot');
+                  select public.guide_reminder_signup(p_email => 'pa@example.test', p_state => 'WY', p_renewal_date => date '2031-07-31', p_profession => 'pa');
+                  select public.guide_reminder_signup(p_email => 'np@example.test', p_state => 'WY', p_renewal_date => date '2031-08-31', p_product_updates => true, p_profession => 'np')`);
     const first = await claim();
     assert.equal(first.state, 'new');
     assert.deepEqual(first.rows.map(r => [r.kind, r.name, r.email, r.extra]).sort(), [
+      ['renewal reminder', '', 'np@example.test', 'WY NP, renews 2031-08-31, wants product news'],
+      ['renewal reminder', '', 'pa@example.test', 'WY PA, renews 2031-07-31'],
       ['renewal reminder', '', 'plain@example.test', 'TX, renews 2031-05-31'],
       ['renewal reminder', '', 'reader@example.test', 'CO, renews 2031-04-30, wants product news'],
     ]);
@@ -118,6 +125,7 @@ print(json.dumps(list(m.TEXT_KINDS)))`])).stdout);
     await pg.sql(`delete from public.guide_renewal_reminders`);
     await pg.sql(REMINDER_NOTICE);
     assert.ok((await pg.value('public.owner_notify_email_kinds()')).includes('renewal reminder'));
+    await pg.sql(REMINDER_PROFESSIONS);
   });
 
   await t.test('technical rows are not claimed or ledgered; a guide and a fix are', async () => {
