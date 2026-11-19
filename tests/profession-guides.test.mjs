@@ -151,3 +151,22 @@ test('indexable guides carry the reminder form for their own profession and stat
     assert.equal(page.reminder.guide, `https://credentialdomd.com${page.path}`);
   }
 });
+
+test('the states index links each state to its PA and NP guide, and only to guides with verified rules', () => {
+  const index = read('landing/states/index.html');
+  const cells = [...index.matchAll(/<div class="state-cell" data-state="([^"]+)">\s*<a href="\/states\/([a-z-]+)" class="state-card" data-state="\1">[\s\S]*?<\/a>\s*(?:<div class="state-pro">([\s\S]*?)<\/div>\s*)?<\/div>/g)];
+  assert.equal(cells.length, 51);
+  const linked = new Set();
+  for (const [, , slug, links = ''] of cells) {
+    for (const [, href] of links.matchAll(/href="([^"]+)"/g)) {
+      assert.match(href, new RegExp(`^/states/(physician-assistant|nurse-practitioner)/${slug}$`), `${slug}: ${href}`);
+      linked.add(href);
+    }
+  }
+  assert.deepEqual([...linked].sort(), pages.filter(p => p.indexable).map(p => p.path).sort());
+  assert.equal(linked.size, 98);
+  // The search hides the whole cell, so no PA or NP link is left behind for a hidden state.
+  assert.match(index, /stateGrid\.querySelectorAll\('\.state-cell'\)/);
+  assert.doesNotMatch(index, /stateGrid\.querySelectorAll\('\.state-card'\)/);
+  renderPublicLaunch(index, 'state-index', undefined, { offerEndpoint: 'https://example.supabase.co/functions/v1/public-membership-offer' });
+});
