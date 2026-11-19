@@ -77,6 +77,7 @@ const OVERRIDES = [
   ['email-inbound/index.ts', 'GEMINI_API_BASE', 'https://generativelanguage.googleapis.com'],
   ['email-inbound/index.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
   ['send-guide/index.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
+  ['send-guide-reminders/index.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
   ['send-invite/index.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
   ['send-reminders/index.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
   ['send-ticket-reply/index.ts', 'RESEND_API_BASE', 'https://api.resend.com'],

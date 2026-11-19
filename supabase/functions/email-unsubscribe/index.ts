@@ -27,7 +27,7 @@
 // provider's one click POST carry no session. The token is the proof.
 import { serve } from 'https://deno.land/std@0.168.0/http/server.ts';
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
-import { createEmailUnsubscribeHandler, UNSUBSCRIBE_BASE } from '../_shared/emailUnsubscribe.mjs';
+import { createEmailUnsubscribeHandler, GUIDE_REMINDERS, UNSUBSCRIBE_BASE } from '../_shared/emailUnsubscribe.mjs';
 
 // Untyped, as in forwarding-address: the client's generated types know no RPC here.
 // deno-lint-ignore no-explicit-any
@@ -39,6 +39,13 @@ serve(createEmailUnsubscribeHandler({
   actionUrl: Deno.env.get('EMAIL_UNSUBSCRIBE_BASE') || UNSUBSCRIBE_BASE,
   store: {
     record: async (profileId: string, list: string, source: string) => {
+      // A guide page renewal reminder: the id is its guide_renewal_reminders
+      // row, and the opt out stops every reminder to that row's address.
+      if (list === GUIDE_REMINDERS) {
+        const { data, error } = await db().rpc('guide_reminder_unsubscribe', { p_id: profileId, p_source: source });
+        if (error) throw Error(`guide_reminder_unsubscribe failed: ${error.code ?? 'unknown'}`);
+        return data;
+      }
       const { data, error } = await db().rpc('record_email_opt_out', { p_profile_id: profileId, p_list: list, p_source: source });
       if (error) throw Error(`record_email_opt_out failed: ${error.code ?? 'unknown'}`);
       return data;

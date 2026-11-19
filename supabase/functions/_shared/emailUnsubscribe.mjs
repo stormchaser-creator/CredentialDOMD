@@ -30,10 +30,14 @@
 
 export const UNSUBSCRIBE_BASE = 'https://credentialdomd.com/api/unsubscribe';
 export const SIGNUP_REMINDERS = 'signup_reminders';
+// A renewal reminder asked for on a state guide page. The id in the token is
+// the guide_renewal_reminders row, not a profile: these people have no account.
+export const GUIDE_REMINDERS = 'guide_reminders';
 
 // list -> the short code in the token and what the page calls it.
 export const OPT_OUT_LISTS = Object.freeze({
   [SIGNUP_REMINDERS]: Object.freeze({ code: 'sr', label: 'reminders about finishing your CredentialDOMD membership' }),
+  [GUIDE_REMINDERS]: Object.freeze({ code: 'gr', label: 'license renewal reminders' }),
 });
 const LIST_BY_CODE = new Map(Object.entries(OPT_OUT_LISTS).map(([list, { code }]) => [code, list]));
 
