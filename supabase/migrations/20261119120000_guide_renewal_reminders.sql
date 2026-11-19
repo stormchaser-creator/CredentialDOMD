@@ -21,7 +21,7 @@
 --   * every reminder carries an unsubscribe link that stops all reminders to
 --     that address (guide_reminder_unsubscribe).
 --
--- No top-level transaction statements: apply-migration.sh wraps the file.
+-- No top-level transaction statements: apply-migration.sh refuses a file that has them.
 
 create table if not exists public.guide_renewal_reminders (
   id                 uuid primary key default gen_random_uuid(),
