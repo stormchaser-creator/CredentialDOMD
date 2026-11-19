@@ -142,6 +142,7 @@ OPTIONAL_PARTS = {
     'lifetime_gift_reservations': ({'lifetime_gift_reservations': ('id', 'email', 'livemode', 'claimed_profile_id', 'claimed_at'), 'profiles': PROFILE}, ()),
     'invite_to_join_sends': ({'invite_to_join_sends': ('id', 'email', 'name', 'status', 'explicit_resend', 'offer_phase', 'offer_annual_cents',
                                                        'created_at', 'sent_at', 'updated_at')}, ()),
+    'guide_renewal_reminders': ({'guide_renewal_reminders': ('id', 'email', 'state', 'renewal_date', 'product_updates', 'created_at')}, ()),
     'limited_refund_requests': ({'limited_refund_requests': ('id', 'profile_id', 'livemode', 'amount_cents', 'state', 'subscription_canceled_at',
                                                              'refund_id', 'refund_status', 'error_code', 'requested_at', 'updated_at'), 'profiles': PROFILE}, ()),
 }
@@ -155,7 +156,7 @@ SIGNUP_KINDS = ('waitlist', 'founding', 'app profile', 'FAILED ATTEMPT')
 # refund only the owner can finish (no agent moves money). Everything else
 # goes to the ops queue for the scheduled supervisor.
 ACTIVITY_PREFIXES = ('TICKET', 'CLIENT', 'BETA', 'guide only', 'FEEDBACK', 'FIXED')
-TEXT_KINDS = ('waitlist', 'guide only', 'founding', 'app profile', 'BETA JOINED', 'CHECKOUT STARTED', 'PAID',
+TEXT_KINDS = ('waitlist', 'guide only', 'renewal reminder', 'founding', 'app profile', 'BETA JOINED', 'CHECKOUT STARTED', 'PAID',
               'LIFETIME GIFT CLAIMED', 'REFUND NEEDS SUPPORT', 'REFUND UNFINISHED')
 MONEY = {
     'PAID': ('paid', 'paid'),
@@ -524,6 +525,13 @@ def query_sql(since, present, now=None):
   s.updated_at, 'subscription:' || s.subscription_id || ':' || s.livemode::text
   from billing_subscriptions s left join profiles p on p.id = s.profile_id
   where s.updated_at > {back} and s.status = 'active'{unpaid}""")
+    if 'guide_renewal_reminders' in has:
+        # A renewal reminder asked for on a state guide (20261119120000): once
+        # per row, so a changed date is not reported again.
+        parts.append(f"""select 'renewal reminder', '', coalesce(g.email, ''),
+  g.state || ', renews ' || to_char(g.renewal_date, 'YYYY-MM-DD') || case when g.product_updates then ', wants product news' else '' end,
+  g.created_at, 'reminder:' || g.id::text
+  from guide_renewal_reminders g where g.created_at > {s}{upto('g.created_at')}""")
     if 'lifetime_gift_reservations' in has:
         parts.append(f"""select 'LIFETIME GIFT CLAIMED', coalesce(p.name, ''), coalesce(p.email, g.email, ''), case when g.livemode then '' else 'test mode' end,
   g.claimed_at, 'gift:' || g.id::text

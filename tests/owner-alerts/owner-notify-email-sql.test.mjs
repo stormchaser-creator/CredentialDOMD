@@ -29,7 +29,8 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 const MIGRATION = fs.readFileSync(path.join(root, 'supabase/migrations/20261014110000_owner_notify_email.sql'), 'utf8');
 // The latest migration that defines owner_notify_rows: its body is the one
 // signup-notify.py must generate.
-const ROWS_MIGRATION = fs.readFileSync(path.join(root, 'supabase/migrations/20261031010000_self_heal_alerts.sql'), 'utf8');
+// The newest migration that restates owner_notify_rows.
+const ROWS_MIGRATION = fs.readFileSync(path.join(root, 'supabase/migrations/20261119150000_owner_notify_renewal_reminders.sql'), 'utf8');
 const ROLLBACK = fs.readFileSync(path.join(root, 'docs/rollback/20261014110000_owner_notify_email.rollback.sql'), 'utf8');
 const python = (() => {
   const r = spawnSync('python3', ['-c', 'import sys; print(sys.executable)'], { encoding: 'utf8' });

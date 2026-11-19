@@ -20,6 +20,10 @@ const root = fileURLToPath(new URL('../../', import.meta.url));
 const NOTIFY = fs.readFileSync(path.join(root, 'supabase/migrations/20261014110000_owner_notify_email.sql'), 'utf8');
 const SELF_HEAL = fs.readFileSync(path.join(root, 'supabase/migrations/20261031010000_self_heal_alerts.sql'), 'utf8');
 const MIGRATION = fs.readFileSync(path.join(root, 'supabase/migrations/20261031200000_owner_email_kinds.sql'), 'utf8');
+// Renewal reminders asked for on a state guide, and the owner notice for them.
+const REMINDERS = fs.readFileSync(path.join(root, 'supabase/migrations/20261119120000_guide_renewal_reminders.sql'), 'utf8');
+const REMINDER_NOTICE = fs.readFileSync(path.join(root, 'supabase/migrations/20261119150000_owner_notify_renewal_reminders.sql'), 'utf8');
+const REMINDER_NOTICE_ROLLBACK = fs.readFileSync(path.join(root, 'docs/rollback/20261119150000_owner_notify_renewal_reminders.rollback.sql'), 'utf8');
 const ROLLBACK = fs.readFileSync(path.join(root, 'docs/rollback/20261031200000_owner_email_kinds.rollback.sql'), 'utf8');
 const PORT = '58789';
 const exec = promisify(execFile);
@@ -73,6 +77,9 @@ test('the owner email claims signups, guides, payments and fixes only', { skip: 
   await pg.sql(SELF_HEAL);
   await pg.sql(MIGRATION);
   await pg.sql(MIGRATION); // idempotent
+  await pg.sql(REMINDERS);
+  await pg.sql(REMINDER_NOTICE);
+  await pg.sql(REMINDER_NOTICE); // idempotent
   const claim = () => pg.value('public.owner_notify_claim(100)');
   const ledgered = () => pg.value(`(select count(*) from public.owner_notify_ledger)`);
   const before = await ledgered();
@@ -82,6 +89,35 @@ test('the owner email claims signups, guides, payments and fixes only', { skip: 
 spec=importlib.util.spec_from_file_location('sn', ${JSON.stringify(PY)}); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
 print(json.dumps(list(m.TEXT_KINDS)))`])).stdout);
     assert.deepEqual(await pg.value('public.owner_notify_email_kinds()'), [...py, 'FIXED', 'FIXED BY ITSELF']);
+  });
+
+  await t.test('a renewal reminder signup is reported once, with its state, date and product news answer', async () => {
+    await pg.sql(`select public.guide_reminder_signup('reader@example.test', 'CO', date '2031-04-30', true, '/states/colorado', null);
+                  select public.guide_reminder_signup('plain@example.test', 'TX', date '2031-05-31', false, '/states/texas', null);
+                  select public.guide_reminder_signup('bot@example.test', 'TX', date '2031-05-31', true, '/states/texas', 'honeypot')`);
+    const first = await claim();
+    assert.equal(first.state, 'new');
+    assert.deepEqual(first.rows.map(r => [r.kind, r.name, r.email, r.extra]).sort(), [
+      ['renewal reminder', '', 'plain@example.test', 'TX, renews 2031-05-31'],
+      ['renewal reminder', '', 'reader@example.test', 'CO, renews 2031-04-30, wants product news'],
+    ]);
+    assert.ok(first.rows.every(r => /^reminder:[0-9a-f-]{36}$/.test(r.key)));
+    // The reader comes back and changes the date: the same row, not news again.
+    await pg.sql(`select public.guide_reminder_signup('reader@example.test', 'CO', date '2031-06-30', false, '/states/colorado', null)`);
+    assert.deepEqual(await claim(), { state: 'none' });
+    await pg.sql(`delete from public.owner_notify_ledger where send_id = '${first.sendId}'; delete from public.owner_notify_sends where id = '${first.sendId}';
+                  delete from public.guide_renewal_reminders`);
+  });
+
+  await t.test('the renewal reminder notice rolls back to the earlier kinds and comes back', async () => {
+    await pg.sql(REMINDER_NOTICE_ROLLBACK);
+    assert.equal((await pg.value('public.owner_notify_email_kinds()')).includes('renewal reminder'), false);
+    assert.equal(await pg.value(`position('renewal reminder' in pg_get_functiondef('public.owner_notify_rows(timestamptz)'::regprocedure))`), 0);
+    await pg.sql(`select public.guide_reminder_signup('rolled@example.test', 'CO', date '2031-04-30', false, '/states/colorado', null)`);
+    assert.deepEqual(await claim(), { state: 'none' });
+    await pg.sql(`delete from public.guide_renewal_reminders`);
+    await pg.sql(REMINDER_NOTICE);
+    assert.ok((await pg.value('public.owner_notify_email_kinds()')).includes('renewal reminder'));
   });
 
   await t.test('technical rows are not claimed or ledgered; a guide and a fix are', async () => {
