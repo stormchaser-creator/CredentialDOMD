@@ -316,11 +316,21 @@ function renderPage(m, parts) {
   const when = monthYear(m.verified);
   const url = `https://credentialdomd.com${m.path}`;
   const ce = m.glance.find(g => /continuing education/i.test(g[0]))?.[1] || '';
-  const title = profession === 'pa'
-    ? `${state.name} Physician Assistant License Renewal: CE Requirements | CredentialDOMD`
-    : `${state.name} Nurse Practitioner License Renewal: APRN and RN CE Requirements | CredentialDOMD`;
+  // Google shows about 60 characters of a title and about 155 of a description
+  // and rewrites or cuts anything longer (SEO audit, 2026-11-19), so each is the
+  // fullest wording that fits. No brand in the title: Google prints the site name itself.
+  const fits = (candidates, max) => candidates.find(c => c.length <= max) || candidates[candidates.length - 1];
+  const license = `${state.name} ${P.noun.replace(/\b[a-z]/g, c => c.toUpperCase())} License Renewal`;
+  const title = fits([`${license}: CE Requirements`, `${license}: CE Rules`, license], 60);
+  const ceText = ce === CE_UNVERIFIED ? '' : `${ce.charAt(0).toLowerCase() + ce.slice(1)}, `;
+  const about = `${state.name} ${P.noun} license renewal: ${ceText}`;
   const description = m.indexable
-    ? `${state.name} ${P.noun} license renewal: ${ce === CE_UNVERIFIED ? 'what the board requires' : ce.charAt(0).toLowerCase() + ce.slice(1)}, required topics, national certification and practice agreement rules, each with the board's own source. Checked ${when}.`
+    ? fits([
+      `${about}required topics, certification and practice rules, each with the board's source. Checked ${when}.`,
+      `${about}required topics and certification rules, each with the board's source. Checked ${when}.`,
+      `${about}required topics and certification rules, with sources. Checked ${when}.`,
+      `${about}required topics and certification rules.`,
+    ], 155)
     : `${state.name} ${P.noun} license renewal: the rules are not yet verified. Board link and federal requirements.`;
   const boardLink = m.boardUrl ? `<a href="${esc(m.boardUrl)}" target="_blank" rel="noopener">${esc(m.board)}</a>` : esc(m.board);
   const lead = m.indexable
@@ -341,7 +351,7 @@ ${parts.redirect}
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(description)}">
-${m.indexable ? '' : '<meta name="robots" content="noindex">\n'}<meta property="og:title" content="${esc(title.replace(' | CredentialDOMD', ''))}">
+${m.indexable ? '' : '<meta name="robots" content="noindex">\n'}<meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(description)}">
 <meta property="og:image" content="https://credentialdomd.com/og-image.png">
 <meta property="og:type" content="article">

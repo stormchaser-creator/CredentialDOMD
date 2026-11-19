@@ -170,3 +170,27 @@ test('the states index links each state to its PA and NP guide, and only to guid
   assert.doesNotMatch(index, /stateGrid\.querySelectorAll\('\.state-card'\)/);
   renderPublicLaunch(index, 'state-index', undefined, { offerEndpoint: 'https://example.supabase.co/functions/v1/public-membership-offer' });
 });
+
+test('every guide title fits 60 characters and every description 155, each unique and leading with the query', () => {
+  // Longer ones are cut or rewritten by Google (SEO audit, 2026-11-19).
+  const text = s => s.replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&lt;/g, '<').replace(/&gt;/g, '>');
+  const guides = [
+    ...fs.readdirSync(new URL('../landing/states/', import.meta.url)).filter(f => f.endsWith('.html') && f !== 'index.html').map(f => [`landing/states/${f}`, 'Medical License Renewal']),
+    ...pages.map(p => [p.file, `${PROFESSIONS[p.profession].noun.replace(/\b[a-z]/g, c => c.toUpperCase())} License Renewal`]),
+  ];
+  assert.equal(guides.length, 153);
+  const titles = new Set(), descriptions = new Set();
+  for (const [file, phrase] of guides) {
+    const html = read(file);
+    const title = text(/<title>([\s\S]*?)<\/title>/.exec(html)[1]);
+    const description = text(/<meta name="description" content="([^"]*)">/.exec(html)[1]);
+    assert.ok(title.length <= 60, `${file}: title is ${title.length} characters: ${title}`);
+    assert.ok(description.length <= 155 && description.length >= 100, `${file}: description is ${description.length} characters`);
+    assert.ok(title.includes(phrase), `${file}: the title leads with the query: ${title}`);
+    assert.doesNotMatch(title, /CredentialDOMD|\{\{|undefined|null/, file);
+    assert.doesNotMatch(description, /\{\{|undefined|\bnull\b|[–—]/, file);
+    titles.add(title); descriptions.add(description);
+  }
+  assert.equal(titles.size, 153, 'titles are unique');
+  assert.equal(descriptions.size, 153, 'descriptions are unique');
+});

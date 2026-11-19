@@ -334,6 +334,53 @@ function metaDuePhrase(state) {
   return `, due ${deadlineAnchor(state).due}`;
 }
 
+// ─── Search result title and description ─────────────────────────
+// Google shows about 60 characters of a title and about 155 of a description.
+// Every guide's title ran 74 to 112 characters and every description 234 to
+// 484 (SEO audit, 2026-11-19), so Google cut the description mid sentence and
+// replaced the title with its own ("Vermont Medical License Renewal 2026 -
+// CredentialDOMD"), dropping the fee and the CME hours that are the reason to
+// click. Each is now the fullest wording that fits, tried in order. The brand
+// is left off the title: Google prints the site name on its own line.
+const TITLE_MAX = 60;
+const DESCRIPTION_MAX = 155;
+const firstThatFits = (candidates, max) => candidates.filter(Boolean).find((c) => c.length <= max) || candidates.filter(Boolean).pop();
+
+function pageTitle(state) {
+  const base = `${state.name} Medical License Renewal`;
+  const fee = feeShort(state);
+  const cme = cmeTitlePhrase(state);
+  const cmeShort = state.cmeHours === 0 ? 'no CME' : state.cmeHours == null ? null : `${state.cmeHours} hrs CME`;
+  return firstThatFits([
+    fee && `${base} ${YEAR}: ${fee} fee, ${cme}`,
+    fee && cmeShort && `${base} ${YEAR}: ${fee} fee, ${cmeShort}`,
+    fee && cmeShort && `${base}: ${fee} fee, ${cmeShort}`,
+    !fee && `${base} ${YEAR}: ${cme}`,
+    fee && `${base} ${YEAR}: ${fee} fee`,
+    `${base} ${YEAR}`,
+  ], TITLE_MAX);
+}
+
+function pageDescription(state) {
+  const fee = feeShort(state);
+  const facts = `Renew your ${state.name} medical license: ${fee ? `${fee} fee, ` : ''}${cmeMetaPhrase(state)}`;
+  const a = deadlineAnchor(state);
+  const checked = state.verified && state.verified.startsWith('2026-08') ? ' Checked August 2026.' : '';
+  const tail = ' Portal link, checklist and common pitfalls.';
+  return firstThatFits([
+    `${facts}, due ${a.due}.${tail}${checked}`,
+    `${facts}, due ${a.due}.${tail}`,
+    `${facts}, due ${a.due}. Portal link and checklist.`,
+    // The curated short form of the deadline, when the full one does not fit.
+    `${facts}. Due: ${a.short}.${tail}`,
+    `${facts}. Due: ${a.short}. Portal link and checklist.`,
+    `${facts}. Due: ${a.short}.`,
+    `${facts}.${tail}${checked}`,
+    `${facts}.${tail}`,
+    `${facts}.`,
+  ], DESCRIPTION_MAX);
+}
+
 function deadlineSentence(state) {
   return escapeHtml(deadlineAnchor(state).sentence);
 }
@@ -415,6 +462,8 @@ function generateStatePage(state, allStates, template) {
     '{{VERIFIED_DATE}}': (state.verified && state.verified.startsWith('2026-08')) ? 'August 2026' : 'recently',
     '{{YEAR}}': String(YEAR),
     '{{FEE_SHORT}}': feeShort(state) || 'see board',
+    '{{PAGE_TITLE}}': escapeHtml(pageTitle(state)),
+    '{{PAGE_DESCRIPTION}}': escapeHtml(pageDescription(state)),
   };
   for (const [k, v] of Object.entries(replacements)) html = html.split(k).join(String(v));
 
