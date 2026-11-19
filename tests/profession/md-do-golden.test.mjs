@@ -30,6 +30,10 @@ const reviewedTxExemptionSource = JSON.parse(readFileSync(new URL('./golden/boar
 // one-time topics, and the DE controlled substance CE note (reviewed case by case).
 // A key already reviewed above names that output as previousReviewedHash.
 const reviewedStateDuties = JSON.parse(readFileSync(new URL('./golden/state-duties-1118.json', import.meta.url), 'utf8'));
+// State duties review fixes (2026-11-18): KY head trauma `within` gains the July 15, 2014
+// enactment boundary of KRS 311.601(2)(b); the PA DO cite moves to 25.271(c)(6)(i)(B).
+// Each key names its state-duties-1118 review as previousReviewedHash.
+const reviewedStateDutiesReview = JSON.parse(readFileSync(new URL('./golden/state-duties-review-1118.json', import.meta.url), 'utf8'));
 const full = JSON.parse(readFileSync(new URL('./golden/md-do-full.json', import.meta.url), 'utf8'));
 
 test('goldens were captured at the base commit', () => {
@@ -39,7 +43,7 @@ test('goldens were captured at the base commit', () => {
 
 test('every MD and DO calculation matches its golden; only exact reviewed display copy, reference URLs and rule fixes differ', async () => {
   const { hashes, full: now } = await computeGolden();
-  const reviewed = [...reviewedCopy.entries, ...reviewedReferences.entries, ...reviewedPaPainTags.entries, ...reviewedCmeAudit.entries, ...reviewedBoardTasks.entries, ...reviewedWaDoExemption.entries, ...reviewedTxExemptionSource.entries, ...reviewedStateDuties.entries];
+  const reviewed = [...reviewedCopy.entries, ...reviewedReferences.entries, ...reviewedPaPainTags.entries, ...reviewedCmeAudit.entries, ...reviewedBoardTasks.entries, ...reviewedWaDoExemption.entries, ...reviewedTxExemptionSource.entries, ...reviewedStateDuties.entries, ...reviewedStateDutiesReview.entries];
   // A later review of a key replaces an earlier one only by naming the
   // reviewed output it replaces; otherwise a key is reviewed once.
   const allowed = new Map();

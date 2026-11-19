@@ -79,6 +79,8 @@ export const isDateUnknown = (item) => !!item && item.dateUnknown === true;
  * in the form moves it to the marker with the box unticked (boardFormStart).
  */
 export const BOARD_APP_MADE_FIELD = "appMadeBoardRecord";
+// Every app-made customFields key (this one and the state duty answers), for the views that hide them.
+export { APP_MARKER_FIELDS } from "../constants/appMarkerFields.js";
 export const LEGACY_APP_MADE_NOTE = "Added when you marked a board step done.";
 /** "marked", "legacy" or null: whether the app made this board record, whatever its date. */
 function appMadeBoardKind(item) {

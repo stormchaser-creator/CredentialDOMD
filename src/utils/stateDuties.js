@@ -8,9 +8,18 @@
 // don't prescribe controlled substances here", is stored on the state's
 // medical license (customFields, CSR_DECLINED_FIELD) and Undo clears it.
 //
+// The date a licensure deadline counts from is the physician's FIRST license
+// (or first registration) in the state, which the records do not hold: a
+// record's issuedDate is often the start of the current term (Alabama renews
+// every year, a Delaware CSR every two). So the app asks once on the state
+// card, prefilled with the earliest issue date on file, and stores the answer
+// on the record (FIRST_LICENSED_FIELD, FIRST_REGISTERED_FIELD) with Undo.
+// Until it is answered the deadline is "needs-date": listed, never dated,
+// never alerted.
+//
 // Alerts: a licensure deadline alerts only inside the reminder lead window,
-// only while the topic is unmet, and only when the issue date it counts from
-// is on file. A date that passed with no completion on file is asked on the
+// only while the topic is unmet, and only from a first date the physician
+// entered. A date that passed with no completion on file is asked on the
 // card, never alerted (the app cannot tell a missed course from one done
 // before it was logged here). A registration prompt never alerts.
 //
@@ -21,13 +30,13 @@ import { isPhysicianDegree } from "../constants/professions.js";
 import { complianceFor } from "./compliance.js";
 import { isInactive } from "./lifecycle.js";
 import { daysUntilDate, localToday } from "./dateDays.js";
+import { CSR_DECLINED_FIELD, FIRST_LICENSED_FIELD, FIRST_REGISTERED_FIELD } from "../constants/appMarkerFields.js";
+
+export { CSR_DECLINED_FIELD, FIRST_LICENSED_FIELD, FIRST_REGISTERED_FIELD };
 
 const ISO = /^\d{4}-\d{2}-\d{2}$/;
 const iso = (v) => { const s = String(v || "").slice(0, 10); return ISO.test(s) ? s : null; };
 const pad = (n) => String(n).padStart(2, "0");
-
-/** The customFields key on a state medical license that records "I don't prescribe controlled substances here". */
-export const CSR_DECLINED_FIELD = "No state controlled substance registration (not prescribing here)";
 
 /** The state's registration rule, or null. */
 export function stateCsrRule(state) {
@@ -152,16 +161,53 @@ export function addPeriod(from, { months = 0, years = 0 }) {
   return `${ty}-${pad(tm + 1)}-${pad(Math.min(day, last))}`;
 }
 
-/** The earliest issue date on the state's medical license records (initial licensure, as near as the records show). */
-export function stateLicenseIssued(licenses, state) {
-  const days = (licenses || []).filter(l => l && l.state === state && isMedical(l)).map(l => iso(l.issuedDate)).filter(Boolean).sort();
+const recordsOf = (licenses, state, from) => (licenses || []).filter(l => l && l.state === state && (from === "csr" ? isCsr(l) : isMedical(l)));
+const firstField = (from) => from === "csr" ? FIRST_REGISTERED_FIELD : FIRST_LICENSED_FIELD;
+
+/**
+ * The earliest issue date on the state's medical license records (from
+ * "license") or controlled substance records ("csr"). Only a suggestion for
+ * the question: an issue date is often the current term, not the first.
+ */
+export function stateIssuedOnFile(licenses, state, from = "license") {
+  const days = recordsOf(licenses, state, from).map(l => iso(l.issuedDate)).filter(Boolean).sort();
   return days[0] || null;
 }
 
-/** The earliest issue date on the state's controlled substance records. */
-export function stateCsrIssued(licenses, state) {
-  const days = (licenses || []).filter(l => l && l.state === state && isCsr(l)).map(l => iso(l.issuedDate)).filter(Boolean).sort();
+/**
+ * The first license ("license") or first registration ("csr") date the
+ * physician entered for the state, or null. Read from every record of that
+ * kind, current or not, so a renewal entered as a new record keeps it.
+ */
+export function firstDateEntered(licenses, state, from = "license") {
+  const key = firstField(from);
+  const days = recordsOf(licenses, state, from).map(l => iso(l.customFields?.[key])).filter(Boolean).sort();
   return days[0] || null;
+}
+
+/**
+ * The edits that store (`on` an ISO day) or clear (null, for Undo) the
+ * physician's first license or registration date in the state, for the
+ * caller to save with editItem. Stored on the current record (the first
+ * medical license in force, or the newest State Controlled Substance
+ * record); cleared from every record of that kind that holds it.
+ */
+export function firstDateEdits(licenses, state, from, on) {
+  const key = firstField(from);
+  const day = on ? iso(on) : null;
+  if (on && !day) return [];
+  const target = from === "csr" ? csrRecordsFor(licenses, state)[0] : currentMedical(licenses, state)[0];
+  const out = [];
+  for (const l of recordsOf(licenses, state, from)) {
+    const has = l.customFields && Object.hasOwn(l.customFields, key);
+    if (day && l === target) out.push({ ...l, customFields: { ...(l.customFields || {}), [key]: day } });
+    else if (has) {
+      const customFields = { ...l.customFields };
+      delete customFields[key];
+      out.push({ ...l, customFields });
+    }
+  }
+  return out;
 }
 
 /** True when a specialty id on the profile is one the rule names (a board, or a subspecialty of it). */
@@ -182,14 +228,18 @@ function phrase(w) {
  * The licensure-relative one-time deadlines for one state, for an MD or DO
  * with a medical license in force there. Each:
  *   { state, topic, hours, from ("license" | "csr"), within (text), anchor
- *     (the issue date it counts from, or null), due, daysLeft, status,
- *     cite, url }
+ *     (the first date the physician entered, or null), suggested (the
+ *     earliest issue date on file, for the question), due, daysLeft,
+ *     status, cite, url }
  * status:
  *   "due"        a date ahead, the topic unmet: listed; alerted inside the lead window
  *   "past"       the date passed, the topic unmet: asked on the card, never alerted
- *   "needs-date" the issue date it counts from is not on file: asked calmly
- * A met topic, a topic that does not apply (a specialty or issue-date rule
- * that excludes this physician) or a state without the rule gives nothing.
+ *   "needs-date" no first date entered: asked calmly, never dated or alerted
+ *   "outside"    the first date entered falls outside the rule's new-licensee
+ *                timing (an earlier deadline or another paragraph covers it):
+ *                shown with Undo, never dated or alerted
+ * A met topic, a topic that does not apply (a specialty rule that excludes
+ * this physician) or a state without the rule gives nothing.
  */
 export function licensureDeadlinesFor(data, state, now = new Date()) {
   const deg = data?.settings?.degreeType;
@@ -205,18 +255,21 @@ export function licensureDeadlinesFor(data, state, now = new Date()) {
     if (!result || result.met) continue;
     if (w.specialties && !specialtyMatches(w.specialties, data.settings.specialties)) continue;
     if (w.from === "csr" && !csrRecordsFor(data.licenses, state).length) continue;
-    const anchor = w.from === "csr" ? stateCsrIssued(data.licenses, state) : stateLicenseIssued(data.licenses, state);
+    // Only the first date the physician entered; never an issue date alone.
+    const anchor = firstDateEntered(data.licenses, state, w.from);
     const base = {
       state, topic: t.topic, hours: t.hours || 0, from: w.from, within: phrase(w), anchor,
+      suggested: stateIssuedOnFile(data.licenses, state, w.from),
       cite: w.cite || t.cite || "", url: w.url || t.url || "",
     };
     if (!anchor) { out.push({ ...base, due: null, daysLeft: null, status: "needs-date" }); continue; }
-    if (w.issuedOnOrAfter && anchor < w.issuedOnOrAfter) continue;
-    if (w.issuedAfter && anchor <= w.issuedAfter) continue;
+    const outside = { ...base, due: null, daysLeft: null, status: "outside" };
+    if (w.issuedOnOrAfter && anchor < w.issuedOnOrAfter) { out.push(outside); continue; }
+    if (w.issuedAfter && anchor <= w.issuedAfter) { out.push(outside); continue; }
     const due = addPeriod(anchor, w);
     // A rule with an earlier deadline for existing licensees (Alabama: by
     // December 31, 2025) dates only what falls after it.
-    if (w.dueAfter && due <= w.dueAfter) continue;
+    if (w.dueAfter && due <= w.dueAfter) { out.push(outside); continue; }
     const daysLeft = daysUntilDate(due, now);
     out.push({ ...base, due, daysLeft, status: daysLeft < 0 ? "past" : "due" });
   }

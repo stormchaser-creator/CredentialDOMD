@@ -20,7 +20,7 @@ import { generateId, getStatusColor, getStatusLabel, describeItem, isNonExpiring
 import { reminderLeadDays } from "../../utils/reminderPreferences";
 import { docMime } from "../../utils/inboxDocs";
 import { FIELD_TYPES as COLUMN_TYPES } from "../../utils/sectionFields.js";
-import { LIFECYCLE_SECTIONS, isAlertable, isInactive, lifecycleNote, withFormField, awaitsBoardDate, boardFormStart } from "../../utils/lifecycle";
+import { LIFECYCLE_SECTIONS, isAlertable, isInactive, lifecycleNote, withFormField, awaitsBoardDate, boardFormStart, APP_MARKER_FIELDS } from "../../utils/lifecycle";
 import { analyzeDocument, analyzePDF, analyzeDocText } from "../../utils/documentScanner";
 import { splitScanned } from "../../utils/docPrefill";
 import { useAiAvailable, describeAiStatus } from "../../utils/aiClient";
@@ -41,8 +41,9 @@ import { fileWaitLine, fileWaitTag, statusWithoutStore } from "../../utils/docum
 // resolves through the description catalogs.
 // The Documents tab's per-file limit (DocumentsSection checkBeforeRead).
 const MAX_FILE_SIZE = 10 * 1024 * 1024;
-// appMadeBoardRecord: the app's own marker on a board record it made (lifecycle.awaitsBoardDate).
-const HIDDEN_CUSTOM_KEYS = new Set(["cptDetail", "componentAudit", "sourceRow", "sourceDoc", "patient", "appMadeBoardRecord"]);
+// APP_MARKER_FIELDS: the app's own settings on a record (a board record it
+// made, the physician's answers to the state duty questions), not record data.
+const HIDDEN_CUSTOM_KEYS = new Set(["cptDetail", "componentAudit", "sourceRow", "sourceDoc", "patient", ...APP_MARKER_FIELDS]);
 
 // label/placeholder can vary by the record being edited (e.g. Certification
 // asks a different question than a license does) — same function-of-form

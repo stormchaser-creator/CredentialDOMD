@@ -97,7 +97,7 @@ export function boardStepsSnapshot(data, now = new Date()) {
  * or DO: each licensed state's own controlled substance registration (on
  * file, declined by the physician, or not yet asked) with its rule and
  * source, and the one-time topics due within a set time of licensure, with
- * the date when the issue date it counts from is on file. Null when there
+ * the date when the physician has entered the first date it counts from. Null when there
  * are none, so a snapshot without them is unchanged.
  */
 export function stateDutiesSnapshot(data, now = new Date()) {
@@ -113,7 +113,9 @@ export function stateDutiesSnapshot(data, now = new Date()) {
     }));
     const deadlines = licensureDeadlines(data, now).map(d => ({
       state: d.state, topic: d.topic, hours: d.hours, within: `${d.within} of ${d.from === "csr" ? "the state controlled substance registration" : "licensure"}`,
-      status: d.status === "due" ? "due" : d.status === "past" ? "date passed with no completion on file" : "issue date not on file",
+      status: d.status === "due" ? "due" : d.status === "past" ? "date passed with no completion on file"
+        : d.status === "outside" ? "the first date the physician entered falls outside the new-licensee timing, so no date is counted"
+        : "first license or registration date not entered yet",
       ...(d.anchor ? { countedFrom: d.anchor } : {}), ...(d.due ? { due: d.due, daysLeft: d.daysLeft } : {}), source: d.url,
     }));
     return registrations.length || deadlines.length ? { registrations, deadlines } : null;
@@ -434,8 +436,9 @@ file, its rule, the next date the rule gives, prerequisites such as PDMP registr
 source. When one is not on file, say the state issues it and that the state card on the CME page
 can add it; never say the physician holds or needs one beyond what the list says.
 snapshot.stateDuties.deadlines lists one-time state topics due within a set time of licensure, with
-the due date when the issue date it counts from is on file. Give only those dates; when the issue
-date is not on file, say adding it to the license shows the date.
+the due date counted from the first license or registration date the physician entered on the state
+card (a record's issue date is often the current term, so it is never used alone). Give only those
+dates; when no first date is entered, say the state card on the CME page asks for it.
 
 NAVIGATION: when the user asks to see, open, go to, show, or "take me to" a record or a
 section ("take me to UMC privileges", "open my DEA", "show the Mercy contract"),

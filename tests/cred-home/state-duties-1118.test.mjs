@@ -13,6 +13,7 @@ import { STATE_REQS, getStateEntry } from '../../src/constants/stateRequirements
 import {
   nextFixedExpiry, stateCsrRule, csrCard, csrCards, csrPrefill, csrDeclineEdits, CSR_DECLINED_FIELD,
   addPeriod, licensureDeadlinesFor, licensureDeadlines, datedLicensureDeadlines, licensureDeadlineAlerts,
+  FIRST_LICENSED_FIELD, FIRST_REGISTERED_FIELD, firstDateEdits, firstDateEntered,
 } from '../../src/utils/stateDuties.js';
 
 const at = (iso) => new Date(`${iso}T12:00:00`);
@@ -24,6 +25,8 @@ const notifications = await bundle('../../src/utils/notifications.js');
 const assistant = await bundle('../../src/utils/assistant.js');
 
 const med = (state, extra = {}) => ({ id: `lic-${state}`, type: 'State Medical License', name: `${state} license`, state, licenseNumber: 'X1', expirationDate: '2028-12-31', ...extra });
+// A license whose first-licensure date the physician entered on the state card.
+const first = (day) => ({ issuedDate: day, customFields: { [FIRST_LICENSED_FIELD]: day } });
 const md = (licenses, extra = {}) => ({ settings: { degreeType: 'MD', specialties: [], reminderLeadDays: 90, primaryState: licenses[0]?.state, ...extra }, licenses, cme: [] });
 
 // ── The table ──
@@ -145,7 +148,7 @@ test('addPeriod clamps to the month end', () => {
 });
 
 test('AL boundaries course: due 12 months after the license issue date, alerted only inside the lead window', () => {
-  const data = md([med('AL', { issuedDate: '2026-03-01' })]);
+  const data = md([med('AL', first('2026-03-01'))]);
   const [d] = licensureDeadlinesFor(data, 'AL', at('2026-11-18'));
   assert.equal(d.topic, 'Ethics');
   assert.equal(d.due, '2027-03-01');
@@ -159,8 +162,51 @@ test('AL boundaries course: due 12 months after the license issue date, alerted 
   assert.equal(inside[0].renewal, '2027-03-01');
 });
 
-test('AL: a license dated so the 12 months end on or before Dec 31, 2025 falls under the existing-licensee deadline, not dated here', () => {
-  assert.deepEqual(licensureDeadlinesFor(md([med('AL', { issuedDate: '2015-06-01' })]), 'AL', at('2026-11-18')), []);
+test('AL: a first license whose 12 months end on or before Dec 31, 2025 falls under the existing-licensee deadline: shown with Undo, never dated', () => {
+  const data = md([med('AL', first('2015-06-01'))]);
+  const [d] = licensureDeadlinesFor(data, 'AL', at('2026-11-18'));
+  assert.equal(d.status, 'outside');
+  assert.equal(d.due, null);
+  assert.deepEqual(datedLicensureDeadlines(data, 365, at('2026-11-18')), []);
+  assert.deepEqual(licensureDeadlineAlerts(data, 365, at('2026-11-18')), []);
+});
+
+test('AL: an issue date that is the current annual term is never read as first licensure (no date, no alert)', () => {
+  // Licensed in AL long ago; the only record on file is this year's term.
+  const data = md([med('AL', { issuedDate: '2026-01-01', expirationDate: '2026-12-31' })]);
+  const [d] = licensureDeadlinesFor(data, 'AL', at('2026-11-18'));
+  assert.equal(d.status, 'needs-date');
+  assert.equal(d.due, null);
+  assert.equal(d.anchor, null);
+  assert.equal(d.suggested, '2026-01-01', 'offered only as the prefill for the question');
+  assert.deepEqual(datedLicensureDeadlines(data, 365, at('2026-11-18')), []);
+  assert.deepEqual(licensureDeadlineAlerts(data, 90, at('2026-11-18')), []);
+  assert.deepEqual(licensureDeadlineAlerts(data, 365, at('2026-11-18')), []);
+  const RealDate = Date;
+  try {
+    globalThis.Date = class extends RealDate { constructor(...a) { super(...(a.length ? a : ['2026-11-18T12:00:00'])); } static now() { return new RealDate('2026-11-18T12:00:00').getTime(); } };
+    assert.equal(notifications.generateAlerts(data)?.cmeIssues?.some(i => i.kind === 'licensure') || false, false);
+  } finally { globalThis.Date = RealDate; }
+});
+
+test('the first license date is asked, stored on the license, kept across a renewal record, and Undo clears it', () => {
+  const lic = med('AL', { issuedDate: '2026-01-01', expirationDate: '2026-12-31' });
+  const data = md([lic]);
+  const edits = firstDateEdits(data.licenses, 'AL', 'license', '2026-03-01');
+  assert.equal(edits.length, 1);
+  assert.equal(edits[0].customFields[FIRST_LICENSED_FIELD], '2026-03-01');
+  assert.equal(data.licenses[0].customFields, undefined, 'nothing changes until the caller saves');
+  const saved = { ...data, licenses: edits };
+  assert.equal(licensureDeadlinesFor(saved, 'AL', at('2026-11-18'))[0].due, '2027-03-01');
+  // The 2027 renewal entered as a new record; the old one is historical.
+  const renewed = { ...data, licenses: [{ ...edits[0], lifecycleStatus: 'historical' }, med('AL', { id: 'lic-AL-2027', issuedDate: '2027-01-01', expirationDate: '2027-12-31' })] };
+  assert.equal(firstDateEntered(renewed.licenses, 'AL', 'license'), '2026-03-01');
+  assert.equal(licensureDeadlinesFor(renewed, 'AL', at('2026-11-18'))[0].due, '2027-03-01', 'the new term does not move the date');
+  const undo = firstDateEdits(renewed.licenses, 'AL', 'license', null);
+  assert.equal(undo.length, 1);
+  assert.equal(Object.hasOwn(undo[0].customFields, FIRST_LICENSED_FIELD), false);
+  assert.equal(licensureDeadlinesFor({ ...data, licenses: [undo[0], renewed.licenses[1]] }, 'AL', at('2026-11-18'))[0].status, 'needs-date');
+  assert.deepEqual(firstDateEdits(data.licenses, 'AL', 'license', 'not a date'), []);
 });
 
 test('no issue date: asked calmly, never listed with a date or alerted', () => {
@@ -173,7 +219,7 @@ test('no issue date: asked calmly, never listed with a date or alerted', () => {
 });
 
 test('a date that passed with the topic unmet is asked on the card, never alerted', () => {
-  const data = md([med('AL', { issuedDate: '2025-02-01' })]);
+  const data = md([med('AL', first('2025-02-01'))]);
   const [d] = licensureDeadlinesFor(data, 'AL', at('2026-11-18'));
   assert.equal(d.status, 'past');
   assert.equal(d.due, '2026-02-01');
@@ -181,12 +227,12 @@ test('a date that passed with the topic unmet is asked on the card, never alerte
 });
 
 test('a met topic (logged, or confirmed done before) gives no deadline', () => {
-  const logged = { ...md([med('AL', { issuedDate: '2026-03-01' })]), cme: [{ id: 'c1', title: 'Synthetic boundaries course', category: 'AMA PRA Category 1', hours: '2', date: '2026-04-01', topics: ['Ethics'] }] };
+  const logged = { ...md([med('AL', first('2026-03-01'))]), cme: [{ id: 'c1', title: 'Synthetic boundaries course', category: 'AMA PRA Category 1', hours: '2', date: '2026-04-01', topics: ['Ethics'] }] };
   assert.deepEqual(licensureDeadlinesFor(logged, 'AL', at('2026-11-18')), []);
 });
 
 test('KY pediatric abusive head trauma: dated 5 years from licensure only for the boards the statute names', () => {
-  const lic = [med('KY', { issuedDate: '2024-01-10' })];
+  const lic = [med('KY', first('2024-01-10'))];
   assert.deepEqual(licensureDeadlinesFor(md(lic, { specialties: ['ABMS:ABNS'] }), 'KY', at('2026-11-18')).map(d => d.topic).filter(t => t === 'Pediatric Abusive Head Trauma'), []);
   assert.deepEqual(licensureDeadlinesFor(md(lic, { specialties: [] }), 'KY', at('2026-11-18')).filter(d => d.topic === 'Pediatric Abusive Head Trauma'), []);
   for (const sp of ['ABMS:ABP', 'ABMS:ABR', 'ABMS:ABFM', 'ABMS:ABEM', 'AOA:AOBP', 'AOA:AOBEM']) {
@@ -195,12 +241,36 @@ test('KY pediatric abusive head trauma: dated 5 years from licensure only for th
   }
 });
 
+test('KY: a first license before July 15, 2014 falls under 311.601(2)(a) (prior to Dec 31, 2017), never dated from licensure', () => {
+  const ped = (day) => licensureDeadlinesFor(md([med('KY', first(day))], { specialties: ['ABMS:ABP'] }), 'KY', at('2026-11-18')).find(x => x.topic === 'Pediatric Abusive Head Trauma');
+  const old = ped('2003-05-01');
+  assert.equal(old.status, 'outside');
+  assert.equal(old.due, null);
+  assert.equal(ped('2014-07-14').status, 'outside');
+  assert.equal(ped('2014-07-15').due, '2019-07-15');
+  assert.equal(ped('2014-07-15').status, 'past');
+  // An annually renewed record with no first date entered is asked, not dated.
+  const undated = licensureDeadlinesFor(md([med('KY', { issuedDate: '2026-03-01' })], { specialties: ['ABMS:ABP'] }), 'KY', at('2026-11-18')).find(x => x.topic === 'Pediatric Abusive Head Trauma');
+  assert.equal(undated.status, 'needs-date');
+  assert.equal(undated.due, null);
+});
+
+test('PA DO organ donation cites 49 Pa. Code 25.271(c)(6)(i)(B)', () => {
+  const t = getStateEntry('PA', 'DO').topics.find(x => x.topic === 'Organ and Tissue Donation');
+  assert.match(t.within.cite, /25\.271\(c\)\(6\)\(i\)\(B\)/);
+});
+
 test('PA organ and tissue donation: 5 years from initial licensure only for a license issued on or after May 1, 2026', () => {
-  const after = licensureDeadlinesFor(md([med('PA', { issuedDate: '2026-06-01' })]), 'PA', at('2026-11-18')).find(d => d.topic === 'Organ and Tissue Donation');
+  const after = licensureDeadlinesFor(md([med('PA', first('2026-06-01'))]), 'PA', at('2026-11-18')).find(d => d.topic === 'Organ and Tissue Donation');
   assert.equal(after.due, '2031-06-01');
-  const before = licensureDeadlinesFor(md([med('PA', { issuedDate: '2020-06-01' })]), 'PA', at('2026-11-18')).find(d => d.topic === 'Organ and Tissue Donation');
-  assert.equal(before, undefined, 'counted from a renewal the records do not date: not dated');
-  const doAfter = licensureDeadlinesFor({ ...md([{ ...med('PA', { issuedDate: '2026-05-01' }), type: 'State Medical License (DO)' }]), settings: { degreeType: 'DO', specialties: [] } }, 'PA', at('2026-11-18')).find(d => d.topic === 'Organ and Tissue Donation');
+  const before = licensureDeadlinesFor(md([med('PA', first('2020-06-01'))]), 'PA', at('2026-11-18')).find(d => d.topic === 'Organ and Tissue Donation');
+  assert.equal(before.status, 'outside', 'counted from a renewal the records do not date: not dated');
+  assert.equal(before.due, null);
+  // A renewal-dated record from May 2026 on, with no first date entered, is asked, never read as a new license.
+  const renewalDated = licensureDeadlinesFor(md([med('PA', { issuedDate: '2026-06-01' })]), 'PA', at('2026-11-18')).find(d => d.topic === 'Organ and Tissue Donation');
+  assert.equal(renewalDated.status, 'needs-date');
+  assert.equal(renewalDated.due, null);
+  const doAfter = licensureDeadlinesFor({ ...md([{ ...med('PA', first('2026-05-01')), type: 'State Medical License (DO)' }]), settings: { degreeType: 'DO', specialties: [] } }, 'PA', at('2026-11-18')).find(d => d.topic === 'Organ and Tissue Donation');
   assert.equal(doAfter.due, '2031-05-01');
 });
 
@@ -209,21 +279,44 @@ test('PA note keeps "or of renewal/reactivation": 49 Pa. Code 16.19(c)(1) says s
   assert.match(t.note, /renewal\/reactivation/);
 });
 
-test('DE controlled substance law course: within the first year of a new Delaware CSR, from the CSR issue date', () => {
-  const csr = { id: 'csr', type: STATE_CSR_TYPE, state: 'DE', name: 'DE CSR', expirationDate: '2027-06-30', issuedDate: '2026-02-01' };
-  const data = md([med('DE', { issuedDate: '2026-01-15' }), csr]);
+test('DE controlled substance law course: within the first year of a new Delaware CSR, from the first registration date entered', () => {
+  const csr = { id: 'csr', type: STATE_CSR_TYPE, state: 'DE', name: 'DE CSR', expirationDate: '2027-06-30', issuedDate: '2026-02-01', customFields: { [FIRST_REGISTERED_FIELD]: '2026-02-01' } };
+  const data = md([med('DE', first('2026-01-15')), csr]);
   const d = licensureDeadlinesFor(data, 'DE', at('2026-11-18')).find(x => x.topic === 'Delaware Controlled Substance Law');
   assert.equal(d.from, 'csr');
   assert.equal(d.due, '2027-02-01');
   assert.equal(licensureDeadlineAlerts(data, 90, at('2026-11-18')).length, 1);
   // No CSR record: nothing to count from, and no prompt for a date of a registration not on file.
   assert.equal(licensureDeadlinesFor(md([med('DE')]), 'DE', at('2026-11-18')).find(x => x.topic === 'Delaware Controlled Substance Law'), undefined);
-  // A registration from before July 2, 2013 fell under 3.1.1 (by June 30, 2015).
-  const old = md([med('DE'), { ...csr, issuedDate: '2012-01-01' }]);
-  assert.equal(licensureDeadlinesFor(old, 'DE', at('2026-11-18')).find(x => x.topic === 'Delaware Controlled Substance Law'), undefined);
-  // CSR on file without an issue date: asked for it.
-  const undated = md([med('DE'), { ...csr, issuedDate: '' }]);
+  // A first registration from before July 2, 2013 fell under 3.1.1 (by June 30, 2015).
+  const old = md([med('DE'), { ...csr, customFields: { [FIRST_REGISTERED_FIELD]: '2012-01-01' } }]);
+  const oldD = licensureDeadlinesFor(old, 'DE', at('2026-11-18')).find(x => x.topic === 'Delaware Controlled Substance Law');
+  assert.equal(oldD.status, 'outside');
+  assert.equal(oldD.due, null);
+  // CSR on file without any date: asked for it.
+  const undated = md([med('DE'), { ...csr, issuedDate: '', customFields: {} }]);
   assert.equal(licensureDeadlinesFor(undated, 'DE', at('2026-11-18')).find(x => x.topic === 'Delaware Controlled Substance Law').status, 'needs-date');
+});
+
+test('DE: a renewal-dated CSR record is never read as a new registration (no date, no alert)', () => {
+  // A long-standing registrant: the record shows the term after the June 30, 2025 expiry.
+  const csr = { id: 'csr', type: STATE_CSR_TYPE, state: 'DE', name: 'DE CSR', expirationDate: '2027-06-30', issuedDate: '2025-07-01' };
+  const data = md([med('DE'), csr]);
+  const d = licensureDeadlinesFor(data, 'DE', at('2026-11-18')).find(x => x.topic === 'Delaware Controlled Substance Law');
+  assert.equal(d.status, 'needs-date');
+  assert.equal(d.due, null);
+  assert.equal(d.suggested, '2025-07-01');
+  // The 2027 renewal entered by editing the record: still nothing dated or alerted.
+  const renewed = md([med('DE'), { ...csr, issuedDate: '2027-07-01', expirationDate: '2029-06-30' }]);
+  assert.equal(licensureDeadlinesFor(renewed, 'DE', at('2028-05-01')).find(x => x.topic === 'Delaware Controlled Substance Law').due, null);
+  assert.deepEqual(licensureDeadlineAlerts(renewed, 365, at('2028-05-01')), []);
+  // The physician enters their first registration; it is stored on the CSR record.
+  const edits = firstDateEdits(data.licenses, 'DE', 'csr', '2009-03-01');
+  assert.equal(edits.length, 1);
+  assert.equal(edits[0].id, 'csr');
+  assert.equal(edits[0].customFields[FIRST_REGISTERED_FIELD], '2009-03-01');
+  const answered = { ...data, licenses: [data.licenses[0], edits[0]] };
+  assert.equal(licensureDeadlinesFor(answered, 'DE', at('2026-11-18')).find(x => x.topic === 'Delaware Controlled Substance Law').status, 'outside');
 });
 
 test('DE 2-hour controlled substance CE topic says it is attested at the CSR renewal', () => {
@@ -235,7 +328,7 @@ test('DE 2-hour controlled substance CE topic says it is attested at the CSR ren
 test('generateAlerts raises a licensure deadline inside the lead window only', () => {
   const RealDate = Date;
   const frozen = (iso) => class extends RealDate { constructor(...a) { super(...(a.length ? a : [`${iso}T12:00:00`])); } static now() { return new RealDate(`${iso}T12:00:00`).getTime(); } };
-  const data = md([med('AL', { issuedDate: '2026-03-01', expirationDate: '2027-12-31' })]);
+  const data = md([med('AL', { ...first('2026-03-01'), expirationDate: '2027-12-31' })]);
   try {
     globalThis.Date = frozen('2026-11-18');
     assert.equal(notifications.generateAlerts(data), null);
@@ -248,7 +341,7 @@ test('generateAlerts raises a licensure deadline inside the lead window only', (
 });
 
 test('Vera gets the registrations and deadlines; a snapshot without them is unchanged', () => {
-  const data = md([med('AL', { issuedDate: '2026-03-01' }), med('TX')]);
+  const data = md([med('AL', first('2026-03-01')), med('TX')]);
   const s = assistant.stateDutiesSnapshot(data, at('2026-11-18'));
   assert.equal(s.registrations.length, 1);
   assert.equal(s.registrations[0].state, 'AL');
@@ -267,6 +360,32 @@ test('UI copy has no em dashes', () => {
 });
 
 test('licensureDeadlines covers every licensed state at once', () => {
-  const data = md([med('AL', { issuedDate: '2026-03-01' }), med('PA', { issuedDate: '2026-06-01' })]);
+  const data = md([med('AL', first('2026-03-01')), med('PA', first('2026-06-01'))]);
   assert.deepEqual(licensureDeadlines(data, at('2026-11-18')).map(d => d.state).sort(), ['AL', 'PA']);
+});
+
+test('the app-made answers stay app settings: hidden on the record view, the read-only archive and the support viewer', async () => {
+  const { APP_MARKER_FIELDS } = await import('../../src/constants/appMarkerFields.js');
+  const { BOARD_APP_MADE_FIELD } = await import('../../src/utils/lifecycle.js');
+  for (const k of [CSR_DECLINED_FIELD, FIRST_LICENSED_FIELD, FIRST_REGISTERED_FIELD, BOARD_APP_MADE_FIELD]) assert.ok(APP_MARKER_FIELDS.has(k), k);
+  const crud = readFileSync(new URL('../../src/components/features/CrudSection.jsx', import.meta.url), 'utf8');
+  assert.match(crud, /HIDDEN_CUSTOM_KEYS = new Set\(\[[^\]]*\.\.\.APP_MARKER_FIELDS\]\)/);
+  const rec = { ...med('OK'), customFields: { [CSR_DECLINED_FIELD]: '2026-11-18', [FIRST_LICENSED_FIELD]: '2020-01-01', 'Board order': 'none' } };
+  const archive = await bundle('../../src/utils/readOnlyArchive.js');
+  const rows = archive.recordDetails('licenses', rec, { licenses: [rec] });
+  assert.equal(rows.some(r => /controlled substance|first ?licensed/i.test(`${r.label} ${r.value}`)), false);
+  assert.ok(rows.some(r => r.value === 'none'), 'other custom fields still show');
+  const viewer = await bundle('../../src/utils/memberViewer.js');
+  const vrows = viewer.recordDetails('licenses', rec, { data: { licenses: [rec] }, settings: {} });
+  assert.equal(JSON.stringify(vrows).includes('2026-11-18'), false);
+  assert.equal(JSON.stringify(vrows).includes(FIRST_LICENSED_FIELD), false);
+  assert.ok(JSON.stringify(vrows).includes('none'), 'the viewer still shows other custom fields');
+});
+
+test('a prerequisite is shown under a neutral label; its own timing stays in its text', () => {
+  const ui = readFileSync(new URL('../../src/components/shared/StateDuties.jsx', import.meta.url), 'utf8');
+  assert.doesNotMatch(ui, /Before you renew:/);
+  assert.match(ui, /Also required: \{p\}/);
+  assert.match(STATE_CSR.AL.prerequisites[0], /before you renew/);
+  assert.doesNotMatch(STATE_CSR.SD.prerequisites.join(' '), /renew/);
 });

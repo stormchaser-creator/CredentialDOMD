@@ -71,23 +71,31 @@ export const STATE_REQS_META = {
 // months of licensure." Existing licensees: "must be completed by December
 // 31, 2025." (albme.gov licensure-cme-requirement, read 2026-11-18)
 const AL_BOUNDARIES_WITHIN = Object.freeze({ months: 12, from: "license", dueAfter: "2025-12-31", cite: "Alabama Board of Medical Examiners, Licensure CME Requirement", url: "https://www.albme.gov/resources/licensees/continuing-medical-education/licensure-cme-requirement" });
-// KRS 311.601(2)(b): pediatricians (including medicine and pediatrics),
-// radiologists, family practitioners and physicians in emergency medicine or
-// urgent care, "within five (5) years of licensure". Dated only for a
-// physician whose Profile names one of these boards; urgent care is a
+// KRS 311.601(2)(b): "Future practicing pediatricians", radiologists,
+// family practitioners and physicians in emergency medicine or urgent care,
+// "within five (5) years of licensure". (2)(a) gave those already
+// practicing a separate deadline, "prior to December 31, 2017". The
+// paragraph came from 2014 Ky. Acts ch. 6 (HB 157, signed 03/19/14, "require
+// certain future licensees to receive pediatric abusive head trauma
+// training"; apps.legislature.ky.gov/record/14RS/hb157.html), effective
+// July 15, 2014 (the statute's History line, both read 2026-11-18). So only a
+// first Kentucky license on or after 2014-07-15 is dated here. Dated only
+// for a physician whose Profile names one of these boards; urgent care is a
 // setting no board names, so it stays the topic's note.
-const KY_PAHT_WITHIN = Object.freeze({ years: 5, from: "license", specialties: Object.freeze(["ABMS:ABP", "ABMS:ABR", "ABMS:ABFM", "ABMS:ABEM", "AOA:AOBP", "AOA:AOBR", "AOA:AOBFP", "AOA:AOBEM"]), cite: "KRS 311.601(2)(b)", url: "https://apps.legislature.ky.gov/law/statutes/statute.aspx?id=54804" });
+const KY_PAHT_WITHIN = Object.freeze({ years: 5, from: "license", issuedOnOrAfter: "2014-07-15", specialties: Object.freeze(["ABMS:ABP", "ABMS:ABR", "ABMS:ABFM", "ABMS:ABEM", "AOA:AOBP", "AOA:AOBR", "AOA:AOBFP", "AOA:AOBEM"]), cite: "KRS 311.601(2)(b)", url: "https://apps.legislature.ky.gov/law/statutes/statute.aspx?id=54804" });
 // 49 Pa. Code 16.19(c)(1)(ii): "A medical doctor who obtains a license on or
 // after May 1, 2026, shall verify completion of the 2 credit hours within 5
 // years of initial licensure." (i) and (iii) count from a renewal or a
 // reactivation, which the records do not date, so only (ii) is dated.
 const PA_MD_ORGAN_WITHIN = Object.freeze({ years: 5, from: "license", issuedOnOrAfter: "2026-05-01", cite: "49 Pa. Code \u00a7 16.19(c)(1)(ii)", url: "https://www.pacodeandbulletin.gov/Display/pacode?file=/secure/pacode/data/049/chapter16/s16.19.html" });
-// 49 Pa. Code 25.271(a)(6)(i)(B): the same for an osteopathic physician.
-const PA_DO_ORGAN_WITHIN = Object.freeze({ years: 5, from: "license", issuedOnOrAfter: "2026-05-01", cite: "49 Pa. Code \u00a7 25.271(a)(6)(i)(B)", url: "https://www.pacodeandbulletin.gov/Display/pacode?file=/secure/pacode/data/049/chapter25/s25.271.html" });
+// 49 Pa. Code 25.271(c)(6)(i)(B): the same for an osteopathic physician.
+const PA_DO_ORGAN_WITHIN = Object.freeze({ years: 5, from: "license", issuedOnOrAfter: "2026-05-01", cite: "49 Pa. Code \u00a7 25.271(c)(6)(i)(B)", url: "https://www.pacodeandbulletin.gov/Display/pacode?file=/secure/pacode/data/049/chapter25/s25.271.html" });
 // 24 Del. Admin. Code, Uniform Controlled Substances Act Regulations 3.1.2:
 // a practitioner with a new registration after July 1, 2013 attests to the
 // one hour course "within the first year of obtaining registration".
-// Counted from the Delaware CSR record's issue date.
+// Counted from the first Delaware registration date the physician enters (a
+// CSR record's issue date is usually the current two-year term, and a
+// renewal is not a new registration).
 const DE_CS_LAW_WITHIN = Object.freeze({ years: 1, from: "csr", issuedAfter: "2013-07-01", cite: "24 Del. Admin. Code Uniform Controlled Substances Act Regs. 3.1.2", url: "https://archive.regulations.delaware.gov/AdminCode/title24/Uniform%20Controlled%20Substances%20Act%20Regulations.pdf" });
 
 export const STATE_REQS = {

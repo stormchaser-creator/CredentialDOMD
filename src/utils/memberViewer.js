@@ -12,6 +12,7 @@ import { MEMBER_VIEW_SECTIONS, MEMBER_VIEW_PROFILE_FIELDS, memberViewSection } f
 import { describeItem, getStatusColor, getStatusLabel, formatDate, isNonExpiring, plainDashes, titleAfterType, titleWithType } from "./helpers.js";
 import { reminderLeadDays } from "./reminderPreferences.js";
 import { LIFECYCLE_LABELS, LIFECYCLE_SECTIONS, isAlertable, isInactive, lifecycleNote, BOARD_APP_MADE_FIELD, awaitsBoardDate } from "./lifecycle.js";
+import { APP_MARKER_FIELDS } from "../constants/appMarkerFields.js";
 import { complianceListFor, resolvePendingLicense, undatedLicenseOnFile } from "./compliance.js";
 import { cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, rollingWindowLabel, appCardTitle, appRenewalLine, anchoredRenewalLine } from "./cmePresentation.js";
 import { timedBlockLabel } from "./coverageBlocks.js";
@@ -157,7 +158,7 @@ export function recordDetails(sectionKey, item, snapshot) {
     }
     if (field.kind === "custom") {
       for (const [key, value] of Object.entries(item.customFields || {})) {
-        if (value === null || value === undefined || value === "" || key === BOARD_APP_MADE_FIELD) continue;
+        if (value === null || value === undefined || value === "" || key === BOARD_APP_MADE_FIELD || APP_MARKER_FIELDS.has(key)) continue;
         const shown = Array.isArray(value) ? value.map(entry => (entry && typeof entry === "object" ? Object.values(entry).filter(v => typeof v !== "object").join(" ") : String(entry))).join("; ") : typeof value === "object" ? "" : String(value);
         if (shown) out.push({ label: key.replace(/([a-z])([A-Z])/g, "$1 $2").replace(/^./, ch => ch.toUpperCase()), value: shown });
       }

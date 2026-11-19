@@ -1,0 +1,41 @@
+{
+  "reason": "State duties review fixes (2026-11-18), replacing the state-duties-1118.json review of these six keys (each names that output as previousReviewedHash). Data only; the compliance engine does not read `within`, so no engine or evidence output moves. (1) rules:getStateReq and rules:getStateEntry for KY (MD and DO): the Pediatric Abusive Head Trauma `within` gains issuedOnOrAfter \"2014-07-15\". KRS 311.601(2)(a) gave physicians already practicing a deadline \"prior to December 31, 2017\"; only (2)(b), \"Future practicing\" physicians, counts \"within five (5) years of licensure\". Subsection (2) came from 2014 Ky. Acts ch. 6 (HB 157), effective July 15, 2014 (statute History line; apps.legislature.ky.gov/record/14RS/hb157.html). The `within` comment above it names both. (2) rules:getStateReq and rules:getStateEntry for PA DO: the Organ and Tissue Donation `within` cite changes from 49 Pa. Code 25.271(a)(6)(i)(B) to 25.271(c)(6)(i)(B), where the official page places it ((a) is the renewal form). Nothing else in these outputs changes.",
+  "entries": [
+    {
+      "key": "rules:getStateReq:KY:MD",
+      "originalHash": "df176e00fa9b9aa23c2d09cdd16e0fc2ef2e6c8ad960204af1cc076581b37378",
+      "previousReviewedHash": "d3d78a0c959b8c72e664c3b959143bc8fe747a22ee3ee3775c12128ed566c664",
+      "reviewedHash": "4cc7f892ad181b47c9b4a4f62a24714b8c39122a9c940fe6d8bab24108dae71b"
+    },
+    {
+      "key": "rules:getStateEntry:KY:MD",
+      "originalHash": "f9c90f23f3f7c4f07a461a3797f9626721375c96b0760608b9ae000f8daf544c",
+      "previousReviewedHash": "e9bdd5e712c388af1c6073273337b2ec91ec58c50a0c7428e2baa3dd3e6dbbb4",
+      "reviewedHash": "639e009366e69913e60de0880114709ab7e9fc0599aecaa7238ae53c7fdd8563"
+    },
+    {
+      "key": "rules:getStateReq:KY:DO",
+      "originalHash": "df176e00fa9b9aa23c2d09cdd16e0fc2ef2e6c8ad960204af1cc076581b37378",
+      "previousReviewedHash": "d3d78a0c959b8c72e664c3b959143bc8fe747a22ee3ee3775c12128ed566c664",
+      "reviewedHash": "4cc7f892ad181b47c9b4a4f62a24714b8c39122a9c940fe6d8bab24108dae71b"
+    },
+    {
+      "key": "rules:getStateEntry:KY:DO",
+      "originalHash": "f9c90f23f3f7c4f07a461a3797f9626721375c96b0760608b9ae000f8daf544c",
+      "previousReviewedHash": "e9bdd5e712c388af1c6073273337b2ec91ec58c50a0c7428e2baa3dd3e6dbbb4",
+      "reviewedHash": "639e009366e69913e60de0880114709ab7e9fc0599aecaa7238ae53c7fdd8563"
+    },
+    {
+      "key": "rules:getStateReq:PA:DO",
+      "originalHash": "bba02af13af6b6c526b8b7f968a6fb5a041076ad461fd72413aa21158c0e91db",
+      "previousReviewedHash": "cea4556c49d6a58466fce099bbb694745d4f85383dd06012697cf2e8466970fc",
+      "reviewedHash": "287a2e7ec7ec31e4689f95f3839d6976d0a85323563e15747b73b74ba3670045"
+    },
+    {
+      "key": "rules:getStateEntry:PA:DO",
+      "originalHash": "31febd95710c5eb4c6b225223074b2110280098eb4f58572d891947d8f024566",
+      "previousReviewedHash": "2605a8b37439692223df76af70a60cb2598b1f2ecd95826c21a27bcf19320731",
+      "reviewedHash": "63b0d7fc2f80eb69465059dfefd5bafea5c7e23dd994279d1379553934f87dcc"
+    }
+  ]
+}

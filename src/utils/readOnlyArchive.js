@@ -13,6 +13,7 @@ import { money, invoicePeriod } from "./invoiceCover.js";
 import { scopeForCollection } from "./limitedLaunchAccess.js";
 import { isIdentityLink, isIdentitySection } from "./pausedApplicationRecords.js";
 import { BOARD_APP_MADE_FIELD, awaitsBoardDate } from "./lifecycle.js";
+import { APP_MARKER_FIELDS } from "../constants/appMarkerFields.js";
 
 const SECTION_LABELS = {
   invoices: "Invoices", travelExpenses: "Expenses", deductibles: "Deductions", encounters: "RVU entries",
@@ -114,8 +115,9 @@ export function recordDetails(key, record, data) {
     if ((field === "fieldValues" || field === "customFields") && value && typeof value === "object" && !Array.isArray(value)) {
       const named = field === "fieldValues" && record.fieldLabels && typeof record.fieldLabels === "object" ? record.fieldLabels : {};
       for (const [inner, innerValue] of Object.entries(value)) {
-        // The app's own marker on a board record it made (lifecycle.awaitsBoardDate).
-        if (field === "customFields" && inner === BOARD_APP_MADE_FIELD) continue;
+        // The app's own settings on a record: its mark on a board record it
+        // made (lifecycle.awaitsBoardDate) and the state duty answers.
+        if (field === "customFields" && (inner === BOARD_APP_MADE_FIELD || APP_MARKER_FIELDS.has(inner))) continue;
         const shown = detailValue(inner, innerValue, data);
         if (shown) rows.push({ label: text(named[inner]) || humanize(inner), value: shown });
       }
