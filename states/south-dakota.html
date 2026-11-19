@@ -305,6 +305,17 @@ a:hover { color: var(--emerald-light); }
 .guide-choice--compact legend { width: auto; margin: 0 6px 0 0; font-size: 13px; }
 .guide-hp { position: absolute; left: -9999px; opacity: 0; height: 0; width: 0; }
 .guide-msg { font-size: 14px; margin-top: 10px; min-height: 1em; }
+.reminder-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
+.reminder-form label.reminder-field { display: flex; flex-direction: column; gap: 6px; flex: 1 1 200px; min-width: 0; color: var(--text-muted); font-size: 13px; }
+.reminder-form input[type="email"], .reminder-form input[type="date"] { min-width: 0; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; padding: 12px 16px; color: var(--text); font-family: var(--font); font-size: 16px; color-scheme: dark; }
+.reminder-form input[type="email"]:focus, .reminder-form input[type="date"]:focus { outline: none; border-color: var(--emerald); }
+.reminder-form button { background: var(--emerald); color: #0d0d1a; border: none; border-radius: 10px; padding: 12px 22px; font-family: var(--font); font-weight: 700; font-size: 15px; cursor: pointer; transition: background 0.2s; }
+.reminder-form button:hover { background: var(--emerald-light); }
+.reminder-form button:disabled { opacity: 0.6; cursor: default; }
+.reminder-updates { flex: 1 1 100%; display: flex; gap: 10px; align-items: flex-start; color: var(--text-muted); font-size: 14px; line-height: 1.45; cursor: pointer; }
+.reminder-updates input { margin-top: 3px; accent-color: var(--emerald); }
+.reminder-hp { position: absolute; left: -9999px; width: 1px; height: 1px; opacity: 0; }
+.reminder-note { color: var(--text-muted); font-size: 13px; margin: 12px 0 0; }
 
 /* STICKY GUIDE BAR (mobile only) */
 .guide-bar { display: none; position: fixed; bottom: 0; left: 0; right: 0; z-index: 200; background: var(--bg-elevated); border-top: 1px solid var(--emerald-border); padding: 10px 44px 10px 16px; box-shadow: 0 -4px 20px rgba(0, 0, 0, 0.4); }
@@ -454,6 +465,30 @@ a:hover { color: var(--emerald-light); }
       </div>
       
     </div>
+  </div>
+</section>
+
+<!-- RENEWAL REMINDER: a separate list from the guide email. The reader gives
+     the date their own license renews and gets a reminder about three months,
+     one month and one week before it. The product news box is a separate,
+     unticked consent. RPC: guide_reminder_signup (20261119120000). -->
+<section class="container">
+  <div class="guide-capture" id="renewal-reminder">
+    <h2>Get a reminder before your South Dakota license renews</h2>
+    <p>Enter the date your license expires. We will email you about three months, one month and one week before it. Free, no account.</p>
+    <form class="reminder-form" novalidate>
+      <label class="reminder-field">Email address
+        <input type="email" name="email" placeholder="you@hospital.org" autocomplete="email" required>
+      </label>
+      <label class="reminder-field">Your renewal date
+        <input type="date" name="renewal" required>
+      </label>
+      <input type="text" class="reminder-hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
+      <button type="submit">Remind me</button>
+      <label class="reminder-updates"><input type="checkbox" name="updates" value="yes"><span>Also send me occasional news about CredentialDOMD, the app that tracks licenses, DEA, boards and CME. Optional.</span></label>
+    </form>
+    <p class="guide-msg reminder-msg" role="status" aria-live="polite"></p>
+    <p class="reminder-note">Stop the reminders at any time with the link in each email.</p>
   </div>
 </section>
 
@@ -796,6 +831,72 @@ a:hover { color: var(--emerald-light); }
       window.addEventListener('scroll', onScroll, { passive: true });
     }
   }
+})();
+</script>
+
+<!-- Renewal reminder signup: straight to the guide_reminder_signup RPC with the
+     public anon key. p_state is this page's state; p_renewal_date is the date
+     the reader typed; p_product_updates is the separate unticked box. -->
+<script>
+(function() {
+  var form = document.querySelector('.reminder-form');
+  if (!form) return;
+  var SB = 'https://hkpnnsjcwprrwobmpqyy.supabase.co';
+  var KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhrcG5uc2pjd3BycndvYm1wcXl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwOTIwODksImV4cCI6MjA4NzY2ODA4OX0._8iVLrhaDshKbxWV4XIs9LuyuS_-25fmABwloazhB-U';
+  var ABBR = 'SD';
+  var loadedAt = Date.now();
+  var emailEl = form.querySelector('input[type="email"]');
+  var dateEl = form.querySelector('input[type="date"]');
+  var msg = form.parentElement.querySelector('.reminder-msg');
+  var btn = form.querySelector('button[type="submit"]');
+  function pad(n) { return (n < 10 ? '0' : '') + n; }
+  function iso(d) { return d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate()); }
+  var today = new Date();
+  var last = new Date(today.getFullYear() + 6, today.getMonth(), today.getDate() - 1);
+  if (dateEl) { dateEl.min = iso(today); dateEl.max = iso(last); }
+  function say(text, ok) { if (msg) { msg.style.color = ok ? 'var(--emerald)' : 'var(--amber)'; msg.textContent = text; } }
+  function longDate(value) {
+    var p = value.split('-');
+    var months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+    return months[Number(p[1]) - 1] + ' ' + Number(p[2]) + ', ' + p[0];
+  }
+  form.addEventListener('submit', function(e) {
+    e.preventDefault();
+    var email = (emailEl && emailEl.value || '').trim();
+    var date = (dateEl && dateEl.value || '').trim();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]{2,}$/.test(email)) { say('Enter your email address.', false); if (emailEl) emailEl.focus(); return; }
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { say('Enter the date your license renews.', false); if (dateEl) dateEl.focus(); return; }
+    if (date < iso(today)) { say('That date has passed. Enter your next renewal date.', false); if (dateEl) dateEl.focus(); return; }
+    if (date > iso(last)) { say('That date is more than six years away. Check the year.', false); if (dateEl) dateEl.focus(); return; }
+    var flags = [];
+    var hp = form.querySelector('.reminder-hp');
+    if (hp && (hp.value || '').trim()) flags.push('honeypot');
+    if (Date.now() - loadedAt < 4000) flags.push('fast-submit');
+    var updates = !!form.querySelector('input[name="updates"]:checked');
+    if (btn) { btn.disabled = true; btn.dataset.label = btn.textContent; btn.textContent = 'Saving\u2026'; }
+    say('', true);
+    fetch(SB + '/rest/v1/rpc/guide_reminder_signup', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'apikey': KEY, 'Authorization': 'Bearer ' + KEY },
+      body: JSON.stringify({ p_email: email, p_state: ABBR, p_renewal_date: date, p_product_updates: updates, p_source: location.pathname || '/', p_flags: flags.join(',') || null }),
+      keepalive: true
+    }).then(function(res) {
+      if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label; }
+      if (res.ok) {
+        say('Saved. We will email you before ' + longDate(date) + '.', true);
+        form.reset();
+      } else if (res.status === 403) {
+        say('This address already has reminders for twelve states, the most we keep for one address.', false);
+      } else if (res.status === 429) {
+        say('Busy right now. Try again in a few minutes.', false);
+      } else {
+        say('That did not go through. Check the address and the date and try again.', false);
+      }
+    }).catch(function() {
+      if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label; }
+      say('Connection hiccup. Please try again.', false);
+    });
+  });
 })();
 </script>
 
