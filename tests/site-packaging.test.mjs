@@ -243,6 +243,8 @@ test("every packaged page, in either launch mode, switches plain http to https b
   for (const name of (await readdir(resolve(sourceRoot, "landing/states"))).filter(name => name.endsWith(".html"))) {
     await cp(resolve(sourceRoot, "landing/states", name), resolve(root, "landing/states", name));
   }
+  // The physician assistant and nurse practitioner guides, a folder each.
+  for (const dir of ["physician-assistant", "nurse-practitioner"]) await cp(resolve(sourceRoot, "landing/states", dir), resolve(root, "landing/states", dir), { recursive: true });
   const modes = [[BASELINE_LAUNCH_MODE, {}], [{ enabled: true, signupHref: "/signup/" }, { supabaseUrl: "https://synthetic.supabase.co" }]];
   for (const [mode, config] of modes) {
     const output = await packageSite(root, undefined, mode, config);
@@ -251,6 +253,16 @@ test("every packaged page, in either launch mode, switches plain http to https b
       assert.ok(published.includes(expected), expected);
     }
     for (const name of published) assert.equal(httpsRedirectProblem(await read(resolve(output, name))), null, name);
+    // All 102 physician assistant and nurse practitioner guides are published,
+    // and the sitemap names the indexable ones only.
+    for (const dir of ["physician-assistant", "nurse-practitioner"]) assert.equal(published.filter(name => name.startsWith(`states/${dir}/`)).length, 51, dir);
+    const sitemap = await read(resolve(output, "sitemap.xml"));
+    assert.ok(sitemap.includes("<loc>https://credentialdomd.com/states/physician-assistant/texas</loc>"));
+    assert.ok(sitemap.includes("<loc>https://credentialdomd.com/states/nurse-practitioner/texas</loc>"));
+    for (const name of published.filter(name => /^states\/(physician-assistant|nurse-practitioner)\//.test(name))) {
+      const noindex = (await read(resolve(output, name))).includes('<meta name="robots" content="noindex">');
+      assert.equal(sitemap.includes(`<loc>https://credentialdomd.com/${name.replace(/\.html$/, "")}</loc>`), !noindex, name);
+    }
   }
 });
 
@@ -286,6 +298,7 @@ test('paid mode packages all public signup surfaces while retaining guide-only r
   for (const name of (await readdir(resolve(sourceRoot, 'landing/states'))).filter(name => name.endsWith('.html'))) {
     await cp(resolve(sourceRoot, 'landing/states', name), resolve(root, 'landing/states', name));
   }
+  for (const dir of ['physician-assistant', 'nurse-practitioner']) await cp(resolve(sourceRoot, 'landing/states', dir), resolve(root, 'landing/states', dir), { recursive: true });
   // Synthetic route for offline rendering only; no provider/auth/checkout is enabled.
   const before = new Map(await Promise.all(pages.map(async page => [page, await read(resolve(root, `landing/${page}.html`))])));
   const output = await packageSite(root, undefined, { enabled: true, signupHref: '/signup/' }, {supabaseUrl:'https://synthetic.supabase.co'});

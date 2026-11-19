@@ -74,6 +74,22 @@ export function enablePortalConfig(source) {
   return source.replace(disabled, '$1true$2');
 }
 
+// Folders under landing/states/ that hold the physician assistant and nurse
+// practitioner guides, published at /states/<folder>/<state>.
+export const PROFESSION_GUIDE_DIRS = Object.freeze(['physician-assistant', 'nurse-practitioner']);
+
+/** Guide routes added to the published sitemap, each once. */
+export function addGuidePagesToSitemap(sitemap, routes) {
+  if (!/<\/urlset>\s*$/.test(sitemap)) throw Error('Invalid sitemap closing element');
+  const entries = routes.map(route => {
+    if (!/^\/states\/[a-z-]+\/[a-z-]+$/.test(route)) throw Error(`Invalid guide route: ${route}`);
+    const url = `https://credentialdomd.com${route}`;
+    if (sitemap.includes(`<loc>${url}</loc>`)) throw Error(`Duplicate sitemap entry: ${route}`);
+    return `  <url><loc>${url}</loc></url>\n`;
+  }).join('');
+  return sitemap.replace('</urlset>', entries + '</urlset>');
+}
+
 export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MODE, { supabaseUrl = process.env.VITE_SUPABASE_URL, portalEnabled = process.env.VITE_CREDENTIAL_PORTAL_ENABLED === 'true' } = {}) {
   // Paid marketing must never ship with only some CTAs/forms migrated.
   assertPublicLaunchReady(launchMode);
@@ -96,7 +112,7 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
   if (await readFile(resolve(root, 'landing/help.html'), 'utf8') !== renderHelp(help, videoCatalog)) throw Error('Help page is stale or advertises unreviewed videos; run node scripts/build-help.mjs');
   const publishedHelp = publicLaunchHelp(help, launchMode);
   const watchPages = renderWatchPages(publishedHelp, videoCatalog);
-  const sitemap = addWatchPagesToSitemap(await readFile(resolve(root, 'public/sitemap.xml'), 'utf8'), watchPages);
+  let sitemap = addWatchPagesToSitemap(await readFile(resolve(root, 'public/sitemap.xml'), 'utf8'), watchPages);
   const cme = JSON.parse(await readFile(resolve(root, 'public/knowledge/credentialdo-cme.json'), 'utf8'));
   const states = JSON.parse(await readFile(resolve(root, 'landing/states/states-data.json'), 'utf8'));
   if (await readFile(resolve(root, 'landing/cme.html'), 'utf8') !== renderCme(cme, states)) throw Error('CME page is stale; run node scripts/build-cme.mjs');
@@ -134,6 +150,25 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
     }
   }
   for (const [name, html] of stateOutput) stateOutput.set(name, canonicalLinks(html, canonical));
+  // The physician assistant and nurse practitioner guides
+  // (scripts/build-profession-guides.mjs): one folder each under states/.
+  // A page marked noindex (its rules are not verified) stays out of the sitemap.
+  const professionOutput = new Map();
+  for (const dir of PROFESSION_GUIDE_DIRS) {
+    let names = [];
+    try { names = await readdir(resolve(root, 'landing/states', dir)); } catch (error) { if (error.code !== 'ENOENT') throw error; }
+    for (const name of names.filter(n => n.endsWith('.html')).sort()) {
+      const html = renderPublicLaunch(await readFile(resolve(root, 'landing/states', dir, name), 'utf8'), 'profession-guides', launchMode, liveOffer);
+      professionOutput.set(`${dir}/${name}`, canonicalLinks(html, canonical));
+    }
+  }
+  if (launchMode.enabled) {
+    const expected = PROFESSION_GUIDE_DIRS.flatMap(dir => states.states.map(state => `${dir}/${state.slug}.html`));
+    if (expected.length !== 102 || expected.some(name => !professionOutput.has(name)) || professionOutput.size !== 102) {
+      throw Error('Paid launch requires all 102 physician assistant and nurse practitioner guides; run node scripts/build-profession-guides.mjs');
+    }
+  }
+  sitemap = addGuidePagesToSitemap(sitemap, [...professionOutput].filter(([, html]) => !/<meta name="robots" content="noindex">/.test(html)).map(([name]) => `/states/${name.replace(/\.html$/, '')}`));
   const watchOutput = watchPages.map(page => ({ ...page, html: canonicalLinks(renderPublicLaunch(page.html, 'watch-pages', launchMode, liveOffer), canonical) }));
   // Plain http://credentialdomd.com/app/ loaded and every signup call from it
   // was refused. Every page must switch itself to https before anything else.
@@ -141,6 +176,7 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
   const notFound = `<!doctype html><html lang="en"><meta charset="utf-8">${HTTPS_REDIRECT_SCRIPT}<title>Page not found</title><h1>Page not found</h1><p><a href="/">CredentialDOMD home</a></p></html>\n`;
   for (const [page, html] of pageOutput) assertHttpsRedirect(html, `landing/${page}.html`);
   for (const [name, html] of stateOutput) assertHttpsRedirect(html, `landing/states/${name}`);
+  for (const [name, html] of professionOutput) assertHttpsRedirect(html, `landing/states/${name}`);
   for (const page of watchOutput) assertHttpsRedirect(page.html, `help/${page.id}/index.html`);
   assertHttpsRedirect(notFound, '404.html');
   await rm(output, { recursive: true, force: true });
@@ -208,6 +244,8 @@ export async function packageSite(root, legacyDir, launchMode = PUBLIC_LAUNCH_MO
   await writeFile(resolve(output, 'sitemap.xml'), sitemap);
   await mkdir(resolve(output, 'states'), { recursive: true });
   for (const [name, html] of stateOutput) await writeFile(resolve(output, 'states', name), html);
+  for (const dir of PROFESSION_GUIDE_DIRS) if ([...professionOutput.keys()].some(name => name.startsWith(`${dir}/`))) await mkdir(resolve(output, 'states', dir), { recursive: true });
+  for (const [name, html] of professionOutput) await writeFile(resolve(output, 'states', name), html);
   // Keep explicitly named legacy public assets when migrating the existing site.
   // Never copy a whole checkout or undocumented public directories.
   if (legacyDir) {

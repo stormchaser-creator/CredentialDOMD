@@ -119,6 +119,8 @@ const minimumSlots = {
   cme: { cta: 1, 'early-release': 1, participation: 1 },
   'state-guides': { cta: 4, 'guide-consent': 4, 'guide-offer': 1, 'early-release': 1, participation: 1 },
   'state-index': { cta: 4, 'early-release': 1, participation: 1 },
+  // The physician assistant and nurse practitioner guides (scripts/build-profession-guides.mjs).
+  'profession-guides': { cta: 4, 'guide-offer': 1, 'early-release': 1, participation: 1 },
   'watch-pages': { cta: 1, 'early-release': 1, participation: 1 },
   'legal-navigation': { cta: 1 },
 };
