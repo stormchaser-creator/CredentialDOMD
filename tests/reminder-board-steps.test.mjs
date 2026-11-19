@@ -118,7 +118,7 @@ test('under a banner snooze, a step the snoozed banner showed does not wake the 
     { send: true, reason: 'list changed' }, 'the banner did not show it');
   // The part's shape is the one the app writes for a board alert.
   const notifications = readFileSync(`${root}src/utils/notifications.js`, 'utf8');
-  assert.match(notifications, /`cme:\$\{ci\.key \?\? ci\.state\}:\$\{ci\.issues\.length\}:\$\{ci\.renewal \?\? "x"\}`/);
+  assert.match(notifications, /`cme:\$\{ci\.key \?\? ci\.state\}:\$\{ci\.issues\.length\}:\$\{ci\.fpDates \?\? ci\.renewal \?\? "x"\}`/);
   assert.match(readFileSync(`${root}src/utils/boardTasks.js`, 'utf8'), /key: `board:\$\{b\.id\}`/);
 });
 
@@ -135,6 +135,8 @@ function fakeDb({ boardFails = false } = {}) {
       const q = { table, board: false, after: null };
       const chain = {
         select: () => chain, in: () => chain, gte: () => chain, lte: () => chain, order: () => chain, limit: () => chain,
+        // The first-date read (licensure deadlines) finds nobody here.
+        or: () => { q.after = 'none'; return chain; },
         ilike: () => { q.board = true; return chain; },
         gt: (_c, v) => { q.after = v; return chain; },
         then(resolve, reject) {
@@ -172,7 +174,7 @@ test('send-reminders adds the steps after the records, never lets them block the
   assert.ok(board < loop.indexOf('const fp = await reminderFingerprint(items);'), 'and counted in the fingerprint');
   assert.match(loop, /let boardFailed = !!read\.boardsFailed;/);
   assert.match(loop, /try \{\s*items\.push\(\.\.\.\(reminderBoardItems[\s\S]*?\} catch \(e\) \{\s*boardFailed = true;/, 'an error is caught and logged');
-  assert.match(loop, /const told = dryRun \|\| readFailed \|\| boardFailed \? null : reminderToldStill/, 'a run without the steps forgets nothing');
+  assert.match(loop, /const told = dryRun \|\| readFailed \|\| boardFailed \|\| licensureFailed \? null : reminderToldStill/, 'a run without the steps forgets nothing');
   assert.doesNotMatch(fn.slice(fn.indexOf('if (read.acksFailed || read.failed.size)'), fn.indexOf('const lead = reminderLeadDays')), /boards/, 'a board failure never refuses the digest');
   assert.match(fn, /"\\n      Mark it done in the app when finished\."/, 'the hint, once, on the first step');
   assert.match(fn, /i === firstBoard \?/);

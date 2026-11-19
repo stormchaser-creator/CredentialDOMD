@@ -370,7 +370,13 @@ export function boardTaskAlerts(data, boards, lead, now = new Date()) {
   return openBoardTasks(data, boards, lead, now).map(({ board: b, tasks: open }) => {
     const issues = open.map(x => `${x.label}: due ${x.due}`);
     const soonest = open.reduce((a, x) => (x.due < a.due ? x : a), open[0]);
-    return { state: b.code, issues, daysLeft: soonest.daysLeft, renewal: soonest.due, key: `board:${b.id}`, kind: "board", label: b.label };
+    // The banner's fingerprint names each step's date when they differ
+    // ("2027-01-05+2027-02-01"), so the reminder email can tell a step the
+    // member snoozed over from a new one (reminderCadence.mjs bannerCounts).
+    // Steps sharing one date keep the single date, as before.
+    const dues = open.map(x => x.due).sort();
+    const fpDates = dues.every(d => d === dues[0]) ? undefined : dues.join("+");
+    return { state: b.code, issues, daysLeft: soonest.daysLeft, renewal: soonest.due, ...(fpDates ? { fpDates } : {}), key: `board:${b.id}`, kind: "board", label: b.label };
   });
 }
 

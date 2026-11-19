@@ -170,7 +170,8 @@ export function generateAlerts(data) {
     // holds while the fingerprint is unchanged) ended the next morning.
     // Physician entries keep `cme:TX:...`, so existing snoozes survive; a PA
     // or NP card is `cme:TX:aprn:...`.
-    ...cmeIssues.map(ci => `cme:${ci.key ?? ci.state}:${ci.issues.length}:${ci.renewal ?? "x"}`),
+    // A board alert whose steps have different dates names each (fpDates).
+    ...cmeIssues.map(ci => `cme:${ci.key ?? ci.state}:${ci.issues.length}:${ci.fpDates ?? ci.renewal ?? "x"}`),
   ];
   const fingerprint = fpParts.sort().join("|");
 

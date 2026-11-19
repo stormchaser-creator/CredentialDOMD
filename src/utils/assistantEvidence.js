@@ -62,7 +62,10 @@ function ruleEvidence(rule, jurisdiction, degree) {
     topics: (rule.topics || []).map(t => ({
       topic: t.topic, savedHours: t.hours, note: t.note || null,
       classification: t.informational ? 'provider_course_guidance' : 'personal_requirement',
-      period: t.period || 'renewal_cycle', condition: t.condition || null,
+      // A topic counted in the state controlled substance registration's own
+      // period (Delaware) is named as such, not as the license cycle.
+      period: t.period?.registration === 'csr' ? 'controlled_substance_registration_period' : (t.period || 'renewal_cycle'), condition: t.condition || null,
+      ...(t.csrHolders ? { appliesTo: 'state_controlled_substance_registration_holders' } : {}),
       citation: t.cite || rule.source || null,
       url: withheld ? null : https(t.url || rule.sourceUrl),
       sourceScope: t.url && t.url !== rule.sourceUrl ? 'topic_specific_reference' : 'inherited_rule_reference_not_topic_verification',

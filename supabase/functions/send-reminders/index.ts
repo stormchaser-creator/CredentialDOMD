@@ -42,9 +42,10 @@ import appBoardLinks from "./appBoardLinks.json" with { type: "json" };
 import { renewalLineFor } from "../_shared/reminderRenewalLine.mjs";
 import { remindable, reminderLabel, withCurrentCategoryNames, reminderGreeting, reminderHeadline } from "../_shared/reminderRows.mjs";
 import { reminderRecipientsQuery, reminderLeadDays, notifyFreqDays } from "../_shared/reminderRecipients.mjs";
-import { reminderEmailDecision, reminderFingerprint, reminderToldBoard, reminderToldStill } from "../_shared/reminderCadence.mjs";
+import { reminderEmailDecision, reminderFingerprint, reminderToldBoard, reminderToldLicensure, reminderToldStill } from "../_shared/reminderCadence.mjs";
 import { readAllPages, groupsOf, readReminderGroup } from "../_shared/reminderReads.mjs";
 import { reminderBoardItems } from "../_shared/reminderBoardSteps.mjs";
+import { reminderLicensureItems } from "../_shared/reminderLicensureDeadlines.mjs";
 import { drainReminderQueue, reminderDeadline } from "../_shared/reminderQueue.mjs";
 
 const RESEND = Deno.env.get("RESEND_API_KEY")!;
@@ -206,6 +207,23 @@ async function handle(req: Request, queueJob: { id: string; lease_token: string 
         results.push({ profile: p.id, sent: false, error: "records_unavailable" });
         continue;
       }
+      // One-time state courses due within a set time of licensure, from a
+      // first date the member entered, unmet and inside this member's lead
+      // time, as the app alerts on them. Held and forgotten exactly like the
+      // board steps above.
+      let licensureFailed = !!read.licensureFailed;
+      if (!licensureFailed) {
+        try {
+          items.push(...(reminderLicensureItems(p, read.licensure.get(p.id), { lead, now: new Date(), today }) as ReminderItem[]));
+        } catch (e) {
+          licensureFailed = true;
+          console.error("reminder licensure deadlines failed", p.id, (e as Error)?.message);
+        }
+      }
+      if (licensureFailed && reminderToldLicensure(p.reminder_email_fingerprint)) {
+        results.push({ profile: p.id, sent: false, error: "records_unavailable" });
+        continue;
+      }
       const fp = await reminderFingerprint(items);
       // A run that sends nothing forgets the told items it no longer lists, so
       // one that returns under the same snooze (an acknowledgement lapsed) is
@@ -214,7 +232,7 @@ async function handle(req: Request, queueJob: { id: string; lease_token: string 
       // Not after a failed table read: the next full read would find that
       // table's told items fresh and mail the same list again under a snooze.
       const forget = async () => {
-        const told = dryRun || readFailed || boardFailed ? null : reminderToldStill(p.reminder_email_fingerprint, fp);
+        const told = dryRun || readFailed || boardFailed || licensureFailed ? null : reminderToldStill(p.reminder_email_fingerprint, fp);
         if (!told) return;
         const { error } = await db.from("profiles").update({ reminder_email_fingerprint: told }).eq("id", p.id);
         if (error) console.error("reminder told update failed", p.id, error.message);
@@ -237,7 +255,9 @@ async function handle(req: Request, queueJob: { id: string; lease_token: string 
       // A board step has no renewal portal; the first one listed says how it
       // leaves the list (the app's Done mark), once.
       const firstBoard = items.find(i => i.table === "board");
-      const boardHint = (i: ReminderItem) => i === firstBoard ? "\n      Mark it done in the app when finished." : "";
+      const firstCourse = items.find(i => i.table === "licensure");
+      const boardHint = (i: ReminderItem) => i === firstBoard ? "\n      Mark it done in the app when finished."
+        : i === firstCourse ? "\n      Log the course in the app when finished." : "";
       const line = (i: ReminderItem) => `  - ${i.name}: ${fmt(i.exp)} (${i.days < 0 ? `${-i.days} day${i.days === -1 ? "" : "s"} ago` : i.days === 0 ? "today" : `in ${i.days} day${i.days === 1 ? "" : "s"}`})${renewLine(i)}${boardHint(i)}`;
       const parts: string[] = [];
       if (expired.length) parts.push(`EXPIRED\n${expired.map(line).join("\n")}`);

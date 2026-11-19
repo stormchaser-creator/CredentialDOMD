@@ -19,14 +19,17 @@
 //   renewsWithLicense: true where the page says the registration is renewed
 //     as part of the practitioner license renewal.
 //
-// Researched and NOT encoded (no official page could be read in the session,
-// or the page did not state the rule): Massachusetts (MCSR; mass.gov returned
-// 403), Michigan (LARA controlled substance license; michigan.gov returned
-// 403), New Jersey (CDS registration; no Drug Control Unit page stating it),
-// Rhode Island (no health.ri.gov page found), New Mexico, District of
-// Columbia. They stay out until their own page is read.
+//   expiresWithLicense: true where the source says the registration expires
+//     on the medical license's own date: "Add it" prefills that date.
+//
+// Added 2026-11-19 from official text read that day: Massachusetts (mass.gov),
+// Michigan (MCL 333.7303), Rhode Island (RIDOH application), New Mexico
+// (16.19.20 and 16.19.12 NMAC), District of Columbia (22-B DCMR 1003).
+// Researched and NOT encoded: New Jersey (CDS registration exists, per the
+// Drug Control Unit applications page, but no official text stating its term
+// could be read). It stays out until its own rule is read.
 
-export const STATE_CSR_CHECKED = "2026-11-18";
+export const STATE_CSR_CHECKED = "2026-11-19";
 
 /** The record type the app files a state registration under (credentialTypes.js). */
 export const STATE_CSR_TYPE = "State Controlled Substance";
@@ -57,6 +60,20 @@ export const STATE_CSR = {
     renewalUrl: "https://www.elicense.ct.gov",
     sourceUrl: "https://portal.ct.gov/dcp/knowledge-base/articles/drug-control/licenses/csp-faqs/when-does-it-expire",
     quote: "expires every two years on February 28th of odd numbered years",
+  },
+  DC: {
+    name: "District of Columbia Controlled Substance Registration", short: "DC CS registration",
+    agency: "DC Health, Pharmaceutical Control Division",
+    who: "Practitioners who prescribe controlled substances in the District of Columbia",
+    cadence: null,
+    expiresWithLicense: true,
+    // 22-B DCMR 1003.4; the fixed December 31 date in 1003.5 is for
+    // non-practitioners. File at least 60 days before expiration (1003.6).
+    expiryRule: "Expires with your DC health professional license; file the renewal at least 60 days before",
+    prerequisites: ["Register with the DC Prescription Drug Monitoring Program before you renew"],
+    renewalUrl: null,
+    sourceUrl: "https://www.dcregs.dc.gov/Common/DCMR/SectionList.aspx?SectionNumber=22-B1003",
+    quote: "shall expire simultaneously with the expiration of the practitioner's District of Columbia health professional license",
   },
   DE: {
     name: "Delaware Controlled Substance Registration (CSR)", short: "DE CSR",
@@ -139,6 +156,19 @@ export const STATE_CSR = {
     sourceUrl: "https://www.pharmacy.la.gov/assets/docs/Forms/102---Appl-for-Renewal-of-CDS-License---Practitioners--2024-0301.pdf",
     quote: "more than 30 days after expiration date of CDS license",
   },
+  MA: {
+    name: "Massachusetts Controlled Substances Registration (MCSR)", short: "MCSR",
+    agency: "Massachusetts Department of Public Health, Drug Control Program",
+    who: "Practitioners who prescribe controlled substances in Massachusetts",
+    cadence: "Every two years",
+    expiresWithLicense: true,
+    // Dates not yet in sync are synced by a shortened, prorated MCSR.
+    expiryRule: "Every two years, synced to your professional license's expiration date",
+    prerequisites: [],
+    renewalUrl: "https://healthprofessionlicensing.mass.gov/",
+    sourceUrl: "https://www.mass.gov/how-to/apply-for-or-renew-a-practitioner-mcsr",
+    quote: "The expiration date of your MCSR will then sync up with the expiration date of your professional license",
+  },
   MD: {
     name: "Maryland CDS Registration", short: "MD CDS",
     agency: "Maryland Department of Health, Office of Controlled Substances Administration",
@@ -149,6 +179,19 @@ export const STATE_CSR = {
     renewalUrl: null,
     sourceUrl: "https://health.maryland.gov/ocsa/Documents/3%20Year%20Practitioner%20Fill-Able%20Application%206-4-2026.pdf",
     quote: "must register with the Prescription Drug Monitoring Program (PDMP) prior to obtaining a new or renewal CDS Registration",
+  },
+  MI: {
+    name: "Michigan Controlled Substance License", short: "MI CS license",
+    agency: "Michigan LARA, Bureau of Professional Licensing",
+    who: "Physicians who prescribe controlled substances in Michigan",
+    cadence: null,
+    renewsWithLicense: true,
+    expiresWithLicense: true,
+    expiryRule: "Renewed with your Michigan medical license, for the same number of years",
+    prerequisites: ["Opioids and controlled substances awareness training (R 338.3135) before it is issued"],
+    renewalUrl: "https://www.michigan.gov/lara/bureau-list/bpl/miplus-assistant",
+    sourceUrl: "https://www.legislature.mi.gov/Laws/MCL?objectName=mcl-333-7303",
+    quote: "renew the controlled substances license concurrently with the renewal of the license issued under article 15",
   },
   MO: {
     name: "Missouri BNDD Controlled Substance Registration", short: "MO BNDD",
@@ -161,6 +204,18 @@ export const STATE_CSR = {
     sourceUrl: "https://www.sos.mo.gov/cmsimages/adrules/csr/current/19csr/19c30-1.pdf",
     // 19 CSR 30-1.017(2)(A)-(B).
     quote: "current and effective for twelve (12) months from the date issued",
+  },
+  NM: {
+    name: "New Mexico Controlled Substance Registration", short: "NM CSR",
+    agency: "New Mexico Board of Pharmacy",
+    who: "Practitioners who prescribe controlled substances in New Mexico",
+    cadence: "Every three years",
+    // 16.19.20.9 NMAC: twelve monthly groups; 16.19.12 NMAC: $180 triennially.
+    expiryRule: "Every three years, on the last day of the month your registration names",
+    prerequisites: ["Register with the New Mexico Prescription Monitoring Program"],
+    renewalUrl: null,
+    sourceUrl: "https://www.srca.nm.gov/parts/title16/16.019.0020.html",
+    quote: "will be the last day of the month designated for that group",
   },
   NV: {
     name: "Nevada Controlled Substance Registration", short: "NV CS registration",
@@ -188,6 +243,19 @@ export const STATE_CSR = {
     renewalUrl: null,
     sourceUrl: "https://content.govdelivery.com/accounts/OKBNDD/bulletins/3d08952",
     quote: "OBN Registration renewals shall open July 1st annually.",
+  },
+  RI: {
+    name: "Rhode Island Controlled Substances Registration (CSR)", short: "RI CSR",
+    agency: "Rhode Island Department of Health",
+    who: "Practitioners who prescribe controlled substances in Rhode Island",
+    cadence: null,
+    renewsWithLicense: true,
+    expiresWithLicense: true,
+    expiryRule: "Issued with your professional license's expiration date and renewed at the same time",
+    prerequisites: ["Register with the Rhode Island Prescription Drug Monitoring Program"],
+    renewalUrl: "https://healthri.mylicense.com/Login.aspx",
+    sourceUrl: "https://health.ri.gov/sites/g/files/xkgbur1006/files/applications/ControlledSubstances.pdf",
+    quote: "The CSR is issued with the same expiration date as the professional license",
   },
   SC: {
     name: "South Carolina Controlled Substances Registration", short: "SC CSR",

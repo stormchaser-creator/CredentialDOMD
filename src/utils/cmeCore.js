@@ -109,6 +109,10 @@ export const showDate = (d) => d.toLocaleDateString("en-US", { month: "short", d
 export function topicPeriodLabel(period, cycleYears) {
   if (period === "lifetime") return "One time, not every cycle";
   if (period && typeof period === "object" && period.years > 0) {
+    if (period.registrationEnd) {
+      const end = parseLocalDate(period.registrationEnd);
+      return `Every ${period.years === 1 ? "year" : `${period.years} years`}, counting your controlled substance registration period ending ${showDate(end)}${period.registrationSource === "rule" ? " (the state's next expiration; add your registration to use its own date)" : ""}`;
+    }
     if (period.fromToday) return period.years === 1 ? "Within the 12 months before today" : `Within the ${period.years} years before today`;
     const every = period.years === 1 ? "Every year" : `Every ${period.years} years`;
     // A fixed due date (New York prescriber training) names the due date

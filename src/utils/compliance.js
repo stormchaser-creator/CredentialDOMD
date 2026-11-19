@@ -10,6 +10,9 @@ import {
   certBodyOf, certificationRolePending, isAdvancedPractice, isNationalCertification, isPracticeLicense, licenseKindOf, professionOf,
 } from "../constants/professions.js";
 import { ruleSetFor } from "./ruleResolver.js";
+import { csrCountingPeriod } from "./csrWindow.js";
+import { STATE_CSR_TYPE } from "../constants/stateControlledSubstance.js";
+import { CSR_DECLINED_FIELD } from "../constants/appMarkerFields.js";
 import {
   MATE_TOPICS, MATE_HOURS, MS_PER_DAY, cmeTopics, topicTags, parseLocalDate, cycleBucket, splitByCycle, inWindow, taggedOutsidePeriod,
   wholeMonthsBetween, showDate, topicPeriodLabel, round2,
@@ -207,6 +210,21 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     if (t.period === "lifetime") {
       pool = cmeEntries || [];
       period = "lifetime";
+    } else if (t.period && typeof t.period === "object" && t.period.registration === "csr") {
+      // CME the state controlled substance registration requires, attested
+      // at CSR renewal (Delaware): counted over the CSR period ending at the
+      // registration's own expiration, or the state's next fixed one.
+      const csr = opts.csrPeriod || csrCountingPeriod(state, null);
+      if (csr) {
+        const pEnd = parseLocalDate(csr.end);
+        const pStart = new Date(pEnd);
+        pStart.setFullYear(pStart.getFullYear() - csr.years);
+        pool = (cmeEntries || []).filter(c => inWindow(c, pStart, pEnd));
+        period = { years: csr.years, registrationEnd: csr.end, registrationSource: csr.source };
+      } else {
+        pool = windowed;
+        period = null;
+      }
     } else if (t.period && typeof t.period === "object" && t.period.years > 0) {
       const pStart = new Date(windowEnd);
       pStart.setFullYear(pStart.getFullYear() - t.period.years);
@@ -257,7 +275,9 @@ export function computeCompliance(cmeEntries, state, degreeType, opts = {}) {
     // (California geriatric rule for a neurosurgeon) carries its source, so
     // the card says where the answer came from. Absent otherwise, which
     // keeps every other row byte-identical.
-    const applicability = topicApplicability(t, opts.topicApplicability, opts.specialties);
+    // A topic only CSR holders owe drops out once the physician said "I don't
+    // prescribe controlled substances here" (stateDuties.js).
+    const applicability = t.csrHolders && opts.csrDeclined ? "not-applicable" : topicApplicability(t, opts.topicApplicability, opts.specialties);
     const answer = t.condition ? opts.topicApplicability?.[t.condition.field] : undefined;
     const prefill = t.condition && applicability === "not-applicable" && answer !== false && answer !== "No"
       ? specialtyPrefill(t.condition, opts.specialties) : null;
@@ -501,6 +521,14 @@ export function topicOutsidePeriod(comp, tr, cmeEntries) {
   const end = comp.windowEnd ? new Date(comp.windowEnd) : null;
   if (!end || Number.isNaN(end.getTime())) return null;
   let start;
+  if (tr.period && typeof tr.period === "object" && tr.period.registrationEnd) {
+    // The CSR period (Delaware): its own end, not the license window's.
+    const rEnd = new Date(`${tr.period.registrationEnd}T00:00:00`);
+    start = new Date(rEnd);
+    start.setFullYear(start.getFullYear() - tr.period.years);
+    const pool = (cmeEntries || []).filter(c => inWindow(c, start, rEnd));
+    return taggedOutsidePeriod(cmeEntries, pool, topicTags(tr), null, start, rEnd);
+  }
   if (tr.period && typeof tr.period === "object" && tr.period.years > 0) {
     start = new Date(end);
     start.setFullYear(start.getFullYear() - tr.period.years);
@@ -726,7 +754,26 @@ export function complianceFor(data, state, kind) {
     hasDEA: hasDEARegistration(data.licenses) && state === mateCardState(data),
     mateAttestedOn: mateAttestationDate(data.licenses),
     boardCertCurrent: currentBoardCertificationOnFile(data.licenses),
+    csrPeriod: csrCountingPeriod(state, csrExpirationOnFile(data.licenses, state)),
+    csrDeclined: csrDeclinedHere(data.licenses, state),
   });
+}
+
+/** The latest expiration on the physician's current CSR records in the state, or null. */
+function csrExpirationOnFile(licenses, state) {
+  let best = null;
+  for (const l of licenses || []) {
+    if (!l || l.state !== state || String(l.type || "") !== STATE_CSR_TYPE || isInactive(l)) continue;
+    const e = String(l.expirationDate || "").slice(0, 10);
+    if (/^\d{4}-\d{2}-\d{2}$/.test(e) && (!best || e > best)) best = e;
+  }
+  return best;
+}
+
+/** Whether the physician said "I don't prescribe controlled substances here" on a current state medical license. */
+function csrDeclinedHere(licenses, state) {
+  return (licenses || []).some(l => l && l.state === state && ofKind(l, "medical") && !isInactive(l)
+    && /^\d{4}-\d{2}-\d{2}/.test(String(l.customFields?.[CSR_DECLINED_FIELD] || "")));
 }
 
 

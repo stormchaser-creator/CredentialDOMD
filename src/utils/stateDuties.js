@@ -30,6 +30,7 @@ import { isPhysicianDegree } from "../constants/professions.js";
 import { complianceFor } from "./compliance.js";
 import { isInactive } from "./lifecycle.js";
 import { daysUntilDate, localToday } from "./dateDays.js";
+import { nextFixedExpiry } from "./csrWindow.js";
 import { CSR_DECLINED_FIELD, FIRST_LICENSED_FIELD, FIRST_REGISTERED_FIELD } from "../constants/appMarkerFields.js";
 
 export { CSR_DECLINED_FIELD, FIRST_LICENSED_FIELD, FIRST_REGISTERED_FIELD };
@@ -43,26 +44,7 @@ export function stateCsrRule(state) {
   return Object.hasOwn(STATE_CSR, state || "") ? STATE_CSR[state] : null;
 }
 
-/**
- * The next expiration a fixed rule gives, on or after today, or null when
- * the rule fixes no date. { month: 12, day: 31, everyYears: 1 } on
- * 2026-11-18 is 2026-12-31; { month: 6, day: 30, everyYears: 2, years: "odd" }
- * is 2027-06-30.
- */
-export function nextFixedExpiry(rule, now = new Date()) {
-  const e = rule?.expires;
-  if (!e || !e.month || !e.day) return null;
-  const today = localToday(now);
-  for (let y = now.getFullYear(); y <= now.getFullYear() + 4; y++) {
-    if (e.everyYears === 2 && e.years === "odd" && y % 2 === 0) continue;
-    if (e.everyYears === 2 && e.years === "even" && y % 2 !== 0) continue;
-    if (e.everyYears !== 1 && e.everyYears !== 2) return null;
-    if (e.everyYears === 2 && !e.years) return null;
-    const d = `${y}-${pad(e.month)}-${pad(e.day)}`;
-    if (d >= today) return d;
-  }
-  return null;
-}
+export { nextFixedExpiry };
 
 const isMedical = (l) => /medical license/i.test(l?.type || "");
 const isCsr = (l) => String(l?.type || "") === STATE_CSR_TYPE;
@@ -88,10 +70,16 @@ export function csrDeclinedOn(licenses, state) {
 }
 
 /** The new-record draft "Add it" opens: type, state, name and, where the rule fixes it, the next expiration. */
-export function csrPrefill(state, now = new Date()) {
+export function csrPrefill(state, now = new Date(), licenses = []) {
   const rule = stateCsrRule(state);
   if (!rule) return null;
-  const exp = nextFixedExpiry(rule, now);
+  // A registration that expires with the license (DC, MA, MI, RI) is
+  // prefilled with the current state medical license's date, for the
+  // physician to confirm against the certificate.
+  const withLicense = rule.expiresWithLicense
+    ? currentMedical(licenses, state).map(l => String(l.expirationDate || "").slice(0, 10)).filter(d => ISO.test(d) && d >= localToday(now)).sort().at(-1) || null
+    : null;
+  const exp = withLicense || nextFixedExpiry(rule, now);
   return { type: STATE_CSR_TYPE, state, name: rule.short, ...(exp ? { expirationDate: exp } : {}) };
 }
 
@@ -113,7 +101,7 @@ export function csrCard(data, state, now = new Date()) {
   if (records.length) return { ...base, status: "on-file", record: records[0] };
   const on = csrDeclinedOn(data.licenses, state);
   if (on) return { ...base, status: "declined", on };
-  return { ...base, status: "ask", prefill: csrPrefill(state, now) };
+  return { ...base, status: "ask", prefill: csrPrefill(state, now, data.licenses) };
 }
 
 /** Every state a physician holds a medical license in, in license order. */

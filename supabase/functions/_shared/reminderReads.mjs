@@ -14,6 +14,7 @@
 // Plain JavaScript so the Deno function and the node tests share one copy.
 
 import { reminderPages } from "./reminderPagination.mjs";
+import { FIRST_LICENSED_FIELD, FIRST_REGISTERED_FIELD } from "./app/constants/appMarkerFields.js";
 
 /** A bounded page; the server may cap it further. */
 export const PAGE_ROWS = 500;
@@ -119,5 +120,31 @@ export async function readReminderGroup(db, ids, { tables, today, lo, hi }) {
   if (boardsRead.error) console.error('query failed', 'licenses (board certification)', boardsRead.error.message);
   const boards = boardsRead.error ? new Map() : byUser(boardsRead.data);
 
-  return { acked, rows, categories, failed, categoriesFailed, acksFailed: !!acksRead.error, boards, boardsFailed: !!boardsRead.error };
+  // Licensure deadlines (reminderLicensureDeadlines.mjs) count only from a
+  // first date the member entered on a state record (stateDuties.js), so
+  // only members with one are read further: every licence and CME record,
+  // which the app's CME engine needs to tell a logged course from a missing
+  // one. A failed read never fails the credential digest.
+  const licensure = new Map();
+  let licensureFailed = false;
+  const firstRead = await readAllPages(() => db.from('licenses')
+    .select('id, user_id')
+    .in('user_id', ids)
+    .or(`custom_fields->>${FIRST_LICENSED_FIELD}.not.is.null,custom_fields->>${FIRST_REGISTERED_FIELD}.not.is.null`)
+    .order('id'));
+  if (firstRead.error) { console.error('query failed', 'licenses (first dates)', firstRead.error.message); licensureFailed = true; }
+  const withFirst = [...new Set((firstRead.data || []).map(r => r.user_id))];
+  if (withFirst.length && !licensureFailed) {
+    const lic = await readAllPages(() => db.from('licenses').select('*').in('user_id', withFirst).order('id'));
+    const cme = await readAllPages(() => db.from('cme').select('*').in('user_id', withFirst).order('id'));
+    if (lic.error || cme.error) {
+      console.error('query failed', 'licensure records', (lic.error || cme.error).message);
+      licensureFailed = true;
+    } else {
+      const licBy = byUser(lic.data), cmeBy = byUser(cme.data);
+      for (const u of withFirst) licensure.set(u, { licenses: licBy.get(u) || [], cme: cmeBy.get(u) || [] });
+    }
+  }
+
+  return { acked, rows, categories, failed, categoriesFailed, acksFailed: !!acksRead.error, boards, boardsFailed: !!boardsRead.error, licensure, licensureFailed };
 }

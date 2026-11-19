@@ -61,6 +61,15 @@ export const BOARD_EXEMPTION_CONDITION_DEGREE_FIELD = "Board certification exemp
  * are still in the rule text). A state with separate MD and DO boards keys
  * its condition by degree; a degree with no entry has no exemption there.
  *
+ * NH, MD and DO. N.H. Code Admin. R. Med 402.01 (gc.nh.gov rules page, read
+ * 2026-11-19): (g) "Passage of an American Specialty Board examination, whether
+ * for initial eligibility or for recertification, shall be accepted as the
+ * equivalent of 100 category I CME credit hours"; (i) proof "of being up to
+ * date on a program of maintenance of certification by the physicians
+ * specialty organization" completes the CME requirement "for the preceding 2
+ * years". Neither names ABMS. The 3 hour pain management and addiction
+ * requirement (RSA 318-B:41, VI) is still owed.
+ *
  * ME, MD only. Board of Licensure in Medicine Rules ch. 1 s. 11(1)(A) (02-373,
  * amended 2026): "Current certification, including maintenance of
  * certification, by the American Board of Medical Specialties (ABMS) is
@@ -85,7 +94,7 @@ export const BOARD_EXEMPTION_CONDITIONS = Object.freeze({
   LA: "I was certified or recertified by an ABMS member board or AOA-recognized specialty board within the past year.",
   TX: "I was board certified or recertified within 36 months before this renewal, or I hold current ABMS MOC or AOA OCC. This presumes compliance for one renewal only.",
   KY: "I passed an ABMS or AOA board certification or recertification exam in this CME cycle.",
-  NH: "I passed an ABMS board exam.",
+  NH: "I passed a specialty board exam (initial or recertification) in this 2-year cycle, or I am up to date in my board's maintenance of certification (MOC or OCC).",
   ME: Object.freeze({ MD: "My ABMS certification is current with MOC. A lifetime certificate does not qualify." }),
   WA: Object.freeze({
     MD: "I was certified by an ABMS member board in the four years before this renewal is due, or I meet my ABMS board's MOC participation requirements now.",

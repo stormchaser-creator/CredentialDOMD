@@ -89,7 +89,7 @@ test('far-off dated steps from the new boards are listed as upcoming and not ale
   assert.ok(steps.every(s => !s.alerted));
 });
 
-test('ABIM and AOBPr are not encoded (no official page read)', () => {
-  assert.equal(BOARD_TASKS['ABMS:ABIM'], undefined);
+test('AOBPr is not encoded (no published rules); ABIM is, from abim.org read 2026-11-19', () => {
+  assert.ok(BOARD_TASKS['ABMS:ABIM']);
   assert.equal(BOARD_TASKS['AOA:AOBPr'], undefined);
 });

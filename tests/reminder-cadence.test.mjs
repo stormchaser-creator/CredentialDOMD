@@ -318,11 +318,24 @@ function createDb(tables, fail = [], { maxRows = 1000 } = {}) {
       this.filters.push(r => r[c] != null && re.test(String(r[c])));
       return this;
     }
+    // PostgREST or=(a,b): only the shape send-reminders sends, JSON keys that
+    // are not null ("custom_fields->>key.not.is.null"). The licensure
+    // first-date read uses it; fail: ['licenses:first'] fails that read alone.
+    or(expr) {
+      this.first = true;
+      const keys = String(expr).split(',').map(t => {
+        const m = t.match(/^([a-z_]+)->>([A-Za-z]+)\.not\.is\.null$/);
+        if (!m) throw new Error(`or: ${t}`);
+        return [m[1], m[2]];
+      });
+      this.filters.push(r => keys.some(([c, k]) => r[c] != null && typeof r[c] === 'object' && r[c][k] != null));
+      return this;
+    }
     run() {
       const rows = tables[this.table] ||= [];
-      log.push({ table: this.table, op: this.op, payload: this.payload, board: !!this.board });
+      log.push({ table: this.table, op: this.op, payload: this.payload, board: !!this.board, first: !!this.first });
       if (this.op === 'insert') { rows.push(...[].concat(this.payload)); return { data: null, error: null }; }
-      if (this.op === 'select' && (fail.includes(this.table) || (this.board && fail.includes(`${this.table}:board`)))) return { data: null, error: { message: `${this.table} read failed` } };
+      if (this.op === 'select' && (fail.includes(this.table) || (this.board && fail.includes(`${this.table}:board`)) || (this.first && fail.includes(`${this.table}:first`)))) return { data: null, error: { message: `${this.table} read failed` } };
       let hit = rows.filter(r => this.filters.every(f => f(r)));
       if (this.op === 'update') { for (const r of hit) Object.assign(r, this.payload); return { data: null, error: null }; }
       if (this.orderBy) hit = [...hit].sort((a, b) => String(a[this.orderBy]) < String(b[this.orderBy]) ? -1 : String(a[this.orderBy]) > String(b[this.orderBy]) ? 1 : 0);
@@ -661,7 +674,11 @@ test('send-reminders under node: snooze, the app\'s columns and the daily cadenc
     assert.ok(!previewed.has(uid(10002)), 'a 30-day lead in the same group does not list it');
     assert.equal(body.results.filter(r => r.sent === false && r.reason === 'nothing due').length, Math.floor(n / 2));
     const reads = log.filter(l => l.op === 'select');
-    assert.ok(reads.filter(l => l.table === 'licenses' && !l.board).length <= 2 * Math.ceil(n / 100), `licenses read per group of members, not per member (${reads.filter(l => l.table === 'licenses' && !l.board).length})`);
+    assert.ok(reads.filter(l => l.table === 'licenses' && !l.board && !l.first).length <= 2 * Math.ceil(n / 100), `licenses read per group of members, not per member (${reads.filter(l => l.table === 'licenses' && !l.board && !l.first).length})`);
+    // The licensure first-date read is one per group as well; nobody here
+    // entered a first date, so no member's records or CME are read further.
+    assert.ok(reads.filter(l => l.table === 'licenses' && l.first).length <= 2 * Math.ceil(n / 100), 'and the first-date read once per group');
+    assert.equal(reads.filter(l => l.table === 'cme').length, 0, 'CME is read only for members with a first date');
     assert.ok(reads.filter(l => l.table === 'licenses' && l.board).length <= 2 * Math.ceil(n / 100), 'and the Board Certification records once per group too');
     assert.ok(reads.length < n, `${reads.length} reads for ${n} members`);
   });
@@ -694,6 +711,27 @@ test('send-reminders under node: snooze, the app\'s columns and the daily cadenc
     assert.match(sent[0].text, /Coming up \(within 90 days\)\n {2}- State Medical License · ZZ: Nov 1, 2026 \(in 40 days\)\n {2}- AOBS/, 'sorted with the records by days left');
     assert.match(sent[0].text, /\n {2}- AOBS Longitudinal Assessment: Nov 15, 2026 \(in 54 days\)\n {6}Mark it done in the app when finished\./);
     assert.equal(sent[0].text.match(/Mark it done in the app/g).length, 1, 'the hint once');
+  });
+
+  await t.test('a licensure course due within the lead time, from the first date the member entered, is in the digest until it is logged', async () => {
+    sent.length = 0;
+    const p = profile(30101, { degree_type: 'MD' });
+    // First licensed in AL 2025-12-15: the boundaries course is due 12 months later.
+    const al = { id: 'lic-al-30101', user_id: uid(30101), type: 'State Medical License', state: 'AL', expiration_date: '2027-12-31', issued_date: '2026-01-01', lifecycle_status: 'active', custom_fields: { firstLicensedHere: '2025-12-15' } };
+    const tables = { profiles: [p], licenses: [al], cme: [], alert_acks: [], notification_log: [] };
+    const { byProfile } = await runAt('2026-09-22T13:00:03.000Z', tables);
+    assert.equal(byProfile[uid(30101)].sent, true);
+    assert.equal(byProfile[uid(30101)].count, 1);
+    assert.match(sent[0].text, /\n {2}- AL Ethics \(one-time\): Dec 15, 2026 \(in 84 days\)\n {6}Log the course in the app when finished\./);
+    sent.length = 0;
+    tables.cme.push({ id: 'cme-30101', user_id: uid(30101), title: 'Navigating Professional Boundaries in Medicine', date: '2026-09-01', hours: 2, category: 'AMA PRA Category 1', topics: ['Ethics'] });
+    const logged = await runAt('2026-09-29T13:00:03.000Z', tables);
+    assert.deepEqual(logged.byProfile[uid(30101)], { profile: uid(30101), sent: false, reason: 'nothing due' }, 'logged: nothing left to send');
+    // Without an entered first date the course is never emailed.
+    sent.length = 0;
+    const q = profile(30102, { degree_type: 'MD' });
+    const none = await runAt('2026-09-22T13:00:03.000Z', { profiles: [q], licenses: [{ ...al, id: 'lic-al-30102', user_id: uid(30102), custom_fields: {} }], cme: [], alert_acks: [], notification_log: [] });
+    assert.deepEqual(none.byProfile[uid(30102)], { profile: uid(30102), sent: false, reason: 'nothing due' });
   });
 
   await t.test('a step marked done drops out and the list changes; a passed unmarked step is never emailed', async () => {

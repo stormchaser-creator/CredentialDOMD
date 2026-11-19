@@ -96,7 +96,7 @@ test('M2: LA, TX, KY, NH, ME (MD) and WA need their condition confirmed', () => 
 
 test('M2: each condition restates its state rule text and invents nothing', () => {
   const words = { LA: ['within the past year', 'ABMS member board', 'AOA-recognized'], TX: ['36 months', 'one renewal', 'ABMS MOC', 'AOA OCC'],
-    KY: ['passing an ABMS or AOA board certification or recertification exam'], NH: ['ABMS board exam'], ME: ['ABMS certification with MOC', 'lifetime certs excluded'],
+    KY: ['passing an ABMS or AOA board certification or recertification exam'], NH: ['American Specialty Board exam', 'MOC/OCC', '3 hr pain management still owed'], ME: ['ABMS certification with MOC', 'lifetime certs excluded'],
     WA: ['ABMS cert in last 4 yrs', 'ABMS MOC participation'] };
   for (const [st, list] of Object.entries(words)) {
     const moc = getStateEntry(st, 'MD').moc;

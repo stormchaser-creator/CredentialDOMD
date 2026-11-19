@@ -23,7 +23,7 @@ const doData = (lic = {}, extra = {}) => ({
   cme: [],
 });
 // Each board's own site (ABOP's manual is hosted on manula.com under its own path).
-const OFFICIAL = /^https:\/\/(certification\.osteopathic\.org|www\.abns\.org|www\.abai\.org|www\.theaba\.org|www\.abcrs\.org|www\.abderm\.org|www\.abem\.org|www\.theabfm\.org|www\.abmgg\.org|www\.abnm\.org|www\.abog\.org|www\.abop\.org|www\.manula\.com\/manuals\/american-board-of-ophthal|www\.abos\.org|www\.abohns\.org|abpath\.org|www\.abp\.org|www\.abpmr\.org|www\.abplasticsurgery\.org|www\.theabpm\.org|abpn\.org|www\.theabr\.org|www\.absurgery\.org|www\.abts\.org|abu\.org)\//;
+const OFFICIAL = /^https:\/\/(certification\.osteopathic\.org|www\.abns\.org|www\.abai\.org|www\.theaba\.org|www\.abcrs\.org|www\.abderm\.org|www\.abem\.org|www\.abim\.org|www\.theabfm\.org|www\.abmgg\.org|www\.abnm\.org|www\.abog\.org|www\.abop\.org|www\.manula\.com\/manuals\/american-board-of-ophthal|www\.abos\.org|www\.abohns\.org|abpath\.org|www\.abp\.org|www\.abpmr\.org|www\.abplasticsurgery\.org|www\.theabpm\.org|abpn\.org|www\.theabr\.org|www\.absurgery\.org|www\.abts\.org|abu\.org)\//;
 const aobs = (data) => boardComplianceFor(data).find(b => b.id === 'AOA:AOBS');
 
 test('every task has an id, a label, a cadence and an official source URL', () => {
@@ -168,10 +168,13 @@ test('the Neurological Surgery discipline card uses the AOBS tasks with its own 
   assert.equal(boardRecordFor(data.licenses, card.id).id, 'bc');
 });
 
-test('a board with no task data keeps its sentence and gets no tasks (ABIM: no official page could be read)', () => {
+test('a board with no task data keeps its sentence and gets no tasks', () => {
+  // Every board in the app's lists has step data since ABIM (2026-11-19); a
+  // card for a board without any (synthetic id) still gets none.
   const data = { settings: { degreeType: 'MD', specialties: ['ABMS:ABIM'] }, licenses: [], cme: [] };
-  assert.equal(boardTasksFor(data, boardComplianceFor(data)[0]), null);
-  assert.ok(boardComplianceFor(data)[0].assessment);
+  const card = boardComplianceFor(data)[0];
+  assert.ok(card.assessment);
+  assert.equal(boardTasksFor(data, { ...card, id: 'ABMS:NOTABOARD' }), null);
 });
 
 test('AOA certificate issued after 2018: the typed valid-thru date is its date and never delays the assessment', () => {

@@ -643,7 +643,7 @@ ok("ME DO cites the osteopathic chapter", /\b2600-[A-Z]\b/.test(topicOf("ME", "D
 
 // No rule anywhere may be sourced to a third-party mirror. A physician quoting
 // a commercial reprint at a board audit is quoting nothing the board published.
-// AZ, NH and NJ still carry Cornell LII URLs at the rule-set level and are
+// AZ and NJ still carry Cornell LII URLs at the rule-set level and are
 // listed here so the gap is visible rather than silently tolerated.
 {
   const MIRROR = /law\.cornell\.edu|casetext\.com|justia\.com|findlaw\.com|cebroker\.com|txrules\.elaws\.us/i;
@@ -653,7 +653,7 @@ ok("ME DO cites the osteopathic chapter", /\b2600-[A-Z]\b/.test(topicOf("ME", "D
   // only shrink, instead of a whitelist that quietly blesses four violations
   // forever. `source` is checked too: it renders to the physician as the
   // authority, so a third-party URL sitting in it is the same defect.
-  const KNOWN_MIRROR_DEBT = new Set(["AZ/MD", "AZ/DO", "NH", "NJ"]);
+  const KNOWN_MIRROR_DEBT = new Set(["AZ/MD", "AZ/DO", "NJ"]);
   const unexpected = [];
   const stillMirrored = new Set();
   eachRuleSet((st, deg, e) => {

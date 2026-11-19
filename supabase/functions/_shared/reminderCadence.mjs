@@ -118,13 +118,14 @@ function readFingerprint(value) {
 
 /**
  * How many expired or due parts the banner's fingerprint holds for each
- * "section:date". A board's part ("cme:board:<board id>:<steps>:<soonest
- * due>", src/utils/notifications.js) counts its steps under "board:<soonest
- * due>", the section and date the email gives a board step
- * (reminderBoardSteps.mjs). A step of the same board due later than the
- * soonest is not accounted for and reads as new, so it is sent. Known
- * limitation: under a banner snooze, such a later step wakes the email until
- * the app's board part carries each step's due date.
+ * "section:date". A board's part ("cme:board:<board id>:<steps>:<due>",
+ * src/utils/notifications.js) counts its steps under "board:<due>", the
+ * section and date the email gives a board step (reminderBoardSteps.mjs).
+ * When the board's steps have different dates the app names each one
+ * ("<due>+<due>", boardTasks.js boardTaskAlerts fpDates), and each counts
+ * under its own date. A licensure deadline's part
+ * ("cme:licensure:<state>:<topic>:1:<due>") counts under "licensure:<due>"
+ * (reminderLicensureDeadlines.mjs).
  */
 function bannerCounts(alertsFingerprint) {
   const counts = new Map();
@@ -133,10 +134,12 @@ function bannerCounts(alertsFingerprint) {
     const bits = part.split(':');
     const [kind, sec, date] = bits;
     if ((kind === 'exp' || kind === 'soon') && sec && date) add(`${sec}:${date}`, 1);
-    else if (kind === 'cme' && sec === 'board' && bits.length >= 5) {
+    else if (kind === 'cme' && (sec === 'board' || sec === 'licensure') && bits.length >= 5) {
       const n = Number(bits.at(-2));
-      const due = bits.at(-1);
-      if (Number.isInteger(n) && n > 0 && /^\d{4}-\d{2}-\d{2}$/.test(due)) add(`board:${due}`, n);
+      const dues = String(bits.at(-1)).split('+');
+      if (!Number.isInteger(n) || n <= 0 || !dues.every(d => /^\d{4}-\d{2}-\d{2}$/.test(d))) continue;
+      if (dues.length === 1) add(`${sec}:${dues[0]}`, n);
+      else if (dues.length === n) for (const d of dues) add(`${sec}:${d}`, 1);
     }
   }
   return counts;
@@ -208,8 +211,17 @@ export function reminderToldStill(stored, fingerprint) {
  * again when the read works.
  */
 export function reminderToldBoard(stored) {
+  return reminderToldSection(stored, 'board');
+}
+
+/** The same for a licensure deadline (section "licensure", reminderLicensureDeadlines.mjs). */
+export function reminderToldLicensure(stored) {
+  return reminderToldSection(stored, 'licensure');
+}
+
+function reminderToldSection(stored, sec) {
   const emailed = readFingerprint(stored);
-  return !!emailed.items && emailed.items.some(i => i.sec === 'board');
+  return !!emailed.items && emailed.items.some(i => i.sec === sec);
 }
 
 /**

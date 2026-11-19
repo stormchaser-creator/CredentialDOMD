@@ -1698,6 +1698,8 @@ const ABNS_URL = "https://www.abns.org/content/continuing-certification";
 // The release that added every board below except AOBS and ABNS (and the
 // ABNS dues step): its first period asks instead of alerting (trackedFrom).
 const BOARD_STEPS_ADDED = "2026-11-18";
+// ABIM, added a day later: its first period asks the same way.
+const ABIM_STEPS_ADDED = "2026-11-19";
 export const BOARD_TASKS = {
   "AOA:AOBS": {
     checked: "2026-11",
@@ -1775,8 +1777,45 @@ export const BOARD_TASKS = {
 
   // ---- ABMS boards checked 2026-11 on each board's own pages. A step whose
   // rule is a year of the physician's own cycle that the app cannot place
-  // keeps its rule as dueRule (no date, no alert). ABIM is not here: no
-  // official ABIM page could be read (bot protection).
+  // keeps its rule as dueRule (no date, no alert). ABIM was added
+  // 2026-11-19 (ABIM_STEPS_ADDED) once its pages could be read.
+  // ABIM, read 2026-11-19 on abim.org (moc-fees, participate-in-activities,
+  // assessment-options, moc-policies, faqs). Only the annual fee has a date
+  // every diplomate shares: "Payment is due by January 1 each year". The
+  // 100 points ("100 MOC points every five years", counted by December 31 of
+  // the due year) and the assessment (LKA over a 5-year cycle, or the
+  // traditional exam "10 years from the last pass") fall in each physician's
+  // own cycle, which only the ABIM Physician Portal shows: dueRule, no date.
+  "ABMS:ABIM": {
+    checked: "2026-11",
+    trackedFrom: ABIM_STEPS_ADDED,
+    sourceUrl: "https://www.abim.org/maintenance-of-certification/",
+    whereToCheck: { label: "ABIM Physician Portal", url: "https://www.abim.org/maintenance-of-certification/" },
+    sources: [
+      "https://www.abim.org/maintenance-of-certification/moc-fees/",
+      "https://www.abim.org/maintenance-of-certification/participate-in-activities/",
+      "https://www.abim.org/maintenance-of-certification/assessment-options/longitudinal-knowledge-assessment/",
+      "https://www.abim.org/maintenance-of-certification/assessment-options/traditional-10-year/",
+      "https://www.abim.org/maintenance-of-certification/moc-policies/",
+    ],
+    tasks: [
+      // Due "by January 1 each year": dated December 31 of the year before
+      // (also the 5% early-payment day), so it is due inside a year and can
+      // be reminded about before it passes. Its period is the paying year.
+      { id: "fee", label: "MOC fee for the coming year", every: "year", due: "12-31", cost: 220,
+        detail: "Due by January 1 for the coming year: $220 for your first certificate and $120 for each additional one, 5% off when paid by December 31. Status never changes for non-payment, but LKA questions and MOC points wait until it is paid.",
+        source: "https://www.abim.org/maintenance-of-certification/moc-fees/" },
+      { id: "points", label: "100 MOC points", every: { years: 5 },
+        dueRule: "100 points every five years, counted through December 31 of your due year. Your due year is in the ABIM Physician Portal.",
+        detail: "LKA earns 0.2 points per correct answer. Points from another ABMS board's MOC can waive this requirement.",
+        source: "https://www.abim.org/maintenance-of-certification/participate-in-activities/" },
+      { id: "assessment", label: "Knowledge assessment (LKA or 10-year exam)", every: { years: 5 },
+        dueRule: "Pass by the deadline in your ABIM Physician Portal: the LKA over a 5-year cycle (30 questions a quarter, each quarter's questions expire at quarter end), or the traditional exam every 10 years.",
+        detail: "LKA enrollment runs from December 1 of the year before your assessment year to November 15 of that year.",
+        source: "https://www.abim.org/maintenance-of-certification/assessment-options/longitudinal-knowledge-assessment/" },
+    ],
+  },
+
   "ABMS:ABAI": {
     checked: "2026-11",
     trackedFrom: BOARD_STEPS_ADDED,
