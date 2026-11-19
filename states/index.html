@@ -109,6 +109,12 @@ a:hover { color: var(--emerald-light); }
 .states-section-title { font-size: 14px; font-weight: 600; color: var(--text-muted); text-transform: uppercase; letter-spacing: 1px; margin-bottom: 20px; }
 .state-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; margin-bottom: 64px; }
 .state-card { background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 20px; transition: all 0.2s; display: flex; align-items: flex-start; gap: 14px; text-decoration: none; }
+/* A state's card with its physician assistant and nurse practitioner guide links under it. */
+.state-cell { display: flex; flex-direction: column; min-width: 0; }
+.state-cell .state-card { flex: 1; }
+.state-pro { display: flex; gap: 18px; padding: 8px 6px 6px; font-size: 13px; }
+.state-pro a { color: var(--text-muted); text-decoration: underline; text-underline-offset: 3px; padding: 4px 0; }
+.state-pro a:hover { color: var(--emerald-light); }
 .state-card:hover { border-color: var(--emerald-border); transform: translateY(-2px); background: var(--bg-card-hover); box-shadow: var(--shadow-md); }
 .state-abbr { background: var(--emerald-dim); border: 1px solid var(--emerald-border); color: var(--emerald); font-weight: 700; font-size: 14px; padding: 6px 10px; border-radius: 8px; flex-shrink: 0; min-width: 40px; text-align: center; }
 .state-info { flex: 1; min-width: 0; }
@@ -204,6 +210,7 @@ a:hover { color: var(--emerald-light); }
     </div>
     <h1>Medical License Renewal <span class="accent">by State</span></h1>
     <p class="hero-subtitle">Complete 2026 guides to physician license renewal in every US state. CME requirements, fees, deadlines, and step-by-step renewal processes.</p>
+    <p class="hero-subtitle">Each state also has a renewal guide for physician assistants and one for nurse practitioners, linked under its card.</p>
     <p class="hero-subtitle"><a href="/cme/">Browse CME resources and provider sources &rarr;</a></p>
   </div>
 </section>
@@ -243,6 +250,7 @@ a:hover { color: var(--emerald-light); }
   <div class="states-section-title">Select a state to view its complete renewal guide</div>
   <div class="state-grid" id="stateGrid">
 
+    <div class="state-cell" data-state="alabama al">
     <a href="/states/alabama" class="state-card" data-state="alabama al">
       <span class="state-abbr">AL</span>
       <div class="state-info">
@@ -254,7 +262,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/alabama">PA guide</a><a href="/states/nurse-practitioner/alabama">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="alaska ak">
     <a href="/states/alaska" class="state-card" data-state="alaska ak">
       <span class="state-abbr">AK</span>
       <div class="state-info">
@@ -265,7 +276,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/alaska">PA guide</a><a href="/states/nurse-practitioner/alaska">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="arizona az">
     <a href="/states/arizona" class="state-card" data-state="arizona az">
       <span class="state-abbr">AZ</span>
       <div class="state-info">
@@ -276,7 +290,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/arizona">PA guide</a><a href="/states/nurse-practitioner/arizona">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="arkansas ar">
     <a href="/states/arkansas" class="state-card" data-state="arkansas ar">
       <span class="state-abbr">AR</span>
       <div class="state-info">
@@ -287,7 +304,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/arkansas">PA guide</a><a href="/states/nurse-practitioner/arkansas">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="california ca">
     <a href="/states/california" class="state-card" data-state="california ca">
       <span class="state-abbr">CA</span>
       <div class="state-info">
@@ -299,7 +319,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/california">PA guide</a><a href="/states/nurse-practitioner/california">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="colorado co">
     <a href="/states/colorado" class="state-card" data-state="colorado co">
       <span class="state-abbr">CO</span>
       <div class="state-info">
@@ -310,7 +333,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/nurse-practitioner/colorado">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="connecticut ct">
     <a href="/states/connecticut" class="state-card" data-state="connecticut ct">
       <span class="state-abbr">CT</span>
       <div class="state-info">
@@ -321,7 +347,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/connecticut">PA guide</a><a href="/states/nurse-practitioner/connecticut">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="delaware de">
     <a href="/states/delaware" class="state-card" data-state="delaware de">
       <span class="state-abbr">DE</span>
       <div class="state-info">
@@ -332,7 +361,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/delaware">PA guide</a><a href="/states/nurse-practitioner/delaware">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="district of columbia dc washington">
     <a href="/states/district-of-columbia" class="state-card" data-state="district of columbia dc washington">
       <span class="state-abbr">DC</span>
       <div class="state-info">
@@ -343,7 +375,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/district-of-columbia">PA guide</a><a href="/states/nurse-practitioner/district-of-columbia">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="florida fl">
     <a href="/states/florida" class="state-card" data-state="florida fl">
       <span class="state-abbr">FL</span>
       <div class="state-info">
@@ -355,7 +390,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/florida">PA guide</a><a href="/states/nurse-practitioner/florida">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="georgia ga">
     <a href="/states/georgia" class="state-card" data-state="georgia ga">
       <span class="state-abbr">GA</span>
       <div class="state-info">
@@ -366,7 +404,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/georgia">PA guide</a><a href="/states/nurse-practitioner/georgia">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="hawaii hi">
     <a href="/states/hawaii" class="state-card" data-state="hawaii hi">
       <span class="state-abbr">HI</span>
       <div class="state-info">
@@ -377,7 +418,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/hawaii">PA guide</a><a href="/states/nurse-practitioner/hawaii">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="idaho id">
     <a href="/states/idaho" class="state-card" data-state="idaho id">
       <span class="state-abbr">ID</span>
       <div class="state-info">
@@ -388,7 +432,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/idaho">PA guide</a><a href="/states/nurse-practitioner/idaho">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="illinois il">
     <a href="/states/illinois" class="state-card" data-state="illinois il">
       <span class="state-abbr">IL</span>
       <div class="state-info">
@@ -399,7 +446,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/illinois">PA guide</a><a href="/states/nurse-practitioner/illinois">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="indiana in">
     <a href="/states/indiana" class="state-card" data-state="indiana in">
       <span class="state-abbr">IN</span>
       <div class="state-info">
@@ -410,7 +460,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/indiana">PA guide</a><a href="/states/nurse-practitioner/indiana">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="iowa ia">
     <a href="/states/iowa" class="state-card" data-state="iowa ia">
       <span class="state-abbr">IA</span>
       <div class="state-info">
@@ -421,7 +474,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/iowa">PA guide</a><a href="/states/nurse-practitioner/iowa">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="kansas ks">
     <a href="/states/kansas" class="state-card" data-state="kansas ks">
       <span class="state-abbr">KS</span>
       <div class="state-info">
@@ -432,7 +488,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/kansas">PA guide</a><a href="/states/nurse-practitioner/kansas">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="kentucky ky">
     <a href="/states/kentucky" class="state-card" data-state="kentucky ky">
       <span class="state-abbr">KY</span>
       <div class="state-info">
@@ -443,7 +502,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/kentucky">PA guide</a><a href="/states/nurse-practitioner/kentucky">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="louisiana la">
     <a href="/states/louisiana" class="state-card" data-state="louisiana la">
       <span class="state-abbr">LA</span>
       <div class="state-info">
@@ -454,7 +516,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/louisiana">PA guide</a><a href="/states/nurse-practitioner/louisiana">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="maine me">
     <a href="/states/maine" class="state-card" data-state="maine me">
       <span class="state-abbr">ME</span>
       <div class="state-info">
@@ -465,7 +530,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/maine">PA guide</a><a href="/states/nurse-practitioner/maine">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="maryland md">
     <a href="/states/maryland" class="state-card" data-state="maryland md">
       <span class="state-abbr">MD</span>
       <div class="state-info">
@@ -476,7 +544,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/maryland">PA guide</a><a href="/states/nurse-practitioner/maryland">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="massachusetts ma">
     <a href="/states/massachusetts" class="state-card" data-state="massachusetts ma">
       <span class="state-abbr">MA</span>
       <div class="state-info">
@@ -487,7 +558,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/massachusetts">PA guide</a><a href="/states/nurse-practitioner/massachusetts">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="michigan mi">
     <a href="/states/michigan" class="state-card" data-state="michigan mi">
       <span class="state-abbr">MI</span>
       <div class="state-info">
@@ -498,7 +572,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/michigan">PA guide</a><a href="/states/nurse-practitioner/michigan">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="minnesota mn">
     <a href="/states/minnesota" class="state-card" data-state="minnesota mn">
       <span class="state-abbr">MN</span>
       <div class="state-info">
@@ -509,7 +586,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/minnesota">PA guide</a><a href="/states/nurse-practitioner/minnesota">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="mississippi ms">
     <a href="/states/mississippi" class="state-card" data-state="mississippi ms">
       <span class="state-abbr">MS</span>
       <div class="state-info">
@@ -520,7 +600,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/mississippi">PA guide</a><a href="/states/nurse-practitioner/mississippi">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="missouri mo">
     <a href="/states/missouri" class="state-card" data-state="missouri mo">
       <span class="state-abbr">MO</span>
       <div class="state-info">
@@ -531,7 +614,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/missouri">PA guide</a><a href="/states/nurse-practitioner/missouri">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="montana mt">
     <a href="/states/montana" class="state-card" data-state="montana mt">
       <span class="state-abbr">MT</span>
       <div class="state-info">
@@ -542,7 +628,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/nurse-practitioner/montana">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="nebraska ne">
     <a href="/states/nebraska" class="state-card" data-state="nebraska ne">
       <span class="state-abbr">NE</span>
       <div class="state-info">
@@ -553,7 +642,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/nebraska">PA guide</a><a href="/states/nurse-practitioner/nebraska">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="nevada nv">
     <a href="/states/nevada" class="state-card" data-state="nevada nv">
       <span class="state-abbr">NV</span>
       <div class="state-info">
@@ -564,7 +656,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/nevada">PA guide</a><a href="/states/nurse-practitioner/nevada">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="new hampshire nh">
     <a href="/states/new-hampshire" class="state-card" data-state="new hampshire nh">
       <span class="state-abbr">NH</span>
       <div class="state-info">
@@ -575,7 +670,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/new-hampshire">PA guide</a><a href="/states/nurse-practitioner/new-hampshire">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="new jersey nj">
     <a href="/states/new-jersey" class="state-card" data-state="new jersey nj">
       <span class="state-abbr">NJ</span>
       <div class="state-info">
@@ -586,7 +684,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/new-jersey">PA guide</a><a href="/states/nurse-practitioner/new-jersey">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="new mexico nm">
     <a href="/states/new-mexico" class="state-card" data-state="new mexico nm">
       <span class="state-abbr">NM</span>
       <div class="state-info">
@@ -597,7 +698,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/new-mexico">PA guide</a><a href="/states/nurse-practitioner/new-mexico">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="new york ny">
     <a href="/states/new-york" class="state-card" data-state="new york ny">
       <span class="state-abbr">NY</span>
       <div class="state-info">
@@ -609,7 +713,9 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    </div>
 
+    <div class="state-cell" data-state="north carolina nc">
     <a href="/states/north-carolina" class="state-card" data-state="north carolina nc">
       <span class="state-abbr">NC</span>
       <div class="state-info">
@@ -620,7 +726,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/north-carolina">PA guide</a><a href="/states/nurse-practitioner/north-carolina">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="north dakota nd">
     <a href="/states/north-dakota" class="state-card" data-state="north dakota nd">
       <span class="state-abbr">ND</span>
       <div class="state-info">
@@ -631,7 +740,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/north-dakota">PA guide</a><a href="/states/nurse-practitioner/north-dakota">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="ohio oh">
     <a href="/states/ohio" class="state-card" data-state="ohio oh">
       <span class="state-abbr">OH</span>
       <div class="state-info">
@@ -642,7 +754,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/ohio">PA guide</a><a href="/states/nurse-practitioner/ohio">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="oklahoma ok">
     <a href="/states/oklahoma" class="state-card" data-state="oklahoma ok">
       <span class="state-abbr">OK</span>
       <div class="state-info">
@@ -653,7 +768,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/oklahoma">PA guide</a><a href="/states/nurse-practitioner/oklahoma">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="oregon or">
     <a href="/states/oregon" class="state-card" data-state="oregon or">
       <span class="state-abbr">OR</span>
       <div class="state-info">
@@ -664,7 +782,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/oregon">PA guide</a><a href="/states/nurse-practitioner/oregon">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="pennsylvania pa">
     <a href="/states/pennsylvania" class="state-card" data-state="pennsylvania pa">
       <span class="state-abbr">PA</span>
       <div class="state-info">
@@ -676,7 +797,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/pennsylvania">PA guide</a><a href="/states/nurse-practitioner/pennsylvania">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="rhode island ri">
     <a href="/states/rhode-island" class="state-card" data-state="rhode island ri">
       <span class="state-abbr">RI</span>
       <div class="state-info">
@@ -687,7 +811,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/rhode-island">PA guide</a><a href="/states/nurse-practitioner/rhode-island">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="south carolina sc">
     <a href="/states/south-carolina" class="state-card" data-state="south carolina sc">
       <span class="state-abbr">SC</span>
       <div class="state-info">
@@ -698,7 +825,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/south-carolina">PA guide</a><a href="/states/nurse-practitioner/south-carolina">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="south dakota sd">
     <a href="/states/south-dakota" class="state-card" data-state="south dakota sd">
       <span class="state-abbr">SD</span>
       <div class="state-info">
@@ -709,7 +839,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/south-dakota">PA guide</a><a href="/states/nurse-practitioner/south-dakota">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="tennessee tn">
     <a href="/states/tennessee" class="state-card" data-state="tennessee tn">
       <span class="state-abbr">TN</span>
       <div class="state-info">
@@ -720,7 +853,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/tennessee">PA guide</a><a href="/states/nurse-practitioner/tennessee">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="texas tx">
     <a href="/states/texas" class="state-card" data-state="texas tx">
       <span class="state-abbr">TX</span>
       <div class="state-info">
@@ -732,7 +868,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/texas">PA guide</a><a href="/states/nurse-practitioner/texas">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="utah ut">
     <a href="/states/utah" class="state-card" data-state="utah ut">
       <span class="state-abbr">UT</span>
       <div class="state-info">
@@ -743,7 +882,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/utah">PA guide</a><a href="/states/nurse-practitioner/utah">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="vermont vt">
     <a href="/states/vermont" class="state-card" data-state="vermont vt">
       <span class="state-abbr">VT</span>
       <div class="state-info">
@@ -754,7 +896,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/vermont">PA guide</a><a href="/states/nurse-practitioner/vermont">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="virginia va">
     <a href="/states/virginia" class="state-card" data-state="virginia va">
       <span class="state-abbr">VA</span>
       <div class="state-info">
@@ -765,7 +910,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/virginia">PA guide</a><a href="/states/nurse-practitioner/virginia">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="washington wa">
     <a href="/states/washington" class="state-card" data-state="washington wa">
       <span class="state-abbr">WA</span>
       <div class="state-info">
@@ -776,7 +924,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/washington">PA guide</a><a href="/states/nurse-practitioner/washington">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="west virginia wv">
     <a href="/states/west-virginia" class="state-card" data-state="west virginia wv">
       <span class="state-abbr">WV</span>
       <div class="state-info">
@@ -787,7 +938,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/west-virginia">PA guide</a><a href="/states/nurse-practitioner/west-virginia">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="wisconsin wi">
     <a href="/states/wisconsin" class="state-card" data-state="wisconsin wi">
       <span class="state-abbr">WI</span>
       <div class="state-info">
@@ -798,7 +952,10 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/wisconsin">PA guide</a><a href="/states/nurse-practitioner/wisconsin">NP guide</a></div>
+    </div>
 
+    <div class="state-cell" data-state="wyoming wy">
     <a href="/states/wyoming" class="state-card" data-state="wyoming wy">
       <span class="state-abbr">WY</span>
       <div class="state-info">
@@ -809,6 +966,8 @@ a:hover { color: var(--emerald-light); }
         </div>
       </div>
     </a>
+    <div class="state-pro"><a href="/states/physician-assistant/wyoming">PA guide</a><a href="/states/nurse-practitioner/wyoming">NP guide</a></div>
+    </div>
 
   </div>
 
@@ -857,7 +1016,8 @@ const noResults = document.getElementById('noResults');
 
 searchInput.addEventListener('input', function() {
   const query = this.value.toLowerCase().trim();
-  const cards = stateGrid.querySelectorAll('.state-card');
+  // A cell is the state's card plus its PA and NP guide links; the whole cell hides.
+  const cards = stateGrid.querySelectorAll('.state-cell');
   let visibleCount = 0;
 
   cards.forEach(card => {
