@@ -8,6 +8,7 @@
 // account from the phone (an audit row). Every screen and dialog gets the
 // phone layout audit.
 import { test } from './support/fixtures.mjs';
+import { openAdminSection } from './support/admin-nav.mjs';
 import {
   accessSnapshot, createPhysician, field, letters, makeAdmin, profileOf, row, sleep, waitFor,
 } from './support/lab.mjs';
@@ -319,9 +320,8 @@ for (const width of [375, 390]) {
       await reloadPhone(page);
       const openAdmin = async (section) => {
         await phoneMore(page, 'Admin');
-        const b = page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: new RegExp(`^${section}`) }).first();
-        await b.scrollIntoViewIfNeeded();
-        await b.tap();
+        // Five groups since 2026-11-20; a Tools section opens its card (support/admin-nav.mjs).
+        await openAdminSection(page, section, { tap: true });
         await sleep(1500);
       };
       const pending = await createPhysician({ firstName: 'Quincy', lastName: `Unpaid ${letters()}` });
@@ -398,8 +398,8 @@ for (const width of [375, 390]) {
         file(await auditScreen(qa, page, 'Admin Traffic history', { allowSmall: anyOf(exceptChrome(), matchOf('admin-accounts')) }), 'Admin Traffic history');
       }, { soft: true });
 
-      await qa.feature('ADMIN-004', 'Admin > Overview & reports, Emails and Control history on a phone', async () => {
-        for (const s of ['Overview & reports', 'Emails', 'Control history']) {
+      await qa.feature('ADMIN-004', 'Admin > Home, Emails and Control history on a phone', async () => {
+        for (const s of ['Home', 'Emails', 'Control history']) {
           await openAdmin(s);
           file(await auditScreen(qa, page, `Admin ${s}`, { allowSmall: anyOf(exceptChrome(), matchOf('admin-accounts')) }), `Admin ${s}`);
         }

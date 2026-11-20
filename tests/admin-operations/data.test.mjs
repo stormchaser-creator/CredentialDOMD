@@ -35,7 +35,27 @@ test('rejected network reads and malformed responses settle visibly', async () =
   }
 });
 test('reports do not eagerly download personal working lists', () => {
-  assert.deepEqual(ADMIN_TAB_SOURCES.reports, []); assert.deepEqual(ADMIN_TAB_SOURCES.tickets, ['tickets','feedback']);
+  assert.deepEqual(ADMIN_TAB_SOURCES.reports, []); assert.deepEqual(ADMIN_TAB_SOURCES.inbox, ['tickets','feedback','messages','users']);
+});
+test('each group reads what its sections read before the five-group layout', () => {
+  // Former tab sources: tickets [tickets, feedback], messages [messages, users], users [users, invites],
+  // waitlist [waitlist, attempts, users, invites], signups [signups, visits], errors [errors, users], fields [fields], ai [users].
+  const former = { inbox: [['tickets', 'feedback'], ['messages', 'users']], people: [['users', 'invites'], ['waitlist', 'attempts', 'users', 'invites']],
+    activity: [['signups', 'visits'], ['errors', 'users']], tools: [['fields'], ['users']] };
+  for (const [group, lists] of Object.entries(former)) {
+    assert.deepEqual([...new Set(lists.flat())].sort(), [...ADMIN_TAB_SOURCES[group]].sort(), group);
+  }
+  assert.deepEqual(Object.keys(ADMIN_TAB_SOURCES), ['reports', 'inbox', 'people', 'activity', 'tools']);
+});
+test('every former tab opens in exactly one group', async () => {
+  const { adminGroupOf, ADMIN_GROUPS } = await import('../../src/utils/adminData.js');
+  const expected = { reports: 'reports', tickets: 'inbox', messages: 'inbox', users: 'people', waitlist: 'people', signups: 'activity', errors: 'activity',
+    fields: 'tools', ai: 'tools', emails: 'tools', audit: 'tools', preview: 'tools' };
+  for (const [section, group] of Object.entries(expected)) assert.equal(adminGroupOf(section), group, section);
+  for (const group of ADMIN_GROUPS) assert.equal(adminGroupOf(group.id), group.id);
+  assert.deepEqual(ADMIN_GROUPS.map(g => g.label), ['Home', 'Inbox', 'People', 'Activity', 'Tools']);
+  const all = ADMIN_GROUPS.flatMap(g => g.sections);
+  assert.equal(all.length, new Set(all).size, 'no section sits in two groups');
 });
 test('ticket search filters combine and approval filter excludes closed work', () => {
   const rows = [{ subject:'License upload', user_email:'a@example.com', status:'open', priority:'urgent', from_admin:false }, { subject:'License resolved', status:'resolved', priority:'urgent', from_admin:false }, { subject:'License upload', status:'open', priority:'normal', from_admin:true }];
@@ -144,9 +164,9 @@ test('the oldest open ticket stays loaded however much newer archived activity t
   assert.equal(archived.rows.length, 200);
   assert.equal(archived.count, 300);
   assert.ok(archived.rows.every(row => row.archived_at));
-  assert.deepEqual(adminTabSources('tickets'), ['tickets', 'feedback']);
-  assert.deepEqual(adminTabSources('tickets', { showArchived: true }), ['tickets', 'feedback', 'archivedTickets']);
-  assert.deepEqual(adminTabSources('users', { showArchived: true }), ['users', 'invites']);
+  assert.deepEqual(adminTabSources('inbox'), ['tickets', 'feedback', 'messages', 'users']);
+  assert.deepEqual(adminTabSources('inbox', { showArchived: true }), ['tickets', 'feedback', 'messages', 'users', 'archivedTickets']);
+  assert.deepEqual(adminTabSources('people', { showArchived: true }), ['users', 'invites', 'waitlist', 'attempts']);
 });
 
 // QA ADMIN-001: a stale-row refusal is PT409 (20260930030000). Only that code

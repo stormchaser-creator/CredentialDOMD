@@ -1,4 +1,4 @@
-// QA ADMIN-007: the Tickets tab's "Archived (n)" button. The count came from
+// QA ADMIN-007: the Tickets "Archived (n)" button (Admin > Inbox since 2026-11-20). The count came from
 // the archive list's coverage, which loads only while the archive is open:
 // on first view the button read plain "Archived", and after archiving a
 // ticket from the active list it kept the old n. Executes the real
@@ -71,10 +71,10 @@ const nodes = tree => { const out = []; const visit = n => { if (Array.isArray(n
 const archiveButton = tree => nodes(tree).find(n => n.type === 'button' && /^(Archived|Back to active)/.test([].concat(n.props.children).join('')));
 const label = tree => [].concat(archiveButton(tree)?.props.children).join('');
 
-test('the Tickets tab shows "Archived (n)" on first view, before the archive is opened', async () => {
+test('Inbox (Tickets) shows "Archived (n)" on first view, before the archive is opened', async () => {
   const f = fixture({ archived: 3 });
   let { view } = await f.render();
-  view.selectTab('tickets');
+  view.selectTab('inbox');
   const { tree } = await f.render();
   assert.equal(label(tree), 'Archived (3)');
 });
@@ -82,7 +82,7 @@ test('the Tickets tab shows "Archived (n)" on first view, before the archive is 
 test('archiving a ticket from the active list moves the count, after the archive was visited', async () => {
   const f = fixture({ archived: 3 });
   let { view } = await f.render();
-  view.selectTab('tickets');
+  view.selectTab('inbox');
   ({ view } = await f.render());
   archiveButton((await f.render()).tree).props.onClick();
   let { tree } = await f.render();
@@ -98,7 +98,7 @@ test('archiving a ticket from the active list moves the count, after the archive
 test('a failed count read leaves the plain label, never a number', async () => {
   const f = fixture({ archived: 3, failCount: true });
   const { view } = await f.render();
-  view.selectTab('tickets');
+  view.selectTab('inbox');
   const { tree } = await f.render();
   assert.equal(label(tree), 'Archived');
 });

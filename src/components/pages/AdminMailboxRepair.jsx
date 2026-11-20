@@ -3,11 +3,12 @@ import { useApp } from "../../context/AppContext";
 import { createMailboxRepairClient, repairSummary } from "../../utils/mailboxRepairClient";
 
 /**
- * Admin > Users: record every member's verified sign-in email the way the
+ * Admin > Tools: record every member's verified sign-in email the way the
  * sign-in webhook would have. The first tap only counts; the second applies.
- * Shows counts, never an address.
+ * Shows counts, never an address. `bare`: the Tools card carries the title
+ * and the one-line summary.
  */
-export default function AdminMailboxRepair() {
+export default function AdminMailboxRepair({ bare = false } = {}) {
   const { theme: T, user } = useApp();
   const accountId = user?.id;
   const mounted = useRef(true);
@@ -39,13 +40,17 @@ export default function AdminMailboxRepair() {
     backgroundColor: primary ? T.accent : "transparent", color: primary ? "#fff" : T.text, fontSize: 16, fontWeight: 700,
     cursor: busy ? "default" : "pointer", fontFamily: "inherit" });
   return (
-    <div style={{ border: `1px solid ${T.border}`, borderRadius: 12, padding: 14, margin: "12px 0", backgroundColor: T.card }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Repair sign-in emails</div>
-      <p style={{ fontSize: 13, color: T.textMuted, margin: "6px 0 10px", lineHeight: 1.5 }}>
+    <div style={bare ? {} : { border: `1px solid ${T.border}`, borderRadius: 12, padding: 14, margin: "12px 0", backgroundColor: T.card }}>
+      {!bare && <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Repair sign-in emails</div>}
+      {!bare && <p style={{ fontSize: 13, color: T.textMuted, margin: "6px 0 4px", lineHeight: 1.5 }}>
+        Preview first, then Apply, to copy each member&apos;s verified sign-in email onto their account.
+      </p>}
+      <details style={{ fontSize: 13, color: T.textMuted, margin: "6px 0 10px", lineHeight: 1.5 }}>
+        <summary style={{ cursor: "pointer" }}>Details</summary>
         Reads each member&apos;s verified sign-in email from Clerk and records it the way the sign-in webhook would have, so documents
         forwarded from that address reach their account. The first tap only counts what would change. Nothing changes until you
         tap Apply. Running it again is safe: an account that is already current is left alone.
-      </p>
+      </details>
       <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
         {armed ? (
           <>

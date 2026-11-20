@@ -12,6 +12,7 @@ import {
   sleep, stamp, syntheticPdf, tokenFor, waitFor, waitForMemberApp, landing, LAB_EMAIL_DOMAIN, field, openCredentials, pendingOps, syncWarnings,
 } from './support/lab.mjs';
 import { GENERATED_DIR } from '../lib/paths.mjs';
+import { openAdminSection } from './support/admin-nav.mjs';
 import {
   callFunction, countWhere, hostRun, objectBytesOnDisk, repoFile, sharedMember, stackKeys, REPO_ROOT,
 } from './support/ops-helpers.mjs';
@@ -57,7 +58,7 @@ async function forceRenderCrash(page, message) {
 
 async function openAdmin(page, section) {
   await openMore(page, 'Admin');
-  await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: new RegExp(`^${section}`) }).click();
+  await openAdminSection(page, section);
 }
 
 test('client errors: a records-load failure and a render crash reach Admin > Errors; the crash card reloads; failed writes never report', {

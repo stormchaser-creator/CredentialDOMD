@@ -18,15 +18,36 @@ export const ADMIN_SOURCES = {
   errors: { table: 'client_errors', label: 'Error reports', order: 'created_at', size: 50, columns: 'id,created_at,kind,message,stack,url,user_agent,build,auth_user_id,profile_id,extra' },
   messages: { table: 'admin_messages_overview', label: 'Messages', order: 'created_at', size: 200 },
 };
+/**
+ * Five groups on the Admin page, Home first. Each section (a former tab)
+ * lives in exactly one group, and a group reads what its sections read.
+ * Home (id "reports") loads its own report and summary, not a list.
+ */
+export const ADMIN_GROUPS = [
+  { id: 'reports', label: 'Home', sections: ['reports'] },
+  { id: 'inbox', label: 'Inbox', sections: ['tickets', 'messages'] },
+  { id: 'people', label: 'People', sections: ['users', 'waitlist'] },
+  { id: 'activity', label: 'Activity', sections: ['signups', 'errors'] },
+  { id: 'tools', label: 'Tools', sections: ['invite', 'gift', 'mailbox', 'emails', 'ai', 'preview', 'audit', 'fields'] },
+];
+const SECTION_GROUP = Object.fromEntries(ADMIN_GROUPS.flatMap(g => g.sections.map(s => [s, g.id])));
+
+/** The group a section (or a group id itself) opens in. */
+export function adminGroupOf(id) {
+  return SECTION_GROUP[id] || (ADMIN_GROUPS.some(g => g.id === id) ? id : 'reports');
+}
+
 export const ADMIN_TAB_SOURCES = {
-  reports: [], tickets: ['tickets', 'feedback'], messages: ['messages', 'users'],
-  users: ['users', 'invites'], errors: ['errors', 'users'], signups: ['signups', 'visits'],
-  waitlist: ['waitlist', 'attempts', 'users', 'invites'], fields: ['fields'], ai: ['users'], emails: [], audit: [], preview: [],
+  reports: [],
+  inbox: ['tickets', 'feedback', 'messages', 'users'],
+  people: ['users', 'invites', 'waitlist', 'attempts'],
+  activity: ['visits', 'signups', 'errors', 'users'],
+  tools: ['fields', 'users'],
 };
 
-/** The sources a tab reads; the Tickets tab adds the archive only while it is open. */
+/** The sources a group reads; Inbox adds the ticket archive only while it is open. */
 export function adminTabSources(tab, { showArchived = false } = {}) {
-  return [...(ADMIN_TAB_SOURCES[tab] || []), ...(tab === 'tickets' && showArchived ? ['archivedTickets'] : [])];
+  return [...(ADMIN_TAB_SOURCES[tab] || []), ...(tab === 'inbox' && showArchived ? ['archivedTickets'] : [])];
 }
 
 export async function readAdminSource(client, key, requested) {

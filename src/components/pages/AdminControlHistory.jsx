@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../../lib/supabase';
 import { adminButtonStyle } from '../shared/adminButton';
 
-export default function AdminControlHistory({ T }) {
+/** `bare`: the Admin > Tools card carries the title and the one-line summary. */
+export default function AdminControlHistory({ T, bare = false }) {
   const [rows, setRows] = useState([]);
   const [page, setPage] = useState(0);
   const [revision, setRevision] = useState(0);
@@ -26,8 +27,9 @@ export default function AdminControlHistory({ T }) {
     return () => { active = false; };
   }, [page, revision]);
   return <><section aria-label="Administrative control history" style={{ color: T.text }}>
-    <h3>Control history</h3>
-    <p style={{ fontSize: 13, color: T.textMuted }}>Recorded account and invitation access changes from the new controls. Existing lifetime and billing audit records remain in their own ledgers.</p>
+    {!bare && <><h3>Control history</h3>
+      <p style={{ fontSize: 13, color: T.textMuted }}>Access changes you recorded.</p></>}
+    <details style={{ fontSize: 13, color: T.textMuted, margin: '0 0 10px' }}><summary style={{ cursor: 'pointer' }}>Details</summary>Recorded account and invitation access changes from the new controls. Existing lifetime and billing audit records remain in their own ledgers.</details>
     <button disabled={loading} style={adminButtonStyle(T, { disabled: loading })} onClick={() => { setPage(0); setRevision(n => n + 1); }}>Refresh history</button>
     {loading ? <p role="status">Loading history…</p> : error ? <p role="alert">Control history is unavailable. {error}</p> : <>
       {!rows.length && <p>No changes recorded on this page.</p>}
@@ -75,7 +77,8 @@ function SupportViewHistory({ T }) {
   }, [revision]);
   return <section aria-label="Support views" style={{ color: T.text, marginTop: 24 }}>
     <h3>Support views</h3>
-    <p style={{ fontSize: 13, color: T.textMuted }}>Read-only views of a member&apos;s account that the member allowed, and each file opened. Each member sees their own rows in Settings.</p>
+    <p style={{ fontSize: 13, color: T.textMuted }}>Read-only views a member allowed, and files opened.</p>
+    <details style={{ fontSize: 13, color: T.textMuted, margin: '0 0 10px' }}><summary style={{ cursor: 'pointer' }}>Details</summary>Read-only views of a member&apos;s account that the member allowed, and each file opened. Each member sees their own rows in Settings.</details>
     <button style={adminButtonStyle(T)} onClick={() => setRevision(n => n + 1)}>Refresh support views</button>
     {error ? <p role="alert">Support views are unavailable. {error}</p> : rows === null ? <p role="status">Loading support views…</p> : <>
       {!rows.length && <p>No support views recorded.</p>}

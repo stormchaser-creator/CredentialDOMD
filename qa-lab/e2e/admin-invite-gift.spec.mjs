@@ -8,11 +8,13 @@ import {
   LAB_EMAIL_DOMAIN, PAY_FIRST_LINE, accessSnapshot, createPhysician, emailBody, emails, labExec, landing, letters, limitedRefundAs, makeAdmin, newMember, openMore,
   profileOf, row, rows, signIn, sleep, stamp, waitFor, waitForMemberApp,
 } from './support/lab.mjs';
+import { openAdminSection } from './support/admin-nav.mjs';
 
-async function openAccounts(page) {
+// Invite to join and the lifetime gift are Admin > Tools cards (2026-11-20).
+async function openTool(page, tool, field) {
   await openMore(page, 'Admin');
-  await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: 'Accounts' }).click();
-  await page.getByRole('textbox', { name: 'Email address to gift' }).waitFor({ timeout: 30000 });
+  await openAdminSection(page, tool);
+  await page.getByRole('textbox', { name: field }).waitFor({ timeout: 30000 });
 }
 
 test('owner: invite to join sends one email and grants nothing', { tag: ['@ADMIN-001'] }, async ({ page, qa, secondBrowser }) => {
@@ -29,8 +31,8 @@ test('owner: invite to join sends one email and grants nothing', { tag: ['@ADMIN
   labExec(`update public.invite_to_join_sends set created_at = created_at - interval '25 hours', sent_at = sent_at - interval '25 hours'
     where email like '%@${LAB_EMAIL_DOMAIN}' and created_at > now() - interval '25 hours' and created_at < now() - interval '2 minutes'`);
 
-  await qa.feature('ADMIN-001', 'Admin > Accounts > Invite to join: preview, send, ledger, email', async () => {
-    await openAccounts(page);
+  await qa.feature('ADMIN-001', 'Admin > Tools > Invite to join: preview, send, ledger, email', async () => {
+    await openTool(page, 'Invite to join', 'Email address to invite');
     await page.getByRole('textbox', { name: 'Name (optional)' }).fill('Jordan Invitee');
     await page.getByRole('textbox', { name: 'Email address to invite' }).fill(invitee);
     await page.getByRole('button', { name: 'Preview email' }).click();
@@ -88,8 +90,8 @@ test('owner: lifetime gift by email, claimed by signing up with that address', {
   await waitForMemberApp(page);
   const giftee = `gift-${stamp().toLowerCase()}@${LAB_EMAIL_DOMAIN}`;
 
-  await qa.feature('ADMIN-001', 'Admin > Accounts > Gift lifetime access by email', async () => {
-    await openAccounts(page);
+  await qa.feature('ADMIN-001', 'Admin > Tools > Gift lifetime access by email', async () => {
+    await openTool(page, 'Gift lifetime access by email', 'Email address to gift');
     const gift = page.getByRole('button', { name: 'Gift free lifetime access' });
     await page.getByRole('textbox', { name: 'Email address to gift' }).fill(giftee);
     await page.getByRole('textbox', { name: 'Reason for the gift' }).fill('short');

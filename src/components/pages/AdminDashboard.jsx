@@ -4,8 +4,9 @@ import { copyToClipboard } from "../../utils/helpers";
 import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
 import { useIsAdmin } from "../../lib/admin";
-import { ADMIN_SOURCES, adminTabSources, readAdminSource, readAdminAttention, readArchivedTicketCount, filterAdminTickets, filterAdminUsers, readAccountMemberships, groupAdminAccounts, accountMembershipNote, isFoundingAccount, ACCOUNT_GROUPS } from "../../utils/adminData";
+import { ADMIN_SOURCES, adminTabSources, adminGroupOf, readAdminSource, readAdminAttention, readArchivedTicketCount, filterAdminTickets, filterAdminUsers, readAccountMemberships, groupAdminAccounts, accountMembershipNote, isFoundingAccount, ACCOUNT_GROUPS } from "../../utils/adminData";
 import AdminOperationsReport from "./AdminOperationsReport";
+import AdminHomeSummary from "./AdminHomeSummary";
 import AdminErrorReports from "./AdminErrorReports";
 import AdminAccessChange from "./AdminAccessChange";
 import { accessStateLabel } from "../../utils/adminControls";
@@ -42,7 +43,11 @@ export default function AdminDashboard() {
 
 function AdminDashboardContent() {
   const { theme: T, user, data, userIdRef, updateSettings } = useApp();
+  // One of five groups (utils/adminData ADMIN_GROUPS); "reports" is Home.
   const [tab, setTab] = useState("reports");
+  // The section a Home number opened: scrolled to, and opened if it is a Tools card.
+  const [focusSection, setFocusSection] = useState(null);
+  const [openTools, setOpenTools] = useState(() => new Set());
   const [coverage, setCoverage] = useState({});
   const [rowLimits, setRowLimits] = useState({});
   const [ticketPreset, setTicketPreset] = useState({});
@@ -300,6 +305,12 @@ function AdminDashboardContent() {
   // bar bumps it when a panel is opened.
   const [reloadKey, setReloadKey] = useState(0);
   const [reloadedAt, setReloadedAt] = useState(null);
+  // The group (and read) the last finished load was for. Opening a group
+  // renders once before this effect sets loading, so without it a group's
+  // empty states ("No client error reports in this list.") showed for a
+  // frame before its first read.
+  const loadKey = `${tab}|${showArchived}|${reloadKey}`;
+  const [loadedFor, setLoadedFor] = useState(null);
   useEffect(() => {
     if (!isAdmin || !supabase) {
       setLoading(false);
@@ -307,6 +318,7 @@ function AdminDashboardContent() {
     }
     let cancelled = false;
     const keys = adminTabSources(tab, { showArchived });
+    const readFor = `${tab}|${showArchived}|${reloadKey}`;
     const setters = { tickets: setTickets, archivedTickets: setArchivedRows, feedback: setFeedback, signups: setSignups, visits: setVisits,
       waitlist: setWaitlist, attempts: setAttempts, fields: setFields, users: setUsers,
       invites: setInvites, errors: setErrors, messages: setMessages };
@@ -320,17 +332,18 @@ function AdminDashboardContent() {
       const failures = results.filter(result => result.error);
       setError(failures.map(result => `${ADMIN_SOURCES[result.key].label}: ${result.error}`).join(" · "));
       if (!failures.length) setReloadedAt(new Date());
+      setLoadedFor(readFor);
       setLoading(false);
     });
     return () => { cancelled = true; };
   }, [isAdmin, reloadKey, tab, rowLimits, showArchived]);
 
-  // "Archived (n)": counted on every Tickets read (reloadKey moves on each
+  // "Archived (n)": counted on every Inbox read (reloadKey moves on each
   // archive, unarchive and Resolve & archive), not taken from the archive
   // list, which loads only while it is open.
   const [archivedCount, setArchivedCount] = useState(null);
   useEffect(() => {
-    if (!isAdmin || !supabase || tab !== "tickets") return;
+    if (!isAdmin || !supabase || tab !== "inbox") return;
     let cancelled = false;
     readArchivedTicketCount(supabase).then(count => { if (!cancelled) setArchivedCount(count); });
     return () => { cancelled = true; };
@@ -357,6 +370,12 @@ function AdminDashboardContent() {
     return () => { cancelled = true; };
   }, [isAdmin, reloadKey, countsKey, messagesSeenAt, errorsSeenAt]);
 
+  // A Home number opens its group at its section once the lists are in.
+  useEffect(() => {
+    if (!focusSection || loading || loadedFor !== loadKey || typeof document === "undefined") return;
+    document.getElementById(`admin-section-${focusSection}`)?.scrollIntoView?.({ block: "start" });
+  }, [focusSection, loading, loadedFor, loadKey]);
+
   if (!isAdmin) {
     return (
       <div style={{ textAlign: "center", padding: "60px 20px" }}>
@@ -370,43 +389,47 @@ function AdminDashboardContent() {
 
   const sectionKeys = adminTabSources(tab, { showArchived });
   const hasSectionData = sectionKeys.every(key => coverage[key]?.rows && !coverage[key]?.error);
-  // Opening a panel reads again (every number here used to age for the whole
-  // app session), and opening Messages or Errors marks them seen.
-  const openTab = (id) => {
+  // Opening a group reads again (every number here used to age for the whole
+  // app session), and opening Inbox (Messages) or Activity (Errors) marks
+  // them seen.
+  const openTab = (id, section = null) => {
     setTab(id);
+    setFocusSection(section);
+    if (section) setOpenTools(previous => previous.has(section) ? previous : new Set([...previous, section]));
     setReloadKey((k) => k + 1);
-    if (id === "messages") { setRepliesSince(messagesSeenAt || ""); updateSettings({ adminInboxSeenAt: new Date().toISOString() }); }
-    if (id === "errors") updateSettings({ adminErrorsSeenAt: new Date().toISOString() });
+    if (id === "inbox") { setRepliesSince(messagesSeenAt || ""); updateSettings({ adminInboxSeenAt: new Date().toISOString() }); }
+    if (id === "activity") updateSettings({ adminErrorsSeenAt: new Date().toISOString() });
   };
-  // Only an Overview card applies a filter, and only for that drill-down. A
-  // plain tab tap opens the tab unfiltered, so "Accounts" never silently hides
-  // pending accounts after an earlier "Active account profiles" card.
+  // Only a Home number applies a filter, and only for that drill-down. A
+  // plain tab tap opens the group unfiltered, so People never silently hides
+  // pending accounts after an earlier "Active accounts" number.
   const selectTab = (id) => { setTicketPreset({}); setAccountPreset("all"); setShowArchived(false); openTab(id); };
-  const navigateReport = (nextTab, filters = {}) => { setTicketPreset(filters); setAccountPreset(filters.access || "all"); setShowArchived(false); openTab(nextTab); };
+  // Home numbers name a section (tickets, users, waitlist, fields, ...); it
+  // opens in its group, with the same filters the Overview cards applied.
+  const navigateReport = (section, filters = {}) => { setTicketPreset(filters); setAccountPreset(filters.access || "all"); setShowArchived(false); openTab(adminGroupOf(section), section); };
+  const toggleTool = (id) => setOpenTools(previous => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next; });
   const activeTickets = tickets.filter(t => !t.archived_at);
   const archivedTickets = archivedRows.filter(t => t.archived_at);
   // A failed count read is marked "(?)", never shown as a plain label that
   // reads the same as zero (readAdminAttention). No function yet: plain.
   const counts = attention && !attention.error ? attention : null;
   const countFailed = (label, noun) => ({ label: `${label} (?)`, title: `${noun} unavailable, open to check` });
+  const counted = (label, value, title, suffix = "") => value > 0 ? { label: `${label} (${value}${suffix})`, title } : { label };
   const TABS = [
-    { id: "reports", label: "Overview & reports" },
-    { id: "tickets", label: "Tickets" },
-    attention?.error ? { id: "messages", ...countFailed("Messages", "Unread count") }
-      : { id: "messages", label: counts?.unread_replies > 0 ? `Messages (${counts.unread_replies})` : "Messages" },
-    { id: "users", label: "Accounts" },
-    attention?.error ? { id: "errors", ...countFailed("Errors", "New error count") }
-      : { id: "errors", label: counts?.new_errors_since_seen > 0 ? `Errors (${counts.new_errors_since_seen})` : "Errors" },
-    { id: "signups", label: "Traffic history" },
-    attention?.error ? { id: "waitlist", ...countFailed("Waitlist", "Waiting count") }
-      : { id: "waitlist", label: counts ? `Waitlist (${counts.waitlist_waiting})` : "Waitlist" },
-    attention?.error ? { id: "fields", ...countFailed("Fields", "Pending field count") }
-      : { id: "fields", label: counts?.fields_pending > 0 ? `Fields (${counts.fields_pending} pending)` : "Fields" },
-    { id: "ai", label: "AI" },
-    { id: "emails", label: "Emails" },
-    { id: "audit", label: "Control history" },
-    { id: "preview", label: "Preview as" },
+    { id: "reports", label: "Home" },
+    attention?.error ? { id: "inbox", ...countFailed("Inbox", "Unread count") }
+      : { id: "inbox", ...counted("Inbox", counts?.unread_replies, `${counts?.unread_replies} unread message replies`) },
+    attention?.error ? { id: "people", ...countFailed("People", "Waiting count") }
+      : { id: "people", ...counted("People", counts?.waitlist_waiting, `${counts?.waitlist_waiting} waiting on the waitlist`) },
+    attention?.error ? { id: "activity", ...countFailed("Activity", "New error count") }
+      : { id: "activity", ...counted("Activity", counts?.new_errors_since_seen, `${counts?.new_errors_since_seen} new error reports`) },
+    attention?.error ? { id: "tools", ...countFailed("Tools", "Pending field count") }
+      : { id: "tools", ...counted("Tools", counts?.fields_pending, `${counts?.fields_pending} field proposals to review`, " pending") },
   ];
+  const pending = sectionKeys.length > 0 && (loading || loadedFor !== loadKey);
+  const listReady = (!pending || hasSectionData) && !error;
+  const subheading = (id, text) => <h3 id={`admin-section-${id}`} style={{ fontSize: 13, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 8px", scrollMarginTop: 12 }}>{text}</h3>;
+  const tool = (id, title, hint, body) => <ToolCard key={id} id={id} title={title} hint={hint} open={openTools.has(id)} onToggle={() => toggleTool(id)} T={T}>{body}</ToolCard>;
 
   // .cdomd-admin: every control below is a 32 px tap target on a phone
   // (src/styles/base.css; QA ADMIN-001 to ADMIN-004 and ADMIN-008).
@@ -414,7 +437,7 @@ function AdminDashboardContent() {
     <div className="cdomd-admin">
       <h2 style={{ margin: "0 0 4px", fontSize: 20, fontWeight: 800, color: T.text }}>Admin</h2>
       <p style={{ margin: "0 0 14px", fontSize: 12, color: T.textMuted }}>
-        Support, accounts, waitlist signups, and traffic for credentialdomd.com
+        What needs you, then members, activity, and tools.
       </p>
 
       <nav aria-label="Administration sections" style={{
@@ -428,7 +451,7 @@ function AdminDashboardContent() {
             title={t.title}
             onClick={() => selectTab(t.id)}
             style={{
-              flex: "0 0 auto", whiteSpace: "nowrap", padding: "8px 12px", borderRadius: 8, border: "none",
+              flex: "1 0 auto", whiteSpace: "nowrap", padding: "8px 10px", borderRadius: 8, border: "none",
               backgroundColor: tab === t.id ? T.card : "transparent",
               color: tab === t.id ? T.text : T.textMuted,
               fontSize: 13, fontWeight: 700, cursor: "pointer",
@@ -437,11 +460,10 @@ function AdminDashboardContent() {
         ))}
       </nav>
 
-      {tab === "reports" && <AdminOperationsReport T={T} onNavigate={navigateReport} />}
-      {tab === "audit" && <AdminControlHistory T={T} />}
-      {tab === "emails" && <AdminWelcomeEmail T={T} />}
-      {tab === "preview" && <AdminPreviewPicker T={T} />}
-      {loading && <div style={{ padding: 20, textAlign: "center", color: T.textMuted }}>{hasSectionData ? "Refreshing…" : "Loading…"}</div>}
+      {tab === "reports" && <AdminOperationsReport T={T} onNavigate={navigateReport}>
+        <AdminHomeSummary T={T} onNavigate={navigateReport} />
+      </AdminOperationsReport>}
+      {pending && <div style={{ padding: 20, textAlign: "center", color: T.textMuted }}>{hasSectionData ? "Refreshing…" : "Loading…"}</div>}
       {error && (
         <div role="alert" style={{
           padding: "10px 12px", borderRadius: 8,
@@ -454,22 +476,9 @@ function AdminDashboardContent() {
         </div>
       )}
 
-      {!loading && !error && sectionKeys.length > 0 && (
-        <div aria-label="List coverage" style={{ padding: "10px 12px", marginBottom: 12, border: `1px solid ${T.border}`, borderRadius: 10, color: T.textMuted, fontSize: 12 }}>
-          <div>List counts describe loaded records. Overview & reports contains full-database totals.</div>
-          {sectionKeys.map(key => {
-            const item = coverage[key]; if (!item || item.error) return null;
-            return <div key={key} style={{ marginTop: 5 }}>
-              {ADMIN_SOURCES[key].label}: {item.rows.length} loaded{item.count !== null ? ` of ${item.count}` : " (total unavailable)"}
-              {(item.count === null ? item.rows.length >= item.limit : item.rows.length < item.count) && <button style={{ ...adminButtonStyle(T), marginLeft: 8 }} onClick={() => setRowLimits(previous => ({ ...previous, [key]: (previous[key] || ADMIN_SOURCES[key].size) + ADMIN_SOURCES[key].size }))}>Load more {ADMIN_SOURCES[key].label.toLowerCase()}</button>}
-            </div>;
-          })}
-          <button style={{ ...adminButtonStyle(T), marginTop: 8 }} onClick={() => setReloadKey(k => k + 1)}>Refresh section</button>
-          {reloadedAt && <span style={{ marginLeft: 8 }}>Read {reloadedAt.toLocaleTimeString()}</span>}
-        </div>
-      )}
-      {tab === "tickets"  && (!loading || hasSectionData) && !error && (
+      {tab === "inbox" && listReady && (
         <>
+          {subheading("tickets", "Tickets")}
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
             <button onClick={() => { setNewOpen(true); setTicketMsg(""); }} style={{
               flex: 1, padding: "11px", borderRadius: 10, border: "none",
@@ -490,16 +499,14 @@ function AdminDashboardContent() {
               <FeedbackList rows={feedback} T={T} />
             </>
           )}
+          {subheading("messages", "Messages")}
+          <MessagesPanel messages={messages} users={users} myProfileId={userIdRef.current} repliesSince={repliesSince} T={T} onRefresh={() => setReloadKey(k => k + 1)} />
         </>
       )}
-      {tab === "messages" && (!loading || hasSectionData) && !error && (
-        <MessagesPanel messages={messages} users={users} myProfileId={userIdRef.current} repliesSince={repliesSince} T={T} onRefresh={() => setReloadKey(k => k + 1)} />
-      )}
-      {tab === "signups"  && (!loading || hasSectionData) && !error && (
+      {tab === "activity" && listReady && (
         <>
-          <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>
-            Webpage visits
-          </div>
+          {subheading("visits", "Webpage visits")}
+          <p style={{ fontSize: 12, color: T.textMuted, margin: "0 0 8px" }}>Page loads that day, not unique visitors.</p>
           {visits.length === 0 ? (
             <div style={{ padding: "12px 14px", borderRadius: 10, backgroundColor: T.card, border: `1px solid ${T.border}`, fontSize: 13, color: T.textMuted, marginBottom: 16 }}>
               No visits recorded yet. First-party tracking went live Aug 10, 2026. Every landing-page load (home + all 50 state pages) now logs here.
@@ -516,20 +523,50 @@ function AdminDashboardContent() {
               ))}
             </div>
           )}
-          <div style={{ fontSize: 11, color: T.textDim, marginTop: 6, lineHeight: 1.5 }}>
+          <details style={{ fontSize: 11, color: T.textDim, marginTop: 6, lineHeight: 1.5 }}>
+            <summary style={{ cursor: "pointer", color: T.textMuted }}>Details</summary>
             Page loads = every landing-page view that day. Homepage = loads of credentialdomd.com itself. State pages = loads across the 50 state SEO pages (views, not states). Via links = arrived from another site (search, forum, shared link) instead of typing the address.
-          </div>
-          <div style={{ fontSize: 11, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "0 0 8px" }}>
-            New accounts
-          </div>
+          </details>
+          {subheading("signups", "New accounts")}
           <SignupsList rows={signups} T={T} reloadedAt={reloadedAt} onReload={() => setReloadKey((k) => k + 1)} />
+          {subheading("errors", "Errors")}
+          <AdminErrorReports rows={errors} users={users} T={T} onCleared={ids => { setErrors(rows => rows.filter(row => !ids.includes(row.id))); setCoverage(previous => { const old = previous.errors; return old ? { ...previous, errors: { ...old, rows: old.rows.filter(row => !ids.includes(row.id)), count: old.count === null ? null : Math.max(0, old.count - ids.length) } } : previous; }); }} />
         </>
       )}
-      {tab === "errors" && (!loading || hasSectionData) && !error && <AdminErrorReports rows={errors} users={users} T={T} onCleared={ids => { setErrors(rows => rows.filter(row => !ids.includes(row.id))); setCoverage(previous => { const old = previous.errors; return old ? { ...previous, errors: { ...old, rows: old.rows.filter(row => !ids.includes(row.id)), count: old.count === null ? null : Math.max(0, old.count - ids.length) } } : previous; }); }} />}
-      {tab === "users" && (!loading || hasSectionData) && !error && <UsersPanel key={accountPreset} initialAccess={accountPreset} myProfileId={userIdRef.current} users={users} setUsers={setUsers} invites={invites} T={T} onRefresh={() => setReloadKey(k => k + 1)} />}
-      {tab === "waitlist" && (!loading || hasSectionData) && !error && <WaitlistList rows={waitlist} setRows={setWaitlist} attempts={attempts} setAttempts={setAttempts} users={users} invites={invites} T={T} onChanged={refreshCounts} />}
-      {tab === "fields" && (!loading || hasSectionData) && !error && <FieldProposals rows={fields} setRows={setFields} T={T} onChanged={refreshCounts} />}
-      {tab === "ai" && (!loading || hasSectionData) && !error && <AiPanel users={users} ownKey={data?.settings?.apiKey || ""} T={T} />}
+      {tab === "people" && listReady && (
+        <UsersPanel key={accountPreset} initialAccess={accountPreset} myProfileId={userIdRef.current} users={users} setUsers={setUsers} invites={invites} T={T} onRefresh={() => setReloadKey(k => k + 1)}
+          heading={subheading("users", "Accounts")}>
+          {subheading("waitlist", "Waitlist")}
+          <WaitlistList rows={waitlist} setRows={setWaitlist} attempts={attempts} setAttempts={setAttempts} users={users} invites={invites} T={T} onChanged={refreshCounts} />
+        </UsersPanel>
+      )}
+      {tab === "tools" && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {tool("invite", "Invite to join", "Sends a sign-up email at the public price. Grants no access. Preview, then Send.", <AdminInviteToJoin bare />)}
+          {tool("gift", "Gift lifetime access by email", "Applies when they sign up with this exact email. Does not send mail.", <AdminLifetimeGift bare />)}
+          {tool("mailbox", "Repair sign-in emails", "Preview first, then Apply, to copy each member's verified sign-in email onto their account.", <AdminMailboxRepair bare />)}
+          {tool("emails", "Welcome email", "Sent once after a member's first verified payment, only while this is on.", <AdminWelcomeEmail T={T} bare />)}
+          {tool("ai", "AI", "Shared keys, daily limits and today's usage.", listReady ? <AiPanel users={users} ownKey={data?.settings?.apiKey || ""} T={T} /> : null)}
+          {tool("preview", "Preview as a member", "Your own records, shown as this membership would see them. Admin is hidden until you exit.", <AdminPreviewPicker T={T} bare />)}
+          {tool("audit", "Control history", "Access changes you recorded, then support views.", <AdminControlHistory T={T} bare />)}
+          {tool("fields", counts?.fields_pending > 0 ? `Field proposals (${counts.fields_pending} pending)` : "Field proposals", "Fields Vera proposed, waiting for you.", listReady ? <FieldProposals rows={fields} setRows={setFields} T={T} onChanged={refreshCounts} /> : null)}
+        </div>
+      )}
+
+      {!pending && !error && sectionKeys.length > 0 && (
+        <div aria-label="List coverage" style={{ padding: "10px 12px", marginTop: 16, border: `1px solid ${T.border}`, borderRadius: 10, color: T.textMuted, fontSize: 12 }}>
+          {sectionKeys.map(key => {
+            const item = coverage[key]; if (!item || item.error) return null;
+            return <div key={key} style={{ marginTop: 5 }}>
+              {ADMIN_SOURCES[key].label}: showing {item.rows.length}{item.count !== null ? ` of ${item.count}` : " (total unavailable)"}
+              {(item.count === null ? item.rows.length >= item.limit : item.rows.length < item.count) && <button style={{ ...adminButtonStyle(T), marginLeft: 8 }} onClick={() => setRowLimits(previous => ({ ...previous, [key]: (previous[key] || ADMIN_SOURCES[key].size) + ADMIN_SOURCES[key].size }))}>Load more {ADMIN_SOURCES[key].label.toLowerCase()}</button>}
+            </div>;
+          })}
+          <div style={{ marginTop: 5 }}>Home has full totals.</div>
+          <button style={{ ...adminButtonStyle(T), marginTop: 8 }} onClick={() => setReloadKey(k => k + 1)}>Refresh section</button>
+          {reloadedAt && <span style={{ marginLeft: 8 }}>Read {reloadedAt.toLocaleTimeString()}</span>}
+        </div>
+      )}
 
       {/* Tap a ticket → read it, answer it, close it */}
       <Modal open={!!openTicket} onClose={closeTicketDetail} title={openTicket?.subject || "Ticket"}>
@@ -811,8 +848,11 @@ function SignupsList({ rows, T, onReload, reloadedAt }) {
           <div>
             <div style={{ fontSize: 11, color: T.textMuted }}>Last 90 days (rolling; server view limit)</div>
             <div style={{ fontSize: 26, fontWeight: 800, color: T.accent }}>{total}</div>
-            <div style={{ fontSize: 11, color: T.textMuted }}>account records with email on file, excluding administrators</div>
-            <div style={{ fontSize: 11, color: T.textMuted, marginTop: 4, lineHeight: 1.5 }}>Includes deleted and closed accounts. "New signup profiles" in Overview &amp; reports leaves those out and uses the window you pick there, so the two numbers can differ.</div>
+            <div style={{ fontSize: 11, color: T.textMuted }}>Including closed accounts. Home&apos;s &quot;New signups&quot; can differ.</div>
+            <details style={{ fontSize: 11, color: T.textMuted, marginTop: 4, lineHeight: 1.5 }}>
+              <summary style={{ cursor: "pointer" }}>Details</summary>
+              Account records with email on file, excluding administrators. Includes deleted and closed accounts. &quot;New signups&quot; on Home leaves those out and uses the window you pick there, so the two numbers can differ.
+            </details>
           </div>
           {onReload && (
             <button onClick={onReload} style={{
@@ -867,7 +907,7 @@ function accessColor(st) {
  * Users: the account directory plus the invite allowlist. Two people can be
  * approved today; this is where that happens and where it can be undone.
  */
-function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invites, T, onRefresh }) {
+function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invites, T, onRefresh, heading = null, children = null }) {
   const [msg, setMsg] = useState("");
   // The invitation row "Invite to join" opened, prefilled in a dialog.
   const [joinTarget, setJoinTarget] = useState(null);
@@ -989,17 +1029,35 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
 
   return (
     <div>
-      <div style={{ ...card, marginBottom: 12 }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Give someone free lifetime access</div>
-        <p style={{ fontSize: 13, color: T.textMuted, margin: "6px 0 0" }}>Someone who already has an account: choose “Give free lifetime access” on their row below. It checks their billing first and records your reason. Someone who has not signed up yet: gift it to their email address here and it applies the moment they confirm that address. Neither sends an email.</p>
-      </div>
-      <AdminLifetimeGift />
-      <AdminInviteToJoin />
+      {heading}
       {msg && <div role="status" aria-live="polite" style={{ fontSize: 12, color: T.textMuted, margin: "0 0 8px" }}>{msg}</div>}
+      <div style={{ fontSize: 12, color: T.textMuted, margin: "0 0 8px", lineHeight: 1.5 }}>
+        Only people who have signed in. Guide-only requests are on the waitlist.
+        {groups && ` ${groups.paying.length} paying, ${groups.free.length} free access, ${groups.unpaid.length} signed in without paying${groups.closed.length ? `, ${groups.closed.length} closed` : ""}.`}
+        {" "}Founding members: {foundingCount}
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <label>Search loaded accounts <input aria-label="Search loaded accounts" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Name, email, NPI or state" style={FORM_CONTROL} /></label>
+        <label>App access <select value={accessFilter} onChange={event => setAccessFilter(event.target.value)} style={FORM_CONTROL}><option value="all">All access states</option><option value="active">Active</option><option value="pending">Pending</option><option value="revoked">Paused</option></select></label>
+      </div>
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "8px 0 6px" }}>
+        Accounts ({shown.length}){hiddenCount > 0 && <button onClick={() => setShowTest(v => !v)} style={{ marginLeft: 8, fontSize: 11, border: "none", background: "transparent", color: T.accent, cursor: "pointer" }}>{showTest ? "hide" : "show"} {hiddenCount} empty account record{hiddenCount === 1 ? "" : "s"}</button>}
+      </div>
+      {memberships?.error && <div role="status" style={{ fontSize: 12, color: T.textMuted, margin: "0 0 8px" }}>Payment details could not be loaded, so accounts are not sorted by membership. Refresh to try again.</div>}
+      {groups ? ACCOUNT_GROUPS.filter(g => g.id !== "closed" || groups.closed.length).map(g => (
+        <div key={g.id}>
+          <div style={{ fontSize: 12, fontWeight: 700, color: T.text, margin: "14px 0 6px" }}>{g.label} ({groups[g.id].length})</div>
+          {groups[g.id].length ? groups[g.id].map(renderAccount) : <div style={{ fontSize: 12, color: T.textDim, marginBottom: 8 }}>{g.empty}</div>}
+        </div>
+      )) : shown.map(renderAccount)}
+      {!shown.length && <Empty T={T} text="No loaded accounts match these filters. Load more records below to widen the search." />}
+      {grantsError && <div role="status" style={{ fontSize: 12, color: T.textMuted, marginTop: 6 }}>Support access grants could not be loaded, so View as member is off. Refresh to try again.</div>}
+
+      {children}
 
       {/* Only invitations still waiting on someone. Once they sign in they
-          are an account below, and listing them twice read as a duplicate. */}
-      <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "8px 0 6px" }}>Waiting on an invitation ({openInvites.length})</div>
+          are an account above, and listing them twice read as a duplicate. */}
+      <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 6px" }}>Waiting on an invitation ({openInvites.length})</div>
       {openInvites.length === 0 && (
         <div style={{ fontSize: 12, color: T.textDim, marginBottom: 8 }}>
           {invites.length ? "Everyone invited has signed in; they are listed under Accounts." : "No invitations yet."}
@@ -1027,30 +1085,6 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
         </div>
       ))}
 
-      <AdminMailboxRepair />
-      <div style={{ fontSize: 12, color: T.textMuted, margin: "14px 0 0" }}>
-        Founding members: {foundingCount}
-      </div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 12 }}>
-        <label>Search loaded accounts <input aria-label="Search loaded accounts" type="search" value={search} onChange={event => setSearch(event.target.value)} placeholder="Name, email, NPI or state" style={FORM_CONTROL} /></label>
-        <label>App access <select value={accessFilter} onChange={event => setAccessFilter(event.target.value)} style={FORM_CONTROL}><option value="all">All access states</option><option value="active">Active</option><option value="pending">Pending</option><option value="revoked">Paused</option></select></label>
-      </div>
-      <div style={{ fontSize: 12, fontWeight: 700, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "8px 0 6px" }}>
-        Accounts ({shown.length}){hiddenCount > 0 && <button onClick={() => setShowTest(v => !v)} style={{ marginLeft: 8, fontSize: 11, border: "none", background: "transparent", color: T.accent, cursor: "pointer" }}>{showTest ? "hide" : "show"} {hiddenCount} empty account record{hiddenCount === 1 ? "" : "s"}</button>}
-      </div>
-      <div style={{ fontSize: 12, color: T.textMuted, margin: "0 0 8px", lineHeight: 1.5 }}>
-        Everyone here has signed in to the app. People who only asked for a state guide are on the Waitlist tab, not here.
-        {groups && ` ${groups.paying.length} paying, ${groups.free.length} free access, ${groups.unpaid.length} signed in without paying${groups.closed.length ? `, ${groups.closed.length} closed` : ""}.`}
-      </div>
-      {memberships?.error && <div role="status" style={{ fontSize: 12, color: T.textMuted, margin: "0 0 8px" }}>Payment details could not be loaded, so accounts are not sorted by membership. Refresh to try again.</div>}
-      {groups ? ACCOUNT_GROUPS.filter(g => g.id !== "closed" || groups.closed.length).map(g => (
-        <div key={g.id}>
-          <div style={{ fontSize: 12, fontWeight: 700, color: T.text, margin: "14px 0 6px" }}>{g.label} ({groups[g.id].length})</div>
-          {groups[g.id].length ? groups[g.id].map(renderAccount) : <div style={{ fontSize: 12, color: T.textDim, marginBottom: 8 }}>{g.empty}</div>}
-        </div>
-      )) : shown.map(renderAccount)}
-      {!shown.length && <Empty T={T} text="No loaded accounts match these filters. Load more records above to widen the search." />}
-      {grantsError && <div role="status" style={{ fontSize: 12, color: T.textMuted, marginTop: 6 }}>Support access grants could not be loaded, so View as member is off. Refresh to try again.</div>}
       {memberViewTarget && <AdminMemberView target={memberViewTarget} grant={memberGrants.get(memberViewTarget.id) || null}
         onClose={() => { setMemberViewTarget(null); setGrantsRevision(n => n + 1); }} />}
       {accessChange && <AdminAccessChange key={`${accessChange.kind}:${accessChange.row.id}:${accessChange.status || accessChange.action}`} change={accessChange} T={T} onClose={() => setAccessChange(null)} onSaved={() => { setMsg("Access change saved in Control history."); refresh(); }}
@@ -1172,7 +1206,7 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T,
 
       {/* Manual add — for signups that arrive by text, call, or hallway */}
       <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-        <input aria-label="Name" value={addName} onChange={e => setAddName(e.target.value)} placeholder="Name"
+        <input aria-label="Waitlist name" value={addName} onChange={e => setAddName(e.target.value)} placeholder="Waitlist name"
           style={{ flex: 1, minWidth: 0, padding: "9px 11px", borderRadius: 9, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, ...FORM_CONTROL }} />
         <input aria-label="Email" value={addEmail} onChange={e => setAddEmail(e.target.value)} placeholder="email@domain.com" type="email"
           style={{ flex: 1.2, minWidth: 0, padding: "9px 11px", borderRadius: 9, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, ...FORM_CONTROL }} />
@@ -1243,7 +1277,8 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T,
             Requests that were not saved ({orphanAttempts.length})
           </div>
           <div style={{ fontSize: 11.5, color: T.textMuted, marginBottom: 6 }}>
-            These submissions have no saved request. A guide-form attempt does not establish waitlist consent; do not invite or add it to the waitlist without an explicit signup.
+            These were not saved as a waitlist signup. Do not invite them without a real signup.
+            <details><summary style={{ cursor: "pointer" }}>Details</summary>These submissions have no saved request. A guide-form attempt does not establish waitlist consent; do not invite or add it to the waitlist without an explicit signup.</details>
           </div>
           {orphanAttempts.map(a => (
             <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap", backgroundColor: T.card, border: `1px solid ${T.warning}`, borderRadius: 10, padding: "8px 12px", marginBottom: 5 }}>
@@ -1278,7 +1313,7 @@ function FieldProposals({ rows, setRows, T, onChanged = () => {} }) {
     setRows(rs => rs.map(r => r.id === row.id ? { ...r, status } : r));
     onChanged();
   };
-  if (!rows.length) return <Empty T={T} text="No new fields proposed yet. When the assistant invents a field to avoid dropping data, it lands here for your review." />;
+  if (!rows.length) return <Empty T={T} text="When Vera invents a field, it lands here for you to approve or dismiss." />;
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
       {msg && <div role="alert" style={{ fontSize: 12.5, fontWeight: 700, color: T.danger || "#ef4444" }}>{msg}</div>}
@@ -1446,10 +1481,14 @@ function AiPanel({ users, ownKey, T }) {
               {status == null ? "Checking..." : status.configured ? `On (ends in ${status.last4})` : "Not set"}
             </div>
             <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>
-              {status?.configured
-                ? `Saved ${timeAgo(status.updated_at)}. Every active account has AI on with no setup. Users who add their own key in Settings > AI bypass this one.`
-                : "Until a key is here, AI features only work for users who added their own key in Settings > AI."}
+              Shared key for every active account. Members can still use their own key.{status?.configured ? ` Saved ${timeAgo(status.updated_at)}.` : ""}
             </div>
+            <details style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>
+              <summary style={{ cursor: "pointer" }}>Details</summary>
+              {status?.configured
+                ? "Every active account has AI on with no setup. Users who add their own key in Settings > AI bypass this one."
+                : "Until a key is here, AI features only work for users who added their own key in Settings > AI."}
+            </details>
           </div>
           {status?.configured && btn("Remove shared key", removeKey, { danger: true })}
         </div>
@@ -1460,7 +1499,9 @@ function AiPanel({ users, ownKey, T }) {
         <div style={{ fontSize: 20, fontWeight: 800, color: opusOn ? "#10b981" : T.text }}>
           {quota == null ? "Checking..." : !opusReported ? "Not reported" : opusOn ? "On" : "Not loaded"}
         </div>
-        <div style={{ fontSize: 11, color: T.textDim, marginTop: 2, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>Status only. There is no paste box here.</div>
+        <details style={{ fontSize: 11, color: T.textDim, marginTop: 2, lineHeight: 1.5 }}>
+          <summary style={{ cursor: "pointer" }}>Details</summary>
           {quota == null
             ? "Asking ai-proxy."
             : !opusReported
@@ -1468,13 +1509,14 @@ function AiPanel({ users, ownKey, T }) {
               : opusOn
                 ? `Every active account has Vera on Claude Opus with nothing pasted; the RVU coder uses it when a user picks Opus in Settings > AI. Loaded server-side by the operator (app_secrets.anthropic_shared_key); it is never sent to a browser and there is no paste box for it here. ${opusLimit ? `Per-user limit ${opusLimit} Opus calls per UTC day` : "No per-user Opus limit reported"}; your account has used ${quota.anthropic_used_today ?? 0} today. Users with their own Anthropic key bypass it.`
                 : "Until the operator loads app_secrets.anthropic_shared_key on the server, Vera runs on Gemini for everyone without their own Anthropic key. There is no paste box for it here by design."}
-        </div>
+        </details>
       </div>
 
       <div style={card}>
         <div style={{ fontSize: 13, fontWeight: 700, color: T.text, marginBottom: 4 }}>{status?.configured ? "Replace the shared key" : "Set the shared key"}</div>
         <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>
-          Paste a Google AI Studio key. It is stored on the server only (app_secrets, service role) and is never sent to a browser. Google is asked to confirm the key before it is saved.
+          Paste a Google AI Studio key. It is stored on the server, not in the browser.
+          <details><summary style={{ cursor: "pointer" }}>Details</summary>It is stored on the server only (app_secrets, service role) and is never sent to a browser. Google is asked to confirm the key before it is saved.</details>
         </div>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <input aria-label="Google AI Studio key" value={keyInput} onChange={e => setKeyInput(e.target.value)} placeholder="AIza... or AQ...." type="password" autoComplete="off" autoCapitalize="none" spellCheck={false}
@@ -1500,9 +1542,11 @@ function AiPanel({ users, ownKey, T }) {
             {opusReported && <span style={{ marginLeft: 12 }}>{opusLimit ?? "no"} <span style={{ fontSize: 11, fontWeight: 700, color: T.textMuted }}>Opus / day</span></span>}
           </div>
         </div>
-        <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 4, lineHeight: 1.5 }}>
+        <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 4 }}>Per account, per UTC day. Admins are unlimited.</div>
+        <details style={{ fontSize: 11.5, color: T.textMuted, marginTop: 4, lineHeight: 1.5 }}>
+          <summary style={{ cursor: "pointer" }}>Details</summary>
           Counted per account per provider per UTC day; admins are unlimited. Past the cap the app tells the user to try tomorrow or add their own key. To change it: set the <code>AI_DAILY_LIMIT</code> secret on the ai-proxy function (Supabase dashboard, Edge Functions, Secrets) or edit <code>DEFAULT_DAILY_LIMIT</code> in <code>supabase/functions/ai-proxy/index.ts</code> and redeploy.
-        </div>
+        </details>
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", margin: "14px 0 6px" }}>
@@ -1510,7 +1554,8 @@ function AiPanel({ users, ownKey, T }) {
         <button onClick={refresh} style={{ fontSize: 11, border: "none", background: "transparent", color: T.accent, cursor: "pointer", fontWeight: 700 }}>refresh</button>
       </div>
       <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>
-        {totalCalls} call{totalCalls === 1 ? "" : "s"} through the shared keys: {geminiRows.length} Gemini{geminiRows.some(r => !r.ok) ? ` (${geminiRows.filter(r => !r.ok).length} failed at Google)` : ""}, {opusRows.length} Opus{opusRows.some(r => !r.ok) ? ` (${opusRows.filter(r => !r.ok).length} failed at Anthropic)` : ""}. Calls made with a user's own key do not appear here.
+        Shared-key calls since midnight UTC. A member&apos;s own key is not listed.{" "}
+        {totalCalls} call{totalCalls === 1 ? "" : "s"}: {geminiRows.length} Gemini{geminiRows.some(r => !r.ok) ? ` (${geminiRows.filter(r => !r.ok).length} failed at Google)` : ""}, {opusRows.length} Opus{opusRows.some(r => !r.ok) ? ` (${opusRows.filter(r => !r.ok).length} failed at Anthropic)` : ""}.
       </div>
       {rows.length === 0 ? (
         <Empty T={T} text="No shared-key calls yet today." />
@@ -1770,6 +1815,29 @@ function MessagesPanel({ messages, users, myProfileId, repliesSince, T, onRefres
           </>
         )}
       </Modal>
+    </div>
+  );
+}
+
+/**
+ * Admin > Tools: one short card per tool, its title and one line on the face
+ * and the tool itself (every field, preview and confirmation it had) only
+ * once opened.
+ */
+function ToolCard({ id, title, hint, open, onToggle, T, children }) {
+  return (
+    <div id={`admin-section-${id}`} style={{ border: `1px solid ${T.border}`, borderRadius: 12, backgroundColor: T.card, scrollMarginTop: 12 }}>
+      <button type="button" aria-expanded={open} aria-controls={`admin-tool-${id}`} onClick={onToggle} style={{
+        display: "flex", width: "100%", justifyContent: "space-between", alignItems: "center", gap: 8, textAlign: "left",
+        padding: "12px 14px", border: "none", backgroundColor: "transparent", color: T.text, cursor: "pointer", fontFamily: "inherit",
+      }}>
+        <span style={{ minWidth: 0 }}>
+          <span style={{ display: "block", fontSize: 14, fontWeight: 700 }}>{title}</span>
+          <span style={{ display: "block", fontSize: 12, color: T.textMuted, marginTop: 2 }}>{hint}</span>
+        </span>
+        <span aria-hidden="true" style={{ fontSize: 12, fontWeight: 700, color: T.accent, flexShrink: 0 }}>{open ? "Close" : "Open"}</span>
+      </button>
+      {open && <div id={`admin-tool-${id}`} style={{ padding: "0 14px 14px" }}>{children}</div>}
     </div>
   );
 }

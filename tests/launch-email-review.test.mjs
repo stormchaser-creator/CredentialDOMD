@@ -110,6 +110,6 @@ test('nothing in the app calls send-invite; the admin screens use invite-to-join
     assert.doesNotMatch(fs.readFileSync(file, 'utf8'), /["'`]send-invite["'`]|functions\/v1\/send-invite/, String(file));
   }
   const admin = fs.readFileSync(new URL('../src/components/pages/AdminDashboard.jsx', import.meta.url), 'utf8');
-  assert.match(admin, /<AdminInviteToJoin \/>/);
+  assert.match(admin, /<AdminInviteToJoin bare \/>/);
   assert.doesNotMatch(admin, /Invite a physician|Re-send email|sendInvite/);
 });
