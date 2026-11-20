@@ -132,6 +132,9 @@ export function createDb() {
         rows("intake_ai_alerts").push({ id, provider: args.p_provider, detail: args.p_detail, sent_at: null });
         return { data: id, error: null };
       }
+      // Pay-first sign-up (20261120190000): an account made from a Checkout
+      // email files nothing until its first email-code sign-in. None by default.
+      if (name === "pay_first_email_unproven") return { data: harness.unproven.has(args.p_profile_id), error: null };
       return { data: null, error: { message: `no rpc ${name}` } };
     },
     storage: {
@@ -183,6 +186,7 @@ export const harness = {
   // fail is "mx.resend.com; spf=pass smtp.mailfrom=attacker.example; dkim=none; dmarc=none".
   rawAuth: "mx.resend.com; dmarc=pass header.from=clinic.example",
   access: { credential: true, practice: true },   // what the membership snapshot answers
+  unproven: new Set(),      // profile ids pay_first_email_unproven answers true for
 };
 globalThis.__inboundHarness = harness;
 
@@ -298,6 +302,7 @@ globalThis.Deno = { env: { get: (k) => env[k] }, serve: (h) => { handler = h; } 
 /** Empty every table, file and recorded call; the loaded function keeps its client. */
 export function resetWorld() {
   harness.db.reset();
+  harness.unproven.clear();
   harness.emails.clear();
   harness.sent.length = 0;
   harness.gemini.length = 0;

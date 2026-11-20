@@ -84,6 +84,8 @@ export function createPayFirstSignup(deps, config = LIMITED_LAUNCH) {
   const note = (entry, level) => { try { log({ event: 'pay_first_signup', ...entry }, level); } catch { /* A log never changes the answer. */ } };
   const live = () => {
     if (!['test', 'live'].includes(deps.mode)) refuse(503, 'signup_unavailable');
+    // The billing routes' own check of the Stripe keys for this mode.
+    deps.assertConfigured?.();
     return deps.mode === 'live';
   };
   const reply = (status, data) => new Response(JSON.stringify(data), { status, headers: {
