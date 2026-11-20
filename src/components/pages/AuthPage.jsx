@@ -8,6 +8,8 @@ import { loadAuthOffer } from "../../utils/authOffer";
 import { sendAuthVisit } from "../../utils/visitBeacon";
 import { watchChunkFailures, chunkRecoveryStep, CHUNK_RETRY_DELAY_MS } from "../../utils/chunkRecovery.js";
 import { resolveChunkFailure } from "../../lib/errorReport.js";
+import { PAY_FIRST_SIGNUP_ENABLED, PAY_FIRST_COPY, readSignupReturn, readStartSignup, startSignup } from "../../utils/payFirstSignup.js";
+import PayFirstReturn from "./PayFirstReturn.jsx";
 
 /**
  * Auth landing page — wraps Clerk's unified <SignIn withSignUp /> component
@@ -155,6 +157,41 @@ function AuthPage() {
     return () => { alive = false; };
   }, []);
 
+  // One step, pay first sign-up (utils/payFirstSignup.js). Off: the screen is
+  // exactly as before. On, with a live offer: Sign up opens Checkout and the
+  // Clerk form only signs in. A refused start ("disabled") turns it back to
+  // login first at once.
+  const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL;
+  // One state object: { disabled, starting, error, showLogIn }.
+  const [pf, setPf] = useState(() => ({}));
+  const payFirst = PAY_FIRST_SIGNUP_ENABLED && !pf.disabled;
+  const signupReturn = PAY_FIRST_SIGNUP_ENABLED ? readSignupReturn(window.location.search) : null;
+  const { starting, error: startError, showLogIn } = pf;
+  const setShowLogIn = value => setPf(previous => ({ ...previous, showLogIn: value }));
+  // Only with the live price line: a paused or unreadable offer leaves it out.
+  const signUpOffered = payFirst && !!offer?.action;
+  // The Clerk form signs in only while Sign up is (or is about to be) offered,
+  // or on the return from a pay-first Checkout. While the offer loads it
+  // assumes Sign up, so the form is not mounted twice in the usual case.
+  const signInOnly = payFirst && (!!signupReturn || offer === undefined || signUpOffered);
+  const beginSignup = async () => {
+    if (starting) return;
+    setPf(previous => ({ ...previous, starting: true, error: null }));
+    const r = await startSignup({ supabaseUrl });
+    if (r.url) { window.location.assign(r.url); return; }
+    setPf(previous => ({ ...previous, starting: false,
+      ...(r.error === "disabled" ? { disabled: true } : { error: r.error === "full" ? PAY_FIRST_COPY.full : PAY_FIRST_COPY.unavailable }) }));
+  };
+  // /app/?start=signup from a home page Sign up: straight to Checkout, once.
+  const autoStarted = useRef(false);
+  useEffect(() => {
+    if (!signUpOffered || signupReturn || autoStarted.current || !readStartSignup(window.location.search)) return;
+    autoStarted.current = true;
+    beginSignup();
+    // beginSignup reads only state guarded above; the ref makes this once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signUpOffered, signupReturn]);
+
   useEffect(() => {
     const onHashChange = () => {
       if (isLegacyEntry(window.location.hash)) {
@@ -210,11 +247,29 @@ function AuthPage() {
             {/* The annual amount and that it renews, before an account is made (funnel 2026-10-14). */}
             {offer.renewal && <p data-auth-offer-renewal="" style={{ margin: "4px 0 0", fontSize: 12.5, color: T.text, lineHeight: 1.5 }}>{offer.renewal}</p>}
             <p style={{ margin: "4px 0 0", fontSize: 12.5, color: T.textMuted, lineHeight: 1.5 }}>{offer.status}</p>
+            {signUpOffered && !signupReturn && (
+              <>
+                <button type="button" data-pay-first-signup="" onClick={beginSignup} disabled={starting} style={{
+                  marginTop: 12, width: "100%", minHeight: 48, padding: "12px 16px", borderRadius: 10, border: "none",
+                  background: T.accent, color: "#fff", fontWeight: 800, fontSize: 16, fontFamily: "inherit", cursor: starting ? "default" : "pointer", opacity: starting ? 0.8 : 1,
+                }}>{starting ? PAY_FIRST_COPY.starting : PAY_FIRST_COPY.signUp}</button>
+                {startError && <p data-pay-first-error="" role="alert" style={{ margin: "8px 0 0", fontSize: 13, color: T.text, lineHeight: 1.5 }}>{startError}</p>}
+              </>
+            )}
           </div>
         )}
-        <p style={{ margin: "0 0 16px", color: T.textMuted, fontSize: 13, lineHeight: 1.6, textAlign: "center" }}>
-          Already have an account? Use the same email address.
-        </p>
+        {signupReturn && (
+          <PayFirstReturn sessionId={signupReturn} supabaseUrl={supabaseUrl} onLogIn={() => setShowLogIn(true)} T={T} />
+        )}
+        {signUpOffered && !signupReturn ? (
+          <p data-pay-first-login-heading="" style={{ margin: "0 0 16px", color: T.textMuted, fontSize: 13, lineHeight: 1.6, textAlign: "center" }}>
+            {PAY_FIRST_COPY.alreadyMember} <strong style={{ color: T.text }}>{PAY_FIRST_COPY.logIn}</strong>
+          </p>
+        ) : !signupReturn && (
+          <p style={{ margin: "0 0 16px", color: T.textMuted, fontSize: 13, lineHeight: 1.6, textAlign: "center" }}>
+            Already have an account? Use the same email address.
+          </p>
+        )}
 
         {chunkNotice && (
           <div data-auth-chunk-notice="" role="alert" style={{ margin: "0 0 14px", padding: "12px 14px", borderRadius: 12, border: `1px solid ${T.border}`, backgroundColor: T.card, textAlign: "center" }}>
@@ -226,13 +281,16 @@ function AuthPage() {
           </div>
         )}
         {/* Clerk widget */}
-        <div ref={widgetRef} data-auth-widget="" style={{ display: "flex", justifyContent: "center", minHeight: reserved.widget }}>
+        <div ref={widgetRef} data-auth-widget="" style={{ display: signupReturn && !showLogIn ? "none" : "flex", justifyContent: "center", minHeight: signupReturn && !showLogIn ? 0 : reserved.widget }}>
           <SessionActivationGuard />
           {entry.ready && (
             <SignIn
-              key={entry.version}
+              // A switch back to login first mounts the form afresh.
+              key={`${entry.version}:${signInOnly ? "in" : "up"}`}
               routing="hash"
-              withSignUp
+              // Pay first: accounts are made after payment, so the form only
+              // signs in. Login first (the default and the fallback): as before.
+              withSignUp={!signInOnly}
               signUpFallbackRedirectUrl="/app/"
               fallbackRedirectUrl="/app/"
               appearance={{
@@ -262,6 +320,11 @@ function AuthPage() {
             />
           )}
         </div>
+        {signInOnly && offer !== undefined && (!signupReturn || showLogIn) && (
+          <p data-pay-first-just-paid="" style={{ margin: "12px 0 0", color: T.textMuted, fontSize: 13, lineHeight: 1.6, textAlign: "center" }}>
+            {PAY_FIRST_COPY.justPaid}
+          </p>
+        )}
 
         {/* Footer */}
         <div style={{

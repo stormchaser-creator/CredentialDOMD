@@ -86,6 +86,7 @@ import { useCallSyncAutoRun } from "./hooks/useCallSync";
 import { AuthPage, NotificationCenter, NotificationBanner, AdminMessageCard, SettingsSection, FAQSection, LegalSection, PricingModal, CancellationPage, SupportModal, AdminDashboard } from "./components/pages";
 import { useIsAdmin } from "./lib/admin";
 import AdminPreviewBanner, { ADMIN_PREVIEW_BANNER_CLEARANCE } from "./components/pages/AdminPreview";
+import PayFirstEmailProof from "./components/pages/PayFirstEmailProof.jsx";
 import { isNonExpiring, mailtoHref, copyToClipboard, avatarInitials } from "./utils/helpers";
 import { referenceSharePayload } from "./utils/referenceDraft.js";
 import { installPhoneViewportReset, paintPageBackground } from "./utils/phoneViewport.js";
@@ -295,6 +296,8 @@ export default function App() {
               <AppRulesNotice />
               {/* Outside AppInner so it also shows on the pending and paused screens. */}
               <AdminPreviewBanner />
+              {/* Pay-first sign-up: docs@ turns on at the first email-code sign-in. */}
+              <PayFirstEmailProof />
             </AppProvider>
           </SignedIn>
         </>
