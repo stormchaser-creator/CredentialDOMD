@@ -21,7 +21,7 @@ export const MEMBERSHIP_COPY = Object.freeze({
   foundingPracticeIncluded: "Practice is included for as long as this membership stays active.",
   lifetimePolicy: view.lifetimeException,
   promisedBeta: view.promisedBeta,
-  availability: "Open More > Profile & settings and review your membership offer under Your membership. Founding Credential is $99/year for the first 100 paid founding members. Availability is confirmed before payment; viewing an offer does not reserve a place. Paid membership requires a card at checkout and your explicit agreement. You keep the same account and saved records.",
+  availability: "Open More > Profile & settings and review your membership offer under Your membership. Founding Credential is $99/year while Founder spots last. Availability is confirmed before payment; viewing an offer does not reserve a place. Paid membership requires a card at checkout and your explicit agreement. You keep the same account and saved records.",
   refundGuarantee: view.refundGuarantee,
   // The terms the offer and the welcome email state (WELCOME_MONEY_BACK),
   // beside Cancel and get a refund. A test holds the three equal.

@@ -197,7 +197,7 @@ if (VARIANTS.has('main')) test('signup replay: public site to Checkout, back, ex
       evidence.steps.public = { hero, offerCallsOnFirstLoad: calls.length, offerLog: [...offerLog] };
       rec.mark('public:offer-calls', { count: calls.length });
       qa.check('the public page requests its offer exactly once on initial load', calls.length === 1, calls);
-      qa.check('the public headline states the reviewed founding price before sign-in', hero.includes('$99/year') && /first 100/.test(hero), hero);
+      qa.check('the public headline states the reviewed founding price before sign-in', hero.includes('$99/year') && /while Founder spots last/.test(hero), hero);
       if (calls.length > 1) problem('the public page asks public-membership-offer more than once per load', `${calls.length} calls in the first 4 s of one page load`);
       await snap(page, rec, 'public-home', { full: false });
       // The first one the visitor can see (on a phone the header's is inside the closed menu).

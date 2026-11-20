@@ -27,7 +27,7 @@ export function getPublicBillingOffer(id, phase = PUBLIC_BILLING_POLICY.pricePha
     tier: core ? 'founding' : 'locum', annualCents: amount, unitAmount: amount,
     currency: 'usd', interval: 'year', pricePhase: core ? phase : 'standard',
     priceLockedWhileActive: core && phase !== 'standard',
-    eligibilityLabel: core && phase === 'founding' ? 'First 100 paid founding memberships' : core && phase === 'earlybird' ? 'Early-bird membership' : 'Standard annual membership',
+    eligibilityLabel: core && phase === 'founding' ? 'Founder plan, while spots last' : core && phase === 'earlybird' ? 'Early-bird membership' : 'Standard annual membership',
     practiceIncluded, practiceTrialDays: practiceIncluded ? 0 : PUBLIC_BILLING_POLICY.practiceTrialDays,
     trialAutoCharges: false, billingEnabled: false,
     productId: `prod_credentialdomd_${id}_v2`,

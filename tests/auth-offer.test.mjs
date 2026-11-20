@@ -11,7 +11,7 @@ const founding = { schemaVersion: 1, phase: 'founding', annualCents: 9900, check
 
 test('shows the founding offer exactly as the public site words it', async () => {
   const offer = await loadAuthOffer({ ...base, fetchImpl: reply(founding) });
-  assert.deepEqual(offer, { headline: 'Founding Credential: $99/year for the first 100 paid members, Practice included while you are a member',
+  assert.deepEqual(offer, { headline: 'Founding Credential: $99/year while Founder spots last, Practice included while you are a member',
     status: 'Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.',
     // Funnel 2026-10-14: the live price and its renewal, before the account is made.
     action: 'Join for $99 a year',

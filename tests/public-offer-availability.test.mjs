@@ -54,7 +54,7 @@ const structured = html => [...html.matchAll(/<script\b[^>]*type="application\/l
 // (they keep founding), the package card's reason it is not sold to founding
 // buyers, the price schedule, and the comparison grid's founding cell. The
 // same list the QA journey allows.
-const ALLOWED = /signed up under the earlier free-beta wording|opt in to \$99\/year Credential during the beta|not offered to founding buyers|After the 100 paid founding memberships|^\$99 a year for the first 100 paid founding members, Practice included|then \$149 early bird and \$199 standard/;
+const ALLOWED = /signed up under the earlier free-beta wording|opt in to \$99\/year Credential during the beta|not offered to founding buyers|After the 100 paid founding memberships|^\$99 a year while Founder spots last, Practice included|then \$149 early bird and \$199 standard/;
 const offering$99 = text => text.split(/(?<=[.!?])\s+/).filter(x => /\$99/.test(x) && !ALLOWED.test(x));
 
 async function pages() {

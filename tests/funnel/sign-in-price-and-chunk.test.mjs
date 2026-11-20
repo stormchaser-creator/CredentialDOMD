@@ -66,7 +66,7 @@ async function compileAuthPage(states) {
 }
 
 test('the sign-up screen says the live price and the renewal before the account is made', async () => {
-  const offer = { action: 'Join for $99 a year', headline: 'Founding Credential: $99/year for the first 100 paid members, Practice included while you are a member',
+  const offer = { action: 'Join for $99 a year', headline: 'Founding Credential: $99/year while Founder spots last, Practice included while you are a member',
     renewal: '$99 at checkout, then $99 each year while this subscription remains active. Cancel before renewal to avoid the next annual charge.',
     status: 'Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.' };
   const previous = globalThis.window;

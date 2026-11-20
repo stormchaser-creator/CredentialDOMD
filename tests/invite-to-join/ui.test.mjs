@@ -11,7 +11,7 @@ import { mountComponent, settle } from '../component-harness.mjs';
 const T = { text: '#111111', textMuted: '#555555', input: '#eeeeee', border: '#cccccc', accent: '#008800', card: '#ffffff', danger: '#dd0000', success: '#006600' };
 const EMAIL = { from: '"Synthetic Owner, DO" <whit@credentialdomd.com>', to: 'new.doctor@example.com', replyTo: 'owner@example.invalid',
   subject: 'Synthetic Owner, DO invited you to join CredentialDOMD',
-  text: 'Hello Jane Synthetic,\n\nSynthetic Owner, DO invited you to join CredentialDOMD.\n\nThe founding membership is $99/year for the first 100 paid members.' };
+  text: 'Hello Jane Synthetic,\n\nSynthetic Owner, DO invited you to join CredentialDOMD.\n\nThe founding membership is $99/year while Founder spots last.' };
 const PREVIEW = { email: EMAIL, name: 'Jane Synthetic', history: { lastSentAt: null, cooldownUntil: null, sentInWindow: 4, dailyCap: 20 } };
 const deferred = () => { let resolve, reject; const promise = new Promise((r, j) => { resolve = r; reject = j; }); return { promise, resolve, reject }; };
 // Objects built inside the component's vm realm compare by value only after a copy.

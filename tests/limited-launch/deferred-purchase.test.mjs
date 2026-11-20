@@ -106,17 +106,17 @@ const button = (f, label) => find(f.render(), n => n.type === 'button' && textOf
 test('new public founding entry follows server availability and never offers existing members a second purchase', () => {
   const f = fixture();
   f.context.limitedLaunch.access.freeBeta = {state:'none',startsAt:null,endsAt:null,autoCharges:false};
-  assert.match(f.html(), /Founding Credential: \$99\/year for the first 100 paid members, Practice included while you are a member/);
+  assert.match(f.html(), /Founding Credential: \$99\/year while Founder spots last, Practice included while you are a member/);
   assert.match(f.html(), /does not reserve a founding place/);
   assert.match(f.html(), /\$245\/year total at first purchase/);
   f.context.limitedLaunch.access.pricePhase = 'earlybird';
-  assert.doesNotMatch(f.html(), /first 100 paid members|\$99/);
+  assert.doesNotMatch(f.html(), /while Founder spots last|\$99/);
   f.context.limitedLaunch.access.lifetime = {credential:true,practice:true};
   assert.match(f.html(), /No payment is required/);
-  assert.doesNotMatch(f.html(), /Review Credential offer|first 100 paid/);
+  assert.doesNotMatch(f.html(), /Review Credential offer|while Founder spots last/);
   f.context.limitedLaunch.access.lifetime = {credential:false,practice:false};
   f.context.limitedLaunch.access.purchasedOfferId = 'core';
-  assert.doesNotMatch(f.html(), /Review Credential offer|first 100 paid/);
+  assert.doesNotMatch(f.html(), /Review Credential offer|while Founder spots last/);
 });
 
 test('founding capacity refusals clear consent and require a fresh explicit review with no automatic price change', async () => {

@@ -37,6 +37,17 @@ test('unavailable or inconsistent public policy never invents a founding price o
   assert.equal((await createPublicMembershipOfferHandler({readOffer:async()=>{throw Error('private database detail');}})(request())).status,503);
 });
 
+test('Founder spots left passes only as a whole number while the Founder plan is open (20261120150000)',async()=>{
+  const read=value=>createPublicMembershipOfferHandler({readOffer:async()=>value})(request()).then(r=>r.json());
+  const open={...offer,bundleAvailable:false};
+  assert.deepEqual(await read({...open,founderSpotsLeft:37,paidCount:63,email:'private@example.invalid'}),{...open,founderSpotsLeft:37});
+  for(const bad of [0,101,-1,2.5,'37',null,true]) assert.deepEqual(await read({...open,founderSpotsLeft:bad}),open,JSON.stringify(bad));
+  const full={...open,availability:'temporarily_full'};
+  assert.deepEqual(await read({...full,founderSpotsLeft:3}),full);
+  const later={...offer,phase:'earlybird',annualCents:14900,bundleAvailable:true};
+  assert.deepEqual(await read({...later,founderSpotsLeft:3}),later);
+});
+
 function expiredFixture() {
   const config={app:'credentialdomd',version:'v2',policyVersion:'policy1'};
   const quote={public_founding_slot:1,offer_id:'core',price_phase:'founding',annual_cents:9900,profile_id:'profile1',clerk_subject:'user_one',livemode:false,attempt_id:'attempt1'};
