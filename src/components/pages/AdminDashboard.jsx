@@ -24,6 +24,7 @@ import AdminLifetimeAccess from "./AdminLifetimeAccess";
 import AdminLifetimeGift from "./AdminLifetimeGift";
 import AdminInviteToJoin from "./AdminInviteToJoin";
 import AdminMailboxRepair from "./AdminMailboxRepair";
+import AdminPaidSignups from "./AdminPaidSignups";
 import AdminMemberView from "./AdminMemberView";
 import AdminWelcomeEmail from "./AdminWelcomeEmail";
 import { readActiveGrants, memberViewAvailability } from "../../utils/memberViewClient.js";
@@ -1020,6 +1021,7 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
 
   return (
     <div>
+      <AdminPaidSignups />
       {heading}
       {msg && <div role="status" aria-live="polite" style={{ fontSize: 12, color: T.textMuted, margin: "0 0 8px" }}>{msg}</div>}
       <div style={{ fontSize: 12, color: T.textMuted, margin: "0 0 8px", lineHeight: 1.5 }}>
