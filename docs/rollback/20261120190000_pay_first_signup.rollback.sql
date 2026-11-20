@@ -75,6 +75,8 @@ drop function if exists public.dispatch_pay_first_sweep();
 drop function if exists public.admin_pay_first_signups();
 drop function if exists public.record_billing_dispute(text,boolean,text,integer,text,text);
 drop function if exists public.prove_pay_first_email(uuid,text);
+drop function if exists public.mark_pay_first_link_emailed(uuid);
+drop function if exists public.pay_first_link_due(boolean,integer);
 drop function if exists public.pay_first_email_unproven(uuid);
 drop function if exists public.pay_first_token_gate(uuid);
 drop function if exists public.finish_pay_first_provision(uuid,uuid,text,text,boolean);

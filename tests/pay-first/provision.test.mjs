@@ -3,6 +3,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { world, sha, newNonce } from './payFirstWorld.mjs';
+import { EMAILED_SIGN_IN_LINK } from '../../supabase/functions/_shared/payFirstSignup.mjs';
 
 const status = (w, s, nonce) => w.post(w.payFirst.status, { sessionId: s, nonce });
 
@@ -264,6 +265,39 @@ test('the sweep needs the hook secret and finishes what the webhooks missed', as
   const r = await (await w.post(w.payFirst.status, { action: 'sweep' }, { 'x-hook-secret': 'hook-secret' })).json();
   assert.deepEqual(r.outcomes, { provisioned: 1 });
   assert.equal(w.rows.get(s.signupId).state, 'provisioned');
+});
+
+test('the emailed sign-in link is built OFF: nothing is sent, and its draft claims only what is built', async () => {
+  assert.equal(EMAILED_SIGN_IN_LINK.enabled, false);
+  assert.equal(EMAILED_SIGN_IN_LINK.text('https://credentialdomd.com/app/?signin=t'), `Your CredentialDOMD membership is set up.
+
+Log in: https://credentialdomd.com/app/?signin=t
+
+This link works once, for 24 hours. You can always log in with the email you used at checkout and the code we send.
+
+CredentialDOMD
+https://credentialdomd.com`);
+  const w = world();
+  const sent = [];
+  const s = await w.start();
+  w.pay(s.sessionId);
+  await w.webhook('checkout.session.completed', structuredClone(w.sessions.get(s.sessionId)));
+  w.tick(11 * 60000);
+  w.store.linkDue = async () => [{ signup_id: s.signupId, clerk_subject: w.rows.get(s.signupId).clerk_subject, email: 'new.buyer@example.org' }];
+  w.store.markLinkEmailed = async () => true;
+  const off = await (await w.post(w.statusRoute({ deliverLink: async m => sent.push(m) }), { action: 'sweep' }, { 'x-hook-secret': 'hook-secret' })).json();
+  assert.equal(off.linksEmailed, undefined);
+  assert.equal(sent.length, 0);
+  // Turned on (only by a reviewed change): one link per sign-up, under its own key.
+  const marks = new Set();
+  w.store.markLinkEmailed = async id => !marks.has(id) && !!marks.add(id);
+  const on = w.statusRoute({ deliverLink: async m => sent.push(m), emailedLink: { ...EMAILED_SIGN_IN_LINK, enabled: true } });
+  for (let i = 0; i < 2; i++) await w.post(on, { action: 'sweep' }, { 'x-hook-secret': 'hook-secret' });
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].to, 'new.buyer@example.org');
+  assert.match(sent[0].text, /\/app\/\?signin=ticket_user_/);
+  assert.equal(sent[0].idempotencyKey, `credentialdomd:payfirst-link:${s.signupId}`);
+  assert.equal(w.calls.filter(c => c[0] === 'clerk.token').at(-1)[2], 86400);
 });
 
 test('the sweep releases an abandoned Checkout once Stripe says it expired unpaid', async () => {

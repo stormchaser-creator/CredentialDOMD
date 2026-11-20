@@ -76,6 +76,19 @@ export function payFirstDependencies(base: Base, settle: Settle) {
         body: JSON.stringify({ user_id: subject, expires_in_seconds: seconds }) }))?.token,
       sessions: async (subject: string) => listed(await clerk(`/v1/sessions?user_id=${encodeURIComponent(subject)}&limit=100`)),
     },
+    // The emailed sign-in link's one send, as the welcome email sends
+    // (Resend, the existing key, an idempotency key per sign-up). Only ever
+    // called with EMAILED_SIGN_IN_LINK.enabled, which is false.
+    deliverLink: async ({ to, subject, text, idempotencyKey }: { to: string; subject: string; text: string; idempotencyKey: string }) => {
+      const key = Deno.env.get('RESEND_API_KEY') || '';
+      if (!key) throw Error('Email is not configured');
+      const response = await fetch(`${(Deno.env.get('RESEND_API_BASE') || 'https://api.resend.com').replace(/\/+$/, '')}/emails`, {
+        method: 'POST', redirect: 'error', signal: AbortSignal.timeout(8000),
+        headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json', 'Idempotency-Key': idempotencyKey },
+        body: JSON.stringify({ from: 'CredentialDOMD <support@credentialdomd.com>', to: [to], subject, text }),
+      });
+      if (!response.ok) throw Error('Email was not accepted');
+    },
     // Exactly as clerk-webhook makes a profile for a new Clerk user.
     initProfile: async (identity: { subject: string; email: string; updatedMs: number; checkedAt: string }) => {
       if (Deno.env.get('CLERK_ISSUER') !== PRODUCTION_CLERK_ISSUER || Deno.env.get('CLERK_CONTINUITY_ENABLED') !== 'true') throw Error('continuity_unavailable');
@@ -99,6 +112,9 @@ export function payFirstDependencies(base: Base, settle: Settle) {
       emailUnproven: async (profile: string) => (await checked(db().rpc('pay_first_email_unproven', { p_profile_id: profile }))) === true,
       prove: (profile: string, subject: string) => checked(db().rpc('prove_pay_first_email', { p_profile_id: profile, p_clerk_subject: subject })),
       row: (signup: string) => /^[0-9a-f-]{36}$/.test(signup || '') ? row('signup_id', signup) : null,
+      // The emailed sign-in link (off: EMAILED_SIGN_IN_LINK.enabled is false).
+      linkDue: (live: boolean, limit: number) => checked(db().rpc('pay_first_link_due', { p_livemode: live, p_limit: limit })),
+      markLinkEmailed: async (signup: string) => (await checked(db().rpc('mark_pay_first_link_emailed', { p_signup_id: signup }))) === true,
       rowBySession: (session: string) => row('session_id', session),
       rowBySubscription: (sub: string) => row('subscription_id', sub),
       rowByProfile: async (profile: string) => {
