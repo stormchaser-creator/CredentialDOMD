@@ -91,7 +91,15 @@ test('the owner email claims signups, guides, payments and fixes only', { skip: 
     const py = JSON.parse((await exec('python3', ['-c', `import importlib.util,json
 spec=importlib.util.spec_from_file_location('sn', ${JSON.stringify(PY)}); m=importlib.util.module_from_spec(spec); spec.loader.exec_module(m)
 print(json.dumps(list(m.TEXT_KINDS)))`])).stdout);
-    assert.deepEqual(await pg.value('public.owner_notify_email_kinds()'), [...py, 'FIXED', 'FIXED BY ITSELF']);
+    // The pay-first kinds arrive with 20261120190000, which this database
+    // does not load; that migration's own list is checked against them below.
+    const PAY_FIRST = ['PAID, NO LOGIN YET', 'SIGN-UP NEEDS YOU', 'DISPUTE OPENED'];
+    assert.deepEqual(await pg.value('public.owner_notify_email_kinds()'), [...py.filter(k => !PAY_FIRST.includes(k)), 'FIXED', 'FIXED BY ITSELF']);
+    const payFirst = fs.readFileSync(path.join(root, 'supabase/migrations/20261120190000_pay_first_signup.sql'), 'utf8');
+    const fn = payFirst.slice(payFirst.indexOf('function public.owner_notify_email_kinds()'));
+    const listed = fn.slice(fn.indexOf('array['));
+    const kinds = [...listed.slice(0, listed.indexOf(']')).matchAll(/'([^']+)'/g)].map(m => m[1]);
+    assert.deepEqual(kinds, [...py, 'FIXED', 'FIXED BY ITSELF']);
   });
 
   await t.test('a renewal reminder signup is reported once, with its state, date and product news answer', async () => {

@@ -157,8 +157,14 @@ SIGNUP_KINDS = ('waitlist', 'founding', 'app profile', 'FAILED ATTEMPT')
 # goes to the ops queue for the scheduled supervisor.
 ACTIVITY_PREFIXES = ('TICKET', 'CLIENT', 'BETA', 'guide only', 'FEEDBACK', 'FIXED')
 TEXT_KINDS = ('waitlist', 'guide only', 'renewal reminder', 'founding', 'app profile', 'BETA JOINED', 'CHECKOUT STARTED', 'PAID',
-              'LIFETIME GIFT CLAIMED', 'REFUND NEEDS SUPPORT', 'REFUND UNFINISHED')
+              'LIFETIME GIFT CLAIMED', 'REFUND NEEDS SUPPORT', 'REFUND UNFINISHED',
+              # Pay-first sign-up (20261120190000): a payment whose account is not
+              # finished, one only the owner can finish, and a dispute.
+              'PAID, NO LOGIN YET', 'SIGN-UP NEEDS YOU', 'DISPUTE OPENED')
 MONEY = {
+    'PAID, NO LOGIN YET': ('paid, no login yet', 'paid, no login yet'),
+    'SIGN-UP NEEDS YOU': ('paid sign-up needing you', 'paid sign-ups needing you'),
+    'DISPUTE OPENED': ('dispute opened', 'disputes opened'),
     'PAID': ('paid', 'paid'),
     'CHECKOUT STARTED': ('checkout started', 'checkouts started'),
     'SUBSCRIPTION ACTIVE': ('subscription active without a recorded payment', 'subscriptions active without a recorded payment'),
