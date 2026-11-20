@@ -42,7 +42,7 @@ for (const page of ['index', 'locums']) {
     assert.match(html, /card (?:is )?required at checkout/i);
     if (page === 'index') {
       // Owner decisions 2026-11-13 and 2026-11-15: the home page shows only the
-      // $99 Founder plan while founder places remain, and says "Sign up today".
+      // $99 Founder plan while Founder spots remain, and says "Sign up today".
       assert.match(html, />Sign up today<\/a>/);
       assert.doesNotMatch(html, /Create your account/);
       assert.match(html, /The Founder plan is \$99 a year while Founder spots last, with everything included: Credential and Practice/);

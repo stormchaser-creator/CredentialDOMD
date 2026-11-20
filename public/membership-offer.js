@@ -21,7 +21,7 @@ const RATES = Object.freeze({
 // withLiveOffer marks them). Equal to src/content/publicLaunch.mjs
 // FOUNDING_AVAILABILITY and FOUNDING_RATE_LOCK (pinned by a test). A later
 // phase states its own rate instead, so no sentence keeps offering $99 once
-// the founding places are paid.
+// the Founder spots are paid.
 const AVAILABILITY = Object.freeze({
   founding: 'Founding Credential is $99/year while Founder spots last.',
   earlybird: `Early bird Credential is ${usd(PRICES.earlybird)}/year.`,

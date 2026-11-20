@@ -347,7 +347,7 @@ test('public and in-app legal documents use production defaults and retain an ex
       assert.match(section.blocks[2], /first charge is scheduled for your original beta end date, when your paid year starts/);
       assert.match(section.blocks[2], /If an unfinished checkout is completed after the original beta end date/);
       // Owner approved, 2026-11-16: the $99 founding terms, and no later price.
-      assert.match(section.blocks[3], /^Paid founding members get Credential for \$99 per year while Founder places last\. Founding members keep their annual rate/);
+      assert.match(section.blocks[3], /^Paid founding members get Credential for \$99 per year while Founder spots last\. Founding members keep their annual rate/);
       assert.match(section.blocks[3], /for life while their membership remains continuously active/);
       assert.equal(section.blocks[4], 'Founding Credential at $99 per year includes Practice while you are a member.');
       assert.doesNotMatch(JSON.stringify(on.terms), /\$\s?(?:149|199|245)\b/);

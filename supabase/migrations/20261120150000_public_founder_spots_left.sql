@@ -1,32 +1,44 @@
 -- Public Founder spots left (owner request, 2026-11-20).
 --
 -- The home page shows "N spots left at $99/year" while the Founder plan is
--- open. public_membership_offer() now carries founderSpotsLeft: a whole
--- number from 1 to 100, sent only while the phase is founding and checkout is
--- available. It is the cap minus every place already taken (paid, committed,
--- reserved by an open Checkout, or promised to a protected historical
--- member), counted exactly as founding_public_state() counts them, so the
--- number never shows a place a new buyer could not actually get. Nothing
--- else leaves the database: no slot number, email, profile, date or state.
+-- open. public_membership_offer() now carries founderSpotsLeft, sent only
+-- while the phase is founding and checkout is available.
 --
--- The reviewed body of public_membership_offer() is kept under a private
--- name and wrapped, as the founding capacity migration did for its routines.
--- Idempotent. No gate, price, slot or Stripe change.
+-- Owner decision 2026-11-20 ("Count paid founders only"): spots left is the
+-- founding program's capacity minus PAID Founder members only, that is live
+-- founding places whose first payment is verified
+-- (limited_founding_slots.state = 'paid'). Committed sign-ups, places
+-- reserved by an open Checkout and protected earlier promises do not reduce
+-- it, and leads and email-only contacts (early_access_leads) never count. A
+-- paid place is not given back after a cancel or refund (owner policy
+-- 2026-09-20), so it keeps counting. The capacity comes from the sealed
+-- program row; no count is written here. This is the paid-only logic from
+-- draft PR #19 (claude/leads-vs-members, 20261116120000), which this
+-- migration now owns for the public count.
+--
+-- Nothing else leaves the database: no slot number, email, profile, date or
+-- state. The reviewed body of public_membership_offer() is kept under a
+-- private name and wrapped, as the founding capacity migration did for its
+-- routines. Additive and idempotent: create or replace and a guarded
+-- rename only. No gate, price, slot or Stripe change.
 -- Rollback: docs/rollback/20261120150000_public_founder_spots_left.rollback.sql
 
--- Places left at the founding price for this mode: null when the program is
--- not prepared or not enabled.
-create or replace function public.founding_spots_left(p_livemode boolean)
-returns integer language plpgsql stable security definer set search_path=public,pg_temp as $$
-declare cap integer; occupied integer;
-begin
- if not exists(select 1 from public.access_policy_settings where singleton and public_founding_enabled) then return null; end if;
- select capacity into cap from public.limited_founding_programs where livemode=p_livemode;
- if not found then return null; end if;
- select count(*) into occupied from public.limited_founding_slots
-  where livemode=p_livemode and not(state='promised' and public.founding_lifetime_email(promise_email,p_livemode));
- return greatest(cap-occupied,0);
-end $$;
+-- Founding places with a verified first payment. Never goes down.
+create or replace function public.paid_founder_count()
+returns integer language sql stable security definer set search_path='' as $$
+  select count(*)::integer from public.limited_founding_slots f where f.livemode and f.state='paid'
+$$;
+comment on function public.paid_founder_count() is
+  'Live founding places with a verified first payment. Leads, accounts, lifetime access and promised, reserved or committed places are not counted.';
+
+-- Null when no live founding program exists, so nothing is shown.
+create or replace function public.founder_spots_left()
+returns integer language sql stable security definer set search_path='' as $$
+  select greatest(g.capacity-public.paid_founder_count(),0)
+  from public.limited_founding_programs g where g.livemode
+$$;
+comment on function public.founder_spots_left() is
+  'Founding capacity minus paid founding places (owner 2026-11-20). Null when there is no live founding program.';
 
 do $$ begin
  if to_regprocedure('public.public_membership_offer_before_spots()') is null then
@@ -40,11 +52,11 @@ declare offer jsonb; left_now integer;
 begin
  offer:=public.public_membership_offer_before_spots();
  if offer->>'phase'='founding' and offer->>'availability'='available' and (offer->>'checkoutEnabled')::boolean then
-  left_now:=public.founding_spots_left(true);
-  if left_now between 1 and 100 then offer:=offer||jsonb_build_object('founderSpotsLeft',left_now); end if;
+  left_now:=public.founder_spots_left();
+  if left_now>=1 then offer:=offer||jsonb_build_object('founderSpotsLeft',left_now); end if;
  end if;
  return offer;
 end $$;
 
-revoke all on function public.founding_spots_left(boolean),public.public_membership_offer_before_spots(),public.public_membership_offer() from public,anon,authenticated,service_role;
-grant execute on function public.public_membership_offer() to service_role;
+revoke all on function public.paid_founder_count(),public.founder_spots_left(),public.public_membership_offer_before_spots(),public.public_membership_offer() from public,anon,authenticated,service_role;
+grant execute on function public.paid_founder_count(),public.founder_spots_left(),public.public_membership_offer() to service_role;

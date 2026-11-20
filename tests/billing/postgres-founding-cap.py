@@ -182,8 +182,8 @@ with tempfile.TemporaryDirectory(prefix='founding-cap-', dir='/tmp') as temp:
         check('test program stages independently from live program', value(f"prepare_founding_program(false,'synthetic_cap','{digest(promised)}',4)")['promised'] == 4 and count('not livemode') == 4)
         sql("update access_policy_settings set limited_self_service_enabled=true,limited_checkout_enabled=true,enforcement_enabled=true,public_founding_enabled=true,limited_self_service_price_phase='founding'")
         check('preparation refuses an enabled program', role('select ' + stage, ok=False).returncode != 0)
-        check('public offer says 96 Founder places left beside four protected promises, and nothing else about them', value('public_membership_offer()') == {'schemaVersion': 1, 'phase': 'founding', 'annualCents': 9900, 'checkoutEnabled': True, 'availability': 'available', 'founderSpotsLeft': 96})
-        check('anon and authenticated cannot call the spots count or the offer directly', all(role(f'select {fn}', who=who, ok=False).returncode != 0 for who in ['anon', 'authenticated'] for fn in ['founding_spots_left(true)', 'public_membership_offer()']))
+        check('four protected promises are not paid Founder members: 100 Founder spots left, and nothing else about them', value('public_membership_offer()') == {'schemaVersion': 1, 'phase': 'founding', 'annualCents': 9900, 'checkoutEnabled': True, 'availability': 'available', 'founderSpotsLeft': 100})
+        check('anon and authenticated cannot call the spots count or the offer directly', all(role(f'select {fn}', who=who, ok=False).returncode != 0 for who in ['anon', 'authenticated'] for fn in ['founder_spots_left()', 'paid_founder_count()', 'public_membership_offer()']))
 
         # Every new public identity takes the actual self-service path; no direct
         # invitation writes manufacture eligibility or bypass the capacity wrapper.
@@ -332,6 +332,19 @@ with tempfile.TemporaryDirectory(prefix='founding-cap-', dir='/tmp') as temp:
             with concurrent.futures.ThreadPoolExecutor(max_workers=12) as pool:
                 paid_results.extend(pool.map(lambda pair: settle(pair[0], pair[1], f'evt_Paid{pair[0]}'), ordered_winners[previous:threshold]))
             previous = threshold
+            if threshold == 95:
+                # Paid Founder members only (owner 2026-11-20): 95 paid leave 5
+                # spots once the unpaid places are gone (rolled-back probe);
+                # committed, reserved and promised places never reduce it.
+                probe = sql("""begin;
+                  select public_membership_offer();
+                  select paid_founder_count();
+                  delete from limited_founding_slots where livemode and state<>'paid';
+                  select public_membership_offer();
+                  rollback;""").stdout.strip().splitlines()
+                check('spots left counts paid Founder members only',
+                      'founderSpotsLeft' not in json.loads(probe[0]) and json.loads(probe[0])['availability'] == 'temporarily_full'
+                      and probe[1] == '95' and json.loads(probe[2]) == {'schemaVersion': 1, 'phase': 'founding', 'annualCents': 9900, 'checkoutEnabled': True, 'availability': 'available', 'founderSpotsLeft': 5})
             if threshold < 100:
                 offer = value('public_membership_offer()')
                 check(f'exactly{threshold} paid of100 occupied keeps public99 pending and protected holder99',

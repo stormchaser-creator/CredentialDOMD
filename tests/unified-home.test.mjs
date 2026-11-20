@@ -1,11 +1,11 @@
 // The unified home page (owner approval 2026-11-15), rendered with the
 // production defaults and painted by the real public/membership-offer.js.
 //
-// While founder places remain it shows one plan, the $99 Founder plan; every
+// While Founder spots remain it shows one plan, the $99 Founder plan; every
 // signup link says "Sign up today" (header: "Sign up" and "Log in"); and it
 // never says "Create your account" or names a later price. Once a validated
 // reply says founding is over, the Founder card gives way to that reply's
-// plan. A count of founder places appears only when the server sends one.
+// plan. A count of Founder spots appears only when the server sends one.
 // All replies here are synthetic; nothing is fetched.
 import test from 'node:test';
 import assert from 'node:assert/strict';
@@ -84,7 +84,7 @@ function assertFounderState(document, label) {
   assert.match(visible, /DOs, MDs, NPs and PAs/, label);
   assert.doesNotMatch(visible, LATER_PRICE, label);
   assert.doesNotMatch(visible, OLD_LABEL, label);
-  assert.doesNotMatch(visible, /The Founder places are taken|Early bird|Standard Credential/, label);
+  assert.doesNotMatch(visible, /The Founder spots are taken|Early bird|Standard Credential/, label);
   for (const node of document.querySelectorAll('[data-founder-only]')) assert.equal(node.hidden, false, label);
   for (const node of document.querySelectorAll('[data-after-founders]')) assert.equal(node.hidden, true, label);
   const offer = graph(document).find(item => item['@type'] === 'SoftwareApplication').offers;
@@ -160,7 +160,7 @@ test('once a validated reply says founding is over, the page shows that plan and
     for (const node of document.querySelectorAll('[data-founder-only]')) assert.equal(node.hidden, true, phase);
     for (const node of document.querySelectorAll('[data-after-founders]')) assert.equal(node.hidden, false, phase);
     assert.ok(visible.includes(`${name} Credential: ${price}/year`), `${phase}: the live plan is stated`);
-    assert.ok(visible.includes('The Founder places are taken.'), phase);
+    assert.ok(visible.includes('The Founder spots are taken.'), phase);
     assert.ok(visible.includes(offerPresentation(reply(phase)).rateNote), phase);
     assert.ok(visible.includes('Credential + Practice is $245/year total at first purchase, with no early bird discount.'), phase);
     assert.doesNotMatch(visible, /Founder plan|One plan\. Everything included|Limited Founder spots|keep this price for life/, phase);
