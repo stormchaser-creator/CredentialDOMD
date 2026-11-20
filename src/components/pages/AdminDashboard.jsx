@@ -305,6 +305,12 @@ function AdminDashboardContent() {
   // bar bumps it when a panel is opened.
   const [reloadKey, setReloadKey] = useState(0);
   const [reloadedAt, setReloadedAt] = useState(null);
+  // The group (and read) the last finished load was for. Opening a group
+  // renders once before this effect sets loading, so without it a group's
+  // empty states ("No client error reports in this list.") showed for a
+  // frame before its first read.
+  const loadKey = `${tab}|${showArchived}|${reloadKey}`;
+  const [loadedFor, setLoadedFor] = useState(null);
   useEffect(() => {
     if (!isAdmin || !supabase) {
       setLoading(false);
@@ -312,6 +318,7 @@ function AdminDashboardContent() {
     }
     let cancelled = false;
     const keys = adminTabSources(tab, { showArchived });
+    const readFor = `${tab}|${showArchived}|${reloadKey}`;
     const setters = { tickets: setTickets, archivedTickets: setArchivedRows, feedback: setFeedback, signups: setSignups, visits: setVisits,
       waitlist: setWaitlist, attempts: setAttempts, fields: setFields, users: setUsers,
       invites: setInvites, errors: setErrors, messages: setMessages };
@@ -325,6 +332,7 @@ function AdminDashboardContent() {
       const failures = results.filter(result => result.error);
       setError(failures.map(result => `${ADMIN_SOURCES[result.key].label}: ${result.error}`).join(" · "));
       if (!failures.length) setReloadedAt(new Date());
+      setLoadedFor(readFor);
       setLoading(false);
     });
     return () => { cancelled = true; };
@@ -364,9 +372,9 @@ function AdminDashboardContent() {
 
   // A Home number opens its group at its section once the lists are in.
   useEffect(() => {
-    if (!focusSection || loading || typeof document === "undefined") return;
+    if (!focusSection || loading || loadedFor !== loadKey || typeof document === "undefined") return;
     document.getElementById(`admin-section-${focusSection}`)?.scrollIntoView?.({ block: "start" });
-  }, [focusSection, loading, tab]);
+  }, [focusSection, loading, loadedFor, loadKey]);
 
   if (!isAdmin) {
     return (
@@ -418,7 +426,8 @@ function AdminDashboardContent() {
     attention?.error ? { id: "tools", ...countFailed("Tools", "Pending field count") }
       : { id: "tools", ...counted("Tools", counts?.fields_pending, `${counts?.fields_pending} field proposals to review`, " pending") },
   ];
-  const listReady = (!loading || hasSectionData) && !error;
+  const pending = sectionKeys.length > 0 && (loading || loadedFor !== loadKey);
+  const listReady = (!pending || hasSectionData) && !error;
   const subheading = (id, text) => <h3 id={`admin-section-${id}`} style={{ fontSize: 13, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "18px 0 8px", scrollMarginTop: 12 }}>{text}</h3>;
   const tool = (id, title, hint, body) => <ToolCard key={id} id={id} title={title} hint={hint} open={openTools.has(id)} onToggle={() => toggleTool(id)} T={T}>{body}</ToolCard>;
 
@@ -454,7 +463,7 @@ function AdminDashboardContent() {
       {tab === "reports" && <AdminOperationsReport T={T} onNavigate={navigateReport}>
         <AdminHomeSummary T={T} onNavigate={navigateReport} />
       </AdminOperationsReport>}
-      {loading && <div style={{ padding: 20, textAlign: "center", color: T.textMuted }}>{hasSectionData ? "Refreshing…" : "Loading…"}</div>}
+      {pending && <div style={{ padding: 20, textAlign: "center", color: T.textMuted }}>{hasSectionData ? "Refreshing…" : "Loading…"}</div>}
       {error && (
         <div role="alert" style={{
           padding: "10px 12px", borderRadius: 8,
@@ -544,7 +553,7 @@ function AdminDashboardContent() {
         </div>
       )}
 
-      {!loading && !error && sectionKeys.length > 0 && (
+      {!pending && !error && sectionKeys.length > 0 && (
         <div aria-label="List coverage" style={{ padding: "10px 12px", marginTop: 16, border: `1px solid ${T.border}`, borderRadius: 10, color: T.textMuted, fontSize: 12 }}>
           {sectionKeys.map(key => {
             const item = coverage[key]; if (!item || item.error) return null;
@@ -837,11 +846,12 @@ function SignupsList({ rows, T, onReload, reloadedAt }) {
       }}>
         <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 8 }}>
           <div>
+            <div style={{ fontSize: 11, color: T.textMuted }}>Last 90 days (rolling; server view limit)</div>
             <div style={{ fontSize: 26, fontWeight: 800, color: T.accent }}>{total}</div>
-            <div style={{ fontSize: 11, color: T.textMuted }}>Last 90 days, including closed accounts. Home&apos;s &quot;New signups&quot; can differ.</div>
+            <div style={{ fontSize: 11, color: T.textMuted }}>Including closed accounts. Home&apos;s &quot;New signups&quot; can differ.</div>
             <details style={{ fontSize: 11, color: T.textMuted, marginTop: 4, lineHeight: 1.5 }}>
               <summary style={{ cursor: "pointer" }}>Details</summary>
-              Last 90 days (rolling; server view limit). Account records with email on file, excluding administrators. Includes deleted and closed accounts. &quot;New signups&quot; on Home leaves those out and uses the window you pick there, so the two numbers can differ.
+              Account records with email on file, excluding administrators. Includes deleted and closed accounts. &quot;New signups&quot; on Home leaves those out and uses the window you pick there, so the two numbers can differ.
             </details>
           </div>
           {onReload && (
@@ -1196,7 +1206,7 @@ function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T,
 
       {/* Manual add — for signups that arrive by text, call, or hallway */}
       <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-        <input aria-label="Name" value={addName} onChange={e => setAddName(e.target.value)} placeholder="Name"
+        <input aria-label="Waitlist name" value={addName} onChange={e => setAddName(e.target.value)} placeholder="Waitlist name"
           style={{ flex: 1, minWidth: 0, padding: "9px 11px", borderRadius: 9, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, ...FORM_CONTROL }} />
         <input aria-label="Email" value={addEmail} onChange={e => setAddEmail(e.target.value)} placeholder="email@domain.com" type="email"
           style={{ flex: 1.2, minWidth: 0, padding: "9px 11px", borderRadius: 9, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, ...FORM_CONTROL }} />

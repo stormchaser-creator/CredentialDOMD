@@ -127,10 +127,12 @@ test('the Activity "New accounts" total states its 90-day window and how it diff
   const f = load([]);
   const tree = f.render('SignupsList', { rows: [{ day: '2026-09-24T00:00:00Z', signups: 2 }, { day: '2026-09-23T00:00:00Z', signups: 1 }], T });
   const shown = text(tree);
-  // One line on the face; the full wording behind Details.
-  assert.match(shown, /Last 90 days, including closed accounts\. Home's "New signups" can differ\./);
+  // The window label sits right above the total (the lab reads the number after it);
+  // one line under it; the full wording behind Details.
+  assert.match(shown, /Last 90 days \(rolling; server view limit\)\s*3\b/);
+  assert.match(shown, /Including closed accounts\. Home's "New signups" can differ\./);
   const details = text(nodes(tree).find(n => n.type === 'details'));
-  assert.match(details, /Last 90 days \(rolling; server view limit\)/);
+  assert.match(details, /excluding administrators/);
   assert.match(details, /Includes deleted and closed accounts/);
   assert.match(details, /"New signups" on Home leaves those out/);
   assert.match(text(f.render('SignupsList', { rows: [], T })), /No new accounts in the last 90 days/);

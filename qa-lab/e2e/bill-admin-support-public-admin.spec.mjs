@@ -126,7 +126,8 @@ test('owner: Errors, Waitlist, Fields and AI tab counts follow each action', {
     const label0 = await tabLabel(page, 'Waitlist');
     const db0 = attention(admin.profile.id).waitlist_waiting;
     qa.check('the Waitlist label is the database\'s waiting count', labelCount(label0) === db0, `"${label0}" vs ${db0}`);
-    await page.getByPlaceholder('Name').fill(leadName);
+    // People also has the accounts search ("Name, email, NPI or state"); the waitlist's own field is "Waitlist name".
+    await page.getByPlaceholder('Waitlist name', { exact: true }).fill(leadName);
     await page.getByPlaceholder(LEAD_EMAIL_PLACEHOLDER).fill(leadEmail);
     await page.getByRole('button', { name: 'Add', exact: true }).click();
     const lead = await waitFor('the lead row', async () => row(`select id, source, waitlist from public.early_access_leads where email = '${leadEmail}'`), { timeoutMs: 15000 }).catch(() => null);
