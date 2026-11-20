@@ -111,7 +111,7 @@ test('while a new buyer\'s offer is founding, the $245 bundle is not offered and
   const html = renderWith(buyer);
   assert.match(html, />Review Credential offer</);
   assert.doesNotMatch(html, /Review Credential \+ Practice offer/);
-  assert.match(html, /Founding Credential: \$99\/year for the first 100 paid members, Practice included while you are a member\./);
+  assert.match(html, /Founding Credential: \$99\/year while Founder spots last, Practice included while you are a member\./);
   assert.ok(html.includes(MEMBERSHIP_COPY.bundleDuringFounding));
   assert.doesNotMatch(html, /\$245\/year total/);
   assert.equal(canReviewBillingOffer(buyer, 'core_locum'), false);

@@ -113,7 +113,7 @@ test('visitor: landing offer, create-account path, fallback, beacon', {
     const blockedPrice = (await p.page.locator('[data-membership-price]').first().innerText()).trim();
     await qa.shot('landing phone offer blocked', p.page);
     qa.check('offer blocked: the offer request was refused', p.pub.offerLog.some((o) => o.mode === 'block'), p.pub.offerLog.map((o) => o.mode));
-    qa.check('offer blocked: the static founding copy renders (no invented price)', blockedHero === 'Founding Credential: $99/year for the first 100 paid members, Practice included while you are a member' && blockedPrice === '$99', `${blockedHero} | ${blockedPrice}`);
+    qa.check('offer blocked: the static founding copy renders (no invented price)', blockedHero === 'Founding Credential: $99/year while Founder spots last, Practice included while you are a member' && blockedPrice === '$99', `${blockedHero} | ${blockedPrice}`);
     qa.check('offer blocked: the status line says the offer is confirmed before payment', /confirmed before payment/.test(blockedStatus), blockedStatus);
     const text = await visible(p.page);
     qa.check('offer blocked: no waitlist form and no stale copy', !(await p.page.locator('form.wl-form').count()) && !STALE.test(text));
@@ -132,7 +132,7 @@ test('visitor: landing offer, create-account path, fallback, beacon', {
     // Sentences that still offer $99 to a new visitor once the live phase is early bird. These
     // may keep it: the promised free-beta holders' opt-in (they keep founding), the bundle card's
     // reason it is not sold to founding buyers, and the price schedule ($99, then $149, then $199).
-    const allowed = /signed up under the earlier free-beta wording|opt in to \$99\/year Credential during the beta|not offered to founding buyers|After the 100 paid founding memberships|^\$99 a year for the first 100 paid founding members, Practice included/;
+    const allowed = /signed up under the earlier free-beta wording|opt in to \$99\/year Credential during the beta|not offered to founding buyers|After the 100 paid founding memberships|^\$99 a year while Founder spots last, Practice included/;
     const sentences = (await visible(p.page)).split(/(?<=[.!?])\s+/).filter((x) => /\$99/.test(x) && !allowed.test(x));
     await p.page.locator('#planned-pricing').scrollIntoViewIfNeeded();
     const shot = await qa.shot('landing phone earlybird', p.page);

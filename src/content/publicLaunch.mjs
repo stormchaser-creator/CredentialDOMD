@@ -51,7 +51,7 @@ export function assertPublicLaunchReady(mode = PUBLIC_LAUNCH_MODE, wired = WIRED
 // (its FOUNDING_AVAILABILITY and FOUNDING_RATE_LOCK, pinned equal by
 // tests/public-offer-availability.test.mjs), so a page past the founding cap
 // no longer offers $99 in a sentence the hero repaint does not reach.
-export const FOUNDING_AVAILABILITY = 'Founding Credential is $99/year for the first 100 paid founding members.';
+export const FOUNDING_AVAILABILITY = 'Founding Credential is $99/year while Founder spots last.';
 export const FOUNDING_RATE_LOCK = 'That founding annual rate stays locked for life while membership remains continuously active.';
 // Practice under the Founder plan. The public site prints this sentence alone
 // while founding lasts (owner, 2026-11-16: the $99 Founder plan is the only
@@ -75,9 +75,9 @@ export function publicLaunchPresentation(mode = PUBLIC_LAUNCH_MODE) {
     teamAvailability: 'Group-management features are on the roadmap and are not currently available. The individual Practice package does not provide team-wide account management. Contact support@credentialdomd.com to discuss your group’s needs; no release date or priority onboarding is promised.',
     founderParticipation: 'Founding members help shape what comes next. In the app, ask VERA for help and use support tickets to report problems or suggest improvements.',
     // Owner decision, 2026-09-28: founding members keep Practice while they are members.
-    foundingOffer: 'Founding Credential: $99/year for the first 100 paid members, Practice included while you are a member',
+    foundingOffer: 'Founding Credential: $99/year while Founder spots last, Practice included while you are a member',
     foundingRate: enabled
-      ? 'Founding Credential: $99/year for the first 100 paid members, Practice included while you are a member. That annual rate stays locked for life while membership remains continuously active. The app confirms your available offer before you choose to pay.'
+      ? 'Founding Credential: $99/year while Founder spots last, Practice included while you are a member. That annual rate stays locked for life while membership remains continuously active. The app confirms your available offer before you choose to pay.'
       : 'The planned founding Credential offer is $99/year for eligible founding members, with that annual rate locked for life while membership remains active.',
     // No later price is printed while founding lasts (owner, 2026-11-16). A
     // later phase states its own rate from the live offer (public/membership-offer.js).
@@ -86,9 +86,9 @@ export function publicLaunchPresentation(mode = PUBLIC_LAUNCH_MODE) {
       : 'Planned early-bird Credential is $149/year; planned standard Credential is $199/year. These are launch prices, not claims about a previous selling price.',
     earlyBirdRateLock: 'The early bird annual rate also stays the same while membership remains active.',
     signupHeading: 'Sign up today',
-    publicRateHeadline: 'First 100 paid founding memberships: $99/year',
+    publicRateHeadline: 'Founder plan: $99/year while spots last',
     publicPrice: '$99',
-    publicPriceLabel: ' / year, founding rate for the first 100 paid members',
+    publicPriceLabel: ' / year, founding rate while Founder spots last',
     // The $245 package as sold once a buyer's offer is no longer founding.
     bundleOffer: 'Credential + Practice is $245/year total at first purchase, with no early bird discount.',
     // Every buyer whose offer is founding gets Practice in the $99 Credential,

@@ -128,7 +128,7 @@ test('the preview is the exact message, with the live founding price, and sends 
     '',
     'CredentialDOMD keeps your medical licenses, DEA registrations, board certifications, CME and professional documents in one place, organized for the next renewal or credentialing request.',
     '',
-    'The founding membership is $99/year for the first 100 paid members, with Practice included while you are a member. That annual rate stays locked for life while your membership remains continuously active. The app confirms your offer before you choose to pay.',
+    'The founding membership is $99/year while Founder spots last, with Practice included while you are a member. That annual rate stays locked for life while your membership remains continuously active. The app confirms your offer before you choose to pay.',
     '',
     '100% no-hassle money-back guarantee on your most recent annual membership payment, including renewals.',
     '',
@@ -154,7 +154,7 @@ test('every live offer is quoted at its own price, and no phase says free, no ca
     assert.ok(email.text.includes(price), `${offer.phase} quotes ${price}`);
     for (const other of [99, 149, 199].filter(p => p !== offer.annualCents / 100)) assert.ok(!email.text.includes(`$${other}/`), `${offer.phase} never quotes $${other}`);
     assert.equal(email.text.includes('Practice included'), offer.phase === 'founding');
-    assert.equal(email.text.includes('first 100 paid members'), offer.phase === 'founding');
+    assert.equal(email.text.includes('while Founder spots last'), offer.phase === 'founding');
     assert.ok(email.text.includes(MONEY_BACK_GUARANTEE));
     assert.ok(email.text.includes('https://credentialdomd.com/app/'));
     assert.match(email.text, /^Hello,$/m, 'no name, a plain greeting');

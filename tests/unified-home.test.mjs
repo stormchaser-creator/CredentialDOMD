@@ -17,7 +17,7 @@ const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 const endpoint = 'https://synthetic.supabase.co/functions/v1/public-membership-offer';
 const CENTS = { founding: 9900, earlybird: 14900, standard: 19900 };
 const reply = (phase, patch = {}) => ({ schemaVersion: 1, phase, annualCents: CENTS[phase], checkoutEnabled: true, availability: 'available', bundleAvailable: phase !== 'founding', ...patch });
-const STATIC_SPOTS = 'Limited to the first 100 founders';
+const STATIC_SPOTS = 'Limited Founder spots at $99/year';
 const unescape = s => s.replace(/&#39;/g, "'").replace(/&quot;/g, '"').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
 
 /** A small element tree: enough for attribute selectors, hidden and textContent. */
@@ -84,7 +84,7 @@ function assertFounderState(document, label) {
   assert.match(visible, /DOs, MDs, NPs and PAs/, label);
   assert.doesNotMatch(visible, LATER_PRICE, label);
   assert.doesNotMatch(visible, OLD_LABEL, label);
-  assert.doesNotMatch(visible, /The 100 Founder places are taken|Early bird|Standard Credential/, label);
+  assert.doesNotMatch(visible, /The Founder places are taken|Early bird|Standard Credential/, label);
   for (const node of document.querySelectorAll('[data-founder-only]')) assert.equal(node.hidden, false, label);
   for (const node of document.querySelectorAll('[data-after-founders]')) assert.equal(node.hidden, true, label);
   const offer = graph(document).find(item => item['@type'] === 'SoftwareApplication').offers;
@@ -115,11 +115,12 @@ test('as printed, and with a founding reply, the page is the Founder plan with "
 });
 
 test('the founder count appears only as a whole number from 1 to 100 that the server sent', async () => {
-  assert.equal(founderSpotsText(37), '37 of 100 founder spots left');
+  assert.equal(founderSpotsText(37), '37 spots left at $99/year');
+  assert.equal(founderSpotsText(1), '1 spot left at $99/year');
   const document = await page();
   const answer = { current: reply('founding', { founderSpotsLeft: 37 }) };
   const refresh = await paint(document, answer);
-  assert.deepEqual(spots(document), ['37 of 100 founder spots left', '37 of 100 founder spots left']);
+  assert.deepEqual(spots(document), ['37 spots left at $99/year', '37 spots left at $99/year']);
   assertFounderState(document, 'with a count');
   for (const bad of [0, 101, -1, 3.5, '37', null, true, [37]]) {
     answer.current = reply('founding', { founderSpotsLeft: bad }); await refresh();
@@ -127,7 +128,7 @@ test('the founder count appears only as a whole number from 1 to 100 that the se
   }
   // A count is never kept once it cannot be confirmed, and never shown beside "temporarily unavailable".
   answer.current = reply('founding', { founderSpotsLeft: 12 }); await refresh();
-  assert.deepEqual(spots(document), ['12 of 100 founder spots left', '12 of 100 founder spots left']);
+  assert.deepEqual(spots(document), ['12 spots left at $99/year', '12 spots left at $99/year']);
   answer.current = Error('offline'); await refresh();
   assert.deepEqual(spots(document), [STATIC_SPOTS, STATIC_SPOTS]);
   answer.current = reply('founding', { founderSpotsLeft: 12, availability: 'temporarily_full' }); await refresh();
@@ -159,16 +160,16 @@ test('once a validated reply says founding is over, the page shows that plan and
     for (const node of document.querySelectorAll('[data-founder-only]')) assert.equal(node.hidden, true, phase);
     for (const node of document.querySelectorAll('[data-after-founders]')) assert.equal(node.hidden, false, phase);
     assert.ok(visible.includes(`${name} Credential: ${price}/year`), `${phase}: the live plan is stated`);
-    assert.ok(visible.includes('The 100 Founder places are taken.'), phase);
+    assert.ok(visible.includes('The Founder places are taken.'), phase);
     assert.ok(visible.includes(offerPresentation(reply(phase)).rateNote), phase);
     assert.ok(visible.includes('Credential + Practice is $245/year total at first purchase, with no early bird discount.'), phase);
-    assert.doesNotMatch(visible, /Founder plan|One plan\. Everything included|first 100 founders|keep this price for life/, phase);
+    assert.doesNotMatch(visible, /Founder plan|One plan\. Everything included|Limited Founder spots|keep this price for life/, phase);
     // The only $99 left is the earlier free-beta promise, which those members keep.
     const still99 = visible.split(/(?<=[.!?])\s+/).filter(x => /\$99/.test(x) && !/opt in to \$99\/year Credential during the beta/.test(x));
     assert.deepEqual(still99, [], phase);
     assert.doesNotMatch(visible, OLD_LABEL, phase);
     assertSignupLinks(document, phase);
-    assert.deepEqual(spots(document).filter(text => /\d+ of 100/.test(text)), [], phase);
+    assert.deepEqual(spots(document).filter(text => /\d+ spots? left/.test(text)), [], phase);
     // Structured data follows, from the page's original text.
     const offer = graph(document).find(item => item['@type'] === 'SoftwareApplication').offers;
     assert.deepEqual([offer.name, offer.price, offer.priceCurrency], [`${name} Credential`, String(CENTS[phase] / 100), 'USD'], phase);

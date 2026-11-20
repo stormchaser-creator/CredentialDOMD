@@ -92,7 +92,7 @@ export function validatedOffer(offer) {
 export function offerParagraph({ phase, annualCents, availability }) {
   const rate = `$${annualCents / 100}/year`;
   const price = phase === 'founding'
-    ? `The founding membership is ${rate} for the first 100 paid members, with Practice included while you are a member. That annual rate stays locked for life while your membership remains continuously active.`
+    ? `The founding membership is ${rate} while Founder spots last, with Practice included while you are a member. That annual rate stays locked for life while your membership remains continuously active.`
     : phase === 'earlybird'
       ? `Membership is ${rate} (early bird Credential), with one 30 day Practice trial when your first annual payment is confirmed. That annual rate stays locked for life while your membership remains continuously active.`
       : `Membership is ${rate} (standard Credential), with one 30 day Practice trial when your first annual payment is confirmed.`;

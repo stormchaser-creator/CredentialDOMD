@@ -19,7 +19,7 @@ import { MEMBERSHIP_COPY } from '../src/content/membershipCopy.js';
 
 const read = path => readFile(new URL(`../${path}`, import.meta.url), 'utf8');
 const view = publicLaunchPresentation();
-const HEADLINE = 'Founding Credential: $99/year for the first 100 paid members, Practice included while you are a member';
+const HEADLINE = 'Founding Credential: $99/year while Founder spots last, Practice included while you are a member';
 const visible = html => html.replace(/<script\b[\s\S]*?<\/script>/gi, '').replace(/<style\b[\s\S]*?<\/style>/gi, '').replace(/<[^>]+>/g, ' ').replace(/&amp;/g, '&');
 const PHASES = { founding: 9900, earlybird: 14900, standard: 19900 };
 const reply = (phase, patch = {}) => ({ schemaVersion: 1, phase, annualCents: PHASES[phase], checkoutEnabled: true, availability: 'available', bundleAvailable: phase !== 'founding', ...patch });
@@ -140,7 +140,7 @@ test('the rendered price blocks spell "early bird" one way and carry no hyphen o
   const terms = getLegalDocuments().terms.sections[0].blocks;
   const pricing = terms.slice(3, 6);
   // Owner approved, 2026-11-16: the $99 founding terms, with no later price.
-  assert.match(pricing[0], /^The first 100 paid founding members get Credential for \$99 per year\. Founding members keep their annual rate for life/);
+  assert.match(pricing[0], /^Paid founding members get Credential for \$99 per year while Founder places last\. Founding members keep their annual rate for life/);
   assert.equal(pricing[1], 'Founding Credential at $99 per year includes Practice while you are a member.');
   assert.doesNotMatch(terms.join(' '), /\$\s?(?:149|199|245)\b/);
   for (const text of [...pricing, view.earlyBirdRateLock, view.bundleOffer,

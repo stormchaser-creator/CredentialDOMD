@@ -112,7 +112,7 @@ test('unknown configuration uses qualified founding policy, while a later failur
   await createOfferUpdater(dom,undefined,{fetchImpl:()=>{throw Error('Must not fetch');}})();
   assert.equal(dom.statuses[0].textContent,'Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.');
   assert.equal(dom.nodes.price[0].textContent, '$99');
-  assert.match(dom.nodes.headline[0].textContent, /First 100 paid founding memberships/);
+  assert.match(dom.nodes.headline[0].textContent, /Founder plan: \$99\/year while spots last/);
 });
 
 test('later-phase prices never flash back to $99 during a slow or failed refresh', async () => {

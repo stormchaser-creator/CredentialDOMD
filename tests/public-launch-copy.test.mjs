@@ -45,15 +45,15 @@ for (const page of ['index', 'locums']) {
       // $99 Founder plan while founder places remain, and says "Sign up today".
       assert.match(html, />Sign up today<\/a>/);
       assert.doesNotMatch(html, /Create your account/);
-      assert.match(html, /The Founder plan is \$99 a year for the first 100 paid members, with everything included: Credential and Practice/);
+      assert.match(html, /The Founder plan is \$99 a year while Founder spots last, with everything included: Credential and Practice/);
     } else {
       // Owner, 2026-11-16: every page says "Sign up" or "Sign up today".
       assert.match(html, />Sign up today<\/a>/);
       assert.match(html, />Sign up<\/a>/);
       assert.match(html, />Log in<\/a>/);
       assert.doesNotMatch(html, /Create your account|>Sign in</);
-      assert.match(html, /Founding Credential is \$99\/year for the first 100 paid founding members/);
-      assert.match(html, /<meta name="description" content="[^"]*\$99\/yr Founder plan for the first 100 paid members\. Early release; card required at checkout\.">/);
+      assert.match(html, /Founding Credential is \$99\/year while Founder spots last/);
+      assert.match(html, /<meta name="description" content="[^"]*\$99\/yr Founder plan while spots last\. Early release; card required at checkout\.">/);
     }
     assert.match(html, /30 days free with no card, starting when they first activate their account with a verified email address/);
     assert.match(html, /signing in again does not restart those 30 days/);

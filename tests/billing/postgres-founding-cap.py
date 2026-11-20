@@ -165,6 +165,8 @@ with tempfile.TemporaryDirectory(prefix='founding-cap-', dir='/tmp') as temp:
             assert migration.count(original) == 1, 'mutation target changed; review the test'
             executed_migration = migration.replace(original, "if paid>=95 then return 'paid_out'; end if;", 1)
         sql(executed_migration)
+        sql((ROOT / 'supabase/migrations/20261120150000_public_founder_spots_left.sql').read_text())
+        check('spots-left migration is idempotent', sql((ROOT / 'supabase/migrations/20261120150000_public_founder_spots_left.sql').read_text()).returncode == 0)
         check('migration stages no programs, promises, quotes, beta grants or activation', count() == 0 and sql("select (select count(*) from limited_founding_programs)+(select count(*) from limited_billing_quotes)+(select count(*) from limited_beta_grants)").stdout.strip() == '0' and sql('select not(enforcement_enabled or limited_checkout_enabled or limited_invitation_enabled or limited_self_service_enabled or public_founding_enabled) from access_policy_settings').stdout.strip() == 't')
         check('four reviewed base routine bodies survive wrapper renames exactly', all(sql(f"select pg_get_functiondef('{name.replace('(', '_before_founding(', 1)}'::regprocedure)").stdout.replace(name.split('(')[0] + '_before_founding(', name.split('(')[0] + '(', 1) == body for name, body in bodies.items()))
 
@@ -180,6 +182,8 @@ with tempfile.TemporaryDirectory(prefix='founding-cap-', dir='/tmp') as temp:
         check('test program stages independently from live program', value(f"prepare_founding_program(false,'synthetic_cap','{digest(promised)}',4)")['promised'] == 4 and count('not livemode') == 4)
         sql("update access_policy_settings set limited_self_service_enabled=true,limited_checkout_enabled=true,enforcement_enabled=true,public_founding_enabled=true,limited_self_service_price_phase='founding'")
         check('preparation refuses an enabled program', role('select ' + stage, ok=False).returncode != 0)
+        check('public offer says 96 Founder places left beside four protected promises, and nothing else about them', value('public_membership_offer()') == {'schemaVersion': 1, 'phase': 'founding', 'annualCents': 9900, 'checkoutEnabled': True, 'availability': 'available', 'founderSpotsLeft': 96})
+        check('anon and authenticated cannot call the spots count or the offer directly', all(role(f'select {fn}', who=who, ok=False).returncode != 0 for who in ['anon', 'authenticated'] for fn in ['founding_spots_left(true)', 'public_membership_offer()']))
 
         # Every new public identity takes the actual self-service path; no direct
         # invitation writes manufacture eligibility or bypass the capacity wrapper.
@@ -204,6 +208,7 @@ with tempfile.TemporaryDirectory(prefix='founding-cap-', dir='/tmp') as temp:
         check('110 concurrent accounts claim exactly96 public seats and14 pending; totalnever exceeds100', len(winners) == 96 and len(losers) == 14 and count('livemode') == 100 and len({c['quote']['public_founding_slot'] for c in winners.values()}) == 96)
         public_offer = value('public_membership_offer()')
         check('100 occupied but zero paid stays99 temporarily full, never switches149', count("livemode and state='paid'") == 0 and public_offer['annualCents'] == 9900 and public_offer['availability'] == 'temporarily_full' and claim(losers[0], pending_previews[losers[0]])['state'] == 'founding_capacity_pending')
+        check('a full Founder plan sends no spots-left number', 'founderSpotsLeft' not in public_offer)
         check('capacity-denied accounts have no attempt or accepted quote', int(sql(f"select count(*) from billing_checkout_attempts where profile_id in ({','.join(text(pid(n)) for n in losers)})").stdout) == 0)
         enroll(600, account=True)
         bundle_claim = claim(600, preview(600, 'core_locum'))

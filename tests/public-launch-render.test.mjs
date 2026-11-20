@@ -60,7 +60,7 @@ test('paid locums exposes static navigation and cannot submit a disguised waitli
   assert.match(output, /class="btn-primary nav-cta" href="\/signup\/">Sign up<\/a>/);
   assert.match(output, /<a class="btn-primary" href="\/signup\/"[^>]*>Sign up today<\/a>/);
   assert.doesNotMatch(output, /Create your account|data-membership-action/);
-  assert.match(output, /Founding Credential is \$99\/year for the first 100 paid founding members/);
+  assert.match(output, /Founding Credential is \$99\/year while Founder spots last/);
   assert.doesNotMatch(output, /Their invitation will confirm eligibility|Your invitation will confirm eligibility/);
   assert.match(output, /less polished/);
   assert.match(output, /support tickets/);
@@ -101,7 +101,7 @@ test('home shows the Founder plan before sign-in, with its signup link right und
   const hero = output.slice(output.indexOf('<section class="hero"'), output.indexOf('<section id="how">'));
   assert.match(hero, /<div class="offer" data-founder-only>\s*<strong>Founder plan: \$99\/year, everything included<\/strong>/);
   assert.match(hero, /Your rate stays locked for life while your membership is active/);
-  assert.match(hero, /<span class="spots" data-founder-spots>Limited to the first 100 founders<\/span>/, 'no number is printed');
+  assert.match(hero, /<span class="spots" data-founder-spots>Limited Founder spots at \$99\/year<\/span>/, 'no number is printed');
   const offer = hero.indexOf('data-founder-spots');
   const signup = hero.indexOf('<a class="btn" href="/app/">Sign up today</a>');
   assert.ok(offer > 0 && signup > offer && signup < hero.indexOf('Take a look inside'), 'after the offer box, before the tour link');
@@ -143,7 +143,7 @@ test('home FAQ answers are the same in the page and its structured data', async 
   }
   assert.equal(faq.mainEntity.find(item => item.name === 'Who is CredentialDOMD for?').acceptedAnswer.text, 'DOs, MDs, NPs and PAs. It tracks licenses and certifications for all four.');
   const cost = faq.mainEntity.find(item => item.name === 'How much does it cost?').acceptedAnswer.text;
-  assert.match(cost, /^The Founder plan is \$99 a year for the first 100 paid members/);
+  assert.match(cost, /^The Founder plan is \$99 a year while Founder spots last/);
   assert.match(cost, /Card required at checkout; the app confirms your offer before you pay\.$/);
   const offer = graph.find(item => item['@type'] === 'SoftwareApplication').offers;
   assert.deepEqual([offer.name, offer.price, offer.priceCurrency], ['Founder plan', '99', 'USD']);
@@ -197,7 +197,7 @@ test('all 51 guides keep four requested-guide forms and facts while removing wai
     // The guides carry most of the traffic: each must state the founding offer once,
     // above the guide form, and point locums physicians at the practice tools.
     assert.equal((output.match(/class="guide-offer"/g) || []).length, 1, file);
-    assert.match(output, /Founding Credential: \$99\/year for the first 100 paid members, Practice included while you are a member/, file);
+    assert.match(output, /Founding Credential: \$99\/year while Founder spots last, Practice included while you are a member/, file);
     assert.ok(output.indexOf('class="guide-offer"') < output.indexOf('class="guide-form"'), `${file}: offer sits above the guide form`);
     assert.match(output, /href="\/locums"/, file);
     assert.match(output.slice(output.indexOf('class="guide-offer"'), output.indexOf('class="guide-form"')), /No-hassle 100% money-back guarantee/, `${file}: the offer button states the guarantee`);
@@ -347,7 +347,7 @@ test('public and in-app legal documents use production defaults and retain an ex
       assert.match(section.blocks[2], /first charge is scheduled for your original beta end date, when your paid year starts/);
       assert.match(section.blocks[2], /If an unfinished checkout is completed after the original beta end date/);
       // Owner approved, 2026-11-16: the $99 founding terms, and no later price.
-      assert.match(section.blocks[3], /^The first 100 paid founding members get Credential for \$99 per year\. Founding members keep their annual rate/);
+      assert.match(section.blocks[3], /^Paid founding members get Credential for \$99 per year while Founder places last\. Founding members keep their annual rate/);
       assert.match(section.blocks[3], /for life while their membership remains continuously active/);
       assert.equal(section.blocks[4], 'Founding Credential at $99 per year includes Practice while you are a member.');
       assert.doesNotMatch(JSON.stringify(on.terms), /\$\s?(?:149|199|245)\b/);

@@ -15,7 +15,7 @@ test('production mode opens protected app signup without collecting a waitlist r
   assert.equal(view.guideCapture.forceGuideOnly, true);
   assert.equal(view.guideCapture.showWaitlistChoice, false);
   // Owner, 2026-11-16: one plan while founding lasts, so there is nothing to compare.
-  assert.match(view.availability, /^Founding Credential is \$99\/year for the first 100 paid founding members\. Availability is confirmed before payment; signing up does not reserve a place\./);
+  assert.match(view.availability, /^Founding Credential is \$99\/year while Founder spots last\. Availability is confirmed before payment; signing up does not reserve a place\./);
   assert.doesNotMatch(view.availability, /create your account|Compare the plans/i);
   assert.match(view.availability, /card at checkout/);
   assert.doesNotMatch(view.availability, /Checkout is not open/);
@@ -55,8 +55,8 @@ test('paid preview is navigation, and guide delivery cannot imply paid or waitli
   assert.equal(view.guideCapture.submitLabel, 'Email me the guide');
   assert.match(view.guideCapture.note, /does not create an account/);
   assert.match(view.primaryAction.label, /^Sign up today$/);
-  assert.match(view.availability, /Founding Credential is \$99\/year for the first 100 paid founding members/);
-  assert.match(view.foundingRate, /Founding Credential: \$99\/year for the first 100 paid members, Practice included while you are a member/);
+  assert.match(view.availability, /Founding Credential is \$99\/year while Founder spots last/);
+  assert.match(view.foundingRate, /Founding Credential: \$99\/year while Founder spots last, Practice included while you are a member/);
   assert.match(view.promisedBeta, /first activate their account with a verified email address/);
   assert.match(view.promisedBeta, /does not restart those 30 days/);
   assert.doesNotMatch(view.promisedBeta, /invitation will confirm/);
@@ -105,7 +105,7 @@ test('public signup cannot embed an invitation bearer token or any nonempty frag
 
 test('founding marketing states the paid cap without claiming live availability or a signup reservation', () => {
   const view = publicLaunchPresentation();
-  assert.match(view.availability, /first 100 paid founding members/);
+  assert.match(view.availability, /\$99\/year while Founder spots last/);
   assert.match(view.availability, /Availability is confirmed before payment/);
   assert.match(view.availability, /does not reserve a place/);
   assert.match(view.foundingRate, /membership remains continuously active/);

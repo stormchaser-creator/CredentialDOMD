@@ -12,7 +12,7 @@ const SIGN_UP = 'Sign up today';
 // page's own static text (publicLaunch foundingRate); a later phase replaces it,
 // so a later rate's card never keeps the founding "Practice included" line.
 const RATES = Object.freeze({
-  founding: `Founding Credential: $99/year for the first 100 paid members, Practice included while you are a member. That annual rate stays locked for life while membership remains continuously active. ${CONFIRMED}`,
+  founding: `Founding Credential: $99/year while Founder spots last, Practice included while you are a member. That annual rate stays locked for life while membership remains continuously active. ${CONFIRMED}`,
   earlybird: `Early bird Credential: ${usd(PRICES.earlybird)}/year, with one 30 day Practice trial when your first annual payment is confirmed. That annual rate stays locked for life while membership remains continuously active. ${CONFIRMED}`,
   standard: `Standard Credential: ${usd(PRICES.standard)}/year, with one 30 day Practice trial when your first annual payment is confirmed. ${CONFIRMED}`,
 });
@@ -21,9 +21,9 @@ const RATES = Object.freeze({
 // withLiveOffer marks them). Equal to src/content/publicLaunch.mjs
 // FOUNDING_AVAILABILITY and FOUNDING_RATE_LOCK (pinned by a test). A later
 // phase states its own rate instead, so no sentence keeps offering $99 once
-// the 100 founding places are paid.
+// the founding places are paid.
 const AVAILABILITY = Object.freeze({
-  founding: 'Founding Credential is $99/year for the first 100 paid founding members.',
+  founding: 'Founding Credential is $99/year while Founder spots last.',
   earlybird: `Early bird Credential is ${usd(PRICES.earlybird)}/year.`,
   standard: `Standard Credential is ${usd(PRICES.standard)}/year.`,
 });
@@ -38,8 +38,8 @@ const RATE_LOCKS = Object.freeze({
 const BUNDLE_LABELS = Object.freeze({ founding: ' / year, after founding', later: ' / year total' });
 const FALLBACK = Object.freeze({ action: SIGN_UP, renewal: null, reviewAction: 'See membership plans',
   status: 'Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.',
-  headline: 'First 100 paid founding memberships: $99/year', price: '$99', priceLabel: ' / year, founding rate for the first 100 paid members',
-  heroHeadline: 'Founding Credential: $99/year for the first 100 paid members, Practice included while you are a member',
+  headline: 'Founder plan: $99/year while spots last', price: '$99', priceLabel: ' / year, founding rate while Founder spots last',
+  heroHeadline: 'Founding Credential: $99/year while Founder spots last, Practice included while you are a member',
   heroNote: 'The founding annual rate stays locked for life while membership remains active.',
   heading: SIGN_UP, phase: 'Membership options', rateNote: RATES.founding, bundleLabel: BUNDLE_LABELS.founding,
   availabilityOffer: AVAILABILITY.founding, rateLock: RATE_LOCKS.founding, phaseKey: 'founding',
@@ -79,16 +79,16 @@ export function offerPresentation(value) {
     // avoid the next annual charge."). Null when nothing can be paid today.
     renewal: open ? `${dollars} at checkout, then ${dollars} each year while this subscription remains active. Cancel before renewal to avoid the next annual charge.` : null,
     reviewAction: value.phase === 'founding' ? 'See the $99 founding plan' : `See the ${rate} plan`, status,
-    heroHeadline: `${phase} Credential: ${rate}${value.phase === 'founding' ? ' for the first 100 paid members, Practice included while you are a member' : ''}`,
+    heroHeadline: `${phase} Credential: ${rate}${value.phase === 'founding' ? ' while Founder spots last, Practice included while you are a member' : ''}`,
     heroNote: value.phase === 'standard' ? 'One annual membership for your credentials, CME and professional records.' : `Your $${value.annualCents / 100} annual rate stays locked for life while membership remains active.`,
-    headline: `${phase} Credential: ${rate}${value.phase === 'founding' ? ' for the first 100 paid founding members, Practice included while you are a member' : ''}.`,
+    headline: `${phase} Credential: ${rate}${value.phase === 'founding' ? ' while Founder spots last, Practice included while you are a member' : ''}.`,
     price: `$${value.annualCents / 100}`, priceLabel: ` / year, ${phase.toLowerCase()} Credential`,
     heading: SIGN_UP, phase: `${phase} membership`,
     rateNote: RATES[value.phase], bundleLabel: value.phase === 'founding' ? BUNDLE_LABELS.founding : BUNDLE_LABELS.later,
     availabilityOffer: AVAILABILITY[value.phase], rateLock: RATE_LOCKS[value.phase], phaseKey: value.phase,
     // For the home page (homePresentation below). The count is used only when
     // the server sends a whole number from 1 to 100 while founding is open;
-    // a reply without one (the server does not send it today) shows no number.
+    // a reply without one shows the page's static line instead (20261120150000).
     offerAvailability: value.availability,
     spots: value.phase === 'founding' && open ? founderSpotsText(value.founderSpotsLeft) : '' };
 }
@@ -98,7 +98,7 @@ export function offerPresentation(value) {
 // signup link says "Sign up today". It carries none of the data-membership-*
 // elements above, so nothing here can put another signup label or a later
 // price back while founding lasts. Its own hooks:
-//   data-founder-spots    "N of 100 founder spots left" with a live count,
+//   data-founder-spots    "N spots left at $99/year" with a live count,
 //                         otherwise the page's own static line
 //   data-founder-only     shown while the validated phase is founding
 //   data-after-founders   shown once a validated reply says founding is over,
@@ -108,7 +108,10 @@ export function offerPresentation(value) {
 const BUNDLE_OFFER = `Credential + Practice is ${usd(BUNDLE_CENTS)}/year total at first purchase, with no early bird discount.`;
 const HOME_PAUSED = 'Paid checkout is paused, so no payment is taken now. If you sign up today, your account opens when checkout reopens and your payment completes.';
 const HOME_FULL = 'Founder plan checkout is temporarily unavailable. Signing up does not reserve a place.';
-export const founderSpotsText = left => Number.isInteger(left) && left >= 1 && left <= 100 ? `${left} of 100 founder spots left` : '';
+// The cap itself is never printed (owner, 2026-11-20): only how many places
+// are left at the founding price, e.g. "37 spots left at $99/year".
+export const founderSpotsText = left => Number.isInteger(left) && left >= 1 && left <= 100
+  ? `${left} ${left === 1 ? 'spot' : 'spots'} left at ${usd(PRICES.founding)}/year` : '';
 
 /** The home page's view of a validated offer, or of FALLBACK when there is none. */
 export function homePresentation(view) {
