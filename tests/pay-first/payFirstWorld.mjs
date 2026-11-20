@@ -200,6 +200,8 @@ export function world({ live = false } = {}) {
   return {
     calls, disputes, stripe, clerk, users, store, rows, profiles, slots, settled, sessions, subs, customers, handlers, payFirst, post, webhook, start, pay, price,
     tick: ms => { clock += ms; }, now: () => clock,
+    /** public-signup-status built with some dependencies replaced. */
+    statusRoute: overrides => createPayFirstSignup({ ...payDeps, ...overrides }, config).status,
     setAdopt: plan => { adoptPlan = plan; },
     reconcileBusy: times => { busy = times; },
     addUser: (email, { verified = true, external_id = null, primary = email, deleted = false } = {}) => { const u = { id: `user_${crypto.randomBytes(6).toString('hex')}`, external_id, emails: [...new Set([email, primary])], primary, verified, deleted }; users.set(u.id, u); return u; },

@@ -47,6 +47,29 @@ const SWEEP_LIMIT = 10, SWEEP_BUDGET_MS = 45000;
 // Errors that need the owner, not another try (initializeProductionProfile's safe codes).
 const OWNER_ERRORS = new Set(['account_unavailable', 'identity_conflict', 'verified_primary_required', 'source_identity_unavailable']);
 
+/**
+ * The optional emailed sign-in link (build brief section 3): for a payer who
+ * never came back to the app, a one-use link to /app/?signin=<token>. Built
+ * OFF: nothing is sent until the owner approves these exact words and this
+ * switch is changed in a reviewed commit (it is not an environment flag).
+ * Opening the link proves the mailbox, so it also turns docs@ on.
+ */
+export const EMAILED_SIGN_IN_LINK = Object.freeze({
+  enabled: false,
+  seconds: 24 * 60 * 60,
+  // DRAFT for the owner's approval. Claims only what is built: the account
+  // exists, the link works once for 24 hours, and the email code always works.
+  subject: 'Your CredentialDOMD sign-in link',
+  text: link => `Your CredentialDOMD membership is set up.
+
+Log in: ${link}
+
+This link works once, for 24 hours. You can always log in with the email you used at checkout and the code we send.
+
+CredentialDOMD
+https://credentialdomd.com`,
+});
+
 /** The email Stripe collected, as every table keys it, or null. */
 export function normalEmail(value) {
   if (typeof value !== 'string') return null;
@@ -306,9 +329,30 @@ export function createPayFirstSignup(deps, config = LIMITED_LAUNCH) {
       } catch { /* Counted as unavailable; the next run tries again. */ }
       outcomes[outcome] = (outcomes[outcome] || 0) + 1;
     }
-    const summary = { state: 'ready', holds: Array.isArray(batch) ? batch.length : 0, outcomes, deferred };
+    const linked = await emailLinks(mode, started);
+    const summary = { state: 'ready', holds: Array.isArray(batch) ? batch.length : 0, outcomes, deferred, ...(linked !== null ? { linksEmailed: linked } : {}) };
     if (summary.holds) note({ route: 'sweep', ...summary }, Object.keys(outcomes).every(k => ['provisioned', 'released'].includes(k)) && !deferred ? 'info' : 'error');
     return reply(200, summary);
+  }
+  // The emailed sign-in link, from the sweep. Null while it is off (always,
+  // until the owner approves the words); else how many went out.
+  async function emailLinks(mode, started) {
+    const link = deps.emailedLink ?? EMAILED_SIGN_IN_LINK;
+    if (link.enabled !== true || !deps.store.linkDue || !deps.deliverLink) return null;
+    let sent = 0;
+    for (const due of (await deps.store.linkDue(mode, SWEEP_LIMIT)) || []) {
+      if (now() - started >= SWEEP_BUDGET_MS || !normalEmail(due?.email) || !/^user_[A-Za-z0-9]+$/.test(due?.clerk_subject || '')) continue;
+      // Marked first: a send that fails is not retried into a second email.
+      if (!await deps.store.markLinkEmailed(due.signup_id)) continue;
+      try {
+        const ticket = await deps.clerk.signInToken(due.clerk_subject, link.seconds);
+        if (typeof ticket !== 'string' || !ticket) continue;
+        const url = `${origin}/app/?signin=${encodeURIComponent(ticket)}`;
+        await deps.deliverLink({ to: due.email, subject: link.subject, text: link.text(url), idempotencyKey: `${config.app}:payfirst-link:${due.signup_id}` });
+        sent += 1;
+      } catch { note({ route: 'sweep', code: 'sign_in_link_unsent' }); }
+    }
+    return sent;
   }
   // The payer's browser: finish if needed, then a one-use sign-in token.
   async function payerStatus(data) {

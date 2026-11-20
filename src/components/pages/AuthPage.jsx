@@ -8,7 +8,7 @@ import { loadAuthOffer } from "../../utils/authOffer";
 import { sendAuthVisit } from "../../utils/visitBeacon";
 import { watchChunkFailures, chunkRecoveryStep, CHUNK_RETRY_DELAY_MS } from "../../utils/chunkRecovery.js";
 import { resolveChunkFailure } from "../../lib/errorReport.js";
-import { PAY_FIRST_SIGNUP_ENABLED, PAY_FIRST_COPY, readSignupReturn, readStartSignup, startSignup } from "../../utils/payFirstSignup.js";
+import { PAY_FIRST_SIGNUP_ENABLED, PAY_FIRST_COPY, readSigninLink, readSignupReturn, readStartSignup, startSignup } from "../../utils/payFirstSignup.js";
 import PayFirstReturn from "./PayFirstReturn.jsx";
 
 /**
@@ -165,7 +165,11 @@ function AuthPage() {
   // One state object: { disabled, starting, error, showLogIn }.
   const [pf, setPf] = useState(() => ({}));
   const payFirst = PAY_FIRST_SIGNUP_ENABLED && !pf.disabled;
-  const signupReturn = PAY_FIRST_SIGNUP_ENABLED ? readSignupReturn(window.location.search) : null;
+  // Back from a pay-first Checkout, or an emailed sign-in link (sent only
+  // once the owner approves it): either way the return screen signs in.
+  const signupSession = PAY_FIRST_SIGNUP_ENABLED ? readSignupReturn(window.location.search) : null;
+  const signinLink = PAY_FIRST_SIGNUP_ENABLED ? readSigninLink(window.location.search) : null;
+  const signupReturn = signupSession || signinLink;
   const { starting, error: startError, showLogIn } = pf;
   const setShowLogIn = value => setPf(previous => ({ ...previous, showLogIn: value }));
   // Only with the live price line: a paused or unreadable offer leaves it out.
@@ -259,7 +263,7 @@ function AuthPage() {
           </div>
         )}
         {signupReturn && (
-          <PayFirstReturn sessionId={signupReturn} supabaseUrl={supabaseUrl} onLogIn={() => setShowLogIn(true)} T={T} />
+          <PayFirstReturn sessionId={signupSession} linkTicket={signinLink} supabaseUrl={supabaseUrl} onLogIn={() => setShowLogIn(true)} T={T} />
         )}
         {signUpOffered && !signupReturn ? (
           <p data-pay-first-login-heading="" style={{ margin: "0 0 16px", color: T.textMuted, fontSize: 13, lineHeight: 1.6, textAlign: "center" }}>

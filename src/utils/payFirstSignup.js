@@ -40,6 +40,22 @@ export function readSignupReturn(search) {
   } catch { return null; }
 }
 
+/** The one-use token of an emailed sign-in link (/app/?signin=...), or null. Sent only once the owner turns that email on. */
+export function readSigninLink(search) {
+  try {
+    const value = new URLSearchParams(typeof search === "string" ? search : "").get("signin");
+    return typeof value === "string" && /^[A-Za-z0-9._-]{20,4096}$/.test(value) ? value : null;
+  } catch { return null; }
+}
+
+/** The address with a sign-in token taken out (it is single use either way). */
+export function withoutSigninLink({ pathname = "/", search = "", hash = "" } = {}) {
+  const params = new URLSearchParams(search);
+  params.delete("signin");
+  const rest = params.toString();
+  return `${pathname}${rest ? `?${rest}` : ""}${hash || ""}`;
+}
+
 /** /app/?start=signup: a home page Sign up that goes straight to Checkout. */
 export function readStartSignup(search) {
   try { return new URLSearchParams(typeof search === "string" ? search : "").get("start") === "signup"; } catch { return false; }

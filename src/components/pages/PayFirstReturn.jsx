@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useSignIn } from "@clerk/clerk-react";
-import { PAY_FIRST_COPY, PAY_FIRST_RETURN_DELAYS_MS, afterSignupReturn, forgetNonce, keptNonce, signInWithTicket, signupStatus } from "../../utils/payFirstSignup.js";
+import { PAY_FIRST_COPY, PAY_FIRST_RETURN_DELAYS_MS, afterSignupReturn, forgetNonce, keptNonce, signInWithTicket, signupStatus, withoutSigninLink } from "../../utils/payFirstSignup.js";
 
 /**
  * Back from a pay-first Checkout (/app/?signup=cs_...), signed out. Asks
@@ -9,12 +9,22 @@ import { PAY_FIRST_COPY, PAY_FIRST_RETURN_DELAYS_MS, afterSignupReturn, forgetNo
  * minute on, or on any answer that needs the email code, it offers Log in:
  * the account exists with the email paid with, so the code works.
  */
-export default function PayFirstReturn({ sessionId, supabaseUrl, onLogIn, T }) {
+export default function PayFirstReturn({ sessionId, linkTicket, supabaseUrl, onLogIn, T }) {
   const { isLoaded, signIn, setActive } = useSignIn();
   const [phase, setPhase] = useState("setting_up");
   const done = useRef(false);
   useEffect(() => {
     if (!isLoaded || done.current) return undefined;
+    // An emailed sign-in link (off until the owner approves its words): its
+    // token is the ticket; the address loses it either way (single use).
+    if (linkTicket) {
+      done.current = true;
+      signInWithTicket({ signIn, setActive, ticket: linkTicket }).then(ok => {
+        try { history.replaceState(history.state, "", withoutSigninLink(window.location)); } catch { /* Stays as is. */ }
+        if (!ok) setPhase("login");
+      });
+      return undefined;
+    }
     let alive = true, step = 0, timer;
     const nonce = keptNonce();
     const ask = async () => {
@@ -39,7 +49,7 @@ export default function PayFirstReturn({ sessionId, supabaseUrl, onLogIn, T }) {
     };
     timer = setTimeout(ask, PAY_FIRST_RETURN_DELAYS_MS[0]);
     return () => { alive = false; clearTimeout(timer); };
-  }, [isLoaded, signIn, setActive, sessionId, supabaseUrl]);
+  }, [isLoaded, signIn, setActive, sessionId, linkTicket, supabaseUrl]);
 
   const line = phase === "setting_up" ? PAY_FIRST_COPY.settingUp
     : phase === "already_member" ? PAY_FIRST_COPY.alreadyHaveMembership

@@ -62,6 +62,8 @@ create table if not exists public.pay_first_signups (
  owner_reason text check (owner_reason ~ '^[a-z][a-z0-9_]{0,63}$'),
  last_error text check (length(last_error) <= 300),
  token_issued_at timestamptz, email_proven_at timestamptz,
+ -- The optional emailed sign-in link (built OFF; payFirstSignup.mjs EMAILED_SIGN_IN_LINK).
+ link_emailed_at timestamptz,
  created_at timestamptz not null default clock_timestamp(),
  updated_at timestamptz not null default clock_timestamp(),
  check ((state in ('creating','open','expired') and attempt_id is null) or state not in ('creating','open','expired')),
@@ -402,6 +404,25 @@ begin
  return first_at is not null and first_at>clock_timestamp()-interval '15 minutes';
 end $$;
 
+-- The optional emailed sign-in link (OFF until the owner approves its words):
+-- accounts made by a payment whose payer never came back to the app for the
+-- instant sign-in, 10 minutes on, once each.
+create or replace function public.pay_first_link_due(p_livemode boolean,p_limit integer)
+returns jsonb language sql stable security definer set search_path=public,pg_temp as $$
+ select coalesce(jsonb_agg(jsonb_build_object('signup_id',s.signup_id,'clerk_subject',s.clerk_subject,'email',s.email_norm) order by s.updated_at),'[]'::jsonb)
+ from (select * from public.pay_first_signups where livemode=p_livemode and state='provisioned' and created_user
+  and token_issued_at is null and link_emailed_at is null and updated_at<clock_timestamp()-interval '10 minutes'
+  order by updated_at limit greatest(1,least(coalesce(p_limit,10),25))) s
+$$;
+-- First caller wins; true only once per sign-up.
+create or replace function public.mark_pay_first_link_emailed(p_signup_id uuid)
+returns boolean language plpgsql security definer set search_path=public,pg_temp as $$
+begin
+ update public.pay_first_signups set link_emailed_at=clock_timestamp(),updated_at=clock_timestamp()
+  where signup_id=p_signup_id and state='provisioned' and link_emailed_at is null and token_issued_at is null;
+ return found;
+end $$;
+
 -- docs@ files nothing into an account made from an email typed into Stripe
 -- (nobody proved they read that mailbox) until its owner signs in once with
 -- the email code: email-inbound replies "Log in once with your email code to
@@ -514,6 +535,7 @@ revoke all on function public.pay_first_open_holds(boolean),public.pay_first_fou
  public.claim_pay_first_provision(uuid,text,text,text),public.mark_pay_first_paid(uuid,uuid,text,text,text),
  public.adopt_pay_first_signup(uuid,uuid,uuid,text,text,text,text,uuid,jsonb),public.finish_pay_first_provision(uuid,uuid,text,text,boolean),
  public.pay_first_token_gate(uuid),public.pay_first_email_unproven(uuid),public.prove_pay_first_email(uuid,text),
+ public.pay_first_link_due(boolean,integer),public.mark_pay_first_link_emailed(uuid),
  public.record_billing_dispute(text,boolean,text,integer,text,text),public.admin_pay_first_signups(),public.founding_public_state(boolean),
  public.dispatch_pay_first_sweep()
  from public,anon,authenticated,service_role;
@@ -522,6 +544,7 @@ grant execute on function public.pay_first_founding_consent(),public.hold_pay_fi
  public.claim_pay_first_provision(uuid,text,text,text),public.mark_pay_first_paid(uuid,uuid,text,text,text),
  public.adopt_pay_first_signup(uuid,uuid,uuid,text,text,text,text,uuid,jsonb),public.finish_pay_first_provision(uuid,uuid,text,text,boolean),
  public.pay_first_token_gate(uuid),public.pay_first_email_unproven(uuid),public.prove_pay_first_email(uuid,text),
+ public.pay_first_link_due(boolean,integer),public.mark_pay_first_link_emailed(uuid),
  public.record_billing_dispute(text,boolean,text,integer,text,text) to service_role;
 grant execute on function public.admin_pay_first_signups() to authenticated;
 grant execute on function public.dispatch_pay_first_sweep() to postgres, service_role;
