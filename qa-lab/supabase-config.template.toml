@@ -533,6 +533,12 @@ verify_jwt = false
 [functions.public-record]
 verify_jwt = false
 
+[functions.public-signup-checkout]
+verify_jwt = false
+
+[functions.public-signup-status]
+verify_jwt = false
+
 [functions.prune-backups]
 verify_jwt = false
 
