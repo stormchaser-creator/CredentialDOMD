@@ -15,12 +15,14 @@ import { CASE_CATEGORY_GROUPS } from "../../../constants/credentialTypes";
 import { categoryForCase } from "../../../utils/caseCategory";
 import { CASE_CATEGORY_HINTS } from "../../../constants/credentialTypes";
 import { identifierReason } from "../../../utils/identifierGate";
+import { encounterWRVU } from "../../../utils/bonusTracking";
 
 const localDate = (d) => {
   const x = new Date(d);
   return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, "0")}-${String(x.getDate()).padStart(2, "0")}`;
 };
-const rvuOf = (enc) => (enc.codes || []).reduce((s, c) => s + (c.wRVU || 0) * (c.units || 1), 0);
+// One definition of an entry's wRVU, shared with the bonus progress card.
+const rvuOf = encounterWRVU;
 // Surgery-section CPTs (1xxxx-6xxxx): the codes that make a case log.
 const surgicalCodes = (codes) => (codes || []).filter(({ code }) => {
   const n = parseInt(code, 10);

@@ -7,6 +7,8 @@ import { callDayStartHour, hourLabel, DEFAULT_CALL_DAY_START_HOUR } from "../../
 import { coveragePeriodText } from "../../../utils/coverageBlocks";
 import { paidOf, balanceOf } from "../../../utils/invoiceArgs";
 import useDocumentBytes from "../../shared/useDocumentBytes";
+import BonusProgress from "./BonusProgress";
+import { encounterWRVU } from "../../../utils/bonusTracking";
 
 const money = (n) => `$${(parseFloat(n) || 0).toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
@@ -25,7 +27,7 @@ const facilityMatches = (a, b) => {
  * what was billed and collected, the days and hours on the ground, the
  * RVUs logged, and the cases done while there.
  */
-function ContractSummary({ contract, onClose, docs = [], onOpenDoc, openingId = null, openError = null }) {
+function ContractSummary({ contract, onClose, docs = [], onOpenDoc, openingId = null, openError = null, onEdit = null }) {
   const { data, theme: T } = useApp();
   // The agreement's files, with their bytes while it is open.
   useDocumentBytes(docs);
@@ -54,7 +56,7 @@ function ContractSummary({ contract, onClose, docs = [], onOpenDoc, openingId = 
     const encounters = (data.encounters || [])
       .filter(e => e.contractId === cid)
       .sort((a, b) => String(b.date || "").localeCompare(String(a.date || "")));
-    const encRvu = (e) => (e.codes || []).reduce((t, c) => t + (c.wRVU || 0) * (c.units || 1), 0);
+    const encRvu = encounterWRVU;
     const totalRvu = encounters.reduce((t, e) => t + encRvu(e), 0);
     const encIds = new Set(encounters.map(e => e.id));
 
@@ -102,6 +104,10 @@ function ContractSummary({ contract, onClose, docs = [], onOpenDoc, openingId = 
           {s.duty.length} duty day{s.duty.length === 1 ? "" : "s"} logged · {money(s.dutyEarned)} earned
         </div>
       )}
+
+      {/* Logged wRVUs against the agreement's bonus target, and the estimate. */}
+      {heading("Bonus")}
+      <BonusProgress contract={contract} onAddTerms={onEdit} />
 
       {heading("Terms")}
       <div style={{ fontSize: 13, color: T.text, lineHeight: 1.7 }}>
