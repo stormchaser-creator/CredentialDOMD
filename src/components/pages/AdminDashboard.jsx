@@ -26,6 +26,7 @@ import AdminLifetimeAccess from "./AdminLifetimeAccess";
 import AdminLifetimeGift from "./AdminLifetimeGift";
 import AdminInviteToJoin from "./AdminInviteToJoin";
 import AdminMailboxRepair from "./AdminMailboxRepair";
+import AdminPaidSignups from "./AdminPaidSignups";
 import AdminMemberView from "./AdminMemberView";
 import AdminWelcomeEmail from "./AdminWelcomeEmail";
 import { readActiveGrants, memberViewAvailability } from "../../utils/memberViewClient.js";
@@ -1028,6 +1029,7 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
       ))}
 
       <AdminMailboxRepair />
+      <AdminPaidSignups />
       <div style={{ fontSize: 12, color: T.textMuted, margin: "14px 0 0" }}>
         Founding members: {foundingCount}
       </div>
