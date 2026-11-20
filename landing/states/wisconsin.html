@@ -280,12 +280,7 @@ a:hover { color: var(--emerald-light); }
 .guide-form button { background: var(--emerald); color: #0d0d1a; border: none; border-radius: 10px; padding: 12px 22px; font-family: var(--font); font-weight: 700; font-size: 15px; cursor: pointer; transition: background 0.2s; }
 .guide-form button:hover { background: var(--emerald-light); }
 .guide-form button:disabled { opacity: 0.6; cursor: default; }
-.guide-choice { border: 0; margin: 12px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; color: var(--text-muted); font-size: 14px; line-height: 1.45; }
-.guide-choice legend { padding: 0; margin: 0 0 6px; width: 100%; color: var(--text); font-weight: 600; }
 .guide-choice-sub { display: block; color: var(--text-muted); font-weight: 400; font-size: 13.5px; margin-top: 2px; }
-.guide-choice label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text); }
-.guide-choice input[type="radio"] { width: 18px; height: 18px; margin: 0; accent-color: var(--emerald); flex: 0 0 auto; }
-.guide-choice.is-missing legend { color: var(--amber); }
 /* The hero copy of the capture. Tighter than the page-end one because it sits
    under the H1, and the board portal link below it is demoted to a text link:
    the only above-the-fold button used to send the visitor to the state board
@@ -301,8 +296,6 @@ a:hover { color: var(--emerald-light); }
   .guide-capture--hero { padding: 16px 16px; }
   .guide-capture--hero h2 { font-size: 16px; }
 }
-.guide-choice--compact { margin-top: 6px; font-size: 13px; gap: 6px 14px; }
-.guide-choice--compact legend { width: auto; margin: 0 6px 0 0; font-size: 13px; }
 .guide-hp { position: absolute; left: -9999px; opacity: 0; height: 0; width: 0; }
 .guide-msg { font-size: 14px; margin-top: 10px; min-height: 1em; }
 .reminder-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
@@ -366,7 +359,7 @@ a:hover { color: var(--emerald-light); }
     <a href="/" class="nav-logo">Credential<span>DOMD</span></a>
     <div class="nav-links">
       <a href="/#features">Features</a>
-      <!-- public-launch:cta --><a href="https://credentialdomd.com/#early-access">Early Access</a><!-- /public-launch:cta -->
+      <!-- public-launch:cta --><a href="/app/">Sign up</a><!-- /public-launch:cta -->
       <a href="/states/">All States</a>
       <a href="/cme/">CME</a>
       <details class="support-menu">
@@ -377,7 +370,7 @@ a:hover { color: var(--emerald-light); }
           <a href="/security">Security &amp; data handling</a>
         </div>
       </details>
-      <!-- public-launch:cta --><a href="https://credentialdomd.com/#early-access" class="nav-cta">Get Early Access</a><!-- /public-launch:cta -->
+      <!-- public-launch:cta --><a class="nav-cta" href="/app/">Sign up</a><!-- /public-launch:cta -->
     </div>
   </div>
 </header>
@@ -418,11 +411,7 @@ a:hover { color: var(--emerald-light); }
         <input type="email" name="email" placeholder="you@hospital.org" autocomplete="email" aria-label="Email address" required>
         <input type="text" class="guide-hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
         <button type="submit">Email me the guide</button>
-        <!-- public-launch:guide-consent --><fieldset class="guide-choice guide-choice--compact">
-          <legend>Also join the waitlist?</legend>
-          <label><input type="radio" name="waitlist" value="yes"><span>Yes, add me</span></label>
-          <label><input type="radio" name="waitlist" value="no" checked><span>No, guide only</span></label>
-        </fieldset><!-- /public-launch:guide-consent -->
+        <!-- public-launch:guide-note --><p class="guide-choice-sub">This form requests one guide. It does not create an account, start a membership or charge you. Membership signup is a separate step. <a href="/app/">Sign up</a></p><!-- /public-launch:guide-note -->
       </form>
       <p class="guide-msg" role="status" aria-live="polite"></p>
     </div>
@@ -510,11 +499,7 @@ a:hover { color: var(--emerald-light); }
       <input type="email" name="email" placeholder="you@hospital.org" autocomplete="email" aria-label="Email address" required>
       <input type="text" class="guide-hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
       <button type="submit">Email me the guide</button>
-      <!-- public-launch:guide-consent --><fieldset class="guide-choice">
-        <legend>Add me to the CredentialDOMD waitlist? <span class="guide-choice-sub">Early access to the app that tracks every license, CME cycle, and renewal for you.</span></legend>
-        <label><input type="radio" name="waitlist" value="yes"><span>Yes, add me</span></label>
-        <label><input type="radio" name="waitlist" value="no" checked><span>No, just the guide</span></label>
-      </fieldset><!-- /public-launch:guide-consent -->
+      <!-- public-launch:guide-note --><p class="guide-choice-sub">This form requests one guide. It does not create an account, start a membership or charge you. Membership signup is a separate step. <a href="/app/">Sign up</a></p><!-- /public-launch:guide-note -->
     </form>
     <p class="guide-msg" role="status" aria-live="polite"></p>
   </div>
@@ -593,14 +578,11 @@ a:hover { color: var(--emerald-light); }
 <section class="container">
   <div class="cta-section">
     <h2>Track your Wisconsin license, CME, and DEA in one place</h2>
-    <p><!-- public-launch:guide-product -->The reminder email above covers this renewal. The app goes further: it watches your WI renewal window, counts your CME hours against the requirement, and tracks your DEA registration alongside your license. Built by a practicing neurosurgeon who uses it daily. Paid membership opens by invitation; a card is required at checkout.<!-- /public-launch:guide-product --></p>
-    <!-- public-launch:cta --><a href="https://credentialdomd.com/#early-access" class="cta-button">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4"/><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/></svg>
-      Request an invite
-    </a><!-- /public-launch:cta -->
+    <p><!-- public-launch:guide-product -->Use CredentialDOMD to organize your saved licenses, renewal dates and CME alongside your professional documents. Review your records and confirm requirements with the licensing board.<!-- /public-launch:guide-product --></p>
+    <!-- public-launch:cta --><a class="cta-button" href="/app/">Sign up today <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M9 12l2 2 4-4"/><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/></svg></a><!-- /public-launch:cta -->
     <p><!-- public-launch:early-release -->CredentialDOMD is an early release. Some workflows are less polished, and the app will continue to evolve.<!-- /public-launch:early-release --></p>
     <p><!-- public-launch:participation -->Founding members help shape what comes next. In the app, ask VERA for help and use support tickets to report problems or suggest improvements.<!-- /public-launch:participation --></p>
-    <p class="cta-subtext"><!-- public-launch:signup-trust -->Join the waitlist for an invitation and membership details. Paid checkout is not open.<!-- /public-launch:signup-trust --></p>
+    <p class="cta-subtext"><!-- public-launch:signup-trust -->Early release · Card required at checkout<!-- /public-launch:signup-trust --></p>
   </div>
 </section>
 
@@ -703,11 +685,7 @@ a:hover { color: var(--emerald-light); }
       <input type="email" name="email" placeholder="you@hospital.org" autocomplete="email" aria-label="Email address" required>
       <input type="text" class="guide-hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
       <button type="submit">Email me the guide</button>
-      <!-- public-launch:guide-consent --><fieldset class="guide-choice">
-        <legend>Add me to the CredentialDOMD waitlist? <span class="guide-choice-sub">Early access to the app that tracks every license, CME cycle, and renewal for you.</span></legend>
-        <label><input type="radio" name="waitlist" value="yes"><span>Yes, add me</span></label>
-        <label><input type="radio" name="waitlist" value="no" checked><span>No, just the guide</span></label>
-      </fieldset><!-- /public-launch:guide-consent -->
+      <!-- public-launch:guide-note --><p class="guide-choice-sub">This form requests one guide. It does not create an account, start a membership or charge you. Membership signup is a separate step. <a href="/app/">Sign up</a></p><!-- /public-launch:guide-note -->
     </form>
     <p class="guide-msg" role="status" aria-live="polite"></p>
   </div>
@@ -723,7 +701,7 @@ a:hover { color: var(--emerald-light); }
         <a href="/states/">All States</a>
         <a href="/cme/">CME resources</a>
         <a href="https://credentialdomd.com/#features">Features</a>
-        <!-- public-launch:cta --><a href="https://credentialdomd.com/#early-access">Early Access</a><!-- /public-launch:cta -->
+        <!-- public-launch:cta --><a href="/app/">Sign up</a><!-- /public-launch:cta -->
         <a href="mailto:support@credentialdomd.com?subject=CredentialDOMD%20Support">Contact</a>
       </div>
     </div>
@@ -741,21 +719,17 @@ a:hover { color: var(--emerald-light); }
     <input type="email" name="email" placeholder="you@hospital.org" autocomplete="email" aria-label="Email address" required>
     <input type="text" class="guide-hp" name="website" tabindex="-1" autocomplete="off" aria-hidden="true">
     <button type="submit">Send</button>
-    <!-- public-launch:guide-consent --><fieldset class="guide-choice guide-choice--compact">
-      <legend>Waitlist?</legend>
-      <label><input type="radio" name="waitlist" value="yes"><span>Yes, add me</span></label>
-      <label><input type="radio" name="waitlist" value="no" checked><span>No, guide only</span></label>
-    </fieldset><!-- /public-launch:guide-consent -->
+    <!-- public-launch:guide-note --><p class="guide-choice-sub">This form requests one guide. It does not create an account, start a membership or charge you. Membership signup is a separate step. <a href="/app/">Sign up</a></p><!-- /public-launch:guide-note -->
   </form>
   <p class="guide-msg" role="status" aria-live="polite"></p>
 </div>
 
-<!-- Guide-email capture: same /api relay + Supabase RPC contract as the homepage
-     .wl-form binder. Contract: p_email, p_name=null, p_source = page path
-     ("/states/texas"), p_note = "guide-email {ABBR} {placement} [flags]"
-     (placement: inline | end | sticky; flags: honeypot,fast-submit),
-     p_stage = "guide", p_waitlist = the required yes/no choice (no = guide only).
-     Attempt trace fires first via waitlist_attempt. -->
+<!-- Guide-email capture: POST /api/guide-request (first-party relay), falling
+     back to the guide_request RPC (20261120220000_retire_waitlist). Contract:
+     p_email, p_source = page path ("/states/texas"),
+     p_note = "guide-email {ABBR} {placement} [flags]"
+     (placement: inline | end | sticky; flags: honeypot,fast-submit).
+     A guide request only: there is no waitlist (retired 2026-11-20). -->
 <script>
 (function() {
   var SB = 'https://hkpnnsjcwprrwobmpqyy.supabase.co';
@@ -793,47 +767,29 @@ a:hover { color: var(--emerald-light); }
       if (hp && (hp.value || '').trim()) flags.push('honeypot');
       if (Date.now() - loadedAt < 4000) flags.push('fast-submit');
       var placement = form.getAttribute('data-placement') || 'inline';
-      var choiceBox = form.querySelector('.guide-choice');
-      var optEl = form.querySelector('input[name="waitlist"]:checked');
-      // The waitlist question used to BLOCK the send when nothing was ticked.
-      // Every radio now defaults to "no", so this cannot normally happen, but
-      // if the markup ever drifts an unanswered question must not cost a lead:
-      // no answer reads as no, which is the conservative half of an opt-in and
-      // what every requester has chosen anyway.
-      if (choiceBox) choiceBox.classList.remove('is-missing');
-      var wantsWaitlist = document.documentElement.getAttribute('data-public-launch') !== 'founding-signup' && !!(optEl && optEl.value === 'yes');
       var note = 'guide-email ' + ABBR + ' ' + placement + (flags.length ? ' ' + flags.join(',') : '');
-      var payload = { p_email: email, p_name: null, p_source: location.pathname || '/', p_note: note, p_stage: 'guide', p_waitlist: wantsWaitlist };
-      try { post('/api/waitlist-attempt', 'waitlist_attempt', { p_email: email, p_name: null, p_source: payload.p_source, p_stage: 'guide' }).catch(function() {}); } catch (err) {}
+      var payload = { p_email: email, p_source: location.pathname || '/', p_note: note };
       if (btn) { btn.disabled = true; btn.dataset.label = btn.textContent; btn.textContent = 'Sending\u2026'; }
       if (msg) msg.textContent = '';
-      post('/api/waitlist', 'waitlist_signup', payload).then(function(res) {
+      post('/api/guide-request', 'guide_request', payload).then(function(res) {
         if (btn) { btn.disabled = false; btn.textContent = btn.dataset.label; }
         if (!msg) return;
         if (res.status === 208) {
-          // waitlist_signup: this state's guide already went to this address
-          // in the last 24 hours, so nothing is sent again. The waitlist
-          // answer was still recorded.
+          // guide_request: this state's guide already went to this address
+          // in the last 24 hours, so nothing is sent again.
           msg.style.color = 'var(--amber)';
-          msg.textContent = wantsWaitlist
-            ? 'This guide was already sent to this address in the last 24 hours. Check your spam or junk folder. You can ask for it again once 24 hours have passed. You are on the waitlist, and Eric will email you when your spot opens.'
-            : 'This guide was already sent to this address in the last 24 hours. Check your spam or junk folder. You can ask for it again once 24 hours have passed.';
+          msg.textContent = 'This guide was already sent to this address in the last 24 hours. Check your spam or junk folder. You can ask for it again once 24 hours have passed.';
         } else if (res.ok || res.status === 409) {
           msg.style.color = 'var(--emerald)';
-          msg.textContent = wantsWaitlist
-            ? 'The guide is on its way, usually within 15 minutes, and you are on the waitlist. Eric will email you when your spot opens.'
-            : 'The guide is on its way, usually within 15 minutes.';
+          msg.textContent = 'The guide is on its way, usually within 15 minutes.';
           form.reset();
           if (placement === 'sticky') { form.hidden = true; try { localStorage.setItem('cdomd_guide_bar', 'off'); } catch (e2) {} }
           else hideBar(true);
         } else if (res.status === 403) {
-          // waitlist_signup: this address already asked for three guides in
-          // the last 24 hours (a rolling window, not a calendar day). The
-          // waitlist answer was still recorded.
+          // guide_request: this address already asked for three guides in
+          // the last 24 hours (a rolling window, not a calendar day).
           msg.style.color = 'var(--amber)';
-          msg.textContent = wantsWaitlist
-            ? 'This address has asked for three guides in the last 24 hours, the most we send in that time. Ask for this one again in 24 hours. You are on the waitlist, and Eric will email you when your spot opens.'
-            : 'This address has asked for three guides in the last 24 hours, the most we send in that time. Ask for this one again in 24 hours.';
+          msg.textContent = 'This address has asked for three guides in the last 24 hours, the most we send in that time. Ask for this one again in 24 hours.';
         } else if (res.status === 429) {
           msg.style.color = 'var(--amber)';
           msg.textContent = 'Busy right now. Try again in a few minutes.';

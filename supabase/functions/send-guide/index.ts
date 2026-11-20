@@ -2,9 +2,9 @@
  * send-guide: emails a state's renewal facts to a lead who asked for the
  * guide on a /states/{slug} page.
  *
- * State pages capture with waitlist_signup(p_source='/states/{slug}',
- * p_note='guide-email {ABBR}', p_stage='guide'). The leads table has no
- * stage column, so the note carries the marker. This function sweeps
+ * State pages capture with guide_request(p_source='/states/{slug}',
+ * p_note='guide-email {ABBR} ...') (waitlist_signup until the waitlist was
+ * retired, 20261120220000). The note carries the marker. This function sweeps
  * early_access_leads for rows with note 'guide-email XX' and
  * guide_sent_at null, sends ONE email per row via Resend, and stamps
  * guide_sent_at. Capped at 20 sends per sweep. Each request has a leased,

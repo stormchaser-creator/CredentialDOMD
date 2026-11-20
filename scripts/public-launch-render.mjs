@@ -71,12 +71,14 @@ function navigation(fallback, view) {
   return `${anchor[1]}<a${attrs} href="${escapeHtml(view.primaryAction.href)}">${escapeHtml(button ? view.primaryAction.label : view.primaryAction.shortLabel)}${icon ? ` ${icon}` : ''}</a>${anchor[4]}`;
 }
 
-function signupInsteadOfForm(fallback, view) {
-  const form = fallback.match(/^\s*<form\b([^>]*)>[\s\S]*<\/form>\s*$/);
-  if (!form || !/class="[^"]*\bwl-form\b/.test(form[1])) throw Error('A signup slot must contain a waitlist form');
-  const id = form[1].match(/\bid="([^"]*)"/)?.[1];
-  const style = form[1].match(/\bstyle="([^"]*)"/)?.[1];
-  if (/\bdata-public-offer-link\b/.test(form[1])) return `<div${id ? ` id="${escapeHtml(id)}"` : ''}${style ? ` style="${escapeHtml(style)}"` : ''}><a class="btn-primary" href="#planned-pricing" style="padding:15px 24px;font-size:16px;text-align:center;"><span data-membership-review-action>See membership plans</span></a></div>`;
+// The locums page's signup button (it was a waitlist form until 2026-11-20).
+// The slot keeps its wrapper's id and style; the button is the mode's.
+function signupButton(fallback, view) {
+  const box = fallback.match(/^\s*<div\b([^>]*)>\s*<a\b[^>]*\bclass="btn-primary"[^>]*>[\s\S]*?<\/a>\s*<\/div>\s*$/);
+  if (!box) throw Error('A signup button slot must contain one div with one btn-primary link');
+  const id = box[1].match(/\bid="([^"]*)"/)?.[1];
+  const style = box[1].match(/\bstyle="([^"]*)"/)?.[1];
+  if (/\bdata-public-offer-link\b/.test(box[1])) return `<div${id ? ` id="${escapeHtml(id)}"` : ''}${style ? ` style="${escapeHtml(style)}"` : ''}><a class="btn-primary" href="#planned-pricing" style="padding:15px 24px;font-size:16px;text-align:center;"><span data-membership-review-action>See membership plans</span></a></div>`;
   return `<div${id ? ` id="${escapeHtml(id)}"` : ''}${style ? ` style="${escapeHtml(style)}"` : ''}><a class="btn-primary" href="${escapeHtml(view.primaryAction.href)}" style="padding:15px 24px;font-size:16px;text-align:center;">${escapeHtml(view.primaryAction.label)}</a></div>`;
 }
 
@@ -114,10 +116,10 @@ export function assertFounderHome(html) {
 
 const minimumSlots = {
   home: { 'signup-link': 6, 'early-release': 1, participation: 1, 'promised-beta': 1, 'lifetime-exception': 1, 'practice-trial': 1, 'refund-guarantee': 1 },
-  locums: { cta: 2, form: 2, 'early-release': 1, participation: 1, 'faq-cost': 1, 'faq-json': 1, 'signup-heading': 1, 'signup-eyebrow': 2, 'signup-card-heading': 1, 'refund-guarantee': 1 },
+  locums: { cta: 2, 'signup-button': 2, 'early-release': 1, participation: 1, 'faq-cost': 1, 'faq-json': 1, 'signup-heading': 1, 'signup-eyebrow': 2, 'signup-card-heading': 1, 'refund-guarantee': 1 },
   help: { cta: 1, 'early-release': 1, participation: 1 },
   cme: { cta: 1, 'early-release': 1, participation: 1 },
-  'state-guides': { cta: 4, 'guide-consent': 4, 'guide-offer': 1, 'early-release': 1, participation: 1 },
+  'state-guides': { cta: 4, 'guide-note': 4, 'guide-offer': 1, 'early-release': 1, participation: 1 },
   'state-index': { cta: 4, 'early-release': 1, participation: 1 },
   // The physician assistant and nurse practitioner guides (scripts/build-profession-guides.mjs).
   'profession-guides': { cta: 4, 'guide-offer': 1, 'early-release': 1, participation: 1 },
@@ -125,96 +127,101 @@ const minimumSlots = {
   'legal-navigation': { cta: 1 },
 };
 
+/** What one marketing slot prints on `surface` in an enabled mode. */
+export function renderLaunchSlot(slot, fallback, surface, view) {
+  const homeFaq = [
+    { name: 'Can I sign up now?', text: `Yes. Membership is open now. ${view.availability} ${FOUNDING_RATE_LOCK}` },
+    { name: 'Can my practice manager use this for our whole group?', text: view.teamAvailability },
+  ];
+  if (fallback.includes('<!-- public-launch:')) throw Error('Nested public launch slots are not allowed');
+  if (slot === 'cta') return navigation(fallback, view);
+  if (slot === 'signup-link') return signupLink(fallback, view);
+  if (slot === 'signup-button') return signupButton(fallback, view);
+  if (slot === 'hero-offer') return `<div style="margin:20px 0;padding:18px 20px;border:1px solid var(--emerald);border-radius:14px;background:var(--emerald-glow);"><p data-membership-hero-headline style="font-size:23px;font-weight:750;line-height:1.3;margin:0 0 8px;">${escapeHtml(view.foundingOffer)}</p>`
+    + '<p data-membership-hero-note style="font-size:14px;line-height:1.5;margin:0;">The founding annual rate stays locked for life while membership remains active.</p></div>'
+    // The signup button right under the offer (signup review 2026-10-07: a
+    // phone's first screen of the home page had no way to sign up; the
+    // first signup button was 16,000 px down). The same button and
+    // guarantee sentence as every other signup button (33363fee).
+    + (surface === 'home' ? `<div data-hero-signup style="margin:0 0 20px;"><a class="btn-primary" href="${escapeHtml(view.primaryAction.href)}" style="display:inline-block;padding:15px 24px;font-size:16px;text-align:center;">${escapeHtml(view.primaryAction.label)}</a>`
+      + `<p style="font-size:12.5px;line-height:1.5;margin:10px 0 0;color:var(--text-secondary);">${escapeHtml(SIGNUP_NOTE)}</p></div>` : '');
+  // Same approved strings and data attributes as the home hero, so membership-offer.js
+  // repaints this block when the live phase changes. No new claims, no new price.
+  if (slot === 'guide-offer') return '<div class="guide-offer" style="margin:18px 0 0;padding:18px 20px;border:1px solid var(--emerald);border-radius:14px;background:var(--emerald-glow);max-width:600px;">'
+    + `<p data-membership-hero-headline style="font-size:19px;font-weight:750;line-height:1.3;margin:0 0 6px;">${escapeHtml(view.foundingOffer)}</p>`
+    + '<p style="font-size:14.5px;line-height:1.55;margin:0 0 6px;color:var(--text-secondary);">Use CredentialDOMD to organize your saved licenses, renewal dates and CME alongside your professional documents.</p>'
+    + '<p data-membership-hero-note style="font-size:13.5px;line-height:1.5;margin:0 0 14px;color:var(--text-secondary);">The founding annual rate stays locked for life while membership remains active.</p>'
+    + `<a href="${escapeHtml(view.primaryAction.href)}" style="display:inline-block;background:var(--emerald);color:#0d0d1a;border-radius:10px;padding:12px 22px;font-weight:700;font-size:15px;text-decoration:none;">${escapeHtml(view.primaryAction.label)}</a>`
+    // Every signup button states the guarantee (33363fee). Same sentence, one source.
+    + `<p style="font-size:12.5px;line-height:1.5;margin:10px 0 0;color:var(--text-secondary);">${escapeHtml(SIGNUP_NOTE)}</p>`
+    + '</div>';
+  if (slot === 'guide-note') return `<p class="guide-choice-sub">${escapeHtml(view.guideCapture.note)} <a href="${escapeHtml(view.primaryAction.href)}">${escapeHtml(view.primaryAction.shortLabel)}</a></p>`;
+  if (slot === 'home-faq-json') {
+    const schema = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: homeFaq.map(answer => ({
+      '@type': 'Question', name: answer.name, acceptedAnswer: { '@type': 'Answer', text: answer.text },
+    })) };
+    return `<script type="application/ld+json">${JSON.stringify(schema).replace(/</g, '\\u003c')}</script>`;
+  }
+  if (slot === 'faq-json') {
+    const match = fallback.match(/^(\s*<script type="application\/ld\+json">)([\s\S]*?)(<\/script>\s*)$/);
+    if (!match) throw Error('Missing launch FAQ JSON-LD');
+    const json = JSON.parse(match[2]);
+    const cost = json.mainEntity?.find(q => q.name === 'What does it cost?');
+    if (!cost?.acceptedAnswer) throw Error('Missing launch price question');
+    cost.acceptedAnswer.text = publicLaunchCostAnswer(view);
+    return `${match[1]}\n${JSON.stringify(json, null, 2).replace(/</g, '\\u003c')}\n${match[3]}`;
+  }
+  if (slot === 'faq-cost') return escapeHtml(publicLaunchCostAnswer(view));
+  if (slot === 'meta') return fallback.replace(/Membership opens by invitation\.|Paid membership opens by invitation; card required at checkout\./g, '$99/yr Founder plan while spots last. Early release; card required at checkout.');
+  if (slot === 'founding-price') return `<b data-membership-price>${escapeHtml(view.publicPrice)}</b><span data-membership-price-label>${escapeHtml(view.publicPriceLabel)}</span>`;
+  // A later phase replaces this paragraph (membership-offer.js), so a later
+  // rate never keeps the founding "Practice included" line.
+  if (slot === 'founding-rate') return `<span data-membership-rate>${escapeHtml(view.foundingRate)}</span>`;
+  // The guarantee covers every membership, so it stands on its own line
+  // instead of inside the Credential + Practice card.
+  if (slot === 'refund-guarantee') return surface === 'home'
+    ? `<p>${escapeHtml(view.refundGuarantee)}</p>`
+    : `<p style="margin-bottom: 16px;">${escapeHtml(view.refundGuarantee)}</p>`;
+  if (slot === 'brand') return fallback.replace(/Credential<span>(?:DoMD|DOMD)<\/span>/g, 'Credential<span>DOMD</span>').replace(/\bCredential(?:DOMD|DoMD|DO)\b/g, view.brand);
+  const text = {
+    'availability': view.availability,
+    'faq-availability': homeFaq[0].text,
+    'faq-teams': homeFaq[1].text,
+    'invitation-copy': view.availability,
+    'signup-heading': view.signupHeading,
+    'signup-eyebrow': 'Membership',
+    'signup-card-heading': 'Membership is open',
+    'signup-note': SIGNUP_NOTE,
+    'signup-label': view.primaryAction.label,
+    'signup-trust': 'Early release · Card required at checkout',
+    'founding-headline': view.publicRateHeadline,
+    // The home page prints the later members' trial inside its hidden
+    // after-founders card; every other page states the Founder plan's alone.
+    'practice-trial': surface === 'home' ? view.practiceTrial : view.foundingPractice,
+    'promised-beta': view.promisedBeta,
+    'lifetime-exception': view.lifetimeException,
+    'early-release': view.earlyRelease,
+    'participation': view.founderParticipation,
+    'footer-mode': `${view.brand} · Early release. ${view.availability}`,
+    'guide-product': 'Use CredentialDOMD to organize your saved licenses, renewal dates and CME alongside your professional documents. Review your records and confirm requirements with the licensing board.',
+  }[slot];
+  if (text === undefined) throw Error(`Unknown public launch slot: ${slot}`);
+  if (slot === 'signup-heading') return `<span data-membership-heading>${escapeHtml(text)}</span>`;
+  if (slot === 'founding-headline') return `<span data-membership-headline>${escapeHtml(text)}</span>`;
+  // The home page's status line has its own attribute: membership-offer.js
+  // gives it the same facts in the site's "sign up" wording.
+  return escapeHtml(text) + (slot === 'early-release' ? ` <span data-${surface === 'home' ? 'home' : 'membership'}-status role="status" aria-live="polite">Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.</span>` : '');
+}
+
 /** Only explicit marketing slots change. Off mode is byte-for-byte unchanged. */
 export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { offerEndpoint = null } = {}) {
   const view = publicLaunchPresentation(mode);
   if (!mode.enabled) return html;
   if (!minimumSlots[surface]) throw Error(`Unknown public launch surface: ${surface}`);
-  const homeFaq = [
-    { name: 'Can I sign up now?', text: `Yes. Membership is open now. ${view.availability} ${FOUNDING_RATE_LOCK}` },
-    { name: 'Can my practice manager use this for our whole group?', text: view.teamAvailability },
-  ];
   const counts = {};
   const output = html.replace(/<!-- public-launch:([a-z-]+) -->([\s\S]*?)<!-- \/public-launch:\1 -->/g, (_whole, slot, fallback) => {
     counts[slot] = (counts[slot] || 0) + 1;
-    if (fallback.includes('<!-- public-launch:')) throw Error('Nested public launch slots are not allowed');
-    if (slot === 'cta') return navigation(fallback, view);
-    if (slot === 'signup-link') return signupLink(fallback, view);
-    if (slot === 'form') return signupInsteadOfForm(fallback, view);
-    if (slot === 'hero-offer') return `<div style="margin:20px 0;padding:18px 20px;border:1px solid var(--emerald);border-radius:14px;background:var(--emerald-glow);"><p data-membership-hero-headline style="font-size:23px;font-weight:750;line-height:1.3;margin:0 0 8px;">${escapeHtml(view.foundingOffer)}</p>`
-      + '<p data-membership-hero-note style="font-size:14px;line-height:1.5;margin:0;">The founding annual rate stays locked for life while membership remains active.</p></div>'
-      // The signup button right under the offer (signup review 2026-10-07: a
-      // phone's first screen of the home page had no way to sign up; the
-      // first signup button was 16,000 px down). The same button and
-      // guarantee sentence as every other signup button (33363fee).
-      + (surface === 'home' ? `<div data-hero-signup style="margin:0 0 20px;"><a class="btn-primary" href="${escapeHtml(view.primaryAction.href)}" style="display:inline-block;padding:15px 24px;font-size:16px;text-align:center;">${escapeHtml(view.primaryAction.label)}</a>`
-        + `<p style="font-size:12.5px;line-height:1.5;margin:10px 0 0;color:var(--text-secondary);">${escapeHtml(SIGNUP_NOTE)}</p></div>` : '');
-    // Same approved strings and data attributes as the home hero, so membership-offer.js
-    // repaints this block when the live phase changes. No new claims, no new price.
-    if (slot === 'guide-offer') return '<div class="guide-offer" style="margin:18px 0 0;padding:18px 20px;border:1px solid var(--emerald);border-radius:14px;background:var(--emerald-glow);max-width:600px;">'
-      + `<p data-membership-hero-headline style="font-size:19px;font-weight:750;line-height:1.3;margin:0 0 6px;">${escapeHtml(view.foundingOffer)}</p>`
-      + '<p style="font-size:14.5px;line-height:1.55;margin:0 0 6px;color:var(--text-secondary);">Use CredentialDOMD to organize your saved licenses, renewal dates and CME alongside your professional documents.</p>'
-      + '<p data-membership-hero-note style="font-size:13.5px;line-height:1.5;margin:0 0 14px;color:var(--text-secondary);">The founding annual rate stays locked for life while membership remains active.</p>'
-      + `<a href="${escapeHtml(view.primaryAction.href)}" style="display:inline-block;background:var(--emerald);color:#0d0d1a;border-radius:10px;padding:12px 22px;font-weight:700;font-size:15px;text-decoration:none;">${escapeHtml(view.primaryAction.label)}</a>`
-      // Every signup button states the guarantee (33363fee). Same sentence, one source.
-      + `<p style="font-size:12.5px;line-height:1.5;margin:10px 0 0;color:var(--text-secondary);">${escapeHtml(SIGNUP_NOTE)}</p>`
-      + '</div>';
-    if (slot === 'guide-consent') return `<p class="guide-choice-sub">${escapeHtml(view.guideCapture.note)} <a href="${escapeHtml(view.primaryAction.href)}">${escapeHtml(view.primaryAction.shortLabel)}</a></p>`;
-    if (slot === 'home-faq-json') {
-      const schema = { '@context': 'https://schema.org', '@type': 'FAQPage', mainEntity: homeFaq.map(answer => ({
-        '@type': 'Question', name: answer.name, acceptedAnswer: { '@type': 'Answer', text: answer.text },
-      })) };
-      return `<script type="application/ld+json">${JSON.stringify(schema).replace(/</g, '\\u003c')}</script>`;
-    }
-    if (slot === 'faq-json') {
-      const match = fallback.match(/^(\s*<script type="application\/ld\+json">)([\s\S]*?)(<\/script>\s*)$/);
-      if (!match) throw Error('Missing launch FAQ JSON-LD');
-      const json = JSON.parse(match[2]);
-      const cost = json.mainEntity?.find(q => q.name === 'What does it cost?');
-      if (!cost?.acceptedAnswer) throw Error('Missing launch price question');
-      cost.acceptedAnswer.text = publicLaunchCostAnswer(view);
-      return `${match[1]}\n${JSON.stringify(json, null, 2).replace(/</g, '\\u003c')}\n${match[3]}`;
-    }
-    if (slot === 'faq-cost') return escapeHtml(publicLaunchCostAnswer(view));
-    if (slot === 'meta') return fallback.replace(/Membership opens by invitation\.|Paid membership opens by invitation; card required at checkout\./g, '$99/yr Founder plan while spots last. Early release; card required at checkout.');
-    if (slot === 'founding-price') return `<b data-membership-price>${escapeHtml(view.publicPrice)}</b><span data-membership-price-label>${escapeHtml(view.publicPriceLabel)}</span>`;
-    // A later phase replaces this paragraph (membership-offer.js), so a later
-    // rate never keeps the founding "Practice included" line.
-    if (slot === 'founding-rate') return `<span data-membership-rate>${escapeHtml(view.foundingRate)}</span>`;
-    // The guarantee covers every membership, so it stands on its own line
-    // instead of inside the Credential + Practice card.
-    if (slot === 'refund-guarantee') return surface === 'home'
-      ? `<p>${escapeHtml(view.refundGuarantee)}</p>`
-      : `<p style="margin-bottom: 16px;">${escapeHtml(view.refundGuarantee)}</p>`;
-    if (slot === 'brand') return fallback.replace(/Credential<span>(?:DoMD|DOMD)<\/span>/g, 'Credential<span>DOMD</span>').replace(/\bCredential(?:DOMD|DoMD|DO)\b/g, view.brand);
-    const text = {
-      'availability': view.availability,
-      'faq-availability': homeFaq[0].text,
-      'faq-teams': homeFaq[1].text,
-      'invitation-copy': view.availability,
-      'signup-heading': view.signupHeading,
-      'signup-eyebrow': 'Membership',
-      'signup-card-heading': 'Membership is open',
-      'signup-note': SIGNUP_NOTE,
-      'signup-label': view.primaryAction.label,
-      'signup-trust': 'Early release · Card required at checkout',
-      'founding-headline': view.publicRateHeadline,
-      // The home page prints the later members' trial inside its hidden
-      // after-founders card; every other page states the Founder plan's alone.
-      'practice-trial': surface === 'home' ? view.practiceTrial : view.foundingPractice,
-      'promised-beta': view.promisedBeta,
-      'lifetime-exception': view.lifetimeException,
-      'early-release': view.earlyRelease,
-      'participation': view.founderParticipation,
-      'footer-mode': `${view.brand} · Early release. ${view.availability}`,
-      'guide-product': 'Use CredentialDOMD to organize your saved licenses, renewal dates and CME alongside your professional documents. Review your records and confirm requirements with the licensing board.',
-    }[slot];
-    if (text === undefined) throw Error(`Unknown public launch slot: ${slot}`);
-    if (slot === 'signup-heading') return `<span data-membership-heading>${escapeHtml(text)}</span>`;
-    if (slot === 'founding-headline') return `<span data-membership-headline>${escapeHtml(text)}</span>`;
-    // The home page's status line has its own attribute: membership-offer.js
-    // gives it the same facts in the site's "sign up" wording.
-    return escapeHtml(text) + (slot === 'early-release' ? ` <span data-${surface === 'home' ? 'home' : 'membership'}-status role="status" aria-live="polite">Your offer is confirmed before payment. Your account opens when payment completes, with our 100% money back guarantee.</span>` : '');
+    return renderLaunchSlot(slot, fallback, surface, view);
   });
   for (const [slot, count] of Object.entries(minimumSlots[surface])) {
     if ((counts[slot] || 0) < count) throw Error(`Incomplete ${surface} migration: ${slot} needs ${count} slots`);
@@ -242,7 +249,6 @@ export function renderPublicLaunch(html, surface, mode = PUBLIC_LAUNCH_MODE, { o
     || (!['legal-navigation', 'home'].includes(surface) && visible.match(/early[ -]bird/i));
   if (foreign) throw Error(`Founder site must not print in ${surface}: ${foreign[0]}`);
   return markLiveOffer(output, view).replace(/<html\b/, '<html data-public-launch="founding-signup"')
-    .replace(/aria-label="Join the waitlist"/g, 'aria-label="Membership signup"')
     // A page whose policy already allows its own origin (the CME page, for
     // the visit beacon, scripts/visit-beacon.mjs) keeps it beside the offer endpoint.
     .replace(/connect-src '(none|self)'/, (whole, kept) => offerEndpoint ? `connect-src ${kept === 'self' ? "'self' " : ''}${escapeHtml(offerEndpoint)}` : whole)

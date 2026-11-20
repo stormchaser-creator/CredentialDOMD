@@ -55,9 +55,9 @@ everything that is not a network call or the iMessage itself:
 Signups, tickets, replies, feedback and errors are reported by time: rows
 created after the last run's start and up to this run's start. (Before
 2026-09-29 there was no upper bound, so a row written in the second a run
-started was reported twice, and a failed signup attempt made in the 3 minutes
-before a run was never reported: that run skipped it as too recent and the
-next one as too old. Attempts now use the same window shifted 3 minutes.)
+started was reported twice. Failed waitlist attempts, which used the same
+window shifted 3 minutes, are no longer reported: the waitlist was retired
+2026-11-20.)
 
 Money events (checkouts, payments, gifts, invitations) are keyed instead and
 looked for over the last LOOKBACK_DAYS: a payment is written when its webhook
@@ -118,7 +118,6 @@ CORE = {
     'early_access_leads': ({'early_access_leads': ('waitlist', 'name', 'email', 'source', 'created_at')}, ()),
     'founding_signups': ({'founding_signups': ('name', 'email', 'created_at')}, ()),
     'profiles': ({'profiles': ('name', 'email', 'created_at')}, ()),
-    'waitlist_attempts': ({'waitlist_attempts': ('name', 'email', 'stage', 'created_at'), 'early_access_leads': ('email', 'created_at')}, ()),
     'support_tickets': ({'support_tickets': ('id', 'user_id', 'subject', 'status', 'resolved_at', 'created_at'), 'profiles': PROFILE}, (IS_ADMIN,)),
     'support_messages': ({'support_messages': ('ticket_id', 'author_id', 'body', 'created_at'), 'support_tickets': ('id', 'subject'),
                           'profiles': PROFILE}, (IS_ADMIN,)),
@@ -149,7 +148,7 @@ OPTIONAL_PARTS = {
 OPTIONAL = tuple(OPTIONAL_PARTS)
 PARTS = {**CORE, **OPTIONAL_PARTS}
 
-SIGNUP_KINDS = ('waitlist', 'founding', 'app profile', 'FAILED ATTEMPT')
+SIGNUP_KINDS = ('waitlist', 'founding', 'app profile')
 # What is texted to the owner (2026-10-31: "i should get text messages about
 # people who sign up and get guides, the techinical side should be handled by
 # scheduled agents"): people signing up, getting a guide or paying, and a
@@ -441,14 +440,8 @@ def query_sql(since, present, now=None):
   coalesce(source,'') as extra, created_at, null::text as key from early_access_leads where created_at > {s}{upto('created_at')}""",
         f"select 'founding', coalesce(name,''), coalesce(email,''), '', created_at, null from founding_signups where created_at > {s}{upto('created_at')}",
         f"select 'app profile', coalesce(name,''), coalesce(email,''), '', created_at, null from profiles where created_at > {s}{upto('created_at')}",
-        # An attempt is judged 3 minutes after it was made (its lead may still
-        # be on the way): the window is shifted, not cut.
-        f"""select 'FAILED ATTEMPT', coalesce(a.name,''), coalesce(a.email,''), coalesce(a.stage,''), a.created_at, null
-  from waitlist_attempts a
-  where a.created_at > {s}::timestamptz - interval '3 minutes'
-    and a.created_at <= {f"'{now}'::timestamptz" if now else 'now()'} - interval '3 minutes'
-    and not exists (select 1 from early_access_leads l where lower(l.email)=lower(a.email)
-                    and l.created_at between a.created_at - interval '15 minutes' and a.created_at + interval '15 minutes')""",
+        # No 'FAILED ATTEMPT' part since the waitlist was retired (2026-11-20,
+        # 20261120220000_retire_waitlist drops waitlist_attempts).
         f"""select 'TICKET', {person('p')}, left(coalesce(t.subject,''),80), t.created_at, null
   from support_tickets t left join profiles p on p.id = t.user_id
   where t.created_at > {s}{upto('t.created_at')} and not public.is_admin(t.user_id)""",

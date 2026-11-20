@@ -207,7 +207,7 @@ test('scheduled jobs: each command runs as pg_cron would, the functions it calls
 
   await qa.feature('OPS-001', 'send-guide-sweep: a requested state guide is emailed and stamped', async () => {
     const email = `ops-guide-${tag}@${LAB_EMAIL_DOMAIN}`;
-    const res = await fetch(`${lab().urls.appOrigin}/api/waitlist`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ p_email: email, p_name: null, p_source: '/states/wyoming', p_note: 'guide-email WY inline', p_stage: 'guide', p_waitlist: false }) });
+    const res = await fetch(`${lab().urls.appOrigin}/api/guide-request`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ p_email: email, p_source: '/states/wyoming', p_note: 'guide-email WY inline' }) });
     qa.check('the guide request was accepted (relay as production\'s worker)', res.ok || res.status === 409, `${res.status}`);
     const r = runCronJob('send-guide-sweep');
     qa.check('the command queued one request to send-guide with the hook secret', r.ok && r.requests.length === 1 && /\/functions\/v1\/send-guide$/.test(r.requests[0].url) && r.requests[0].hookSecret, r.error || '');

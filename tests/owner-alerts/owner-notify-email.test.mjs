@@ -28,7 +28,7 @@ sys.stdout.write(m.compose(json.loads(sys.stdin.read())))`;
 const row = (kind, name, email, extra = '', key = null) => ({ kind, name, email, extra, created_at: '2026-10-14T12:00:00Z', key });
 const SAMPLES = [
   [row('app profile', 'Synthetic Member', 'member@example.test')],
-  [row('waitlist', 'A', 'a@example.test', 'home'), row('founding', '', 'b@example.test'), row('FAILED ATTEMPT', 'C', 'c@example.test', 'lead')],
+  [row('waitlist', 'A', 'a@example.test', 'home'), row('founding', '', 'b@example.test')],
   [row('TICKET', 'Synthetic Member', 'member@example.test', 'Export\tquestion\n'), row('CLIENT ERROR', 'signed-out', '', 'error: x')],
   [row('PAID', 'Synthetic Buyer', 'buyer@example.test', 'Core, founding, $99/yr', 'paid:sub_1:true'), row('CHECKOUT STARTED', 'Synthetic Buyer', 'buyer@example.test', 'Core', 'checkout:1'),
     row('CHECKOUT STARTED', 'Other', 'other@example.test', 'Core', 'checkout:2'), row('app profile', 'Same', 'Same')],

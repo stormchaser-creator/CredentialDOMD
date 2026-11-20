@@ -16,21 +16,16 @@ for (const page of ['index', 'locums']) {
     const source = await read(`landing/${page}.html`);
     const html = renderPublicLaunch(source, page === 'index' ? 'home' : 'locums', off);
     assert.equal(html, source);
-    // The unified home page (2026-11-15) has no waitlist template: off mode
-    // leaves its bytes alone, and the waitlist wording lives on /locums only.
+    // The unified home page (2026-11-15) has no launch template: off mode
+    // leaves its bytes alone. The waitlist was retired 2026-11-20, so the
+    // locums source has no waitlist form or wording left for off mode to show.
     if (page === 'index') return;
-    assert.match(html, /Checkout is not open/);
-    assert.match(html, /card required at checkout/);
-    assert.match(html, /Joining the waitlist does not (?:create a paid account or charge you|charge you or create a paid account)/);
-    assert.match(html, /Signed up under our earlier free-beta offer\?/);
-    assert.match(html, /30 days free with no card, then an optional \$99\/year Credential membership/);
-    assert.match(html, /There is no automatic charge; you must choose to pay to continue/);
-    assert.match(html, /Your invitation will confirm eligibility and when the 30 days start/);
-    assert.match(html, /New paid Credential members will receive a separate 30-day Practice trial/);
-    assert.match(html, /continuing Practice requires an explicit purchase/i);
+    assert.doesNotMatch(html, /waitlist|wl-form|wl-msg|href="#beta"|\/#join/i);
+    assert.match(html, /card required at checkout/i);
+    assert.match(html, /earlier free-beta wording receive 30 days free with no card/);
+    assert.match(html, /there is no automatic charge/i);
     assert.match(html, /keep Credential and Practice free for life/);
-    assert.match(html, /waitlist entry alone does not qualify/i);
-    assert.match(html, /\$245/);
+    assert.match(html, /Requesting a guide or giving an email address for a resource, or an account that was created but never active before launch, does not qualify/);
     assert.doesNotMatch(html, /Free invite-only beta|Free beta[,.]|Request beta access|No card is required for beta access|invite beta is free/i);
     const meta = [...html.matchAll(/<meta\b[^>]*>/g)].map(match => match[0]).join('\n');
     assert.doesNotMatch(meta, /free beta|no card/i);
@@ -78,7 +73,8 @@ for (const page of ['index', 'locums']) {
       assert.doesNotMatch(html, /early bird/i, 'no later plan on /locums while founding lasts');
     }
     assert.match(html, /keep Credential and Practice free for life/);
-    assert.match(html, /waitlist entry, or an account that was created but never active before launch, does not qualify/);
+    assert.match(html, /Requesting a guide or giving an email address for a resource, or an account that was created but never active before launch, does not qualify/);
+    assert.doesNotMatch(html, /waitlist/i);
     assert.doesNotMatch(html.replace(/<script type="module"[^>]*><\/script>/, ''), /\$\s?(?:149|199|245)\b/, 'no later price is printed while founding lasts');
     assert.doesNotMatch(html, /Checkout is not open|invitation will confirm eligibility|<form\b[^>]*class="[^"]*wl-form/i);
     assert.doesNotMatch(html, /Founding invitations/i);
@@ -91,8 +87,9 @@ test('locums visible cost answer and FAQ structured data are identical', async (
   assert.ok(faq);
   const cost = faq.mainEntity.find(entry => entry.name === 'What does it cost?').acceptedAnswer.text;
   assert.equal(html.split(cost).length - 1, 2, 'Cost answer must appear once in JSON-LD and once visibly');
-  assert.match(cost, /earlier free-beta offer/);
-  assert.match(cost, /card required at checkout/);
+  assert.match(cost, /earlier free-beta wording/);
+  assert.match(cost, /card at checkout/);
+  assert.doesNotMatch(cost, /waitlist/i);
 });
 test('OFF help fixture is unchanged and production help presents verified beta and the Founder plan\'s Practice', async () => {
   const help = JSON.parse(await read('public/knowledge/credentialdo-help.json'));
@@ -105,7 +102,7 @@ test('OFF help fixture is unchanged and production help presents verified beta a
   assert.match(availability, /existing invited beta users/);
   assert.match(availability, /new paid Credential members/);
   assert.match(availability, /Earlier free-beta signups/);
-  assert.match(html, /Card required at future paid checkout/);
+  assert.doesNotMatch(html, /waitlist|\/#join/i);
   assert.doesNotMatch(html, /Free invite-only beta/);
   const activeHelp = publicLaunchHelp(help);
   const active = renderPublicLaunch(renderHelp(activeHelp, videos), 'help');

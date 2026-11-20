@@ -7,6 +7,8 @@ create table app_admins(profile_id uuid primary key);
 create function public.is_admin(p uuid) returns boolean language sql stable as $$ select exists(select 1 from app_admins where profile_id = p) $$;
 create table early_access_leads(id uuid primary key default gen_random_uuid(), email text, name text, source text, waitlist boolean, created_at timestamptz default now());
 create table founding_signups(id uuid primary key default gen_random_uuid(), name text, email text, created_at timestamptz default now());
+-- Dropped in production by 20261120220000_retire_waitlist; kept here because
+-- the older migrations these tests replay still name it in owner_notify_rows.
 create table waitlist_attempts(id uuid primary key default gen_random_uuid(), name text, email text, stage text, created_at timestamptz default now());
 create table support_tickets(id uuid primary key default gen_random_uuid(), user_id uuid, subject text, body text, category text, priority text default 'normal',
   status text default 'open', resolved_at timestamptz, archived_at timestamptz, context_payload jsonb default '{}', created_at timestamptz default now());

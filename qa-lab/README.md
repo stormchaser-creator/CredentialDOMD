@@ -2310,7 +2310,7 @@ to `.generated/smoke/`.
 browser ──> app server  http://127.0.0.1:<app port>   (vite preview of the QA build, or vite dev)
               /app/            the QA-lab bundle (Clerk replaced by the QA sign-in)
               /__qa/mock/* ──> mock server (QA sign-in API; the Checkout and portal stand-ins)
-              /api/waitlist, /api/waitlist-attempt, /api/pv, /api/confirm-forwarding
+              /api/guide-request (and its /api/waitlist alias), /api/pv, /api/confirm-forwarding
                            ──> relayed as production's Cloudflare worker relays them
 browser ──> API proxy   http://127.0.0.1:<api port>   (the app's VITE_SUPABASE_URL: CROSS-ORIGIN, as live)
                            ──> local Supabase gateway :54321 (Origin presented as https://credentialdomd.com;
@@ -2771,8 +2771,9 @@ schema is production's):
   members ("membership read only"). The app ignores the error, so a pending
   member's `last_seen_at` is never stamped.
 - The app sends no email of its own on sign-up or payment (Stripe's receipts are
-  Stripe's and are not reproduced). The founding welcome goes to waitlist leads
-  only, and `send-welcome` holds it for owner review (`owner_review_required`).
+  Stripe's and are not reproduced). The founding welcome went to waitlist leads
+  only, and `send-welcome` held it for owner review (`owner_review_required`);
+  its trigger was dropped with the waitlist (20261120220000).
 
 ### The iOS Simulator profile (HTTPS): `npm run qa:sim`
 

@@ -20,10 +20,11 @@ const scripts = html => [...html.matchAll(/<script\b[^>]*>[\s\S]*?<\/script>/g)]
 const assets = html => [...html.matchAll(/(?:src|poster)="([^"]+)"/g)].map(match => match[1]).filter(path => path !== '/membership-offer.js');
 const jsonLd = html => [...html.matchAll(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/g)].map(match => JSON.parse(match[1]));
 
-test('explicit OFF mode leaves source HTML bytes, waitlist fields and widget choices intact', async () => {
+test('explicit OFF mode leaves source HTML bytes intact, and no source has a waitlist form left', async () => {
   for (const [path, surface] of [['index', 'home'], ['locums', 'locums'], ['help', 'help'], ['cme', 'cme'], ['states/ohio', 'state-guides'], ['states/index', 'state-index'], ['terms', 'legal-navigation']]) {
     const html = await read(`landing/${path}.html`);
     assert.equal(renderPublicLaunch(html, surface, off), html, path);
+    assert.doesNotMatch(html, /wl-form|name="waitlist"|\/api\/waitlist|waitlist-signup\.js|Join the waitlist/i, path);
   }
 });
 
@@ -210,10 +211,11 @@ test('all 51 guides keep four requested-guide forms and facts while removing wai
   assert.equal(forms, 204);
 });
 
-test('actual guide controller forces guide-only even with a stale selected waitlist radio', async () => {
+test('actual guide controller sends guide requests only, in either mode, even with a stale waitlist radio in a cached page', async () => {
   const source = await read('landing/states/ohio.html');
   const controller = scripts(source).find(script => script.includes("var ABBR = 'OH'"));
   assert.ok(controller);
+  assert.doesNotMatch(source, /name="waitlist"|guide-choice"|wl-form/);
   for (const enabled of [false, true]) for (const selected of ['yes', 'no', null]) {
     const calls = [];
     const callbacks = [];
@@ -245,15 +247,14 @@ test('actual guide controller forces guide-only even with a stale selected waitl
     });
     callbacks.forEach(fn => fn({ preventDefault() {} }));
     await new Promise(resolve => setImmediate(resolve));
-    const submissions = calls.filter(call => call.path === '/api/waitlist');
+    const submissions = calls.filter(call => call.path === '/api/guide-request');
     assert.equal(submissions.length, 4);
-    assert.equal(calls.length, 8, 'one best-effort attempt trace and one requested-guide write per form');
+    assert.equal(calls.length, 4, 'one requested-guide write per form, and no attempt trace');
     for (const { payload } of submissions) {
-      assert.equal(payload.p_stage, 'guide');
-      assert.equal(payload.p_waitlist, !enabled && selected === 'yes');
+      assert.deepEqual(Object.keys(payload).sort(), ['p_email', 'p_note', 'p_source']);
       assert.match(payload.p_note, /guide-email OH/);
     }
-    if (enabled) messages.forEach(message => assert.doesNotMatch(message.textContent, /waitlist|spot opens/));
+    messages.forEach(message => assert.doesNotMatch(message.textContent, /waitlist|spot opens/));
   }
 });
 

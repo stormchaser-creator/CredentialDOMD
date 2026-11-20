@@ -426,11 +426,11 @@ ${m.openHtml}
 <section class="container">
   <div class="cta-section">
     <h2>Keep your ${esc(state.name)} license, certification and CE in one place</h2>
-    <p><!-- public-launch:guide-product -->CredentialDOMD keeps your licenses, national certification and continuing education together, with these rules built in. Paid membership opens by invitation; a card is required at checkout.<!-- /public-launch:guide-product --></p>
-    <!-- public-launch:cta --><a href="https://credentialdomd.com/#early-access" class="cta-button">Request an invite</a><!-- /public-launch:cta -->
+    <p><!-- public-launch:guide-product -->Use CredentialDOMD to organize your saved licenses, renewal dates and CME alongside your professional documents. Review your records and confirm requirements with the licensing board.<!-- /public-launch:guide-product --></p>
+    <!-- public-launch:cta --><a class="cta-button" href="/app/">Sign up today</a><!-- /public-launch:cta -->
     <p><!-- public-launch:early-release -->CredentialDOMD is an early release. Some workflows are less polished, and the app will continue to evolve.<!-- /public-launch:early-release --></p>
     <p><!-- public-launch:participation -->Founding members help shape what comes next. In the app, ask VERA for help and use support tickets to report problems or suggest improvements.<!-- /public-launch:participation --></p>
-    <p class="cta-subtext"><!-- public-launch:signup-trust -->Join the waitlist for an invitation and membership details. Paid checkout is not open.<!-- /public-launch:signup-trust --></p>
+    <p class="cta-subtext"><!-- public-launch:signup-trust -->Early release · Card required at checkout<!-- /public-launch:signup-trust --></p>
   </div>
 </section>
 

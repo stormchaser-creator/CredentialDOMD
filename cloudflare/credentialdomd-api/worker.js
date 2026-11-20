@@ -1,4 +1,5 @@
-// credentialdomd-api: same-origin relay for the waitlist. Hospital IT
+// credentialdomd-api: same-origin relay for the state guide request (the
+// waitlist until it was retired, 2026-11-20). Hospital IT
 // filters and content blockers kill third-party requests to supabase.co;
 // first-party /api/* cannot be blocked without blocking the site itself.
 //
@@ -49,18 +50,22 @@ const FUNCTIONS = "https://hkpnnsjcwprrwobmpqyy.supabase.co/functions/v1";
 const ANON = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhrcG5uc2pjd3BycndvYm1wcXl5Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzIwOTIwODksImV4cCI6MjA4NzY2ODA4OX0._8iVLrhaDshKbxWV4XIs9LuyuS_-25fmABwloazhB-U";
 
 const WINDOW_MS = 10 * 60 * 1000;
+// 2026-11-20: the waitlist is retired. The state guide's "Email me this guide"
+// form posts /api/guide-request, relayed to guide_request
+// (supabase/migrations/20261120220000_retire_waitlist.sql), which takes a
+// guide note only and never puts anyone on a list. /api/waitlist stays as an
+// alias to the same RPC with the same three arguments, for state pages still
+// cached in a browser: their guide requests keep working, and their name and
+// waitlist answer are dropped here. /api/waitlist-attempt is gone.
+const GUIDE_REQUEST = {
+  rpc: "guide_request",
+  limit: 5,
+  args: { email: "p_email", source: "p_source", note: "p_note" },
+};
 const ROUTES = {
   // path -> { rpc, per-IP cap per WINDOW_MS, accepted body keys -> rpc args }
-  "/api/waitlist": {
-    rpc: "waitlist_signup",
-    limit: 5,
-    args: { name: "p_name", email: "p_email", source: "p_source", note: "p_note", stage: "p_stage", waitlist: "p_waitlist" },
-  },
-  "/api/waitlist-attempt": {
-    rpc: "waitlist_attempt",
-    limit: 15, // attempts precede signups; leave room for the trace of a blocked signup
-    args: { name: "p_name", email: "p_email", source: "p_source", stage: "p_stage" },
-  },
+  "/api/guide-request": GUIDE_REQUEST,
+  "/api/waitlist": GUIDE_REQUEST,
   // Pageview beacon (2026-08-27): landing pages sendBeacon {p, r} here; the
   // RPC whitelists the path, reduces the referrer to its registrable domain,
   // and upserts a (day, path, referrer_domain) counter. Counts only: no
@@ -101,8 +106,8 @@ function toRpcArgs(body, argMap) {
   for (const [plain, rpcName] of Object.entries(argMap)) {
     const v = body[rpcName] !== undefined ? body[rpcName] : body[plain];
     if (v === undefined) continue;
-    // Booleans stay booleans (p_waitlist is the guide-page opt-in checkbox:
-    // false must reach the RPC as false, not as the string "false").
+    // Booleans stay booleans (no route takes one now; kept so a future one
+    // reaches the RPC as false, not as the string "false").
     out[rpcName] = v === null ? null : typeof v === "boolean" ? v : String(v).slice(0, 300);
   }
   return out;
@@ -235,10 +240,10 @@ export default {
       body: JSON.stringify(toRpcArgs(body, route.args)),
     });
     // Status passthrough only. PostgREST maps the RPC's SQLSTATE for us:
-    // PT400 -> 400 (bad email), 23505 -> 409 (already listed), PT429 -> 429.
-    // waitlist_signup also answers through response.status: 403 when an
+    // PT400 -> 400 (bad email, or not a guide), PT429 -> 429.
+    // guide_request also answers through response.status: 403 when an
     // address has asked for three guides in 24 hours, 208 when that state's
-    // guide was already sent to it in 24 hours (the waitlist answer is kept).
+    // guide was already sent to it in 24 hours.
     return new Response(null, { status: r.status, headers: CORS });
   },
 };

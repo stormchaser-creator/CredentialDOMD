@@ -4,7 +4,9 @@
 # in the macOS keychain item "Cloudflare CredentialDOMD" (Workers Scripts:Edit
 # on account a49d649a94a2c5f45a061cecbad6ace4). The route
 # credentialdomd.com/api/* already points at this script, so an upload is a
-# live deploy: run supabase/migrations/20260816_ratelimit.sql FIRST.
+# live deploy. Since 2026-11-20 this script relays guide requests to
+# guide_request (20261120220000_retire_waitlist): upload it, then apply that
+# migration right away (see README.md, Deploy).
 #
 #   ./cloudflare/credentialdomd-api/deploy.sh          # upload
 #   ./cloudflare/credentialdomd-api/deploy.sh --check  # smoke-test the live route
@@ -16,9 +18,13 @@ SCRIPT="credentialdomd-api"
 API="https://api.cloudflare.com/client/v4/accounts/$ACCOUNT/workers/scripts/$SCRIPT"
 
 if [[ "${1:-}" == "--check" ]]; then
-  echo "OPTIONS /api/waitlist (expect 204):"
-  curl -s -o /dev/null -w '%{http_code}\n' -X OPTIONS https://credentialdomd.com/api/waitlist
-  echo "POST /api/waitlist with a bad address (expect 400 from the RPC, proves Worker->RPC path):"
+  echo "OPTIONS /api/guide-request (expect 204):"
+  curl -s -o /dev/null -w '%{http_code}\n' -X OPTIONS https://credentialdomd.com/api/guide-request
+  # 404 here means 20261120220000_retire_waitlist is not applied yet (no guide_request).
+  echo "POST /api/guide-request with a bad address (expect 400 from the RPC, proves Worker->RPC path):"
+  curl -s -o /dev/null -w '%{http_code}\n' -X POST https://credentialdomd.com/api/guide-request \
+    -H 'Content-Type: application/json' -d '{"p_email":"not-an-email"}'
+  echo "POST /api/waitlist, the alias for cached state pages, with a bad address (expect 400):"
   curl -s -o /dev/null -w '%{http_code}\n' -X POST https://credentialdomd.com/api/waitlist \
     -H 'Content-Type: application/json' -d '{"p_email":"not-an-email"}'
   exit 0

@@ -239,11 +239,9 @@ test('visitor: state guides, guide email, invalid and rate-limited requests', {
     await qa.shot('guide requested');
     qa.check('the page confirms the guide is on its way (no waitlist promise)', /The guide is on its way/.test(await msg.innerText()) && !/waitlist/.test(await msg.innerText()), await msg.innerText());
     const relays = site.relayLog.slice(relayBefore).map((r) => `${r.path} ${r.status}`);
-    qa.check('the first-party relay took the attempt trace and the request', relays.includes('/api/waitlist-attempt 204') || relays.some((r) => r.startsWith('/api/waitlist-attempt 2')), relays);
+    qa.check('the first-party relay took the guide request, and no attempt trace (retired with the waitlist)', relays.some((r) => r.startsWith('/api/guide-request 2')) && !relays.some((r) => r.startsWith('/api/waitlist')), relays);
     lead = await waitFor('the lead row', async () => row(`select id, email, source, note, waitlist, guide_sent_at from public.early_access_leads where email = '${email}'`), { timeoutMs: 15000 }).catch(() => null);
     qa.check('early_access_leads row: source /states/texas, note "guide-email TX hero", waitlist false (guide only)', lead?.source === '/states/texas' && lead?.note === 'guide-email TX hero' && lead?.waitlist === false, lead);
-    const attempt = row(`select stage, source from public.waitlist_attempts where email = '${email}'`);
-    qa.check('waitlist_attempts row with stage guide', attempt?.stage === 'guide', attempt);
     // The send-guide-sweep cron job (every 10 minutes in production) is inactive in the lab: run its dispatch as the job would.
     labExec('select public.dispatch_guide_emails()');
     const mail = await waitFor('the guide email', async () => (await emails({ to: email }))[0] || null, { timeoutMs: 120000, intervalMs: 2000 }).catch(() => null);
@@ -274,8 +272,8 @@ test('visitor: state guides, guide email, invalid and rate-limited requests', {
       await form.locator('input[type="email"]').fill(`${t}-rl${i}@${LAB_EMAIL_DOMAIN}`);
       const n = site.relayLog.length;
       await form.getByRole('button', { name: 'Email me the guide' }).click();
-      await waitFor('the relay answer', async () => site.relayLog.slice(n).find((r) => r.path === '/api/waitlist'), { timeoutMs: 15000 }).catch(() => null);
-      const answer = site.relayLog.slice(n).find((r) => r.path === '/api/waitlist');
+      await waitFor('the relay answer', async () => site.relayLog.slice(n).find((r) => r.path === '/api/guide-request'), { timeoutMs: 15000 }).catch(() => null);
+      const answer = site.relayLog.slice(n).find((r) => r.path === '/api/guide-request');
       answers.push(answer?.status);
       if (answer?.status === 429) limited = answer;
       await sleep(400);
@@ -513,10 +511,10 @@ test('visitor: legal pages vs the app, help videos, CME and locums, link crawl',
       const broken = [];
       for (const u of internal) { const r = await probe(u); if (![200, 301, 302].includes(r.status)) broken.push(`${u.replace(site.origin, '')} ${r.status}`); }
       qa.check(`${where} at ${width}px: ${internal.length} internal links, ${buttons} buttons; every internal link answers`, broken.length === 0, broken.slice(0, 8));
-      // "waitlist" may appear only in the lifetime-access rule ("A waitlist entry ... does not qualify").
+      // The waitlist was retired 2026-11-20: no page mentions one.
       const mentions = text.split(/(?<=[.!?])\s+/).filter((x) => /waitlist|join the list|billing is not open/i.test(x));
-      const stale = mentions.filter((x) => !/^A waitlist entry, or an account that was created but never active before launch, does not qualify\./.test(x.trim()));
-      qa.check(`${where} at ${width}px: no stale "waitlist", "Join the list" or "billing is not open" copy`, stale.length === 0, stale.length ? stale.slice(0, 3) : `${mentions.length} policy mention(s) of "waitlist" (lifetime-access rule)`);
+      const stale = mentions;
+      qa.check(`${where} at ${width}px: no stale "waitlist", "Join the list" or "billing is not open" copy`, stale.length === 0, stale.length ? stale.slice(0, 3) : 'no mentions');
       const forms = await page.locator('form').count();
       qa.check(`${where} at ${width}px: no waitlist form (forms: ${forms})`, !(await page.locator('form.wl-form').count()));
       if (width === 375) qa.check(`${where} at 375px: no horizontal page scroll`, await noSideScroll(page));

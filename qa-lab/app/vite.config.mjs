@@ -121,8 +121,10 @@ function rewriteIssuers(command) {
 
 // Production's /api/* relay (cloudflare/credentialdomd-api/worker.js), pointed at the local stack.
 const RPC_ROUTES = {
-  '/api/waitlist': { rpc: 'waitlist_signup', args: { name: 'p_name', email: 'p_email', source: 'p_source', note: 'p_note', stage: 'p_stage', waitlist: 'p_waitlist' } },
-  '/api/waitlist-attempt': { rpc: 'waitlist_attempt', args: { name: 'p_name', email: 'p_email', source: 'p_source', stage: 'p_stage' } },
+  // Guide requests only since the waitlist was retired (20261120220000);
+  // /api/waitlist is the alias the Worker keeps for cached state pages.
+  '/api/guide-request': { rpc: 'guide_request', args: { email: 'p_email', source: 'p_source', note: 'p_note' } },
+  '/api/waitlist': { rpc: 'guide_request', args: { email: 'p_email', source: 'p_source', note: 'p_note' } },
   '/api/pv': { rpc: 'track_pv', args: { p: 'p_path', r: 'p_ref' } },
 };
 const readRequest = (req) => new Promise((resolve, reject) => { const chunks = []; req.on('data', (c) => chunks.push(c)); req.on('end', () => resolve(Buffer.concat(chunks).toString('utf8'))); req.on('error', reject); });

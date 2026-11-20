@@ -31,7 +31,7 @@ function fixture({ archived = 3, active = 2, failCount = false } = {}) {
   };
   const app = { theme: {}, user: { id: 'synthetic-owner' }, data: { settings: {} }, userIdRef: { current: 'owner' }, updateSettings() {} };
   const db = {
-    async rpc() { return { data: { unread_replies: 0, new_errors_since_seen: 0, waitlist_waiting: 0, fields_pending: 0 } }; },
+    async rpc() { return { data: { unread_replies: 0, new_errors_since_seen: 0, fields_pending: 0 } }; },
     from(table) {
       const filters = []; let head = false; let patch = null;
       const rows = () => tickets.filter(t => filters.every(([kind, column, value]) => kind === 'is' ? t[column] === value : kind === 'not' ? t[column] !== null : t[column] === value));

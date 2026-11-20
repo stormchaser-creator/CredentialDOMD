@@ -17,7 +17,7 @@ const tick = () => new Promise(done => setImmediate(done));
 const anchor = '" pending") },\n  ];\n';
 assert.ok(source.includes(anchor), 'TABS anchor moved');
 
-function fixture({ counts = { unread_replies: 2, new_errors_since_seen: 3, waitlist_waiting: 7, fields_pending: 1 }, response = null, full = false } = {}) {
+function fixture({ counts = { unread_replies: 2, new_errors_since_seen: 3, fields_pending: 1 }, response = null, full = false } = {}) {
   const hooks = [], effects = [], rpcs = [], settingsWrites = [];
   let cursor = 0;
   const same = (a, b) => a && b && a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
@@ -59,27 +59,27 @@ test('five groups, Home first; group labels show unread replies, waiting leads, 
   assert.equal(view.tab, 'reports');
   assert.equal(label(view, 'reports'), 'Home');
   assert.equal(label(view, 'inbox'), 'Inbox (2)');
-  assert.equal(label(view, 'people'), 'People (7)');
+  // The waitlist was retired 2026-11-20: People has no count of its own.
+  assert.equal(label(view, 'people'), 'People');
   assert.equal(label(view, 'activity'), 'Activity (3)');
   assert.equal(label(view, 'tools'), 'Tools (1 pending)');
   assert.equal(view.TABS.find(t => t.id === 'inbox').title, '2 unread message replies');
-  assert.equal(view.TABS.find(t => t.id === 'people').title, '7 waiting on the waitlist');
   assert.equal(f.rpcs[0].name, 'admin_attention_counts');
 });
 
 test('zero counts and a server without the count function leave plain labels', async () => {
-  const quiet = await fixture({ counts: { unread_replies: 0, new_errors_since_seen: 0, waitlist_waiting: 0, fields_pending: 0 } }).render();
+  const quiet = await fixture({ counts: { unread_replies: 0, new_errors_since_seen: 0, fields_pending: 0 } }).render();
   assert.deepEqual(['inbox', 'people', 'activity', 'tools'].map(id => label(quiet, id)), ['Inbox', 'People', 'Activity', 'Tools']);
   const notDeployed = await fixture({ response: { data: null, error: { code: 'PGRST202', message: 'Could not find the function' } } }).render();
   assert.deepEqual(['inbox', 'people', 'activity', 'tools'].map(id => label(notDeployed, id)), ['Inbox', 'People', 'Activity', 'Tools']);
 });
 
 test('a failed count read is marked on the labels, never shown the same as zero', async () => {
-  const zero = await fixture({ counts: { unread_replies: 0, new_errors_since_seen: 0, waitlist_waiting: 0, fields_pending: 0 } }).render();
+  const zero = await fixture({ counts: { unread_replies: 0, new_errors_since_seen: 0, fields_pending: 0 } }).render();
   for (const response of [{ data: null, error: { code: '42501', message: 'permission denied' } }, { data: null }, { data: { unread_replies: 1 } }]) {
     const view = await fixture({ response }).render();
-    assert.deepEqual(['inbox', 'people', 'activity', 'tools'].map(id => label(view, id)), ['Inbox (?)', 'People (?)', 'Activity (?)', 'Tools (?)']);
-    for (const id of ['inbox', 'people', 'activity', 'tools']) assert.notEqual(label(view, id), label(zero, id));
+    assert.deepEqual(['inbox', 'people', 'activity', 'tools'].map(id => label(view, id)), ['Inbox (?)', 'People', 'Activity (?)', 'Tools (?)']);
+    for (const id of ['inbox', 'activity', 'tools']) assert.notEqual(label(view, id), label(zero, id));
     assert.equal(view.TABS.find(t => t.id === 'inbox').title, 'Unread count unavailable, open to check');
     assert.equal(view.TABS.find(t => t.id === 'tools').title, 'Pending field count unavailable, open to check');
   }
@@ -118,7 +118,7 @@ test('opening Inbox marks Messages seen, keeps the old stamp for NEW REPLY badge
 test('a Home number opens its section in its group and focuses it; a Tools section opens its card', async () => {
   const f = fixture();
   let view = await f.render();
-  for (const [section, group] of [['tickets', 'inbox'], ['messages', 'inbox'], ['users', 'people'], ['waitlist', 'people'], ['signups', 'activity'], ['errors', 'activity'], ['fields', 'tools']]) {
+  for (const [section, group] of [['tickets', 'inbox'], ['messages', 'inbox'], ['users', 'people'], ['signups', 'activity'], ['errors', 'activity'], ['fields', 'tools']]) {
     view.navigateReport(section); view = await f.render();
     assert.equal(view.tab, group, section);
     assert.equal(view.focusSection, section, section);
@@ -165,11 +165,13 @@ test('each group shows its sections in the briefed order and every former box is
   tree = await open(tree, 'People');
   const people = named(tree, 'UsersPanel')[0];
   assert.equal(people.props.heading.props.children, 'Accounts');
-  assert.equal(named(people.props.children, 'WaitlistList').length, 1, 'the waitlist sits inside People, after the accounts directory');
+  assert.equal(people.props.children, undefined, 'People is the accounts directory alone (the waitlist was retired 2026-11-20)');
+  assert.equal(named(tree, 'WaitlistList').length, 0);
+  assert.doesNotMatch(source, /WaitlistList|waitlist_attempts|Waitlist name|waitlist_waiting/);
   for (const moved of ['AdminLifetimeGift', 'AdminInviteToJoin', 'AdminMailboxRepair']) assert.equal(named(tree, moved).length, 0, `${moved} is no longer on People`);
-  const users = source.slice(source.indexOf('function UsersPanel('), source.indexOf('function WaitlistList('));
+  const users = source.slice(source.indexOf('function UsersPanel('), source.indexOf('function FieldProposals('));
   const at = text => { const i = users.indexOf(text); assert.ok(i > 0, text); return i; };
-  assert.ok(at('Search loaded accounts') < at('{children}') && at('{children}') < at('Waiting on an invitation ('), 'accounts, then waitlist, then invitations');
+  assert.ok(at('Search loaded accounts') < at('Waiting on an invitation ('), 'accounts, then invitations');
   assert.ok(users.includes('chip("Give free lifetime access"'), 'the per-row lifetime button stays');
   tree = await open(tree, 'Activity');
   assert.deepEqual(headings(tree), ['Webpage visits', 'New accounts', 'Errors']);

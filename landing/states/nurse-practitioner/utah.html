@@ -166,12 +166,7 @@ a:hover { color: var(--emerald-light); }
 .guide-form button { background: var(--emerald); color: #0d0d1a; border: none; border-radius: 10px; padding: 12px 22px; font-family: var(--font); font-weight: 700; font-size: 15px; cursor: pointer; transition: background 0.2s; }
 .guide-form button:hover { background: var(--emerald-light); }
 .guide-form button:disabled { opacity: 0.6; cursor: default; }
-.guide-choice { border: 0; margin: 12px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 8px 18px; align-items: center; color: var(--text-muted); font-size: 14px; line-height: 1.45; }
-.guide-choice legend { padding: 0; margin: 0 0 6px; width: 100%; color: var(--text); font-weight: 600; }
 .guide-choice-sub { display: block; color: var(--text-muted); font-weight: 400; font-size: 13.5px; margin-top: 2px; }
-.guide-choice label { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; color: var(--text); }
-.guide-choice input[type="radio"] { width: 18px; height: 18px; margin: 0; accent-color: var(--emerald); flex: 0 0 auto; }
-.guide-choice.is-missing legend { color: var(--amber); }
 /* The hero copy of the capture. Tighter than the page-end one because it sits
    under the H1, and the board portal link below it is demoted to a text link:
    the only above-the-fold button used to send the visitor to the state board
@@ -187,8 +182,6 @@ a:hover { color: var(--emerald-light); }
   .guide-capture--hero { padding: 16px 16px; }
   .guide-capture--hero h2 { font-size: 16px; }
 }
-.guide-choice--compact { margin-top: 6px; font-size: 13px; gap: 6px 14px; }
-.guide-choice--compact legend { width: auto; margin: 0 6px 0 0; font-size: 13px; }
 .guide-hp { position: absolute; left: -9999px; opacity: 0; height: 0; width: 0; }
 .guide-msg { font-size: 14px; margin-top: 10px; min-height: 1em; }
 .reminder-form { display: flex; gap: 10px; flex-wrap: wrap; align-items: flex-end; }
@@ -261,7 +254,7 @@ a:hover { color: var(--emerald-light); }
     <a href="/" class="nav-logo">Credential<span>DOMD</span></a>
     <div class="nav-links">
       <a href="/#features">Features</a>
-      <!-- public-launch:cta --><a href="https://credentialdomd.com/#early-access">Early Access</a><!-- /public-launch:cta -->
+      <!-- public-launch:cta --><a href="/app/">Sign up</a><!-- /public-launch:cta -->
       <a href="/states/">All States</a>
       <a href="/cme/">CME</a>
       <details class="support-menu">
@@ -272,7 +265,7 @@ a:hover { color: var(--emerald-light); }
           <a href="/security">Security &amp; data handling</a>
         </div>
       </details>
-      <!-- public-launch:cta --><a href="https://credentialdomd.com/#early-access" class="nav-cta">Get Early Access</a><!-- /public-launch:cta -->
+      <!-- public-launch:cta --><a class="nav-cta" href="/app/">Sign up</a><!-- /public-launch:cta -->
     </div>
   </div>
 </header>
@@ -407,11 +400,11 @@ a:hover { color: var(--emerald-light); }
 <section class="container">
   <div class="cta-section">
     <h2>Keep your Utah license, certification and CE in one place</h2>
-    <p><!-- public-launch:guide-product -->CredentialDOMD keeps your licenses, national certification and continuing education together, with these rules built in. Paid membership opens by invitation; a card is required at checkout.<!-- /public-launch:guide-product --></p>
-    <!-- public-launch:cta --><a href="https://credentialdomd.com/#early-access" class="cta-button">Request an invite</a><!-- /public-launch:cta -->
+    <p><!-- public-launch:guide-product -->Use CredentialDOMD to organize your saved licenses, renewal dates and CME alongside your professional documents. Review your records and confirm requirements with the licensing board.<!-- /public-launch:guide-product --></p>
+    <!-- public-launch:cta --><a class="cta-button" href="/app/">Sign up today</a><!-- /public-launch:cta -->
     <p><!-- public-launch:early-release -->CredentialDOMD is an early release. Some workflows are less polished, and the app will continue to evolve.<!-- /public-launch:early-release --></p>
     <p><!-- public-launch:participation -->Founding members help shape what comes next. In the app, ask VERA for help and use support tickets to report problems or suggest improvements.<!-- /public-launch:participation --></p>
-    <p class="cta-subtext"><!-- public-launch:signup-trust -->Join the waitlist for an invitation and membership details. Paid checkout is not open.<!-- /public-launch:signup-trust --></p>
+    <p class="cta-subtext"><!-- public-launch:signup-trust -->Early release · Card required at checkout<!-- /public-launch:signup-trust --></p>
   </div>
 </section>
 
@@ -431,7 +424,7 @@ a:hover { color: var(--emerald-light); }
         <a href="/states/">All States</a>
         <a href="/cme/">CME resources</a>
         <a href="https://credentialdomd.com/#features">Features</a>
-        <!-- public-launch:cta --><a href="https://credentialdomd.com/#early-access">Early Access</a><!-- /public-launch:cta -->
+        <!-- public-launch:cta --><a href="/app/">Sign up</a><!-- /public-launch:cta -->
         <a href="mailto:support@credentialdomd.com?subject=CredentialDOMD%20Support">Contact</a>
       </div>
     </div>

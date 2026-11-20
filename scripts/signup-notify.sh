@@ -8,7 +8,7 @@
 # iMessages the owner only the rows of TEXT_KINDS (signup-notify.py): waitlist
 # and founding signups, guides, app profiles, beta activations, checkouts,
 # payments, lifetime gifts, and a refund only the owner can finish. Every
-# other new row (tickets, member replies, fixes, failed signup attempts,
+# other new row (tickets, member replies, fixes,
 # feedback, invitations, a subscription with no recorded payment) is appended
 # to the ops queue, $OPS_QUEUE, which the scheduled supervisor
 # (scripts/ops-supervisor.sh, launchd com.credentialdomd.ops-supervisor) works

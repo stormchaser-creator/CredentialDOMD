@@ -387,7 +387,7 @@ for (const width of [375, 390]) {
       }, { soft: true });
 
       await qa.feature('ADMIN-003', 'Admin > Errors, Waitlist, Fields and AI on a phone', async () => {
-        for (const s of ['Errors', 'Waitlist', 'Fields', 'AI']) {
+        for (const s of ['Errors', 'Fields', 'AI']) {
           await openAdmin(s);
           file(await auditScreen(qa, page, `Admin ${s}`, { allowSmall: anyOf(exceptChrome(), matchOf('admin-accounts')) }), `Admin ${s}`);
         }

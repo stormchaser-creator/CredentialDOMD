@@ -161,12 +161,12 @@ test('expiry timer makes stale state visible and unmounted responses cannot popu
 
 test('attention counts appear as Needs attention chips that open their sections', async () => {
   const f = fixture(); f.render();
-  f.requests[0].resolve({ data: { ...reportFixture(), attention: { unread_replies: 3, new_errors_since_seen: 4, waitlist_waiting: 12, fields_pending: 2 } } }); await tick();
-  assert.equal(f.metrics().length, 11);
+  f.requests[0].resolve({ data: { ...reportFixture(), attention: { unread_replies: 3, new_errors_since_seen: 4, fields_pending: 2 } } }); await tick();
+  assert.equal(f.metrics().length, 10, 'five snapshot numbers and five attention chips (no Waitlist since 2026-11-20)');
   const strip = f.region('Needs attention');
   const chips = f.nodes(strip).filter(node => node.type === 'button');
-  assert.deepEqual(chips.map(node => f.text(node)), ['Unread replies3', 'Awaiting approval3', 'Urgent open tickets2', 'Waitlist12', 'Fields to review2', 'New error reports4']);
-  for (const [label, tab] of [['Unread replies', 'messages'], ['Waitlist', 'waitlist'], ['Fields to review', 'fields'], ['New error reports', 'errors']]) {
+  assert.deepEqual(chips.map(node => f.text(node)), ['Unread replies3', 'Awaiting approval3', 'Urgent open tickets2', 'Fields to review2', 'New error reports4']);
+  for (const [label, tab] of [['Unread replies', 'messages'], ['Fields to review', 'fields'], ['New error reports', 'errors']]) {
     f.metric(label).props.onClick(); assert.equal(f.navigation.at(-1), tab); assert.equal(f.filters.at(-1), undefined);
   }
 });

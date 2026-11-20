@@ -1,5 +1,4 @@
-import { copyAndReadSynthetic } from './support/clipboard-paste.mjs';
-// The owner's Admin tabs beyond accounts and emails: Errors, Waitlist, Fields
+// The owner's Admin tabs beyond accounts and emails: Errors, Fields
 // and AI (tab counts against the database), Home (refresh, CSV),
 // Control history (paging) and Support views, Traffic history (visits and
 // signups against the admin views), a ticket's archive and agent-approval
@@ -29,9 +28,7 @@ async function openAdmin(page, section) {
   if (section) await openAdminSection(page, section);
   return nav;
 }
-// The Waitlist form's placeholder text (an example address, written so no address sits in this file).
-const LEAD_EMAIL_PLACEHOLDER = ['email', 'domain.com'].join('@');
-// Five groups since 2026-11-20: the Errors count is on Activity, Waitlist on People, Fields on Tools.
+// Five groups since 2026-11-20: the Errors count is on Activity, Fields on Tools (the waitlist was retired the same day).
 const tabLabel = async (page, name) => (await adminTab(page, name).innerText()).trim();
 const labelCount = (label) => { const m = /\((\d+)(?: pending)?\)/.exec(label); return m ? Number(m[1]) : 0; };
 /** The admin's counts as admin_attention_counts computes them (LOCAL database). */
@@ -47,9 +44,9 @@ async function newAdmin(page, name = 'Rowan') {
   return admin;
 }
 
-test('owner: Errors, Waitlist, Fields and AI tab counts follow each action', {
+test('owner: Errors, Fields and AI tab counts follow each action', {
   tag: ['@ADMIN-003'],
-}, async ({ page, qa, secondBrowser, context }) => {
+}, async ({ page, qa, secondBrowser }) => {
   test.setTimeout(8 * 60 * 1000);
   const admin = await newAdmin(page);
   const t = stamp('adm').toLowerCase();
@@ -115,77 +112,6 @@ test('owner: Errors, Waitlist, Fields and AI tab counts follow each action', {
     qa.check('the list confirms the deletion and the row leaves it', await page.getByRole('status').filter({ hasText: /Deleted 1 error report/ }).count() > 0 && !(await page.locator('article').filter({ hasText: message }).count()));
     const others = rows(`select count(*)::int as n from public.client_errors`)[0].n;
     qa.check('other reports are untouched', others >= 0, `${others} other report(s) remain; seen stamp ${seen}`);
-  }, { soft: true });
-
-  await qa.feature('ADMIN-003', 'Waitlist: add a QA lead, copy waiting emails, Invite opens prefilled, Remove (confirm) deletes it; the label follows', async () => {
-    const leadEmail = `${t}-lead@${LAB_EMAIL_DOMAIN}`;
-    const leadName = `Quinn Lead ${letters()}`;
-    await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: lab().urls.appOrigin });
-    await openAdminSection(page, 'Waitlist');
-    await page.getByPlaceholder(LEAD_EMAIL_PLACEHOLDER).waitFor({ timeout: 30000 });
-    const label0 = await tabLabel(page, 'Waitlist');
-    const db0 = attention(admin.profile.id).waitlist_waiting;
-    qa.check('the Waitlist label is the database\'s waiting count', labelCount(label0) === db0, `"${label0}" vs ${db0}`);
-    // People also has the accounts search ("Name, email, NPI or state"); the waitlist's own field is "Waitlist name".
-    await page.getByPlaceholder('Waitlist name', { exact: true }).fill(leadName);
-    await page.getByPlaceholder(LEAD_EMAIL_PLACEHOLDER).fill(leadEmail);
-    await page.getByRole('button', { name: 'Add', exact: true }).click();
-    const lead = await waitFor('the lead row', async () => row(`select id, source, waitlist from public.early_access_leads where email = '${leadEmail}'`), { timeoutMs: 15000 }).catch(() => null);
-    qa.check('the lead is saved (early_access_leads, source admin-manual, waitlist true)', lead?.source === 'admin-manual' && lead?.waitlist === true, lead);
-    const shown = page.locator('div').filter({ hasText: leadEmail }).filter({ has: page.getByRole('button', { name: 'Remove' }) }).last();
-    qa.check('the lead appears in the list, marked "added by you"', await shown.isVisible() && /added by you/i.test(await shown.innerText()));
-    await sleep(1500);
-    const labelNow = await tabLabel(page, 'Waitlist');
-    const dbNow = attention(admin.profile.id).waitlist_waiting;
-    qa.check('right after Add, the Waitlist label shows the new count (no tab switch)', labelCount(labelNow) === dbNow, `"${labelNow}" vs ${dbNow} (was ${db0})`);
-    if (labelCount(labelNow) !== dbNow) {
-      qa.bug({
-        title: 'Admin Waitlist and Fields: the tab label keeps its old count after Add, Remove or Dismiss until another tab is opened',
-        step: 'More > Admin > Waitlist > add a lead (or Remove one; or Fields > Dismiss)',
-        expected: 'The tab label count follows the action (the database count)',
-        actual: `After Add the label still reads "${labelNow}" while the database counts ${dbNow} waiting; the counts are only re-read when a tab is opened (src/components/pages/AdminDashboard.jsx:324-329, the readAdminAttention effect keyed on reloadKey and the seen stamps). Already fixed on fix/qa-admin-ops and release/qa1 (beb49e1f, "Admin Waitlist and Fields: say why Add failed, and keep the tab counts current").`,
-        severity: 'low',
-      });
-    }
-    const clip = await copyAndReadSynthetic(page,
-      () => page.getByRole('button', { name: 'Copy waiting emails' }).click(), [`${leadName} <${leadEmail}>`]);
-    qa.check('Copy waiting emails puts the new lead on the clipboard ("Name <email>")', clip.includes(`${leadName} <${leadEmail}>`), clip.slice(0, 200));
-    // Re-open the tab: the label is read again.
-    await openAdminSection(page, 'Fields');
-    await openAdminSection(page, 'Waitlist');
-    await page.getByPlaceholder(LEAD_EMAIL_PLACEHOLDER).waitFor();
-    await sleep(1200);
-    const label1 = await tabLabel(page, 'Waitlist');
-    const db1 = attention(admin.profile.id).waitlist_waiting;
-    qa.check('after adding, the label is the new waiting count', labelCount(label1) === db1 && db1 >= db0 + 1 - 1, `"${label1}" vs ${db1} (was ${db0})`);
-    // Invite opens the invite-to-join dialog prefilled; sending is covered by admin-invite-gift.spec.mjs
-    // (and would spend one of the service's 20 invitations a day shared by every journey).
-    const row_ = page.locator('div').filter({ hasText: leadEmail }).filter({ has: page.getByRole('button', { name: 'Invite to join' }) }).last();
-    await row_.getByRole('button', { name: 'Invite to join' }).click();
-    const dialog = page.getByRole('dialog').filter({ hasText: /Invite to join/ }).last();
-    const opened = await dialog.waitFor({ timeout: 15000 }).then(() => true, () => false);
-    const values = opened ? await dialog.locator('input').evaluateAll((els) => els.map((e) => e.value)) : [];
-    await qa.shot('invite to join from waitlist');
-    qa.check('Invite to join opens prefilled with the lead\'s name and email', opened && values.includes(leadEmail) && values.some((v) => leadName.startsWith(v) || v === leadName), values);
-    await page.keyboard.press('Escape');
-    await dialog.waitFor({ state: 'detached', timeout: 5000 }).catch(async () => { await dialog.getByRole('button', { name: /Close|Cancel/ }).first().click().catch(() => {}); });
-    const dialogs = [];
-    qa.onDialog((d) => { dialogs.push(d.message()); return 'accept'; });
-    await page.locator('div').filter({ hasText: leadEmail }).filter({ has: page.getByRole('button', { name: 'Remove' }) }).last().getByRole('button', { name: 'Remove' }).click();
-    const removed = await waitFor('the lead deleted', async () => !row(`select id from public.early_access_leads where email = '${leadEmail}'`), { timeoutMs: 15000 }).catch(() => false);
-    qa.check('Remove asks to confirm, then deletes the lead', dialogs.some((d) => d.includes(leadEmail)) && removed, dialogs);
-    qa.check('the lead leaves the list', !(await page.getByText(leadEmail).count()));
-    await sleep(1500);
-    const labelAfterRemove = await tabLabel(page, 'Waitlist');
-    qa.check('right after Remove, the Waitlist label shows the new count (no tab switch)', labelCount(labelAfterRemove) === attention(admin.profile.id).waitlist_waiting, `"${labelAfterRemove}"`);
-    await openAdminSection(page, 'Fields');
-    await openAdminSection(page, 'Waitlist');
-    await sleep(1500);
-    const label2 = await tabLabel(page, 'Waitlist');
-    const db2 = attention(admin.profile.id).waitlist_waiting;
-    qa.check('after removing, the label is the database count again', labelCount(label2) === db2, `"${label2}" vs ${db2}`);
-    const welcome = await emails({ to: leadEmail });
-    qa.check('adding a waitlist lead by hand sent no email (the founding welcome is held for owner review)', welcome.length === 0, welcome.map((e) => e.subject));
   }, { soft: true });
 
   await qa.feature('ADMIN-003', 'Fields: a pending QA proposal is counted and Dismiss marks it dismissed', async () => {

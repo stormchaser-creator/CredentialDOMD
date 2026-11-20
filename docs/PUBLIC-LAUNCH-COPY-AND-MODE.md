@@ -1,5 +1,7 @@
 # Public founding-launch copy and mode
 
+**November 20, 2026: the waitlist is retired.** There is no waitlist form, choice or mode anymore, in either launch mode. Off mode has no primary action, and every source fallback that named the waitlist now holds the same copy paid mode prints. The locums forms are a `signup-button` slot; the guide forms' choice is a `guide-note` slot. Guide forms post `/api/guide-request` (`guide_request`, migration `20261120220000_retire_waitlist`), guide only. What follows describes the September launch as it was.
+
 Updated September 20, 2026 from `7f0c8147` for the owner-approved first-100 paid founding policy. The checked-in public mode is enabled with `/app/` as its destination; actual checkout availability remains server-owned. This source update is not a deployment receipt. It does not activate the new backend capacity policy, grant membership, start a trial or send email. The original default-off preparation was based on `1d84654b5a4aef2bd5280336943a7a2b7a7ceb32`.
 
 ## Implemented contract

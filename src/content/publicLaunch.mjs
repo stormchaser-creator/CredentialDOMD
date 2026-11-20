@@ -4,9 +4,9 @@ export const PUBLIC_LAUNCH_MODE = Object.freeze({
   signupHref: '/app/', // Protected verified-primary signup and explicit paid opt-in.
 });
 
-// Static generators still own the listed surfaces. Do not enable paid copy while
-// one of them still submits a waitlist request under a signup label. Move an ID
-// into WIRED_LAUNCH_SURFACES only with its implementation and regression coverage.
+// Static generators still own the listed surfaces. Move an ID into
+// WIRED_LAUNCH_SURFACES only with its implementation and regression coverage.
+// (The waitlist these once guarded against was retired 2026-11-20.)
 export const REQUIRED_LAUNCH_SURFACES = Object.freeze([
   'home', 'locums', 'help', 'cme', 'state-guides', 'state-index',
   'guide-widgets', 'watch-pages', 'legal-navigation',
@@ -44,6 +44,8 @@ export function assertPublicLaunchReady(mode = PUBLIC_LAUNCH_MODE, wired = WIRED
  * Pure presentation contract for the static generators. A caller may render a
  * draft paid preview without satisfying the production build gate; it cannot
  * issue a request, record consent, send mail, open checkout, or change access.
+ * OFF (`enabled: false`) prints every page exactly as written and has no
+ * primary action: there is no waitlist to send anyone to (retired 2026-11-20).
  */
 // The one sentence of `availability` that states the founding offer, and the
 // rate-lock sentence the home FAQ adds after it. The static pages print them
@@ -64,13 +66,13 @@ export function publicLaunchPresentation(mode = PUBLIC_LAUNCH_MODE) {
   const signupHref = enabled ? reviewedSignupHref(mode.signupHref) : null;
   return Object.freeze({
     brand: 'CredentialDOMD',
-    mode: enabled ? 'founding-signup' : 'waitlist',
-    primaryAction: Object.freeze(enabled
-      ? { kind: 'navigation', label: 'Sign up today', shortLabel: 'Sign up', href: signupHref, collectEmail: false }
-      : { kind: 'waitlist-request', label: 'Join the waitlist', shortLabel: 'Join the waitlist', href: '/#join', collectEmail: true }),
+    mode: enabled ? 'founding-signup' : 'off',
+    primaryAction: enabled
+      ? Object.freeze({ kind: 'navigation', label: 'Sign up today', shortLabel: 'Sign up', href: signupHref, collectEmail: false })
+      : null,
     availability: enabled
       ? `${FOUNDING_AVAILABILITY} Availability is confirmed before payment; signing up does not reserve a place. Paid membership requires a card at checkout and your explicit agreement.`
-      : 'Checkout is not open. Join the waitlist for your invitation and membership details. A waitlist request does not create a paid account or charge you; future paid access requires a card at checkout.',
+      : 'Checkout is not open. Future paid access requires a card at checkout.',
     earlyRelease: 'CredentialDOMD is an early release. Some workflows are less polished, and the app will continue to evolve.',
     teamAvailability: 'Group-management features are on the roadmap and are not currently available. The individual Practice package does not provide team-wide account management. Contact support@credentialdomd.com to discuss your group’s needs; no release date or priority onboarding is promised.',
     founderParticipation: 'Founding members help shape what comes next. In the app, ask VERA for help and use support tickets to report problems or suggest improvements.',
@@ -98,19 +100,18 @@ export function publicLaunchPresentation(mode = PUBLIC_LAUNCH_MODE) {
     promisedBeta: enabled
       ? 'Eligible people who signed up under the earlier free-beta wording receive 30 days free with no card, starting when they first activate their account with a verified email address. The app shows the exact end date; signing in again does not restart those 30 days. You may opt in to $99/year Credential during the beta by adding a card and explicitly agreeing to the annual subscription. Your first charge is scheduled for your original beta end date, when your paid year starts. Choosing early does not charge you early or start a new trial. You keep the same account and saved records. If you never opt in, there is no automatic charge and nothing to cancel. Paid membership renews annually unless canceled.'
       : 'People who signed up under the earlier free-beta wording will receive 30 days free with no card. Their invitation will confirm eligibility and when those 30 days start. Continuing afterward requires an explicit $99/year Credential purchase; there is no automatic charge.',
-    lifetimeException: 'Members whose accounts were already active before paid membership launched, and accounts the founder has personally gifted, keep Credential and Practice free for life. A waitlist entry, or an account that was created but never active before launch, does not qualify. People who signed up under the earlier no-card wording get 30 days free with no card, starting at first sign-in, and then choose whether to pay. There is no automatic charge.',
+    lifetimeException: 'Members whose accounts were already active before paid membership launched, and accounts the founder has personally gifted, keep Credential and Practice free for life. Requesting a guide or giving an email address for a resource, or an account that was created but never active before launch, does not qualify. People who signed up under the earlier no-card wording get 30 days free with no card, starting at first sign-in, and then choose whether to pay. There is no automatic charge.',
     foundingPractice: FOUNDING_PRACTICE,
     practiceTrial: `${FOUNDING_PRACTICE} Early bird and standard Credential members receive a separate 30 day Practice trial when their first annual payment is confirmed. It ends without an added charge, and continuing Practice requires an explicit purchase. Early bird and standard members who want Practice after the trial can contact support@credentialdomd.com to review options; no change or charge will occur without their agreement. The paid Credential membership continues, and existing Practice records remain available to read and export.`,
+    // A guide form only ever requests a guide (guide_request, 20261120220000).
     guideCapture: Object.freeze({
       purpose: 'requested-guide',
       submitLabel: 'Email me the guide',
-      showWaitlistChoice: !enabled,
-      forceGuideOnly: enabled,
       signupIsSeparateNavigation: enabled,
       signupHref,
       note: enabled
         ? 'This form requests one guide. It does not create an account, start a membership or charge you. Membership signup is a separate step.'
-        : 'This form requests one guide. Joining the invitation list is a separate, optional choice.',
+        : 'This form requests one guide. It does not create an account, start a membership or charge you.',
     }),
   });
 }

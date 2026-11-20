@@ -238,10 +238,10 @@ test('signup notifier SQL on PostgreSQL: member replies only, money events, miss
     fs.chmodSync(opsDir, 0o700);
   });
 
-  await t.test('timed rows tile (since, now]: a row at a run\'s start is reported once, a failed attempt 3 minutes later, never skipped', async () => {
+  await t.test('timed rows tile (since, now]: a row at a run\'s start is reported once; waitlist attempts are no longer read', async () => {
     // Before this change: no upper bound (a row written in the second a run
-    // started went out twice), and an attempt made in the 3 minutes before a
-    // run was skipped by it as too recent and by the next one as too old.
+    // started went out twice). The waitlist was retired 2026-11-20: an old
+    // waitlist_attempts row, where the table still exists, is never reported.
     await pg.sql(`insert into support_messages(id, ticket_id, author_id, body, created_at)
       values ('${id(209)}', '${TICKET}', '${MEMBER}', 'Written as a run started.', '2026-09-28T10:00:00.400Z');
       insert into waitlist_attempts(name, email, stage, created_at) values ('Synthetic Attempt', 'attempt@example.test', 'verify', '2026-09-28T09:58:00Z')`);
@@ -249,7 +249,8 @@ test('signup notifier SQL on PostgreSQL: member replies only, money events, miss
     const runs = [await window('2026-09-28T09:50:00Z', '2026-09-28T10:00:00Z'), await window('2026-09-28T10:00:00Z', '2026-09-28T10:10:00Z'),
       await window('2026-09-28T10:10:00Z', '2026-09-28T10:20:00Z')];
     assert.deepEqual(runs.map(r => lines(r, 'TICKET REPLY').length), [0, 1, 0], 'the boundary reply, once');
-    assert.deepEqual(runs.map(r => lines(r, 'FAILED ATTEMPT').map(a => a.email)), [[], ['attempt@example.test'], []], 'the attempt, once, after 3 minutes');
+    assert.deepEqual(runs.map(r => lines(r, 'FAILED ATTEMPT').length), [0, 0, 0], 'no failed waitlist attempt is reported');
+    assert.doesNotMatch(py(['query', '--since', '2026-09-28T09:50:00Z', '--present', '']), /waitlist_attempts/);
   });
 
   await t.test('an optional table whose column was renamed is skipped and named; signups, tickets and replies still go out', async () => {
@@ -593,7 +594,7 @@ test('the text: each texted kind gets its line, every other kind is handed over,
   const TEXTED = ['waitlist', 'guide only', 'founding', 'app profile', 'BETA JOINED', 'CHECKOUT STARTED', 'PAID',
     'LIFETIME GIFT CLAIMED', 'REFUND NEEDS SUPPORT', 'REFUND UNFINISHED'];
   // Every kind the activity query returns (signup-notify.py query_sql).
-  const QUERY_KINDS = ['waitlist', 'guide only', 'founding', 'app profile', 'FAILED ATTEMPT', 'TICKET', 'TICKET REPLY', 'FIXED BY ITSELF', 'FIXED',
+  const QUERY_KINDS = ['waitlist', 'guide only', 'founding', 'app profile', 'TICKET', 'TICKET REPLY', 'FIXED BY ITSELF', 'FIXED',
     'BETA JOINED', 'INVITE SENT', 'FEEDBACK', 'CHECKOUT STARTED', 'PAID', 'SUBSCRIPTION ACTIVE', 'LIFETIME GIFT CLAIMED', 'INVITE FAILED',
     'INVITE UNCONFIRMED', 'REFUND NEEDS SUPPORT', 'REFUND UNFINISHED'];
   const source = fs.readFileSync(PY, 'utf8');
