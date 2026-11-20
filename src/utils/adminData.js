@@ -10,8 +10,6 @@ export const ADMIN_SOURCES = {
   feedback: { table: 'admin_feedback_recent', label: 'Legacy feedback', order: 'created_at', size: 50 },
   signups: { table: 'admin_signups_daily', label: 'Account creation days', order: 'day', size: 100, daily: true },
   visits: { table: 'admin_visits_daily', label: 'Traffic days', order: 'day', size: 100, daily: true },
-  waitlist: { table: 'early_access_leads', label: 'Waitlist', order: 'created_at', size: 500, columns: 'id,name,email,source,note,status,invited_at,created_at,waitlist,guide_sent_at,guide_attempts' },
-  attempts: { table: 'waitlist_attempts', label: 'Signup attempts', order: 'created_at', size: 200, columns: 'id,name,email,stage,created_at' },
   fields: { table: 'field_proposals', label: 'Field proposals', order: 'created_at', size: 200 },
   users: { table: 'profiles', label: 'Account records', order: 'created_at', size: 500, columns: 'id,name,email,auth_user_id,access_status,last_seen_at,created_at,degree_type,primary_state,npi,founding_number,is_founding_member,setup_state,deleted_at,updated_at' },
   invites: { table: 'beta_access', label: 'Invitations', order: 'created_at', size: 500 },
@@ -26,7 +24,7 @@ export const ADMIN_SOURCES = {
 export const ADMIN_GROUPS = [
   { id: 'reports', label: 'Home', sections: ['reports'] },
   { id: 'inbox', label: 'Inbox', sections: ['tickets', 'messages'] },
-  { id: 'people', label: 'People', sections: ['users', 'waitlist'] },
+  { id: 'people', label: 'People', sections: ['users'] },
   { id: 'activity', label: 'Activity', sections: ['signups', 'errors'] },
   { id: 'tools', label: 'Tools', sections: ['invite', 'gift', 'mailbox', 'emails', 'ai', 'preview', 'audit', 'fields'] },
 ];
@@ -40,7 +38,7 @@ export function adminGroupOf(id) {
 export const ADMIN_TAB_SOURCES = {
   reports: [],
   inbox: ['tickets', 'feedback', 'messages', 'users'],
-  people: ['users', 'invites', 'waitlist', 'attempts'],
+  people: ['users', 'invites'],
   activity: ['visits', 'signups', 'errors', 'users'],
   tools: ['fields', 'users'],
 };
@@ -139,7 +137,7 @@ export function isFoundingAccount(user, facts) {
 /**
  * Which section of Admin > Accounts a profile belongs in. Everyone listed
  * there signed in with an emailed code; a guide request alone never makes a
- * profile (guide-only people are on the Waitlist tab).
+ * profile.
  *   paying: an active paid membership.
  *   free:   lifetime access, or a beta grant that has not ended.
  *   unpaid: signed in, no paid membership and no free access.
@@ -189,8 +187,8 @@ export function accountMembershipNote(user, facts, now = Date.now()) {
 }
 
 /**
- * The tab-label counts (unread replies, new errors, waiting leads, pending
- * fields) without loading any list. The seen stamps the client just wrote are
+ * The tab-label counts (unread replies, new errors, pending fields)
+ * without loading any list. The seen stamps the client just wrote are
  * passed along so a tab opened a moment ago does not read as unread while
  * that settings write syncs; the server uses the later of the two.
  *

@@ -25,9 +25,9 @@ test('exactly three dedicated pages present one reviewed video, unique metadata 
     assert.ok(page.html.includes(`Written guide reviewed ${article.updatedAt}`));
     assert.ok(page.html.includes('Synthetic data; no live messages or payments.'));
     assert.match(page.html, /<track kind="captions"/);
-    assert.match(page.html, /Billing is not open/);
-    assert.match(page.html, /card is required at future paid checkout/);
-    assert.match(page.html, /href="\/#join"/);
+    assert.match(page.html, /Founding Credential is \$99\/year while Founder spots last/);
+    assert.match(page.html, /card at checkout/);
+    assert.match(page.html, /href="\/app\/"/);
     // The https redirect is the one script a watch page carries.
     assert.equal(httpsRedirectProblem(page.html), null);
     assert.doesNotMatch(page.html.replace(HTTPS_REDIRECT_SCRIPT, ''), /<script\b|\bautoplay\b|<iframe\b|VideoObject|uploadDate/);

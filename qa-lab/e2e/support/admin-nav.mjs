@@ -4,7 +4,7 @@
 export const ADMIN_SECTIONS = {
   Home: ['Home'], 'Overview & reports': ['Home'],
   Inbox: ['Inbox'], Tickets: ['Inbox'], Messages: ['Inbox'],
-  People: ['People'], Accounts: ['People'], Waitlist: ['People'],
+  People: ['People'], Accounts: ['People'],
   Activity: ['Activity'], Errors: ['Activity'], 'Traffic history': ['Activity'],
   Tools: ['Tools'],
   'Invite to join': ['Tools', 'Invite to join'],

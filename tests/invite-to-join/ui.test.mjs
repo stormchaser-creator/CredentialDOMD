@@ -173,26 +173,25 @@ test('a recent list that cannot load says so, and never reads like a failed send
 });
 
 test('the dialog version is prefilled and does not load the recent list', async () => {
-  const v = await mount({}, { embedded: true, initialName: 'Waitlist Person', initialEmail: 'lead@example.com' });
+  const v = await mount({}, { embedded: true, initialName: 'Invited Person', initialEmail: 'lead@example.com' });
   assert.deepEqual(v.calls, []);
   assert.equal(v.input('Email address to invite').props.value, 'lead@example.com');
-  assert.equal(v.input('Name (optional)').props.value, 'Waitlist Person');
+  assert.equal(v.input('Name (optional)').props.value, 'Invited Person');
   await v.preview();
-  assert.deepEqual(plain(v.calls), [['preview', { email: 'lead@example.com', name: 'Waitlist Person' }]]);
+  assert.deepEqual(plain(v.calls), [['preview', { email: 'lead@example.com', name: 'Invited Person' }]]);
 });
 
-test('Admin wires Invite to join into Tools, invitation rows and Waitlist, and leaves the lifetime gift untouched', async () => {
+test('Admin wires Invite to join into Tools and invitation rows, and leaves the lifetime gift untouched', async () => {
   const admin = await readFile(new URL('../../src/components/pages/AdminDashboard.jsx', import.meta.url), 'utf8');
-  const users = admin.slice(admin.indexOf('function UsersPanel('), admin.indexOf('function WaitlistList('));
-  const waitlist = admin.slice(admin.indexOf('function WaitlistList('));
+  const users = admin.slice(admin.indexOf('function UsersPanel('), admin.indexOf('function FieldProposals('));
   // The standalone Invite to join and the lifetime gift moved from the top of People to Tools (2026-11-20).
   const tools = admin.slice(admin.indexOf('{tab === "tools" && ('), admin.indexOf('aria-label="List coverage"'));
   assert.match(tools, /tool\("invite", "Invite to join", [^\n]*<AdminInviteToJoin bare \/>\)\}\n\s*\{tool\("gift", "Gift lifetime access by email", [^\n]*<AdminLifetimeGift bare \/>\)\}/);
   assert.doesNotMatch(users, /<AdminLifetimeGift|<AdminInviteToJoin bare|<AdminMailboxRepair/);
   assert.match(users, /chip\("Invite to join", T\.accent, \(\) => setJoinTarget\(\{ name: inv\.name \|\| "", email: inv\.email \}\), false\)/);
   assert.match(users, /<AdminInviteToJoin key=\{joinTarget\.email\} embedded initialName=\{joinTarget\.name\} initialEmail=\{joinTarget\.email\} \/>/);
-  assert.match(waitlist, />Invite to join<\/button>/);
-  assert.match(waitlist, /<AdminInviteToJoin key=\{joinTarget\.email\} embedded/);
+  // The waitlist and its Invite to join button were retired 2026-11-20.
+  assert.doesNotMatch(admin, /WaitlistList|waitlist_attempts/);
   assert.doesNotMatch(admin, /send-invite|sendInvite|Re-send email|"Re-invite"|Invite a physician/);
   const gift = await readFile(new URL('../../src/components/pages/AdminLifetimeGift.jsx', import.meta.url), 'utf8');
   assert.match(gift, /Gift lifetime access by email/);

@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { edgeErrorMessage } from "../../utils/edgeError";
-import { copyToClipboard } from "../../utils/helpers";
 import { useApp } from "../../context/AppContext";
 import { supabase } from "../../lib/supabase";
 import { useIsAdmin } from "../../lib/admin";
@@ -16,8 +15,6 @@ import { Modal, ScreenshotAttach } from "../shared";
 import { adminButtonStyle } from "../shared/adminButton";
 import { foundingText } from "../../utils/founding";
 import { setupProgressSummary } from "../../utils/setupTasks";
-import { leadNoteLabel } from "../../utils/adminLabels";
-import { waitlistView, leadState } from "../../utils/adminWaitlist";
 import { attachmentsPayload, linksFor, ticketAttachmentShortfall } from "../../utils/ticketAttachments";
 import TicketAttachments from "../shared/TicketAttachments";
 import { loadAdminSupportThread } from "../../utils/adminSupportThread";
@@ -57,8 +54,6 @@ function AdminDashboardContent() {
   const [feedback, setFeedback] = useState([]);
   const [signups, setSignups] = useState([]);
   const [visits, setVisits] = useState([]);
-  const [waitlist, setWaitlist] = useState([]);
-  const [attempts, setAttempts] = useState([]);
   const [fields, setFields] = useState([]);
   const [users, setUsers] = useState([]);       // profiles directory (admin read)
   const [invites, setInvites] = useState([]);   // beta_access allowlist
@@ -320,7 +315,7 @@ function AdminDashboardContent() {
     const keys = adminTabSources(tab, { showArchived });
     const readFor = `${tab}|${showArchived}|${reloadKey}`;
     const setters = { tickets: setTickets, archivedTickets: setArchivedRows, feedback: setFeedback, signups: setSignups, visits: setVisits,
-      waitlist: setWaitlist, attempts: setAttempts, fields: setFields, users: setUsers,
+      fields: setFields, users: setUsers,
       invites: setInvites, errors: setErrors, messages: setMessages };
     setLoading(keys.length > 0); setError("");
     Promise.all(keys.map(key => readAdminSource(supabase, key, rowLimits[key]))).then(results => {
@@ -349,8 +344,8 @@ function AdminDashboardContent() {
     return () => { cancelled = true; };
   }, [isAdmin, reloadKey, tab, showArchived]);
 
-  // Counts for the tab labels: unread physician replies, new error reports,
-  // people waiting on the waitlist and field proposals to review. Read on
+  // Counts for the tab labels: unread physician replies, new error reports
+  // and field proposals to review. Read on
   // mount and whenever a tab is opened, without loading any list, so a reply
   // to a direct message shows up here before its thread is opened.
   const [attention, setAttention] = useState(null);
@@ -359,7 +354,7 @@ function AdminDashboardContent() {
   // The stamp from before Messages was opened, so the rows that brought a new
   // reply can still be marked after opening the tab moves the stamp to now.
   const [repliesSince, setRepliesSince] = useState(null);
-  // A Waitlist or Fields action changes a count without changing the tab:
+  // A Fields action changes a count without changing the tab:
   // re-read only the counts, not the whole section.
   const [countsKey, setCountsKey] = useState(0);
   const refreshCounts = () => setCountsKey(k => k + 1);
@@ -404,7 +399,7 @@ function AdminDashboardContent() {
   // plain tab tap opens the group unfiltered, so People never silently hides
   // pending accounts after an earlier "Active accounts" number.
   const selectTab = (id) => { setTicketPreset({}); setAccountPreset("all"); setShowArchived(false); openTab(id); };
-  // Home numbers name a section (tickets, users, waitlist, fields, ...); it
+  // Home numbers name a section (tickets, users, fields, ...); it
   // opens in its group, with the same filters the Overview cards applied.
   const navigateReport = (section, filters = {}) => { setTicketPreset(filters); setAccountPreset(filters.access || "all"); setShowArchived(false); openTab(adminGroupOf(section), section); };
   const toggleTool = (id) => setOpenTools(previous => { const next = new Set(previous); if (next.has(id)) next.delete(id); else next.add(id); return next; });
@@ -419,8 +414,7 @@ function AdminDashboardContent() {
     { id: "reports", label: "Home" },
     attention?.error ? { id: "inbox", ...countFailed("Inbox", "Unread count") }
       : { id: "inbox", ...counted("Inbox", counts?.unread_replies, `${counts?.unread_replies} unread message replies`) },
-    attention?.error ? { id: "people", ...countFailed("People", "Waiting count") }
-      : { id: "people", ...counted("People", counts?.waitlist_waiting, `${counts?.waitlist_waiting} waiting on the waitlist`) },
+    { id: "people", label: "People" },
     attention?.error ? { id: "activity", ...countFailed("Activity", "New error count") }
       : { id: "activity", ...counted("Activity", counts?.new_errors_since_seen, `${counts?.new_errors_since_seen} new error reports`) },
     attention?.error ? { id: "tools", ...countFailed("Tools", "Pending field count") }
@@ -535,10 +529,7 @@ function AdminDashboardContent() {
       )}
       {tab === "people" && listReady && (
         <UsersPanel key={accountPreset} initialAccess={accountPreset} myProfileId={userIdRef.current} users={users} setUsers={setUsers} invites={invites} T={T} onRefresh={() => setReloadKey(k => k + 1)}
-          heading={subheading("users", "Accounts")}>
-          {subheading("waitlist", "Waitlist")}
-          <WaitlistList rows={waitlist} setRows={setWaitlist} attempts={attempts} setAttempts={setAttempts} users={users} invites={invites} T={T} onChanged={refreshCounts} />
-        </UsersPanel>
+          heading={subheading("users", "Accounts")} />
       )}
       {tab === "tools" && (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
@@ -907,7 +898,7 @@ function accessColor(st) {
  * Users: the account directory plus the invite allowlist. Two people can be
  * approved today; this is where that happens and where it can be undone.
  */
-function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invites, T, onRefresh, heading = null, children = null }) {
+function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invites, T, onRefresh, heading = null }) {
   const [msg, setMsg] = useState("");
   // The invitation row "Invite to join" opened, prefilled in a dialog.
   const [joinTarget, setJoinTarget] = useState(null);
@@ -1032,7 +1023,7 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
       {heading}
       {msg && <div role="status" aria-live="polite" style={{ fontSize: 12, color: T.textMuted, margin: "0 0 8px" }}>{msg}</div>}
       <div style={{ fontSize: 12, color: T.textMuted, margin: "0 0 8px", lineHeight: 1.5 }}>
-        Only people who have signed in. Guide-only requests are on the waitlist.
+        Only people who have signed in. A guide request alone never makes an account.
         {groups && ` ${groups.paying.length} paying, ${groups.free.length} free access, ${groups.unpaid.length} signed in without paying${groups.closed.length ? `, ${groups.closed.length} closed` : ""}.`}
         {" "}Founding members: {foundingCount}
       </div>
@@ -1052,8 +1043,6 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
       )) : shown.map(renderAccount)}
       {!shown.length && <Empty T={T} text="No loaded accounts match these filters. Load more records below to widen the search." />}
       {grantsError && <div role="status" style={{ fontSize: 12, color: T.textMuted, marginTop: 6 }}>Support access grants could not be loaded, so View as member is off. Refresh to try again.</div>}
-
-      {children}
 
       {/* Only invitations still waiting on someone. Once they sign in they
           are an account above, and listing them twice read as a duplicate. */}
@@ -1095,207 +1084,6 @@ function UsersPanel({ initialAccess = "all", myProfileId, users, setUsers, invit
       {lifetimeTarget && <AdminLifetimeAccess target={lifetimeTarget} onClose={() => setLifetimeTarget(null)} onGranted={result => {
         setUsers(rows => rows.map(row => row.id === result.target.profileId && row.auth_user_id === result.target.clerkSubject ? { ...row, access_status: "active" } : row));
       }} />}
-    </div>
-  );
-}
-
-// One badge shape for the whole waitlist row, so a badge can never win width
-// from the email beside it.
-const badge = (color, bg) => ({
-  fontSize: 10, fontWeight: 800, color, backgroundColor: bg,
-  padding: "2px 7px", borderRadius: 8, textTransform: "uppercase",
-  whiteSpace: "nowrap", flexShrink: 0,
-});
-
-// Why an Add was refused, in words the owner can act on.
-function addLeadProblem(error) {
-  if (error?.code === "23505") return "that address is already on the list (check the already-joined or guide-only requests)";
-  if (error?.code === "23514") return "the email address or name is not valid";
-  return error?.message || "the server did not confirm it";
-}
-
-function WaitlistList({ rows, setRows, attempts, setAttempts, users, invites, T, onChanged = () => {} }) {
-  // Full back-end control: see everyone, add someone by hand (a physician
-  // whose network ate the form), remove test rows, and review attempts
-  // that never became signups.
-  const [addName, setAddName] = useState("");
-  const [addEmail, setAddEmail] = useState("");
-  const [busy, setBusy] = useState(false);
-  const addLead = async () => {
-    const email = addEmail.trim(), name = addName.trim();
-    if (!email || !name) return;
-    setBusy(true); setInviteMsg("");
-    const { data, error } = await supabase.from("early_access_leads")
-      .insert({ name, email, source: "admin-manual", waitlist: true }).select().single();
-    setBusy(false);
-    // Refused (already on the list, malformed) or unconfirmed: say why and
-    // keep what was typed. "Could not" picks up the red status styling.
-    if (error || !data) { setInviteMsg(`Could not add ${email}: ${addLeadProblem(error)}.`); return; }
-    setRows(rs => [data, ...rs]); setAddName(""); setAddEmail("");
-    onChanged();
-  };
-  // The lead "Invite to join" opened, prefilled in a dialog.
-  const [joinTarget, setJoinTarget] = useState(null);
-  const [inviteMsg, setInviteMsg] = useState("");
-  // Remove a row only once the server confirms exactly one row deleted. A
-  // delete that RLS refuses returns success with zero rows, so the count is
-  // the check, not just the error.
-  const removeLead = async (r) => {
-    const from = r.waitlist === false ? "the guide-request list" : "the waitlist";
-    if (!window.confirm(`Remove ${r.email} from ${from}?`)) return;
-    setInviteMsg("");
-    const { data, error } = await supabase.from("early_access_leads").delete().eq("id", r.id).select("id");
-    if (error || data?.length !== 1) { setInviteMsg(`Could not remove ${r.email}: ${error?.message || "the server did not confirm it"}. Refresh and try again.`); return; }
-    setRows(rs => rs.filter(x => x.id !== r.id));
-    onChanged();
-  };
-  const removeAttempt = async (a) => {
-    setInviteMsg("");
-    const { data, error } = await supabase.from("waitlist_attempts").delete().eq("id", a.id).select("id");
-    if (error || data?.length !== 1) { setInviteMsg(`Could not dismiss ${a.email}: ${error?.message || "the server did not confirm it"}. Refresh and try again.`); return; }
-    setAttempts(as2 => as2.filter(x => x.id !== a.id));
-  };
-  const [showJoined, setShowJoined] = useState(false);
-  const [showGuideOnly, setShowGuideOnly] = useState(false);
-  const view = waitlistView(rows, users || [], invites || [], { showJoined, showGuideOnly });
-  const { activeEmails, guideOnly, joined: alreadyJoined, waiting, visible: visibleRows } = view;
-  const leadEmails = new Set(rows.map(r => (r.email || "").toLowerCase()));
-  const orphanAttempts = attempts.filter(a => !leadEmails.has((a.email || "").toLowerCase()));
-  const copyAll = async () => {
-    setInviteMsg("");
-    const text = view.contactable.map(r => `${r.name || ""} <${r.email}>`).join(", ");
-    const copied = await copyToClipboard(text);
-    setInviteMsg(copied ? "Waiting emails copied." : "Could not copy the emails. Select the addresses and copy them manually.");
-  };
-  return (
-    <div>
-      <div style={{
-        display: "flex", alignItems: "center", justifyContent: "space-between",
-        backgroundColor: T.card, border: `2px solid ${T.accent}`,
-        borderRadius: 12, padding: "12px 16px", marginBottom: 12,
-      }}>
-        <div>
-          <div style={{ fontSize: 26, fontWeight: 800, color: T.accent }}>{waiting.length}</div>
-          <div style={{ fontSize: 11, color: T.textMuted }}>
-            waiting to join · {alreadyJoined.length} already have access · {guideOnly.length} guide-only requests
-          </div>
-          <div role="status" aria-live="polite" style={{ fontSize: 12, marginTop: 4, color: inviteMsg.startsWith("Could not") ? "#ef4444" : T.textMuted }}>{inviteMsg}</div>
-        </div>
-        <button onClick={copyAll} disabled={!view.contactable.length} style={{
-          padding: "8px 14px", borderRadius: 8, border: `1px solid ${T.border}`,
-          backgroundColor: "transparent", color: T.text, fontSize: 12, fontWeight: 700, cursor: "pointer",
-        }}>Copy waiting emails</button>
-      </div>
-
-      {(alreadyJoined.length > 0 || guideOnly.length > 0) && (
-        <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
-          {alreadyJoined.length > 0 && (
-            <button onClick={() => setShowJoined(s => !s)} style={{
-              padding: "6px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
-              backgroundColor: "transparent", color: T.textMuted, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
-            }}>{showJoined ? "Hide" : "Show"} already-joined leads ({alreadyJoined.length})</button>
-          )}
-          {guideOnly.length > 0 && (
-            <button onClick={() => setShowGuideOnly(s => !s)} style={{
-              padding: "6px 10px", borderRadius: 8, border: `1px solid ${T.border}`,
-              backgroundColor: "transparent", color: T.textMuted, fontSize: 11.5, fontWeight: 700, cursor: "pointer",
-            }}>{showGuideOnly ? "Hide" : "Show"} guide-only requests ({guideOnly.length})</button>
-          )}
-        </div>
-      )}
-
-      {/* Manual add — for signups that arrive by text, call, or hallway */}
-      <div style={{ display: "flex", gap: 6, marginBottom: 12 }}>
-        <input aria-label="Waitlist name" value={addName} onChange={e => setAddName(e.target.value)} placeholder="Waitlist name"
-          style={{ flex: 1, minWidth: 0, padding: "9px 11px", borderRadius: 9, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, ...FORM_CONTROL }} />
-        <input aria-label="Email" value={addEmail} onChange={e => setAddEmail(e.target.value)} placeholder="email@domain.com" type="email"
-          style={{ flex: 1.2, minWidth: 0, padding: "9px 11px", borderRadius: 9, border: `1px solid ${T.border}`, backgroundColor: T.input, color: T.text, ...FORM_CONTROL }} />
-        <button onClick={addLead} disabled={busy || !addName.trim() || !addEmail.trim()} style={{
-          padding: "9px 14px", borderRadius: 9, border: "none", backgroundColor: T.accent, color: "#fff",
-          fontSize: 16, fontWeight: 800, cursor: "pointer", opacity: busy ? 0.6 : 1, flexShrink: 0,
-        }}>Add</button>
-      </div>
-
-      {visibleRows.length === 0 && <Empty T={T} text="No pending waitlist signups in this view." />}
-      <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-        {visibleRows.map((r) => (
-          <div key={r.id || r.email + r.created_at} style={{
-            backgroundColor: T.card, border: `1px solid ${T.border}`,
-            borderRadius: 10, padding: "10px 12px",
-          }}>
-            {/* The email is the row. It used to share one non-wrapping flex
-                line with up to four uppercase badges, and since a guide
-                request carries no name the email WAS the heading: flex gave
-                the badges their width and squeezed the address down to a few
-                characters. Now the address gets its own full-width line, and
-                the badges wrap underneath it. */}
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap" }}>
-              <div style={{ minWidth: 0, flex: "1 1 240px" }}>
-                {r.name && (
-                  <div style={{ fontSize: 14, fontWeight: 700, color: T.text, overflowWrap: "anywhere" }}>{r.name}</div>
-                )}
-                <div style={{
-                  fontSize: r.name ? 12.5 : 14,
-                  fontWeight: r.name ? 500 : 700,
-                  color: r.name ? T.textMuted : T.text,
-                  marginTop: r.name ? 2 : 0,
-                  overflowWrap: "anywhere",
-                }}>{r.email}</div>
-                <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginTop: 5 }}>
-                  {/* Provenance, not a problem: amber is reserved for failed
-                      attempts, so a lead who came off a state guide page and
-                      ticked "add me" reads as informational. */}
-                  {r.note && <span style={badge(T.info, T.infoDim)}>{leadNoteLabel(r.note)}{/^guide(?:-email)?(?: |$)/.test(r.note) ? (r.guide_sent_at ? " · sent" : r.guide_attempts >= 5 ? " · delivery failed" : " · pending") : ""}</span>}
-                  {r.source === "admin-manual" && <span style={badge(T.accent, T.accentGlow)}>added by you</span>}
-                  {r.waitlist === false && <span style={badge(T.textMuted, T.neutralDim)}>guide only</span>}
-                  {activeEmails.has((r.email || "").toLowerCase()) && (
-                    <span style={badge("#10b981", "rgba(16,185,129,0.14)")}>already a user</span>
-                  )}
-                </div>
-              </div>
-              <div style={{ display: "flex", alignItems: "center", gap: 8, flexShrink: 0, flexWrap: "wrap" }}>
-                {r.waitlist === true && <span style={badge(T.accent, T.accentGlow)}>{leadState(r, view)}</span>}
-                <span style={{ fontSize: 11, color: T.textMuted }}>{new Date(r.created_at).toLocaleDateString()}</span>
-                {r.waitlist === true && !activeEmails.has((r.email || "").trim().toLowerCase()) && (
-                  <button type="button" onClick={() => { setInviteMsg(""); setJoinTarget({ name: r.name || "", email: r.email }); }} style={{
-                    padding: "5px 9px", borderRadius: 7, border: "none", backgroundColor: T.accent, color: "#fff", fontSize: 11, fontWeight: 800, cursor: "pointer",
-                  }}>Invite to join</button>
-                )}
-                <button onClick={() => removeLead(r)} style={{
-                  padding: "5px 9px", borderRadius: 7, border: "none", backgroundColor: T.dangerDim || "rgba(239,68,68,0.12)",
-                  color: T.danger || "#ef4444", fontSize: 11, fontWeight: 800, cursor: "pointer",
-                }}>Remove</button>
-              </div>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {orphanAttempts.length > 0 && (
-        <>
-          <div style={{ fontSize: 12, fontWeight: 800, color: T.warning, textTransform: "uppercase", letterSpacing: 0.5, margin: "16px 0 6px" }}>
-            Requests that were not saved ({orphanAttempts.length})
-          </div>
-          <div style={{ fontSize: 11.5, color: T.textMuted, marginBottom: 6 }}>
-            These were not saved as a waitlist signup. Do not invite them without a real signup.
-            <details><summary style={{ cursor: "pointer" }}>Details</summary>These submissions have no saved request. A guide-form attempt does not establish waitlist consent; do not invite or add it to the waitlist without an explicit signup.</details>
-          </div>
-          {orphanAttempts.map(a => (
-            <div key={a.id} style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 8, flexWrap: "wrap", backgroundColor: T.card, border: `1px solid ${T.warning}`, borderRadius: 10, padding: "8px 12px", marginBottom: 5 }}>
-              <div style={{ minWidth: 0, flex: "1 1 220px" }}>
-                {a.name && <div style={{ fontSize: 13, fontWeight: 700, color: T.text, overflowWrap: "anywhere" }}>{a.name}</div>}
-                <div style={{ fontSize: a.name ? 12 : 13, fontWeight: a.name ? 500 : 700, color: a.name ? T.textMuted : T.text, overflowWrap: "anywhere" }}>{a.email}</div>
-                <span style={{ ...badge(T.warning, T.warningDim), display: "inline-block", marginTop: 4 }}>{a.stage === "guide" ? "guide request" : a.stage === "normal" ? "waitlist signup" : "request"}</span>
-              </div>
-              <button onClick={() => removeAttempt(a)} style={{ padding: "4px 8px", borderRadius: 7, border: "none", backgroundColor: "transparent", color: T.textDim, fontSize: 11, fontWeight: 700, cursor: "pointer", flexShrink: 0 }}>dismiss</button>
-            </div>
-          ))}
-        </>
-      )}
-      {joinTarget && <Modal open onClose={() => setJoinTarget(null)} title="Invite to join">
-        <AdminInviteToJoin key={joinTarget.email} embedded initialName={joinTarget.name} initialEmail={joinTarget.email}
-          onSent={result => setInviteMsg(`Invitation to join sent to ${result.to}.`)} />
-      </Modal>}
     </div>
   );
 }

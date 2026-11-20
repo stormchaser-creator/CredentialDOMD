@@ -92,17 +92,17 @@ test('missing migration, authorization and network failures have actionable safe
 });
 
 test('the optional attention block is validated, carried and exported; absent it reads as null', () => {
-  const attention = { unread_replies: 2, new_errors_since_seen: 5, waitlist_waiting: 11, fields_pending: 1 };
+  const attention = { unread_replies: 2, new_errors_since_seen: 5, fields_pending: 1 };
   assert.equal(normalizeAdminReport(reportFixture(), 30).attention, null);
   const report = normalizeAdminReport({ ...reportFixture(), attention: { ...attention, debug: 'private@example.invalid' } }, 30);
   assert.deepEqual(report.attention, attention);
-  for (const bad of [[], 'x', 0, { ...attention, fields_pending: -1 }, { ...attention, unread_replies: '2' }, { waitlist_waiting: 1 }]) {
+  for (const bad of [[], 'x', 0, { ...attention, fields_pending: -1 }, { ...attention, unread_replies: '2' }, { fields_pending: 1 }]) {
     assert.throws(() => normalizeAdminReport({ ...reportFixture(), attention: bad }, 30), /incomplete report/, JSON.stringify(bad));
   }
   const csv = adminReportCsv({ ...reportFixture(7), attention }, '2026-09-24T13:00:00Z');
   assert.match(csv, /"Attention","Unread message replies","","2"/);
   assert.match(csv, /"Attention","New error reports since last opened","","5"/);
-  assert.match(csv, /"Attention","Waiting on the waitlist","","11"/);
+  assert.doesNotMatch(csv, /waitlist/i);
   assert.match(csv, /"Attention","Field proposals awaiting review","","1"/);
   assert.doesNotMatch(csv, /private@example|debug/);
   assert.doesNotMatch(adminReportCsv(reportFixture(7), '2026-09-24T13:00:00Z'), /"Attention"/);

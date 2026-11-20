@@ -26,7 +26,7 @@ function listTrouble(code) {
  * exact message the server will send; Send sends exactly that. It grants no
  * access and changes no account.
  *
- * `embedded` is the Waitlist and invitation-row version inside a dialog:
+ * `embedded` is the invitation-row version inside a dialog:
  * prefilled, and without the recent list. `bare` is the Admin > Tools
  * version: the card around it carries the title and the one-line summary.
  */

@@ -14,7 +14,7 @@ import { HTTPS_REDIRECT_SCRIPT, assertHttpsRedirect } from './https-redirect.mjs
 
 const publicPages = ['index', 'locums', 'security', 'privacy', 'terms', 'help', 'cme', 'credential-access'];
 const cmeAssets = ['cme.css', 'cme.mjs'];
-const publicSiteAssets = ['support-nav.css', 'support-nav.js', 'waitlist-signup.js', 'membership-offer.js',
+const publicSiteAssets = ['support-nav.css', 'support-nav.js', 'membership-offer.js',
   // The unified home page's stylesheet and menu (2026-11-15).
   'unified.css', 'unified-menu.js'];
 const landingFonts = ['figtree.woff'];

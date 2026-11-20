@@ -12,8 +12,8 @@ test('production mode opens protected app signup without collecting a waitlist r
   assert.deepEqual(view.primaryAction, {
     kind: 'navigation', label: 'Sign up today', shortLabel: 'Sign up', href: '/app/', collectEmail: false,
   });
-  assert.equal(view.guideCapture.forceGuideOnly, true);
-  assert.equal(view.guideCapture.showWaitlistChoice, false);
+  assert.equal(view.guideCapture.purpose, 'requested-guide');
+  assert.doesNotMatch(JSON.stringify(view), /waitlist/i, 'the waitlist was retired 2026-11-20');
   // Owner, 2026-11-16: one plan while founding lasts, so there is nothing to compare.
   assert.match(view.availability, /^Founding Credential is \$99\/year while Founder spots last\. Availability is confirmed before payment; signing up does not reserve a place\./);
   assert.doesNotMatch(view.availability, /create your account|Compare the plans/i);
@@ -21,18 +21,16 @@ test('production mode opens protected app signup without collecting a waitlist r
   assert.doesNotMatch(view.availability, /Checkout is not open/);
 });
 
-test('explicit OFF fixture preserves the waitlist action and optional guide choice', () => {
+test('explicit OFF fixture has no primary action and no waitlist to send anyone to', () => {
   const off = { enabled: false, signupHref: null };
   assert.doesNotThrow(() => assertPublicLaunchReady(off));
   const view = publicLaunchPresentation(off);
-  assert.equal(view.mode, 'waitlist');
-  assert.equal(view.primaryAction.kind, 'waitlist-request');
-  assert.equal(view.primaryAction.href, '/#join');
-  assert.equal(view.primaryAction.collectEmail, true);
-  assert.equal(view.guideCapture.showWaitlistChoice, true);
-  assert.equal(view.guideCapture.forceGuideOnly, false);
+  assert.equal(view.mode, 'off');
+  assert.equal(view.primaryAction, null);
   assert.equal(view.guideCapture.signupHref, null);
+  assert.match(view.guideCapture.note, /requests one guide/);
   assert.match(view.availability, /Checkout is not open/);
+  assert.doesNotMatch(JSON.stringify(view), /waitlist|#join|invitation list/i);
 });
 
 test('an accidental flag flip cannot package a partial paid launch', () => {
@@ -49,8 +47,6 @@ test('paid preview is navigation, and guide delivery cannot imply paid or waitli
   assert.equal(view.primaryAction.kind, 'navigation');
   assert.equal(view.primaryAction.collectEmail, false);
   assert.equal(view.primaryAction.href, '/signup/');
-  assert.equal(view.guideCapture.forceGuideOnly, true);
-  assert.equal(view.guideCapture.showWaitlistChoice, false);
   assert.equal(view.guideCapture.signupIsSeparateNavigation, true);
   assert.equal(view.guideCapture.submitLabel, 'Email me the guide');
   assert.match(view.guideCapture.note, /does not create an account/);

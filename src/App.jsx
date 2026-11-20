@@ -1196,7 +1196,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
           <>
             <div style={{ marginTop: 14, fontSize: 18, fontWeight: 800 }}>CredentialDOMD is invite-only right now</div>
             <div style={{ marginTop: 8, fontSize: 14, color: T.textMuted, lineHeight: 1.5 }}>
-              You are signed in as <b style={{ color: T.text }}>{user?.email || "this account"}</b>, but that address has not been invited yet. If you received an invitation, sign in with the exact email it was sent to. Otherwise join the waitlist at credentialdomd.com and we will let you know.
+              You are signed in as <b style={{ color: T.text }}>{user?.email || "this account"}</b>, but that address has not been invited yet. If you received an invitation, sign in with the exact email it was sent to. Otherwise contact support@credentialdomd.com and we will help.
             </div>
             <button onClick={recheckAccess} style={{ marginTop: 18, padding: "10px 18px", borderRadius: 10, border: "none", backgroundColor: T.accent, color: "#fff", fontWeight: 700, cursor: "pointer" }}>Check again</button>
           </>

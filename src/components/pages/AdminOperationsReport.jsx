@@ -74,7 +74,6 @@ export default function AdminOperationsReport({ T = {}, onNavigate, children }) 
     { label: "Awaiting approval", value: report.support.waiting_approval, face: ADMIN_REPORT_FACE.approval, tab: "tickets", filters: { status: "unresolved", approval: "needs_review" } },
     { label: "Urgent open tickets", value: report.support.urgent, face: ADMIN_REPORT_FACE.urgent, tab: "tickets", filters: { status: "unresolved", priority: "urgent" } },
     ...(report.attention ? [
-      { label: "Waitlist", value: report.attention.waitlist_waiting, face: ADMIN_REPORT_FACE.waitlist_waiting, tab: "waitlist" },
       { label: "Fields to review", value: report.attention.fields_pending, face: ADMIN_REPORT_FACE.fields_pending, tab: "fields" },
       { label: "New error reports", value: report.attention.new_errors_since_seen, face: ADMIN_REPORT_FACE.new_errors, tab: "errors" },
     ] : []),
@@ -138,7 +137,7 @@ export default function AdminOperationsReport({ T = {}, onNavigate, children }) 
         {[
           ["Open tickets", "open"], ["Urgent open tickets", "urgent"], ["Awaiting approval", "approval"], ["New signups", "signups"],
           ["Account profiles", "accounts"], ["Active accounts", "active"], ["Retained error reports", "errors"],
-          ["Unread replies", "unread_replies"], ["New error reports", "new_errors"], ["Waitlist", "waitlist_waiting"], ["Fields to review", "fields_pending"],
+          ["Unread replies", "unread_replies"], ["New error reports", "new_errors"], ["Fields to review", "fields_pending"],
           ["Recorded page loads", "page_views"], ["Tickets created", "tickets"],
         ].map(([label, key]) => <p key={key}><strong>{label}.</strong> {ADMIN_REPORT_FACE[key] ? `${ADMIN_REPORT_FACE[key]} ` : ""}{ADMIN_REPORT_DEFINITIONS[key]}</p>)}
         <p>CSV includes counts, definitions and UTC timestamps. Export requires a successful report loaded within the last five minutes.</p>

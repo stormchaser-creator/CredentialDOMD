@@ -13,7 +13,6 @@ export const ADMIN_REPORT_DEFINITIONS = Object.freeze({
   errors: "Retained client error reports in the selected window. Reports are pruned after 7 days and can be cleared by administrators; older days are incomplete. Zero does not prove that no errors occurred.",
   unread_replies: "Your messages with a physician reply newer than the last time you opened Inbox (Messages).",
   new_errors: "Retained error reports newer than the last time you opened Activity (Errors).",
-  waitlist_waiting: "Waitlist signups whose email has no active account yet. Guide-only requests are not counted.",
   fields_pending: "Fields Vera proposed that are waiting for your approve or dismiss.",
 });
 
@@ -29,12 +28,11 @@ export const ADMIN_REPORT_FACE = Object.freeze({
   errors: "Client errors kept from this window. Cleared after 7 days.",
   unread_replies: "Replies since you last opened Inbox.",
   new_errors: "Errors since you last opened Activity.",
-  waitlist_waiting: "Signups with no account yet. Guide-only is not counted.",
   fields_pending: "Fields Vera proposed, waiting for you.",
   csv: "Export is a 5-minute-old or newer report, with definitions in the file.",
 });
 
-const ATTENTION_KEYS =["unread_replies", "new_errors_since_seen", "waitlist_waiting", "fields_pending"];
+const ATTENTION_KEYS = ["unread_replies", "new_errors_since_seen", "fields_pending"];
 
 /** The attention counts behind the tab labels and Overview cards, or null when absent or malformed. */
 export function normalizeAdminAttention(input) {
@@ -131,7 +129,6 @@ export function adminReportCsv(input, exportedAt = new Date().toISOString()) {
   if (report.attention) {
     add("Attention", "Unread message replies", report.attention.unread_replies, ADMIN_REPORT_DEFINITIONS.unread_replies);
     add("Attention", "New error reports since last opened", report.attention.new_errors_since_seen, ADMIN_REPORT_DEFINITIONS.new_errors);
-    add("Attention", "Waiting on the waitlist", report.attention.waitlist_waiting, ADMIN_REPORT_DEFINITIONS.waitlist_waiting);
     add("Attention", "Field proposals awaiting review", report.attention.fields_pending, ADMIN_REPORT_DEFINITIONS.fields_pending);
   }
   for (const row of report.daily) {

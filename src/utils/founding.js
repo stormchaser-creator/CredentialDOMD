@@ -6,7 +6,7 @@
  * number Postgres assigned in activation order, migration
  * 20260902g_founding_members.sql) or one who paid for a founding place
  * (profiles.is_founding_member, set from limited_founding_slots by migration
- * 20261114120000). Invites and waitlist rows never carry either.
+ * 20261114120000). Invites and guide requests never carry either.
  */
 
 /** The one emoji for founding members: badge, Settings profile, Admin. */

@@ -1583,26 +1583,23 @@
     "id": "ADMIN-003",
     "priority": "P1",
     "area": "ADMIN",
-    "name": "Admin errors, waitlist, fields and AI",
+    "name": "Admin errors, fields and AI",
     "roles": [
       "admin"
     ],
-    "where": "More > Admin tabs Errors, Waitlist, Fields, AI",
+    "where": "More > Admin tabs Errors, Fields, AI",
     "steps": [
       "Errors: open; note the count in the tab label; open one row; clear it; confirm the label count drops",
-      "Waitlist: add a QA lead; tap 'Copy waiting emails'; tap 'Invite' then 'Remove' (confirm) on the QA lead only",
       "Fields: open; if a QA proposal exists tap 'Dismiss'",
       "AI: read the shared-key status; do not remove the live key"
     ],
     "expected": "Tab counts match the DB and update after each action.",
     "server_checks": [
       "client_errors",
-      "early_access_leads / waitlist_attempts",
       "field_proposals"
     ],
     "tests": [
       "tests/admin-operations/errors.test.mjs",
-      "scripts/admin-waitlist.test.mjs",
       "tests/admin-operations/dashboard-attention.test.mjs"
     ]
   },
@@ -3408,7 +3405,7 @@
     ],
     "tests": [
       "tests/hook-secret-vault.test.mjs",
-      "tests/waitlist-signup.test.mjs"
+      "tests/state-guide-limit-copy.test.mjs"
     ]
   },
   {
@@ -3556,7 +3553,7 @@
       "Read ~/.credentialdomd-signup-notify timestamp; confirm it advances",
       "Confirm the QA signup and QA ticket from this run produced notifications (owner confirms receipt)"
     ],
-    "expected": "Job runs every 10 minutes with exit 0; the owner is told of new profiles, waitlist signups, failed attempts, tickets and replies.",
+    "expected": "Job runs every 10 minutes with exit 0; the owner is told of new profiles, guide requests, tickets and replies.",
     "tests": []
   },
   {
@@ -3917,7 +3914,7 @@
     "roles": [
       "visitor"
     ],
-    "where": "credentialdomd.com/states/<state> (54 pages from landing/state-template.html); worker /api/waitlist and /api/waitlist-attempt; cron send-guide-sweep",
+    "where": "credentialdomd.com/states/<state> (54 pages from landing/state-template.html); worker /api/guide-request (guide_request); cron send-guide-sweep",
     "steps": [
       "Open three state guides at phone and desk width",
       "Submit the hero guide form with a QA mailbox",
@@ -3928,11 +3925,11 @@
     "expected": "Pages render with the current offer; a valid submission records a lead and the guide email arrives once; invalid input is refused inline; the rate limit answers 429 without a broken page; CTA reaches /app/.",
     "server_checks": [
       "early_access_leads row with guide note",
-      "waitlist_attempts row",
       "send-guide function via send-guide-sweep"
     ],
     "tests": [
-      "tests/waitlist-signup.test.mjs",
+      "tests/state-guide-limit-copy.test.mjs",
+      "tests/retire-waitlist-sql.test.mjs",
       "tests/landing-beacon.test.mjs",
       "tests/hook-secret-vault.test.mjs",
       "scripts/help-content.test.mjs"

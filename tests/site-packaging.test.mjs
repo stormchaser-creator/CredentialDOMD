@@ -40,7 +40,7 @@ async function siteFixture(t) {
   await writeFile(resolve(root, "landing/states/example.html"), `<!doctype html><meta charset="utf-8">${HTTPS_REDIRECT_SCRIPT}<title>Synthetic state guide</title>`);
   await Promise.all([
     ...pages.map(page => cp(resolve(sourceRoot, `landing/${page}.html`), resolve(root, `landing/${page}.html`))),
-    ...["robots.txt", "sitemap.xml", "organization-logo.svg", "support-nav.css", "support-nav.js", "waitlist-signup.js", "membership-offer.js", "unified.css", "unified-menu.js", "credential-access", "knowledge", "cme-assets"].map(path => cp(resolve(sourceRoot, "public", path), resolve(root, "public", path), { recursive: true })),
+    ...["robots.txt", "sitemap.xml", "organization-logo.svg", "support-nav.css", "support-nav.js", "membership-offer.js", "unified.css", "unified-menu.js", "credential-access", "knowledge", "cme-assets"].map(path => cp(resolve(sourceRoot, "public", path), resolve(root, "public", path), { recursive: true })),
     ...["root-sw-retirement.js", "build-credential-portal.mjs"].map(path => cp(resolve(sourceRoot, "scripts", path), resolve(root, "scripts", path))),
     cp(resolve(sourceRoot, "package.json"), resolve(root, "package.json")),
     cp(resolve(sourceRoot, "landing/states/states-data.json"), resolve(root, "landing/states/states-data.json")),
@@ -122,14 +122,13 @@ test("site package keeps public help/CME, private routes, declared assets and di
   // The Organization logo in the structured data of / and /app/ is the navy
   // mark (a05db20); the retired teal badge (#10b981) must not be published again.
   assert.doesNotMatch(await read(resolve(sourceRoot, "public/organization-logo.svg")), /10b981/i);
-  for (const file of ["support-nav.css", "support-nav.js", "waitlist-signup.js", "membership-offer.js"]) {
+  for (const file of ["support-nav.css", "support-nav.js", "membership-offer.js"]) {
     assert.equal(await read(resolve(output, file)), await read(resolve(root, "public", file)));
   }
   for (const page of ["index.html", "locums.html"]) {
     const html = await read(resolve(output, page));
-    // The unified home page (2026-11-15) has no waitlist form, so no controller.
-    assert.equal((html.match(/<script type="module" src="\/waitlist-signup\.js"><\/script>/g) || []).length, page === "index.html" ? 0 : 1);
-    assert.doesNotMatch(html, /var postSignup =|postSignup\('\/api\/waitlist'/);
+    // No page has a waitlist form or its controller (retired 2026-11-20).
+    assert.doesNotMatch(html, /waitlist-signup\.js|var postSignup =|postSignup\('\/api\/waitlist'/);
   }
   for (const file of ["unified.css", "unified-menu.js"]) assert.equal(await read(resolve(output, file)), await read(resolve(root, "public", file)));
   assert.deepEqual(await readFile(resolve(output, "fonts/figtree.woff")), await readFile(resolve(root, "landing/fonts/figtree.woff")));
@@ -356,8 +355,8 @@ test('paid launch refuses incomplete URL, stale legal content, missing widgets o
   await writeFile(termsPath, terms);
   const guidePath = resolve(root, 'landing/states/ohio.html');
   const guide = await read(guidePath);
-  await writeFile(guidePath, guide.replace(/<!-- public-launch:guide-consent -->[\s\S]*?<!-- \/public-launch:guide-consent -->/, ''));
-  await assert.rejects(packageSite(root, undefined, paid, publicConfig), /Incomplete state-guides migration: guide-consent/);
+  await writeFile(guidePath, guide.replace(/<!-- public-launch:guide-note -->[\s\S]*?<!-- \/public-launch:guide-note -->/, ''));
+  await assert.rejects(packageSite(root, undefined, paid, publicConfig), /Incomplete state-guides migration: guide-note/);
   await preserved();
   await rm(guidePath);
   await assert.rejects(packageSite(root, undefined, paid, publicConfig), /all 51 state guides/);
@@ -378,16 +377,16 @@ test("stale CME page or missing required CME asset preserves the previous packag
   assert.equal(await read(resolve(root, "site-dist/sentinel.txt")), "previous reviewed artifact");
 });
 
-test("missing invitation controller preserves the previous package", async t => {
+// The waitlist was retired 2026-11-20: its form controller is not published
+// in either mode, and no packaged page loads it or posts a waitlist request.
+test("no waitlist controller or waitlist request is packaged", async t => {
   const root = await siteFixture(t);
   const output = await packageSite(root, undefined, BASELINE_LAUNCH_MODE);
-  const previous = await read(resolve(output, "waitlist-signup.js"));
-  await writeFile(resolve(output, "previous-artifact-sentinel.txt"), "previous reviewed artifact");
-  const missingPath = resolve(root, "public/waitlist-signup.js");
-  await rm(missingPath);
-  await assert.rejects(packageSite(root, undefined, BASELINE_LAUNCH_MODE), { code: "ENOENT", path: missingPath });
-  assert.equal(await read(resolve(output, "waitlist-signup.js")), previous);
-  assert.equal(await read(resolve(output, "previous-artifact-sentinel.txt")), "previous reviewed artifact");
+  const names = await readdir(output, { recursive: true });
+  assert.ok(!names.includes("waitlist-signup.js"));
+  for (const name of names.filter(n => n.endsWith(".html"))) {
+    assert.doesNotMatch(await read(resolve(output, name)), /waitlist-signup\.js|\/api\/waitlist|wl-form|name="waitlist"|Join the waitlist/i, name);
+  }
 });
 
 test("missing public-offer controller preserves the previous package", async t => {

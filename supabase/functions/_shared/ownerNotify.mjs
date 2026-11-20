@@ -17,7 +17,7 @@ export const OWNER_NOTIFY_TO = 'stormchaser@elryx.com';
 export const OWNER_NOTIFY_FROM = 'CredentialDOMD Notifier <whit@credentialdomd.com>';
 
 // As signup-notify.py (SIGNUP_KINDS, ACTIVITY_PREFIXES, MONEY), in its order.
-const SIGNUP_KINDS = ['waitlist', 'founding', 'app profile', 'FAILED ATTEMPT'];
+const SIGNUP_KINDS = ['waitlist', 'founding', 'app profile'];
 const ACTIVITY_PREFIXES = ['TICKET', 'CLIENT', 'BETA', 'guide only', 'FEEDBACK', 'FIXED'];
 const MONEY = [
   ['PAID', 'paid', 'paid'],

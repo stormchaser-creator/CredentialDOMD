@@ -450,9 +450,9 @@ test('hand-offs, reminder and guide emails, More, email links', {
 
     // The state guide, requested as a visitor on /states/texas (the page's own relay call).
     const visitor = `guide-${stamp().toLowerCase()}@${LAB_EMAIL_DOMAIN}`;
-    const r = await fetch(`${lab().urls.appOrigin}/api/waitlist`, {
+    const r = await fetch(`${lab().urls.appOrigin}/api/guide-request`, {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ p_email: visitor, p_name: null, p_source: '/states/texas', p_note: 'guide-email TX inline', p_stage: 'guide', p_waitlist: false }),
+      body: JSON.stringify({ p_email: visitor, p_source: '/states/texas', p_note: 'guide-email TX inline' }),
     });
     const lead = await eventually('the lead', async () => row(`select id, note, source, guide_sent_at from public.early_access_leads where email = '${visitor}'`), 15000);
     qa.check('the guide request is recorded as a lead with its marker', r.status < 300 && lead?.note === 'guide-email TX inline', JSON.stringify({ status: r.status, lead }));

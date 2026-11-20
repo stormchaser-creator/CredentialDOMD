@@ -39,8 +39,8 @@ test('reports do not eagerly download personal working lists', () => {
 });
 test('each group reads what its sections read before the five-group layout', () => {
   // Former tab sources: tickets [tickets, feedback], messages [messages, users], users [users, invites],
-  // waitlist [waitlist, attempts, users, invites], signups [signups, visits], errors [errors, users], fields [fields], ai [users].
-  const former = { inbox: [['tickets', 'feedback'], ['messages', 'users']], people: [['users', 'invites'], ['waitlist', 'attempts', 'users', 'invites']],
+  // waitlist (retired 2026-11-20), signups [signups, visits], errors [errors, users], fields [fields], ai [users].
+  const former = { inbox: [['tickets', 'feedback'], ['messages', 'users']], people: [['users', 'invites']],
     activity: [['signups', 'visits'], ['errors', 'users']], tools: [['fields'], ['users']] };
   for (const [group, lists] of Object.entries(former)) {
     assert.deepEqual([...new Set(lists.flat())].sort(), [...ADMIN_TAB_SOURCES[group]].sort(), group);
@@ -49,7 +49,7 @@ test('each group reads what its sections read before the five-group layout', () 
 });
 test('every former tab opens in exactly one group', async () => {
   const { adminGroupOf, ADMIN_GROUPS } = await import('../../src/utils/adminData.js');
-  const expected = { reports: 'reports', tickets: 'inbox', messages: 'inbox', users: 'people', waitlist: 'people', signups: 'activity', errors: 'activity',
+  const expected = { reports: 'reports', tickets: 'inbox', messages: 'inbox', users: 'people', signups: 'activity', errors: 'activity',
     fields: 'tools', ai: 'tools', emails: 'tools', audit: 'tools', preview: 'tools' };
   for (const [section, group] of Object.entries(expected)) assert.equal(adminGroupOf(section), group, section);
   for (const group of ADMIN_GROUPS) assert.equal(adminGroupOf(group.id), group.id);
@@ -114,7 +114,7 @@ test('invitation receipts must identify the requested target and resulting state
 test('attention counts pass the seen stamps along; a failed read is an error, only a missing function is no counts', async () => {
   const { readAdminAttention } = await import('../../src/utils/adminData.js');
   const calls = [];
-  const counts = { unread_replies: 1, new_errors_since_seen: 0, waitlist_waiting: 4, fields_pending: 2 };
+  const counts = { unread_replies: 1, new_errors_since_seen: 0, fields_pending: 2 };
   const client = response => ({ async rpc(name, args) { calls.push({ name, args }); if (response instanceof Error) throw response; return response; } });
   assert.deepEqual(await readAdminAttention(client({ data: counts }), { messagesSeenAt: '2026-09-25T10:00:00Z', errorsSeenAt: null }), counts);
   assert.deepEqual(calls[0], { name: 'admin_attention_counts', args: { p_messages_seen_at: '2026-09-25T10:00:00Z', p_errors_seen_at: null } });
@@ -166,7 +166,7 @@ test('the oldest open ticket stays loaded however much newer archived activity t
   assert.ok(archived.rows.every(row => row.archived_at));
   assert.deepEqual(adminTabSources('inbox'), ['tickets', 'feedback', 'messages', 'users']);
   assert.deepEqual(adminTabSources('inbox', { showArchived: true }), ['tickets', 'feedback', 'messages', 'users', 'archivedTickets']);
-  assert.deepEqual(adminTabSources('people', { showArchived: true }), ['users', 'invites', 'waitlist', 'attempts']);
+  assert.deepEqual(adminTabSources('people', { showArchived: true }), ['users', 'invites']);
 });
 
 // QA ADMIN-001: a stale-row refusal is PT409 (20260930030000). Only that code

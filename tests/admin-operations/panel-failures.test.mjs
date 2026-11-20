@@ -5,8 +5,6 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { transformSync } from 'esbuild';
 import vm from 'node:vm';
-import * as adminWaitlist from '../../src/utils/adminWaitlist.js';
-import * as adminLabels from '../../src/utils/adminLabels.js';
 import * as adminData from '../../src/utils/adminData.js';
 import * as setupTasks from '../../src/utils/setupTasks.js';
 
@@ -31,11 +29,11 @@ function load(responses) {
     return q;
   } };
   const imports = { react, 'react/jsx-runtime': { jsx: (type, props) => ({ type, props }), jsxs: (type, props) => ({ type, props }) }, '../../lib/supabase': { supabase: db },
-    '../../utils/adminWaitlist': adminWaitlist, '../../utils/adminLabels': adminLabels, '../../utils/adminData': adminData,
+    '../../utils/adminData': adminData,
     '../../utils/setupTasks': setupTasks };
   const module = { exports: {} };
   const ctx = vm.createContext({ module, exports: module.exports, require: n => imports[n] || {}, console, window: { confirm: () => true } });
-  vm.runInContext(transformSync(source + '\nexport { MessagesPanel, WaitlistList, FieldProposals, SignupsList, TicketsList, UsersPanel };', { loader: 'jsx', format: 'cjs', jsx: 'automatic' }).code, ctx);
+  vm.runInContext(transformSync(source + '\nexport { MessagesPanel, FieldProposals, SignupsList, TicketsList, UsersPanel };', { loader: 'jsx', format: 'cjs', jsx: 'automatic' }).code, ctx);
   const render = (component, props) => { cursor = 0; return module.exports[component](props); };
   return { render, calls };
 }
@@ -79,34 +77,6 @@ test('sending a message re-reads through the section loader instead of overwriti
   assert.equal(refreshed, 1);
   assert.equal(f.calls[0].op, 'insert');
   assert.equal(f.calls.length, 1, 'no separate list read that could fail into an empty list');
-});
-
-const lead = { id: 'lead-1', email: 'waiting@example.invalid', waitlist: true, created_at: '2026-09-20T00:00:00Z' };
-const attempt = { id: 'attempt-1', email: 'orphan@example.invalid', stage: 'normal' };
-const waitlistProps = (rows, attempts) => ({ rows: rows.value, setRows: fn => { rows.value = fn(rows.value); }, attempts: attempts.value, setAttempts: fn => { attempts.value = fn(attempts.value); }, users: [], invites: [], T });
-
-for (const [label, response] of [['RLS refusal (zero rows)', { data: [], error: null }], ['an error', { data: null, error: { message: 'permission denied' } }]]) {
-  test(`a waitlist removal refused by ${label} keeps the row and says so`, async () => {
-    const rows = { value: [lead] }, attempts = { value: [attempt] };
-    const f = load([response, structuredClone(response)]);
-    const tree = f.render('WaitlistList', waitlistProps(rows, attempts));
-    await nodes(tree).find(n => n.type === 'button' && n.props.children === 'Remove').props.onClick();
-    assert.deepEqual(rows.value, [lead]);
-    assert.match(text(f.render('WaitlistList', waitlistProps(rows, attempts))), /Could not remove waiting@example\.invalid/);
-    await nodes(f.render('WaitlistList', waitlistProps(rows, attempts))).find(n => n.type === 'button' && n.props.children === 'dismiss').props.onClick();
-    assert.deepEqual(attempts.value, [attempt]);
-    assert.match(text(f.render('WaitlistList', waitlistProps(rows, attempts))), /Could not dismiss orphan@example\.invalid/);
-    assert.deepEqual(f.calls.map(c => [c.table, c.op, c.returning]), [['early_access_leads', 'delete', 'id'], ['waitlist_attempts', 'delete', 'id']]);
-  });
-}
-
-test('a confirmed waitlist removal takes the row away', async () => {
-  const rows = { value: [lead] }, attempts = { value: [attempt] };
-  const f = load([{ data: [{ id: 'lead-1' }], error: null }, { data: [{ id: 'attempt-1' }], error: null }]);
-  await nodes(f.render('WaitlistList', waitlistProps(rows, attempts))).find(n => n.type === 'button' && n.props.children === 'Remove').props.onClick();
-  await nodes(f.render('WaitlistList', waitlistProps(rows, attempts))).find(n => n.type === 'button' && n.props.children === 'dismiss').props.onClick();
-  assert.deepEqual(rows.value, []);
-  assert.deepEqual(attempts.value, []);
 });
 
 test('a field proposal status changes only after the server confirms one row', async () => {
