@@ -65,27 +65,29 @@ test('adding or removing a lead, or settling a field, re-reads the tab counts', 
   const render = mount(exports.AdminDashboardContent, () => ({}));
   const tabLabel = (tree, pattern) => nodes(tree).filter(n => n.type === 'button').map(n => text(n.props.children)).find(t => pattern.test(t));
   let tree = await render();
-  assert.equal(tabLabel(tree, /^Waitlist/), 'Waitlist (3)');
-  nodes(tree).find(n => n.type === 'button' && text(n.props.children) === 'Waitlist (3)').props.onClick();
+  // The waitlist count rides on People, and pending fields on Tools (five-group layout, 2026-11-20).
+  assert.equal(tabLabel(tree, /^People/), 'People (3)');
+  nodes(tree).find(n => n.type === 'button' && text(n.props.children) === 'People (3)').props.onClick();
   tree = await render();
   const list = nodes(tree).find(n => n.type === exports.WaitlistList);
-  assert.ok(list, 'the Waitlist tab renders its list');
+  assert.ok(list, 'People renders the waitlist');
   assert.equal(typeof list.props.onChanged, 'function', 'the list can tell the dashboard its counts changed');
   const reads = db.rpcs.length;
   counts.waitlist_waiting = 4;
   list.props.onChanged();
   tree = await render();
   assert.equal(db.rpcs.length, reads + 1, 'one count read, not a section reload');
-  assert.equal(tabLabel(tree, /^Waitlist/), 'Waitlist (4)');
+  assert.equal(tabLabel(tree, /^People/), 'People (4)');
 
-  nodes(tree).find(n => n.type === 'button' && /^Fields/.test(text(n.props.children))).props.onClick();
+  nodes(tree).find(n => n.type === 'button' && /^Tools/.test(text(n.props.children))).props.onClick();
   tree = await render();
+  assert.equal(tabLabel(tree, /^Tools/), 'Tools (2 pending)');
   const fields = nodes(tree).find(n => n.type === exports.FieldProposals);
   assert.equal(typeof fields.props.onChanged, 'function');
   counts.fields_pending = 1;
   fields.props.onChanged();
   tree = await render();
-  assert.equal(tabLabel(tree, /^Fields/), 'Fields (1 pending)');
+  assert.equal(tabLabel(tree, /^Tools/), 'Tools (1 pending)');
 });
 
 // ─── The Waitlist list's own actions ──────────────────────────────────────

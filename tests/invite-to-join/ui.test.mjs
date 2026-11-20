@@ -159,8 +159,8 @@ test('a recent list that cannot load says so, and never reads like a failed send
   // The client's default message is about a send; the list must not reuse it.
   const unconfirmed = refusal('invite_unavailable', 'The invitation could not be confirmed. Nothing is known to have been sent. Refresh the list before trying again.');
   for (const [error, expected] of [
-    [unconfirmed, 'Recent invitations could not be loaded. Open Users again in a minute to retry.'],
-    [Object.assign(new Error('The invitation could not be confirmed.'), { code: undefined }), 'Recent invitations could not be loaded. Open Users again in a minute to retry.'],
+    [unconfirmed, 'Recent invitations could not be loaded. Close and reopen Invite to join in a minute to retry.'],
+    [Object.assign(new Error('The invitation could not be confirmed.'), { code: undefined }), 'Recent invitations could not be loaded. Close and reopen Invite to join in a minute to retry.'],
     [refusal('admin_required', 'Only an authorized administrator can send invitations. Nothing was sent.'), 'Recent invitations could not be loaded: only an authorized administrator can see them.'],
     [refusal('session_changed', 'Your sign-in changed. Reopen Admin and try again. Nothing was sent.'), 'Recent invitations could not be loaded because your sign-in changed. Reopen Admin and try again.'],
     [refusal('not_configured', 'Invitation email is not set up on the server yet. Nothing was sent.'), 'Recent invitations could not be loaded: invitation email is not set up on the server yet.'],
@@ -181,11 +181,14 @@ test('the dialog version is prefilled and does not load the recent list', async 
   assert.deepEqual(plain(v.calls), [['preview', { email: 'lead@example.com', name: 'Waitlist Person' }]]);
 });
 
-test('Admin wires Invite to join into Users and Waitlist, and leaves the lifetime gift untouched', async () => {
+test('Admin wires Invite to join into Tools, invitation rows and Waitlist, and leaves the lifetime gift untouched', async () => {
   const admin = await readFile(new URL('../../src/components/pages/AdminDashboard.jsx', import.meta.url), 'utf8');
   const users = admin.slice(admin.indexOf('function UsersPanel('), admin.indexOf('function WaitlistList('));
   const waitlist = admin.slice(admin.indexOf('function WaitlistList('));
-  assert.match(users, /<AdminLifetimeGift \/>\n\s*<AdminInviteToJoin \/>/);
+  // The standalone Invite to join and the lifetime gift moved from the top of People to Tools (2026-11-20).
+  const tools = admin.slice(admin.indexOf('{tab === "tools" && ('), admin.indexOf('aria-label="List coverage"'));
+  assert.match(tools, /tool\("invite", "Invite to join", [^\n]*<AdminInviteToJoin bare \/>\)\}\n\s*\{tool\("gift", "Gift lifetime access by email", [^\n]*<AdminLifetimeGift bare \/>\)\}/);
+  assert.doesNotMatch(users, /<AdminLifetimeGift|<AdminInviteToJoin bare|<AdminMailboxRepair/);
   assert.match(users, /chip\("Invite to join", T\.accent, \(\) => setJoinTarget\(\{ name: inv\.name \|\| "", email: inv\.email \}\), false\)/);
   assert.match(users, /<AdminInviteToJoin key=\{joinTarget\.email\} embedded initialName=\{joinTarget\.name\} initialEmail=\{joinTarget\.email\} \/>/);
   assert.match(waitlist, />Invite to join<\/button>/);

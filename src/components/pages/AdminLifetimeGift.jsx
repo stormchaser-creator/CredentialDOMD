@@ -3,11 +3,15 @@ import { useApp } from "../../context/AppContext";
 import { createLifetimeGiftClient } from "../../utils/lifetimeGiftClient";
 
 const STATUS = { waiting: "Waiting for them to sign up", claimed: "Claimed", withdrawn: "Withdrawn", expired: "Expired unclaimed. Gift again if you still want to.",
-  needs_review: "They signed up but already had billing on the account, so it was not applied automatically. Use Give free lifetime access on their row below, then withdraw this." };
+  needs_review: "They signed up but already had billing on the account, so it was not applied automatically. Use Give free lifetime access on their row in People, then withdraw this." };
 const day = value => new Date(value).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 
-/** Gift lifetime access to an email address before that person has an account. */
-export default function AdminLifetimeGift() {
+/**
+ * Gift lifetime access to an email address before that person has an account.
+ * `bare` is the Admin > Tools version: the card around it carries the title
+ * and the one-line summary.
+ */
+export default function AdminLifetimeGift({ bare = false } = {}) {
   const { theme: T, user } = useApp();
   const accountId = user?.id;
   const mounted = useRef(true);
@@ -50,14 +54,19 @@ export default function AdminLifetimeGift() {
   const field = { width: "100%", boxSizing: "border-box", padding: "10px 12px", borderRadius: 10, border: `1px solid ${T.border}`,
     backgroundColor: T.input, color: T.text, fontSize: 14, fontFamily: "inherit" };
   return (
-    <div style={{ border: `1px solid ${T.border}`, borderRadius: 12, padding: 14, margin: "12px 0", backgroundColor: T.card }}>
-      <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Gift lifetime access by email</div>
-      <p style={{ fontSize: 13, color: T.textMuted, margin: "6px 0 10px", lineHeight: 1.5 }}>
+    <div style={bare ? {} : { border: `1px solid ${T.border}`, borderRadius: 12, padding: 14, margin: "12px 0", backgroundColor: T.card }}>
+      {!bare && <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Gift lifetime access by email</div>}
+      <p style={{ fontSize: 13, color: T.textMuted, margin: "6px 0 4px", lineHeight: 1.5 }}>
+        {bare ? "For an existing account, use Give free lifetime access on their row in People. For someone new, gift their email here. Neither sends mail."
+          : "Applies when they sign up with this exact email. Does not send mail."}
+      </p>
+      <details style={{ fontSize: 13, color: T.textMuted, margin: "0 0 10px", lineHeight: 1.5 }}>
+        <summary style={{ cursor: "pointer" }}>Details</summary>
         For someone who does not have an account yet. Enter their email address. When they sign up and confirm that address,
         they get Credential and Practice free for life, with no card and no checkout. They must sign up with exactly this address:
         a different spelling, a plus tag or another inbox will not match. If they already have an account, use Give free lifetime
-        access on their row below instead.
-      </p>
+        access on their row in People instead: it checks their billing first and records your reason. Neither sends an email.
+      </details>
       <form onSubmit={reserve} style={{ display: "grid", gap: 8 }}>
         <input type="email" required autoComplete="off" placeholder="their.email@example.com" aria-label="Email address to gift"
           value={email} onChange={e => setEmail(e.target.value)} style={field} />

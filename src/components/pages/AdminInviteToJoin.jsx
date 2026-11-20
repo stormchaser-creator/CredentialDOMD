@@ -16,7 +16,7 @@ function listTrouble(code) {
     case "unauthorized": return "Recent invitations could not be loaded because your sign-in could not be verified. Reopen Admin and try again.";
     case "session_changed": return "Recent invitations could not be loaded because your sign-in changed. Reopen Admin and try again.";
     case "not_configured": return "Recent invitations could not be loaded: invitation email is not set up on the server yet.";
-    default: return "Recent invitations could not be loaded. Open Users again in a minute to retry.";
+    default: return "Recent invitations could not be loaded. Close and reopen Invite to join in a minute to retry.";
   }
 }
 
@@ -27,9 +27,10 @@ function listTrouble(code) {
  * access and changes no account.
  *
  * `embedded` is the Waitlist and invitation-row version inside a dialog:
- * prefilled, and without the recent list.
+ * prefilled, and without the recent list. `bare` is the Admin > Tools
+ * version: the card around it carries the title and the one-line summary.
  */
-export default function AdminInviteToJoin({ initialName = "", initialEmail = "", embedded = false, onSent }) {
+export default function AdminInviteToJoin({ initialName = "", initialEmail = "", embedded = false, bare = false, onSent }) {
   const { theme: T, user } = useApp();
   const accountId = user?.id;
   const mounted = useRef(true);
@@ -95,12 +96,16 @@ export default function AdminInviteToJoin({ initialName = "", initialEmail = "",
     fontSize: 14, fontWeight: 700, cursor: enabled ? "pointer" : "default", opacity: enabled ? 1 : 0.6, fontFamily: "inherit" });
   const line = { fontSize: 12.5, color: T.textMuted, margin: "2px 0", overflowWrap: "anywhere" };
   return (
-    <div style={embedded ? {} : { border: `1px solid ${T.border}`, borderRadius: 12, padding: 14, margin: "12px 0", backgroundColor: T.card }}>
-      {!embedded && <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Invite to join</div>}
-      <p style={{ fontSize: 13, color: T.textMuted, margin: "6px 0 10px", lineHeight: 1.5 }}>
+    <div style={embedded || bare ? {} : { border: `1px solid ${T.border}`, borderRadius: 12, padding: 14, margin: "12px 0", backgroundColor: T.card }}>
+      {!embedded && !bare && <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>Invite to join</div>}
+      {!bare && <p style={{ fontSize: 13, color: T.textMuted, margin: "6px 0 4px", lineHeight: 1.5 }}>
+        Sends a sign-up email at the public price. Grants no access. Preview, then Send.
+      </p>}
+      <details style={{ fontSize: 13, color: T.textMuted, margin: "6px 0 10px", lineHeight: 1.5 }}>
+        <summary style={{ cursor: "pointer" }}>Details</summary>
         Sends one email inviting this person to sign up for CredentialDOMD and pay like anyone else, at the current public price.
         It does not give them access or change any account. Preview shows the exact email; nothing is sent until you press Send.
-      </p>
+      </details>
       <form onSubmit={showPreview} style={{ display: "grid", gap: 8 }}>
         <input type="text" autoComplete="off" placeholder="Name (optional)" aria-label="Name (optional)" maxLength={120}
           value={name} onChange={edit(setName)} disabled={!!busy} style={field} />

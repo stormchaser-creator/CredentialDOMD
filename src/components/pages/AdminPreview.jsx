@@ -8,7 +8,7 @@ import { adminViewBannerStyle, ADMIN_VIEW_BANNER_BUTTON_STYLE } from "../shared/
  * with it sees it, on your own records (utils/adminPreview.js). Ticket
  * d45e857c, phase 1. Viewing another member's account is not part of this.
  */
-export function AdminPreviewPicker({ T = {}, store = adminPreviewStore }) {
+export function AdminPreviewPicker({ T = {}, store = adminPreviewStore, bare = false }) {
   const { user, limitedLaunch, navigate } = useApp();
   const [presetId, setPresetId] = useState(ADMIN_PREVIEW_PRESETS[0].id);
   const [message, setMessage] = useState("");
@@ -20,12 +20,16 @@ export function AdminPreviewPicker({ T = {}, store = adminPreviewStore }) {
   };
   const card = { border: `1px solid ${T.border || "#d1d5db"}`, background: T.card, borderRadius: 12, padding: 16 };
   return <section aria-label="Preview as a member" style={{ color: T.text, fontSize: 14, lineHeight: 1.5 }}>
-    <h3 style={{ fontSize: 19, margin: "0 0 4px" }}>Preview as a member</h3>
-    <p style={{ color: T.textMuted, margin: "0 0 12px" }}>
+    {!bare && <>
+      <h3 style={{ fontSize: 19, margin: "0 0 4px" }}>Preview as a member</h3>
+      <p style={{ color: T.textMuted, margin: "0 0 4px" }}>Your own records, shown as this membership would see them. Admin is hidden until you exit.</p>
+    </>}
+    <details style={{ color: T.textMuted, fontSize: 13, margin: "0 0 12px" }}>
+      <summary style={{ cursor: "pointer" }}>Details</summary>
       See the app the way a member with this membership sees it, using your own records. No member's data is opened.
       The preview stays in this browser tab and is never sent to the server. Your own access does not change: the
       server still applies it, and a preview can only show less than you have.
-    </p>
+    </details>
     <fieldset style={{ ...card, margin: 0 }}>
       <legend style={{ fontWeight: 700, padding: "0 4px" }}>Membership to preview</legend>
       {ADMIN_PREVIEW_PRESETS.map(preset => (

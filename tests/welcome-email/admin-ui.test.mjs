@@ -104,10 +104,12 @@ test('a status that cannot be read is an error, never "Off"', async () => {
   assert.doesNotMatch(v.pageText(), /Off\./);
 });
 
-test('Admin has an Emails tab that renders the panel and loads no list', () => {
+test('Admin > Tools has a Welcome email card that renders the panel and loads no list', () => {
   const dashboard = fs.readFileSync(new URL('../../src/components/pages/AdminDashboard.jsx', import.meta.url), 'utf8');
-  assert.match(dashboard, /\{ id: "emails", label: "Emails" \}/);
-  assert.match(dashboard, /\{tab === "emails" && <AdminWelcomeEmail T=\{T\} \/>\}/);
+  const data = fs.readFileSync(new URL('../../src/utils/adminData.js', import.meta.url), 'utf8');
+  assert.match(data, /\{ id: 'tools', label: 'Tools', sections: \[[^\]]*'emails'/);
+  assert.match(data, /tools: \['fields', 'users'\]/, 'Tools loads no email list');
+  assert.match(dashboard, /\{tool\("emails", "Welcome email", [^\n]*<AdminWelcomeEmail T=\{T\} bare \/>\)\}/);
 });
 
 // The browser's fingerprint comes from its own (possibly cached) bundle, and

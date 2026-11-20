@@ -3,6 +3,7 @@
 // in Your tickets, and the reply email reaches the member's mailbox (mock
 // Resend) with the stored reply text and a link back to the ticket.
 import { test } from './support/fixtures.mjs';
+import { openAdminSection } from './support/admin-nav.mjs';
 import {
   chooseFiles, emailBody, emails, letters, makeAdmin, newMember, openMore, row, rows, sleep, stamp, syntheticPng, waitFor, waitForMemberApp,
 } from './support/lab.mjs';
@@ -52,7 +53,7 @@ test('support: ticket with a screenshot, owner replies in the app, member sees i
     await other.page.reload();
     await waitForMemberApp(other.page);
     await openMore(other.page, 'Admin');
-    await other.page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: 'Tickets' }).click();
+    await openAdminSection(other.page, 'Tickets');
     const item = other.page.getByRole('button').filter({ hasText: subject }).first();
     await item.waitFor({ timeout: 30000 });
     await item.click();

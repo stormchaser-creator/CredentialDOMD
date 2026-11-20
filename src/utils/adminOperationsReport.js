@@ -11,13 +11,30 @@ export const ADMIN_REPORT_DEFINITIONS = Object.freeze({
   page_views: "Recorded page-load events in the selected window. Repeated visits count again; this is not a unique visitor count.",
   tickets: "Tickets created in the selected window, including tickets later resolved or archived.",
   errors: "Retained client error reports in the selected window. Reports are pruned after 7 days and can be cleared by administrators; older days are incomplete. Zero does not prove that no errors occurred.",
-  unread_replies: "Your messages with a physician reply newer than the last time you opened Messages.",
-  new_errors: "Retained error reports newer than the last time you opened Errors.",
+  unread_replies: "Your messages with a physician reply newer than the last time you opened Inbox (Messages).",
+  new_errors: "Retained error reports newer than the last time you opened Activity (Errors).",
   waitlist_waiting: "Waitlist signups whose email has no active account yet. Guide-only requests are not counted.",
   fields_pending: "Fields Vera proposed that are waiting for your approve or dismiss.",
 });
 
-const ATTENTION_KEYS = ["unread_replies", "new_errors_since_seen", "waitlist_waiting", "fields_pending"];
+/** One line per count for Admin > Home; the full definitions above stay in Details and the CSV. */
+export const ADMIN_REPORT_FACE = Object.freeze({
+  open: "Not resolved or archived.",
+  urgent: "Open tickets marked urgent.",
+  approval: "Customer tickets waiting for you.",
+  signups: "New accounts in this window, excluding admins and deleted.",
+  accounts: "Everyone with an account, except deleted or closed. Not a paid count.",
+  active: "Marked active. Not the same as paid.",
+  founding: "Paid founders and pre-launch founders.",
+  errors: "Client errors kept from this window. Cleared after 7 days.",
+  unread_replies: "Replies since you last opened Inbox.",
+  new_errors: "Errors since you last opened Activity.",
+  waitlist_waiting: "Signups with no account yet. Guide-only is not counted.",
+  fields_pending: "Fields Vera proposed, waiting for you.",
+  csv: "Export is a 5-minute-old or newer report, with definitions in the file.",
+});
+
+const ATTENTION_KEYS =["unread_replies", "new_errors_since_seen", "waitlist_waiting", "fields_pending"];
 
 /** The attention counts behind the tab labels and Overview cards, or null when absent or malformed. */
 export function normalizeAdminAttention(input) {

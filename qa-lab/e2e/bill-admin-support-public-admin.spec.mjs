@@ -1,6 +1,6 @@
 import { copyAndReadSynthetic } from './support/clipboard-paste.mjs';
 // The owner's Admin tabs beyond accounts and emails: Errors, Waitlist, Fields
-// and AI (tab counts against the database), Overview & reports (refresh, CSV),
+// and AI (tab counts against the database), Home (refresh, CSV),
 // Control history (paging) and Support views, Traffic history (visits and
 // signups against the admin views), a ticket's archive and agent-approval
 // controls; the admin-only share-sheet probe in Help; and, as a member, Help &
@@ -16,6 +16,7 @@ import {
   sleep, stamp, waitFor, waitForMemberApp,
 } from './support/lab.mjs';
 import { lifetimeMember, routePublicSite, startPublicSite } from './support/bill-admin-support-public-helpers.mjs';
+import { adminTab, openAdminSection } from './support/admin-nav.mjs';
 
 let site;
 test.beforeAll(async () => { site = await startPublicSite(); });
@@ -25,12 +26,13 @@ async function openAdmin(page, section) {
   await openMore(page, 'Admin');
   const nav = page.getByRole('navigation', { name: 'Administration sections' });
   await nav.waitFor({ timeout: 30000 });
-  if (section) await nav.getByRole('button', { name: new RegExp(`^${section}`) }).click();
+  if (section) await openAdminSection(page, section);
   return nav;
 }
 // The Waitlist form's placeholder text (an example address, written so no address sits in this file).
 const LEAD_EMAIL_PLACEHOLDER = ['email', 'domain.com'].join('@');
-const tabLabel = async (page, name) => (await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: new RegExp(`^${name}`) }).innerText()).trim();
+// Five groups since 2026-11-20: the Errors count is on Activity, Waitlist on People, Fields on Tools.
+const tabLabel = async (page, name) => (await adminTab(page, name).innerText()).trim();
 const labelCount = (label) => { const m = /\((\d+)(?: pending)?\)/.exec(label); return m ? Number(m[1]) : 0; };
 /** The admin's counts as admin_attention_counts computes them (LOCAL database). */
 function attention(profileId) {
@@ -96,7 +98,7 @@ test('owner: Errors, Waitlist, Fields and AI tab counts follow each action', {
     const label = await tabLabel(page, 'Errors');
     const after = attention(admin.profile.id).new_errors_since_seen;
     qa.check('the Errors label is the server\'s count of reports since the admin last looked', answer && labelCount(label) === answer.new_errors_since_seen && answer.new_errors_since_seen >= before && answer.new_errors_since_seen <= after && labelCount(label) > 0, `label "${label}", server answer ${answer?.new_errors_since_seen}, database ${before}..${after}`);
-    await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^Errors/ }).click();
+    await openAdminSection(page, 'Errors');
     const group = page.locator('article').filter({ hasText: message }).first();
     await group.waitFor({ timeout: 30000 });
     await group.getByRole('button', { name: new RegExp(message) }).click();
@@ -119,7 +121,7 @@ test('owner: Errors, Waitlist, Fields and AI tab counts follow each action', {
     const leadEmail = `${t}-lead@${LAB_EMAIL_DOMAIN}`;
     const leadName = `Quinn Lead ${letters()}`;
     await context.grantPermissions(['clipboard-read', 'clipboard-write'], { origin: lab().urls.appOrigin });
-    await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^Waitlist/ }).click();
+    await openAdminSection(page, 'Waitlist');
     await page.getByPlaceholder(LEAD_EMAIL_PLACEHOLDER).waitFor({ timeout: 30000 });
     const label0 = await tabLabel(page, 'Waitlist');
     const db0 = attention(admin.profile.id).waitlist_waiting;
@@ -148,8 +150,8 @@ test('owner: Errors, Waitlist, Fields and AI tab counts follow each action', {
       () => page.getByRole('button', { name: 'Copy waiting emails' }).click(), [`${leadName} <${leadEmail}>`]);
     qa.check('Copy waiting emails puts the new lead on the clipboard ("Name <email>")', clip.includes(`${leadName} <${leadEmail}>`), clip.slice(0, 200));
     // Re-open the tab: the label is read again.
-    await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^Fields/ }).click();
-    await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^Waitlist/ }).click();
+    await openAdminSection(page, 'Fields');
+    await openAdminSection(page, 'Waitlist');
     await page.getByPlaceholder(LEAD_EMAIL_PLACEHOLDER).waitFor();
     await sleep(1200);
     const label1 = await tabLabel(page, 'Waitlist');
@@ -175,8 +177,8 @@ test('owner: Errors, Waitlist, Fields and AI tab counts follow each action', {
     await sleep(1500);
     const labelAfterRemove = await tabLabel(page, 'Waitlist');
     qa.check('right after Remove, the Waitlist label shows the new count (no tab switch)', labelCount(labelAfterRemove) === attention(admin.profile.id).waitlist_waiting, `"${labelAfterRemove}"`);
-    await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^Fields/ }).click();
-    await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^Waitlist/ }).click();
+    await openAdminSection(page, 'Fields');
+    await openAdminSection(page, 'Waitlist');
     await sleep(1500);
     const label2 = await tabLabel(page, 'Waitlist');
     const db2 = attention(admin.profile.id).waitlist_waiting;
@@ -189,8 +191,8 @@ test('owner: Errors, Waitlist, Fields and AI tab counts follow each action', {
     const label = `QA lab field ${t}`;
     // A proposal as Vera or the uploader would file it for a member's custom field (fixture).
     labExec(`insert into public.field_proposals (section, label, sample, user_id, status) values ('licenses', '${label}', 'synthetic sample', '${admin.profile.id}', 'pending')`);
-    await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^Errors/ }).click();
-    await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^Fields/ }).click();
+    await openAdminSection(page, 'Errors');
+    await openAdminSection(page, 'Fields');
     const card = page.locator('div').filter({ hasText: label }).filter({ has: page.getByRole('button', { name: 'Dismiss' }) }).last();
     await card.waitFor({ timeout: 30000 });
     const tab0 = await tabLabel(page, 'Fields');
@@ -203,8 +205,8 @@ test('owner: Errors, Waitlist, Fields and AI tab counts follow each action', {
     await sleep(1500);
     const tabNow = await tabLabel(page, 'Fields');
     qa.check('right after Dismiss, the Fields label drops (no tab switch)', labelCount(tabNow) === attention(admin.profile.id).fields_pending, `"${tabNow}" vs ${attention(admin.profile.id).fields_pending}`);
-    await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^Errors/ }).click();
-    await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^Fields/ }).click();
+    await openAdminSection(page, 'Errors');
+    await openAdminSection(page, 'Fields');
     await sleep(1500);
     const tab1 = await tabLabel(page, 'Fields');
     const db1 = attention(admin.profile.id).fields_pending;
@@ -212,7 +214,7 @@ test('owner: Errors, Waitlist, Fields and AI tab counts follow each action', {
   }, { soft: true });
 
   await qa.feature('ADMIN-003', 'AI: the shared-key status is read (Gemini on, Anthropic paused as in production); nothing removed', async () => {
-    await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^AI$/ }).click();
+    await openAdminSection(page, 'AI');
     const gemini = page.getByText('Shared Gemini key').locator('xpath=..');
     await page.getByText(/On \(ends in|Not set/).first().waitFor({ timeout: 30000 }).catch(() => {});
     const text = (await page.locator('main').first().innerText().catch(() => page.locator('body').innerText())).replace(/\s+/g, ' ');
@@ -232,13 +234,15 @@ test('owner: reports and CSV, control history paging, traffic history', {
   test.setTimeout(8 * 60 * 1000);
   const admin = await newAdmin(page, 'Morgan');
 
-  await qa.feature('ADMIN-004', 'Overview: refresh; the counts are the server report; Export aggregate CSV downloads it', async () => {
-    await openAdmin(page, 'Overview & reports');
+  await qa.feature('ADMIN-004', 'Home: refresh; the counts are the server report; Export aggregate CSV downloads it', async () => {
+    await openAdmin(page, 'Home');
     const section = page.getByRole('region', { name: 'Administrative operations report' });
-    await section.getByText(/^Snapshot:/).waitFor({ timeout: 30000 });
+    await section.getByText(/^Snapshot \d{4}-/).waitFor({ timeout: 30000 });
     await section.getByRole('button', { name: 'Refresh report' }).click();
-    await section.getByText(/^Snapshot:/).waitFor({ timeout: 30000 });
-    const cards = await section.locator('article').evaluateAll((els) => Object.fromEntries(els.map((e) => [e.querySelector('h4')?.innerText.trim(), Number(e.querySelector('div')?.innerText.replace(/,/g, ''))])));
+    await section.getByText(/^Snapshot \d{4}-/).waitFor({ timeout: 30000 });
+    // Each Snapshot number is a button: the number, then its short label.
+    const numbers = await section.getByRole('region', { name: 'Snapshot' }).getByRole('button').evaluateAll((els) => Object.fromEntries(els.map((e) => [e.children[1]?.innerText.trim(), Number(e.children[0]?.innerText.replace(/,/g, ''))])));
+    const cards = { ...numbers, 'Active account profiles': numbers['Active accounts'] };
     const report = (await restAs(admin.user, 'rpc/admin_operations_report', { method: 'POST', body: { p_days: 30 } })).data;
     qa.check('the report has aggregate counts only (no names, emails or ids)', !/@|user_/.test(JSON.stringify(report)), Object.keys(report || {}));
     const near = (a, b, slack = 3) => Number.isFinite(a) && Number.isFinite(b) && Math.abs(a - b) <= slack;
@@ -274,7 +278,7 @@ test('owner: reports and CSV, control history paging, traffic history', {
       }
     }
     qa.check(`enough audited changes for two pages (${count} existing, ${made} made)`, count + made > 25, `${count + made} rows`);
-    await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^Control history/ }).click();
+    await openAdminSection(page, 'Control history');
     const history = page.getByRole('region', { name: 'Administrative control history' });
     await history.getByText('Page 1').waitFor({ timeout: 30000 });
     const receipts = () => history.locator('article').evaluateAll((els) => els.map((e) => (e.textContent.match(/Receipt: ([0-9a-f-]{36})/) || [])[1]).filter(Boolean));
@@ -312,7 +316,7 @@ test('owner: reports and CSV, control history paging, traffic history', {
     await sleep(1500);
     const viewsBefore = (await restAs(admin.user, 'admin_visits_daily?order=day.desc&limit=3')).data || [];
     const signupsBefore = (await restAs(admin.user, 'admin_signups_daily?order=day.desc&limit=3')).data || [];
-    await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: /^Traffic history/ }).click();
+    await openAdminSection(page, 'Traffic history');
     await page.getByText('Webpage visits').waitFor({ timeout: 30000 });
     await sleep(1500);
     const text = (await page.locator('body').innerText());

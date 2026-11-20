@@ -9,10 +9,11 @@ import { noRestart } from './support/run-options.mjs';
 import {
   createPhysician, goTab, landing, letters, makeAdmin, newMember, openMore, profileOf, row, rows, signIn, sleep, waitFor, waitForMemberApp, accessSnapshot,
 } from './support/lab.mjs';
+import { openAdminSection } from './support/admin-nav.mjs';
 
 async function openAdmin(page, section) {
   await openMore(page, 'Admin');
-  await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: new RegExp(`^${section}`) }).click();
+  await openAdminSection(page, section);
 }
 async function findAccount(page, text) {
   await openAdmin(page, 'Accounts');
@@ -22,7 +23,7 @@ async function findAccount(page, text) {
   // Refresh). Type once the read has landed, and again if the box was emptied.
   const box = page.getByRole('searchbox', { name: 'Search loaded accounts' });
   for (let i = 0; i < 5; i++) {
-    await page.getByText(/Account records: \d+ loaded/).first().waitFor({ timeout: 20000 }).catch(() => {});
+    await page.getByText(/Account records: showing \d+/).first().waitFor({ timeout: 20000 }).catch(() => {});
     await page.getByText(/^(Loading|Refreshing)…$/).first().waitFor({ state: 'detached', timeout: 20000 }).catch(() => {});
     await box.fill(text);
     await sleep(800);

@@ -11,7 +11,7 @@ const when = (value) => {
 };
 
 /**
- * Admin > Emails: the welcome email a member receives after their first
+ * Admin > Tools > Welcome email: the welcome email a member receives after their first
  * verified payment, exactly as it is sent (src/utils/welcomeEmail.js), and
  * the owner's approval. Off until approved. "Approve and turn on" binds the
  * approval to the fingerprint of every version shown here; the server
@@ -24,7 +24,7 @@ const when = (value) => {
  * the deployed webhook last presented (a purchase, or its 10-minute sweep),
  * and when that is not the approved one the page says nothing is sending.
  */
-export default function AdminWelcomeEmail({ T }) {
+export default function AdminWelcomeEmail({ T, bare = false }) {
   const [status, setStatus] = useState(null);
   const [error, setError] = useState("");
   const [fingerprint, setFingerprint] = useState("");
@@ -86,10 +86,10 @@ export default function AdminWelcomeEmail({ T }) {
   const button = { padding: "8px 14px", borderRadius: 8, border: `1px solid ${T.border}`, background: T.card, color: T.text, fontWeight: 700, cursor: "pointer" };
 
   return <section aria-label="Welcome email" style={{ color: T.text }}>
-    <h3>Welcome email after a paid purchase</h3>
-    <p style={{ fontSize: 13, color: T.textMuted }}>
-      Sent once per purchase, after the first payment is verified, to the address the member verified at sign-in. Only purchases paid while it is on, and only within 72 hours of payment. Never for gifts, free betas or unpaid checkouts. One that could not go out is tried again every 10 minutes, up to 5 times within 23 hours. Changing any word of it needs a new approval here before it sends again.
-    </p>
+    {!bare && <>
+      <h3>Welcome email after a paid purchase</h3>
+      <p style={{ fontSize: 13, color: T.textMuted }}>Sent once after a member&apos;s first verified payment, only while this is on.</p>
+    </>}
 
     <div role="status" style={card}>
       {!status && !error && <span>Loading status…</span>}
@@ -126,6 +126,10 @@ export default function AdminWelcomeEmail({ T }) {
         </>)}
     </div>
     {error && <p role="alert" style={{ color: T.danger }}>{error}</p>}
+    <details style={{ fontSize: 13, color: T.textMuted, marginTop: 10 }}>
+      <summary style={{ cursor: "pointer" }}>Details</summary>
+      Sent once per purchase, after the first payment is verified, to the address the member verified at sign-in. Only purchases paid while it is on, and only within 72 hours of payment. Never for gifts, free betas or unpaid checkouts. One that could not go out is tried again every 10 minutes, up to 5 times within 23 hours. Changing any word of it needs a new approval here before it sends again.
+    </details>
 
     <div style={{ marginTop: 14 }}>
       <label style={{ display: "flex", alignItems: "flex-start", gap: 8 }}>

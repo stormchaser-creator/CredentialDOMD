@@ -13,6 +13,7 @@ import { APP_PUBLIC_ORIGIN } from '../lib/lab-config.mjs';
 import { verifiedMembershipSubject } from './support/membership-responses.mjs';
 import { verifyProfileReadySignup, verifiedSignupSessionSubject } from './support/profile-ready-signup.mjs';
 import { WELCOME_EMAIL_VERSION } from '../../src/utils/welcomeEmail.js';
+import { openAdminSection } from './support/admin-nav.mjs';
 import {
   LAB_EMAIL_DOMAIN, PAY_FIRST_LINE, accessSnapshot, createPhysician, letters, emails, emailBody, labExec, landing, lab, makeAdmin, mockApi,
   newMember, openOfferReview, profileOf, replayStripeEvent, restAs, row, rows, signIn, sleep, stamp, stripeFor, waitFor, waitForCheckoutEvents, waitForMemberApp, waitForProfile,
@@ -247,7 +248,7 @@ test('welcome email on: the owner approves it in Admin > Emails, the next paid m
       await waitForMemberApp(page);
       await page.getByRole('navigation').first().getByRole('button', { name: /^More$/ }).click();
       await page.getByRole('button', { name: /Admin/ }).first().click();
-      await page.getByRole('navigation', { name: 'Administration sections' }).getByRole('button', { name: 'Emails' }).click();
+      await openAdminSection(page, 'Emails');
       const region = page.getByRole('region', { name: 'Welcome email' });
       await region.waitFor();
       // The status line fills in once the settings are read.

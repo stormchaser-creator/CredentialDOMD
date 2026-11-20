@@ -36,6 +36,7 @@ async function exercise(result,{failAttachment=false,failStateRead=false}={}) {
    if(name==='../lib/local-db.mjs')return {localExec:()=>JSON.stringify(fixtureRows)};
    if(name==='./support/lab.mjs')return {stamp:()=> 'ntfdiagnostic',letters:()=> 'Test',newMember:async()=>({user:{email,id:'synthetic-user'},profile:{id:'synthetic-profile'}})};
    if(name==='@supabase/supabase-js')return {createClient:()=>{throw Error('No network allowed');}};
+   if(name==='./support/admin-nav.mjs')return {openAdminSection:async()=>{}};
    throw Error(`Unexpected import ${name}`);
   }});
   const journey=registered.find(x=>x.title.startsWith('owner notifier:'));assert.ok(journey);
