@@ -560,7 +560,7 @@ sys.stdout.write(r.stdout.strip())
     const fixed = runJob();
     assert.equal(fixed.status, 0, fixed.stderr);
     assert.equal(sent().length, 3);
-    assert.equal(sent()[2], 'CredentialDOMD signup\n• [app profile] Synthetic Late Signup (late@example.test)', 'held, not lost');
+    assert.equal(sent()[2], 'CredentialDOMD new account, not paid\n• [app profile] Synthetic Late Signup (late@example.test)', 'held, not lost');
     assert.equal(opsOf('notifier_recovered').length, 1);
     assert.match(opsOf('notifier_recovered')[0].detail, /^CredentialDOMD notifier: working again \(a problem since \d\d:\d\d\)\.$/);
     assert.equal(runJob().status, 0);

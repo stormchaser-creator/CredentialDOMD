@@ -2,9 +2,13 @@ export const ADMIN_REPORT_DAYS = Object.freeze([7, 30, 90]);
 export const ADMIN_REPORT_FRESH_MS = 5 * 60 * 1000;
 
 export const ADMIN_REPORT_DEFINITIONS = Object.freeze({
-  accounts: "Account profiles excluding deleted or closed profiles. Includes administrators and incomplete signup profiles; this is not a paid membership count.",
+  paid_members: "The only people counted as members, users or signups: accounts that are not deleted or closed with a live membership that is active and inside its paid period (Credential, or Credential + Practice). Lifetime, gifted and beta access, unpaid accounts and leads are not counted.",
+  new_paid: "Memberships whose first payment was verified in the selected window. A later refund or cancellation does not remove the day it was paid.",
+  leads: "Email addresses that asked for a state guide or joined the waitlist and do not belong to a paid member. One address counts once. Leads are not users, members or signups; a lead who pays moves to paid members.",
+  accounts_not_paid: "Account profiles with a sign-in identity and email, excluding administrators and deleted or closed accounts, that have no paid membership. Includes lifetime, gifted and beta access. Not members.",
+  accounts: "Account profiles excluding deleted or closed profiles. Includes administrators and incomplete profiles. Accounts are not members; see Paid members.",
   active: "Profiles excluding deleted or closed accounts, with active account status. Account status does not establish paid membership or current product access.",
-  signups: "Profiles excluding deleted or closed accounts and administrators, created in the selected window with a linked sign-in identity and nonblank email. This is not proof of mailbox verification or payment.",
+  signups: "New account profiles, not members: profiles excluding deleted or closed accounts and administrators, created in the selected window with a linked sign-in identity and nonblank email. This is not proof of mailbox verification or payment.",
   open: "Current tickets excluding archived, resolved and closed tickets, regardless of their creation date.",
   urgent: "Current open tickets marked urgent.",
   approval: "Current open customer tickets waiting for administrative approval.",
@@ -13,7 +17,7 @@ export const ADMIN_REPORT_DEFINITIONS = Object.freeze({
   errors: "Retained client error reports in the selected window. Reports are pruned after 7 days and can be cleared by administrators; older days are incomplete. Zero does not prove that no errors occurred.",
   unread_replies: "Your messages with a physician reply newer than the last time you opened Messages.",
   new_errors: "Retained error reports newer than the last time you opened Errors.",
-  waitlist_waiting: "Waitlist signups whose email has no active account yet. Guide-only requests are not counted.",
+  waitlist_waiting: "Leads who asked to join the waitlist and whose email has no active account yet. Guide-only leads are not counted here.",
   fields_pending: "Fields Vera proposed that are waiting for your approve or dismiss.",
 });
 
@@ -27,6 +31,12 @@ export function normalizeAdminAttention(input) {
     if (!Number.isSafeInteger(input[key]) || input[key] < 0) return null;
     result[key] = input[key];
   }
+  // Every lead that is not a paid member (20261116120000). Optional: a server
+  // without it still yields the other counts, and the Leads tab shows none.
+  if (input.leads != null) {
+    if (!Number.isSafeInteger(input.leads) || input.leads < 0) return null;
+    result.leads = input.leads;
+  }
   return result;
 }
 
@@ -39,6 +49,23 @@ const timestamp = value => {
   if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}T.*(?:Z|[+-]\d{2}:\d{2})$/.test(value) || !Number.isFinite(Date.parse(value))) throw invalidReport();
   return new Date(value).toISOString();
 };
+
+const PEOPLE_KEYS = ["paid_members", "leads", "accounts_not_paid", "new_paid_in_period"];
+
+/**
+ * Paid members and leads, kept apart (owner rule 2026-11-16), or null when
+ * absent or malformed. Founder spots left is not part of this block; it is
+ * the public offer's count (20261120150000).
+ */
+export function normalizeAdminPeople(input) {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return null;
+  const result = {};
+  for (const key of PEOPLE_KEYS) {
+    if (!Number.isSafeInteger(input[key]) || input[key] < 0) return null;
+    result[key] = input[key];
+  }
+  return result;
+}
 
 /** Accept only the aggregate contract. Extra server fields can never enter exports. */
 export function normalizeAdminReport(input, expectedDays) {
@@ -58,6 +85,9 @@ export function normalizeAdminReport(input, expectedDays) {
   // (null is the normalized form of "absent", so a report can be re-checked.)
   const attention = input.attention == null ? null : normalizeAdminAttention(input.attention);
   if (input.attention != null && !attention) throw invalidReport();
+  // Additive and optional within schema 1, as attention is (20261116120000).
+  const people = input.people == null ? null : normalizeAdminPeople(input.people);
+  if (input.people != null && !people) throw invalidReport();
   if (accounts.active > accounts.total || support.urgent > support.open || support.waiting_approval > support.open
     || (support.open === 0) !== (support.oldest_open_at === null)
     || (support.oldest_open_at && Date.parse(support.oldest_open_at) > Date.parse(generated_at))) throw invalidReport();
@@ -66,11 +96,14 @@ export function normalizeAdminReport(input, expectedDays) {
     const date = new Date(firstDay);
     date.setUTCDate(date.getUTCDate() + index);
     if (!row || row.day !== date.toISOString().slice(0, 10)) throw invalidReport();
-    return { day: row.day, signups: count(row.signups), page_views: count(row.page_views), tickets: count(row.tickets), errors: count(row.errors) };
+    return { day: row.day, signups: count(row.signups), page_views: count(row.page_views), tickets: count(row.tickets), errors: count(row.errors),
+      // Present with the people block; null on a server without it.
+      paid_members: people ? count(row.paid_members) : null };
   });
+  if (people && daily.reduce((sum, row) => sum + row.paid_members, 0) !== people.new_paid_in_period) throw invalidReport();
   if (daily.reduce((sum, row) => sum + row.signups, 0) !== accounts.new_in_period
     || daily.reduce((sum, row) => sum + row.errors, 0) !== errors.in_period) throw invalidReport();
-  return { schema_version: 1, generated_at, period_start, period_end, days: expectedDays, accounts, support, errors, attention, daily };
+  return { schema_version: 1, generated_at, period_start, period_end, days: expectedDays, accounts, people, support, errors, attention, daily };
 }
 
 export function adminReportErrorMessage(error) {
@@ -102,10 +135,16 @@ export function adminReportCsv(input, exportedAt = new Date().toISOString()) {
   add("Report", "Window start inclusive", report.period_start);
   add("Report", "Window end exclusive", report.period_end);
   add("Report", "UTC calendar days", report.days, "Includes the current, partial UTC day.");
-  add("Report", "Scope", "All records available to the server report; independent of directory display limits.", "Aggregate operational counts only. No personal information or payment/revenue calculation.");
-  add("Snapshot", "Account profiles", report.accounts.total, ADMIN_REPORT_DEFINITIONS.accounts);
-  add("Snapshot", "Active account profiles", report.accounts.active, ADMIN_REPORT_DEFINITIONS.active);
-  add("Window", "New signup profiles", report.accounts.new_in_period, ADMIN_REPORT_DEFINITIONS.signups);
+  add("Report", "Scope", "All records available to the server report; independent of directory display limits.", "Aggregate operational counts only. No personal information or revenue calculation.");
+  if (report.people) {
+    add("Snapshot", "Paid members", report.people.paid_members, ADMIN_REPORT_DEFINITIONS.paid_members);
+    add("Window", "New paid members", report.people.new_paid_in_period, ADMIN_REPORT_DEFINITIONS.new_paid);
+    add("Snapshot", "Leads", report.people.leads, ADMIN_REPORT_DEFINITIONS.leads);
+    add("Snapshot", "Accounts without a paid membership", report.people.accounts_not_paid, ADMIN_REPORT_DEFINITIONS.accounts_not_paid);
+  }
+  add("Snapshot", "Account profiles (not members)", report.accounts.total, ADMIN_REPORT_DEFINITIONS.accounts);
+  add("Snapshot", "Active account profiles (not members)", report.accounts.active, ADMIN_REPORT_DEFINITIONS.active);
+  add("Window", "New account profiles (not members)", report.accounts.new_in_period, ADMIN_REPORT_DEFINITIONS.signups);
   add("Snapshot", "Open tickets", report.support.open, ADMIN_REPORT_DEFINITIONS.open);
   add("Snapshot", "Urgent open tickets", report.support.urgent, ADMIN_REPORT_DEFINITIONS.urgent);
   add("Snapshot", "Tickets awaiting approval", report.support.waiting_approval, ADMIN_REPORT_DEFINITIONS.approval);
@@ -114,11 +153,12 @@ export function adminReportCsv(input, exportedAt = new Date().toISOString()) {
   if (report.attention) {
     add("Attention", "Unread message replies", report.attention.unread_replies, ADMIN_REPORT_DEFINITIONS.unread_replies);
     add("Attention", "New error reports since last opened", report.attention.new_errors_since_seen, ADMIN_REPORT_DEFINITIONS.new_errors);
-    add("Attention", "Waiting on the waitlist", report.attention.waitlist_waiting, ADMIN_REPORT_DEFINITIONS.waitlist_waiting);
+    add("Attention", "Leads waiting on the waitlist", report.attention.waitlist_waiting, ADMIN_REPORT_DEFINITIONS.waitlist_waiting);
     add("Attention", "Field proposals awaiting review", report.attention.fields_pending, ADMIN_REPORT_DEFINITIONS.fields_pending);
   }
   for (const row of report.daily) {
-    add("Daily", "New signup profiles", row.signups, ADMIN_REPORT_DEFINITIONS.signups, row.day);
+    if (report.people) add("Daily", "New paid members", row.paid_members, ADMIN_REPORT_DEFINITIONS.new_paid, row.day);
+    add("Daily", "New account profiles (not members)", row.signups, ADMIN_REPORT_DEFINITIONS.signups, row.day);
     add("Daily", "Recorded page loads", row.page_views, ADMIN_REPORT_DEFINITIONS.page_views, row.day);
     add("Daily", "Tickets created", row.tickets, ADMIN_REPORT_DEFINITIONS.tickets, row.day);
     add("Daily", "Retained error reports", row.errors, ADMIN_REPORT_DEFINITIONS.errors, row.day);

@@ -15,6 +15,8 @@ The administrative area now opens with a report based on database counts, provid
 
 Account profiles are not verified physicians or paid memberships. Active administrative status alone does not prove product entitlement. New signup profiles require an identity and nonblank email, exclude administrators and deleted/closed accounts, and do not prove mailbox verification. Billing and lifetime controls keep their existing verification and entitlement rules.
 
+Since November 16, 2026 the report also counts paid members and leads, apart from account profiles, and labels account counts as not members. Only paid members count as members, users or signups. See `docs/MEMBERS-AND-LEADS.md`.
+
 Current open support includes unarchived open, in-progress and waiting-on-user tickets. Snapshot backlog is distinct from tickets created within the report interval. Page loads are recorded events, not unique visitors. Traffic uses the existing aggregate/legacy cutover without double counting. Existing seven-day pruning and manual deletion mean retained errors are not a complete 30/90-day incident history.
 
 Search filters apply to **loaded** working records. Coverage and Load more are explicit; an exact overview count can exceed matching loaded detail records. This release does not pretend otherwise.

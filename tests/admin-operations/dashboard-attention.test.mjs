@@ -15,7 +15,7 @@ const tick = () => new Promise(done => setImmediate(done));
 const anchor = '    { id: "preview", label: "Preview as" },\n  ];\n';
 assert.ok(source.includes(anchor), 'TABS anchor moved');
 
-function fixture({ counts = { unread_replies: 2, new_errors_since_seen: 3, waitlist_waiting: 7, fields_pending: 1 }, response = null, full = false } = {}) {
+function fixture({ counts = { unread_replies: 2, new_errors_since_seen: 3, waitlist_waiting: 7, leads: 31, fields_pending: 1 }, response = null, full = false } = {}) {
   const hooks = [], effects = [], rpcs = [], settingsWrites = [];
   let cursor = 0;
   const same = (a, b) => a && b && a.length === b.length && a.every((value, i) => Object.is(value, b[i]));
@@ -50,7 +50,8 @@ test('tab labels show unread replies, new errors, waiting leads and pending fiel
   const view = await f.render();
   assert.equal(label(view, 'messages'), 'Messages (2)');
   assert.equal(label(view, 'errors'), 'Errors (3)');
-  assert.equal(label(view, 'waitlist'), 'Waitlist (7)');
+  // Every lead that is not a paid member, not only those waiting for an invitation.
+  assert.equal(label(view, 'waitlist'), 'Leads (31)');
   assert.equal(label(view, 'fields'), 'Fields (1 pending)');
   assert.equal(f.rpcs[0].name, 'admin_attention_counts');
 });
@@ -59,14 +60,14 @@ test('zero counts and a server without the count function leave plain labels', a
   const quiet = await fixture({ counts: { unread_replies: 0, new_errors_since_seen: 0, waitlist_waiting: 0, fields_pending: 0 } }).render();
   assert.deepEqual(['messages', 'errors', 'fields'].map(id => label(quiet, id)), ['Messages', 'Errors', 'Fields']);
   const notDeployed = await fixture({ response: { data: null, error: { code: 'PGRST202', message: 'Could not find the function' } } }).render();
-  assert.deepEqual(['messages', 'errors', 'waitlist', 'fields'].map(id => label(notDeployed, id)), ['Messages', 'Errors', 'Waitlist', 'Fields']);
+  assert.deepEqual(['messages', 'errors', 'waitlist', 'fields'].map(id => label(notDeployed, id)), ['Messages', 'Errors', 'Leads', 'Fields']);
 });
 
 test('a failed count read is marked on the labels, never shown the same as zero', async () => {
   const zero = await fixture({ counts: { unread_replies: 0, new_errors_since_seen: 0, waitlist_waiting: 0, fields_pending: 0 } }).render();
   for (const response of [{ data: null, error: { code: '42501', message: 'permission denied' } }, { data: null }, { data: { unread_replies: 1 } }]) {
     const view = await fixture({ response }).render();
-    assert.deepEqual(['messages', 'errors', 'waitlist', 'fields'].map(id => label(view, id)), ['Messages (?)', 'Errors (?)', 'Waitlist (?)', 'Fields (?)']);
+    assert.deepEqual(['messages', 'errors', 'waitlist', 'fields'].map(id => label(view, id)), ['Messages (?)', 'Errors (?)', 'Leads (?)', 'Fields (?)']);
     for (const id of ['messages', 'errors', 'fields']) assert.notEqual(label(view, id), label(zero, id));
     assert.equal(view.TABS.find(t => t.id === 'messages').title, 'Unread count unavailable, open to check');
   }
