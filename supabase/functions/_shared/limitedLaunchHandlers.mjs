@@ -521,6 +521,15 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
       const session = await deps.stripe().checkout.sessions.retrieve(eventSession.id);
       if (session.id !== eventSession.id) refuse(503, 'checkout_unavailable');
       if (session.metadata?.app !== config.app || session.metadata.catalog_version !== config.version) return reply(200, { received: true });
+      // A pay-first Checkout holds its place in pay_first_signups, not in a
+      // quote: the same proof gives it back (payFirstSignup.mjs).
+      if (session.metadata.flow === 'pay_first') {
+        if (deps.payFirst?.isPayFirst(session)) {
+          trace.phase = 'pay_first_expired';
+          await deps.payFirst.sessionExpired(session);
+        }
+        return reply(200, { received: true });
+      }
       if (session.status !== 'expired' || session.payment_status !== 'unpaid' || session.subscription !== null) return reply(200, { received: true });
       // Its recovery link, kept on the attempt for a later "finish joining"
       // email (nothing is sent here). Best effort: a failure never holds up
@@ -607,8 +616,35 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
       if (updated === 'needs_support') try { log({ ...failureLog('webhook', trace, 200, `refund_${fresh.status}`), event: 'refund_needs_support' }); } catch { /* A log must never change the answer. */ }
       return reply(200, { received: true });
     }
+    if (event.type === 'charge.dispute.created') {
+      // Alert only (owner default 2026-11-20): recorded for the owner's email
+      // (billing_disputes, 20261120190000). Access and the founding place stay
+      // as they are; a cancellation or reversal arrives as its own event.
+      const eventDispute = event.data?.object;
+      if (!/^(dp|du)_[A-Za-z0-9]+$/.test(eventDispute?.id || '')) refuse(400, 'invalid_dispute_event');
+      if (!deps.store.recordDispute) return reply(200, { received: true });
+      trace.phase = 'dispute';
+      const stripe = deps.stripe();
+      const dispute = await stripe.disputes.retrieve(eventDispute.id);
+      if (dispute?.id !== eventDispute.id || dispute.livemode !== live) refuse(503, 'dispute_unavailable');
+      let customer = null;
+      try { customer = id((await stripe.charges.retrieve(id(dispute.charge))).customer) || null; } catch { /* Recorded without its account. */ }
+      await deps.store.recordDispute(dispute.id, live, id(dispute.charge) || null, Number.isSafeInteger(dispute.amount) ? dispute.amount : null,
+        typeof dispute.reason === 'string' ? dispute.reason : null, /^cus_[A-Za-z0-9]+$/.test(customer || '') ? customer : null);
+      try { log({ ...failureLog('webhook', trace, 200, 'dispute_opened'), event: 'dispute_opened' }); } catch { /* A log must never change the answer. */ }
+      return reply(200, { received: true });
+    }
     if (!['checkout.session.completed', 'checkout.session.async_payment_succeeded', 'customer.subscription.created', 'customer.subscription.updated', 'customer.subscription.deleted', 'invoice.paid', 'invoice.payment_failed'].includes(event.type)) return reply(200, { received: true });
     const obj = event.data.object;
+    // A pay-first Checkout (no account yet when it was paid): the account is
+    // made, the place adopted and the subscription settled first. Until then
+    // Stripe is answered 503 and sends it again (payFirstSignup.mjs).
+    if (event.type.startsWith('checkout.') && obj?.metadata?.flow === 'pay_first' && !obj.metadata.profile_id && obj.metadata.app === config.app) {
+      if (!deps.payFirst?.isPayFirst(obj) || !/^cs_[A-Za-z0-9_]+$/.test(obj.id || '')) refuse(503, 'signup_provisioning_unavailable');
+      trace.phase = 'pay_first_provision';
+      if (!await deps.payFirst.sessionCompleted(obj, event.id)) refuse(503, 'signup_provisioning_pending');
+      return reply(200, { received: true });
+    }
     const subId = event.type.startsWith('customer.subscription.') ? obj.id : id(obj.subscription) || id(obj.parent?.subscription_details?.subscription);
     if (!subId || (event.type.startsWith('checkout.') && obj.mode !== 'subscription')) return reply(200, { received: true });
     // A payment made through a recovery link: counted against the expired
@@ -625,6 +661,14 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
     const sub = await stripe.subscriptions.retrieve(subId, { expand: ['items.data.price.product'] });
     if (sub.metadata?.app !== config.app) return reply(200, { received: true });
     if (sub.metadata.catalog_version === BILLING_CATALOG.version) return createBillingHandlers(deps, { ...BILLING_CATALOG, billingEnabled: true }).webhook(new Request(req.url, { method: 'POST', headers: req.headers, body: raw }));
+    // A pay-first subscription whose account is not made yet (an invoice or
+    // subscription event before its Checkout's): provisioned now, or 503.
+    if (sub.metadata.flow === 'pay_first' && !sub.metadata.profile_id) {
+      if (!deps.payFirst?.isPayFirst(sub)) refuse(503, 'signup_provisioning_unavailable');
+      trace.phase = 'pay_first_provision';
+      if (!await deps.payFirst.subscriptionWaiting(sub, event.id)) refuse(503, 'signup_provisioning_pending');
+      return reply(200, { received: true });
+    }
     const settled = await settleSubscription(stripe, live, sub, event, trace);
     // A cancelled subscription with a refund request that never recorded the
     // cancellation (the owner cancelled it by hand in the dashboard): recorded
@@ -1228,5 +1272,11 @@ export function createLimitedLaunchHandlers(deps, config = LIMITED_LAUNCH) {
   // browser never sends one; CORS does not allow it), everything else is a
   // member's request.
   const refundWithSweep = req => (req.headers.has('x-hook-secret') ? refundSweep(req) : refund(req));
-  return { activate, quote, checkout, webhook, portal, refund, refundSweep, refundWithSweep };
+  const routes = { activate, quote, checkout, webhook, portal, refund, refundSweep, refundWithSweep };
+  // settle: the webhook's own settlement, for a pay-first sign-up once its
+  // account and claim exist (payFirstSignup.mjs provision). Not a route, so
+  // not enumerable: the routes stay exactly the list above.
+  Object.defineProperty(routes, 'settle', { enumerable: false,
+    value: (stripe, live, sub, event) => settleSubscription(stripe, live, sub, event, { phase: 'pay_first_settle' }, { retryBusy: true }) });
+  return routes;
 }
