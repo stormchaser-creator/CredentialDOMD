@@ -10,8 +10,8 @@
 -- under the same lock every claim and settlement takes (8222), and turned into
 -- an ordinary founding claim once the account exists ("adopt after"):
 -- adopt_pay_first_signup runs the unchanged bootstrap_limited_signup,
--- create_limited_billing_preview, claim_limited_billing_checkout (or
--- supersede_limited_checkout), pin_limited_billing_price and
+-- create_limited_billing_preview, retire_limited_checkout_attempt (an unpaid
+-- login-first Checkout), claim_limited_billing_checkout, pin_limited_billing_price and
 -- save_billing_checkout, and limited-stripe-webhook's settleSubscription then
 -- settles it exactly as a login-first purchase.
 --
@@ -295,9 +295,16 @@ begin
   return jsonb_build_object('state','duplicate_member','reason','already_member');
  end if;
  if reason is null then
+  -- Checkout made a new Stripe customer for this payment. An account with none
+  -- is bound to it. An unpaid lead's earlier login-first customer (no
+  -- subscription or payment ever) is replaced below, once any open Checkout of
+  -- it is retired. One with any subscription history needs the owner.
   select stripe_customer_id into existing from public.billing_accounts where profile_id=p.id and livemode=r.livemode;
-  if existing is not null and existing<>p_customer_id then reason:='customer_conflict';
-  elsif existing is null and exists(select 1 from public.billing_accounts where stripe_customer_id=p_customer_id and livemode=r.livemode) then reason:='customer_conflict';
+  if exists(select 1 from public.billing_accounts where stripe_customer_id=p_customer_id and livemode=r.livemode and profile_id<>p.id) then reason:='customer_conflict';
+  elsif existing is not null and existing<>p_customer_id and (
+   exists(select 1 from public.billing_subscriptions where profile_id=p.id and livemode=r.livemode)
+   or exists(select 1 from public.limited_paid_purchase_history where profile_id=p.id and livemode=r.livemode)
+   or exists(select 1 from public.billing_accounts where profile_id=p.id and livemode=r.livemode and reconcile_until>clock_timestamp())) then reason:='customer_conflict';
   elsif existing is null then
    insert into public.billing_accounts(profile_id,livemode,stripe_customer_id) values(p.id,r.livemode,p_customer_id);
   end if;
@@ -312,12 +319,23 @@ begin
    return jsonb_build_object('state','duplicate_member','reason','already_member');
   end if;
  end if;
- if reason is null and p_prior_attempt is null then
+ if reason is null then
+  -- An unpaid login-first Checkout of this account: the service expires its
+  -- Stripe sessions and comes back with the proof; it is retired here, in this
+  -- transaction, before the new claim (as supersede_limited_checkout does).
   prior:=public.limited_checkout_supersede_candidate(p.id,p.auth_user_id,r.livemode);
-  if prior is not null then
+  if prior is not null and p_prior_attempt is distinct from (prior->>'attempt_id')::uuid then
    update public.pay_first_signups set profile_id=p.id,clerk_subject=p.auth_user_id,updated_at=clock_timestamp() where signup_id=r.signup_id;
-   return jsonb_build_object('state','prior_attempt','prior',prior);
+   return jsonb_build_object('state','prior_attempt','prior',prior||jsonb_build_object('customer_id',existing));
   end if;
+  if prior is not null and not public.retire_limited_checkout_attempt(p.id,p.auth_user_id,r.livemode,p_prior_attempt,p_prior_proof) then reason:='prior_checkout_open'; end if;
+  -- A worker still creating a login-first Checkout: try again shortly.
+  if reason is null and exists(select 1 from public.billing_checkout_attempts where profile_id=p.id and livemode=r.livemode and state in ('creating','open')) then
+   raise exception 'pay-first prior checkout busy';
+  end if;
+ end if;
+ if reason is null and existing is not null and existing<>p_customer_id then
+  update public.billing_accounts set stripe_customer_id=p_customer_id where profile_id=p.id and livemode=r.livemode;
  end if;
  if reason is null then
   -- The in-app builder, unchanged: the terms the buyer accepted in Checkout
@@ -330,11 +348,7 @@ begin
   update public.pay_first_signups set state='provisioning',profile_id=p.id,clerk_subject=p.auth_user_id,updated_at=clock_timestamp() where signup_id=r.signup_id;
   -- This hold leaves the count while it becomes the account's own claim.
   perform set_config('credentialdomd.pay_first_adopting',r.signup_id::text,true);
-  if p_prior_attempt is not null then
-   c:=public.supersede_limited_checkout(p.id,p.auth_user_id,r.livemode,p_prior_attempt,p_prior_proof,'core',(v->>'id')::uuid,v->>'consent_hash');
-  else
-   c:=public.claim_limited_billing_checkout(p.id,p.auth_user_id,r.livemode,'core',(v->>'id')::uuid,v->>'consent_hash');
-  end if;
+  c:=public.claim_limited_billing_checkout(p.id,p.auth_user_id,r.livemode,'core',(v->>'id')::uuid,v->>'consent_hash');
   perform set_config('credentialdomd.pay_first_adopting','',true);
   if c->>'state' is distinct from 'claimed' then
    -- No place left (a payment after its hold expired), or a claim refused.
