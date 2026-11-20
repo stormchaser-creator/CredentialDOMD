@@ -63,19 +63,19 @@ test('pay-first holds, adoption and settlement on the real billing chain', { ski
   const slots = () => value(`(select count(*) from limited_founding_slots where livemode)`);
   const reset = () => sql(`delete from pay_first_signups`);
   // A paid Checkout up to adoption: saved, leased, marked paid.
-  const paid = async (n, { email = `buyer${n}@example.invalid` } = {}) => {
+  const paid = async (n, { email = `buyer${n}@example.invalid`, cus = customer(n) } = {}) => {
     const h = await hold(n);
     assert.equal(h.state, 'held', JSON.stringify(h));
     const session = `cs_payfirst${n}x${crypto.randomBytes(3).toString('hex')}`;
     assert.equal(await value(`save_pay_first_session('${h.signup_id}','${session}')`), true);
     const lease = await value(`claim_pay_first_provision('${h.signup_id}','${session}','webhook','evt_payfirst${n}')`);
     assert.equal(lease.state, 'claimed', JSON.stringify(lease));
-    const marked = await value(`mark_pay_first_paid('${h.signup_id}','${lease.token}','sub_payfirst${n}','${customer(n)}',${text(email)})`);
+    const marked = await value(`mark_pay_first_paid('${h.signup_id}','${lease.token}','sub_payfirst${n}','${cus}',${text(email)})`);
     assert.equal(marked.state, 'paid');
-    return { id: h.signup_id, session, token: lease.token, email };
+    return { id: h.signup_id, session, token: lease.token, email, cus };
   };
   const newProfile = n => sql(`insert into profiles(id,auth_user_id,access_status) values('${pid(n)}','${subject(n)}','pending')`);
-  const adopt = (h, n, prior = null, proof = null) => value(`adopt_pay_first_signup('${h.id}','${h.token}','${pid(n)}','${subject(n)}','${customer(n)}',${text(h.email)},'prod_Synthetic',${prior ? `'${prior}'` : 'null'},${proof ? lit(proof) : 'null'})`);
+  const adopt = (h, n, prior = null, proof = null) => value(`adopt_pay_first_signup('${h.id}','${h.token}','${pid(n)}','${subject(n)}','${h.cus}',${text(h.email)},'prod_Synthetic',${prior ? `'${prior}'` : 'null'},${proof ? lit(proof) : 'null'})`);
   const quote = async attempt => JSON.parse(await sql(`select to_jsonb(q) from limited_billing_quotes q where attempt_id='${attempt}'`));
   const settle = async (n, attempt) => {
     const event = `evt_payfirstsettle${n}`;
@@ -207,23 +207,30 @@ test('pay-first holds, adoption and settlement on the real billing chain', { ski
     await db.enroll(12);
     const c = await db.claim(12, await db.preview(12, 'core'));
     await db.pinSave(12, c, 'cs_loginfirst12');
-    const h = await paid(12);
-    // The lead's billing account already holds this customer (fixture), as when the buyer typed the same email.
+    // Checkout made a new customer; the lead's login-first one never paid.
+    const h = await paid(12, { cus: 'cus_checkoutmade12' });
     const first = await adopt(h, 12);
     assert.equal(first.state, 'prior_attempt', JSON.stringify(first));
     assert.equal(first.prior.attempt_id, c.attempt_id);
-    const proof = { attempt_id: c.attempt_id, customer_id: customer(12), status: 'expired', subscription_id: null, session_ids: ['cs_loginfirst12'] };
-    await sql(`update billing_accounts set stripe_customer_id='${customer(12)}' where profile_id='${pid(12)}'`);
-    const a = await adopt(h, 12, c.attempt_id, proof);
+    assert.equal(first.prior.customer_id, customer(12), 'the old customer, whose sessions the service expires');
+    // A proof that does not cover the saved session retires nothing.
+    const bad = { attempt_id: c.attempt_id, customer_id: customer(12), status: 'expired', subscription_id: null, session_ids: [] };
+    assert.deepEqual(await adopt(h, 12, c.attempt_id, bad), { state: 'needs_owner', reason: 'prior_checkout_open' });
+    const again = await value(`claim_pay_first_provision('${h.id}','${h.session}','admin')`);
+    const proof = { ...bad, session_ids: ['cs_loginfirst12'] };
+    const a = await adopt({ ...h, token: again.token }, 12, c.attempt_id, proof);
     assert.equal(a.state, 'adopted', JSON.stringify(a));
     assert.notEqual(a.attempt_id, c.attempt_id);
     assert.equal(await value(`(select count(*) from limited_founding_slots where profile_id='${pid(12)}')`), 1, 'one place, moved to the paid attempt');
+    assert.equal(await value(`(select stripe_customer_id from billing_accounts where profile_id='${pid(12)}')`), 'cus_checkoutmade12');
   });
 
   await t.test('a profile bound to a different Stripe customer needs the owner', async () => {
+    // A former member (cancelled) whose account keeps its own Stripe customer.
     await db.enroll(13);
-    const h = await paid(13);
-    await sql(`update billing_accounts set stripe_customer_id='cus_somebodyelse13' where profile_id='${pid(13)}'`);
+    const c = await db.buy(13);
+    assert.equal(await db.settle(13, c, { paid: false, status: 'canceled' }), 'applied');
+    const h = await paid(13, { cus: 'cus_checkoutmade13' });
     const a = await adopt(h, 13);
     assert.deepEqual(a, { state: 'needs_owner', reason: 'customer_conflict' });
     const owner = await ownerRows('SIGN-UP NEEDS YOU');
