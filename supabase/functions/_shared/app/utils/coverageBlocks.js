@@ -450,3 +450,37 @@ export function spanAgainstBlock(s, en, b, intervals = []) {
   const after = en > b.endMs ? uncovered(Math.max(s, b.endMs), en, intervals) : 0;
   return { before, inside: en - s - before - after, after };
 }
+
+/**
+ * The blocks whose turnover (end time) is not the contract's call-day start
+ * hour, as indexes into contract.coveragePeriods. A block's own turnover
+ * decides the call day of work inside it (timedCallDay), so a 6:00 block on
+ * a contract whose call day starts at 7:00 files 6:00 to 6:59 work under the
+ * new day (tickets 29874d99 and 85f2d177). The form shows this; it does not
+ * change the rule. `startHour` is the contract's call-day start hour.
+ */
+export function turnoverConflicts(periods, startHour) {
+  const want = Number(startHour) * 60;
+  if (!Number.isFinite(want)) return [];
+  const out = [];
+  (periods || []).forEach((p, i) => {
+    const t = clockMinutes(p?.endTime);
+    if (t != null && t !== want) out.push(i);
+  });
+  return out;
+}
+
+/**
+ * The periods with each conflicting block moved to the call-day start hour:
+ * its end time, and its start time too when it was the same clock time
+ * (a 24-hour block, 6:00 to 6:00 becomes 7:00 to 7:00).
+ */
+export function alignTurnovers(periods, startHour) {
+  const hh = `${String(startHour).padStart(2, "0")}:00`;
+  const idx = new Set(turnoverConflicts(periods, startHour));
+  return (periods || []).map((p, i) => {
+    if (!idx.has(i)) return p;
+    const same = clockMinutes(p.startTime) != null && clockMinutes(p.startTime) === clockMinutes(p.endTime);
+    return { ...p, endTime: hh, ...(same ? { startTime: hh } : {}) };
+  });
+}

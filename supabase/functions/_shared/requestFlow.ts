@@ -38,6 +38,15 @@
 
 import { oneTapReady } from "./requestPacket.ts";
 import { homeScreenHint } from "./homeScreenHint.ts";
+
+/**
+ * Report asks the app prepares from the physician's own records when the
+ * request is opened, attached at the one tap (src/utils/requestReports.js
+ * PREPARED_KINDS; a test keeps the two lists equal). Ticket c3f23aa8: the
+ * summary used to say these "follow separately", the old multi-step flow.
+ */
+export const PREPARED_REPORT_KINDS: readonly string[] = Object.freeze(["npi", "references", "work_history", "case_logs", "cv"]);
+const isPrepared = (it: { status?: string; kind?: string }) => it.status === "report" && PREPARED_REPORT_KINDS.includes(String(it.kind ?? ""));
 import { BUILT_IN_SECTIONS } from "./app/utils/sectionFields.js";
 import { withDegree } from "./app/utils/outgoingText.js";
 
@@ -582,6 +591,7 @@ export function physicianSummaryText(input: SummaryInput): string {
     for (const it of p.items) {
       const ask = String(it.ask ?? "").trim() || "(unnamed)";
       if (it.status === "found") lines.push(`- ${ask}: ${(it.labels ?? []).filter(Boolean).join(", ") || plural((it.docIds ?? []).length, "document", "documents")}`);
+      else if (isPrepared(it)) lines.push(`- ${ask}: the app prepares it from your records when you open the request (it says so if it cannot)`);
       else if (it.status === "report") lines.push(`- ${ask}: follows separately (the app exports it)`);
       // Neither of these is in the reply to the requester (requestPacket.ts
       // coverNoteFor): each is a question for the physician, asked here and
@@ -590,22 +600,24 @@ export function physicianSummaryText(input: SummaryInput): string {
       else lines.push(`- ${ask}: not on file. The reply says nothing about it unless you add it.`);
     }
     const n = Array.isArray(p.docIds) ? p.docIds.length : 0;
+    const r = p.items.filter(isPrepared).length;
+    const ready = [n > 0 ? plural(n, "document", "documents") : "", r > 0 ? plural(r, "report", "reports") + " the app prepares" : ""].filter(Boolean).join(" and ");
     lines.push("");
     if (!input.requesterFound) {
       // The Approve button is disabled in the app for this request, so
       // "tap Approve and send" would be an instruction that cannot be
       // followed; the one that works is the one given. The not-found fact
       // was said in the opening and is not repeated here.
-      lines.push(n > 0
-        ? `Packet ready: ${plural(n, "document", "documents")}. Open the request, enter their address under Requester's email and send.`
+      lines.push(n > 0 || r > 0
+        ? `Packet ready: ${ready}. Open the request, enter their address under Requester's email and send.`
         : "Nothing on file to attach yet. Open the request, enter their address under Requester's email and tap Send reply.");
     } else if (!input.oneTap) {
       // Not one tap: the draft waits for the physician. The Approve and send
       // this line used to name was tapped on 2026-09-28 over a draft that
       // answered an informational letter as if it were a request.
-      lines.push(`${n > 0 ? `Draft ready: ${plural(n, "document", "documents")}.` : "Nothing on file to attach yet."} Open the app and tap Review. Nothing goes to ${who} until you send it.`);
-    } else if (n > 0) {
-      lines.push(`Packet ready: ${plural(n, "document", "documents")}. Open the app and tap Approve and send.`);
+      lines.push(`${n > 0 || r > 0 ? `Draft ready: ${ready}.` : "Nothing on file to attach yet."} Open the app and tap Review. Nothing goes to ${who} until you send it.`);
+    } else if (n > 0 || r > 0) {
+      lines.push(`Packet ready: ${ready}. Open the app and tap Approve and send.`);
     } else {
       // "Send reply" is the first words of the live button on the request's
       // card and on Home ("Send reply (nothing to attach)"). "Reply from the

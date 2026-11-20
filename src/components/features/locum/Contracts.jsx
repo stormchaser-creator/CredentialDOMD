@@ -18,7 +18,7 @@ import { TAX_STATES, MODELED_STATES, NO_INCOME_TAX_STATES } from "../../../utils
 import { STATE_NAMES } from "../../../constants/states";
 import { isArchived, inForceAmongSiblings } from "../../../utils/contractsForDate";
 import { callDayStartHour, hourLabel, currentCallDay } from "../../../utils/billing";
-import { toClock, savedPeriod, periodProblem, coveragePeriodText, blockSummary, contractZone, deviceZone, validZone, isTimedPeriod } from "../../../utils/coverageBlocks";
+import { toClock, savedPeriod, periodProblem, coveragePeriodText, blockSummary, contractZone, deviceZone, validZone, isTimedPeriod, turnoverConflicts, alignTurnovers } from "../../../utils/coverageBlocks";
 import { facilityZone, sameClock, ZONE_NAMES } from "../../../utils/facilityZone";
 import { callPeriodsOf, callRate } from "../../../utils/dutyPay";
 import { resolveDocument } from "../../../utils/receiptFiles";
@@ -421,6 +421,21 @@ function Contracts() {
                 </div>
               );
             })}
+            {(() => {
+              // A block that turns over at another hour than the call day
+              // decides the call day of work inside it (tickets 29874d99,
+              // 85f2d177: 6:00 blocks on a contract whose day starts at 7).
+              const startHour = callDayStartHour(form);
+              const clash = turnoverConflicts(form.coveragePeriods, startHour);
+              if (!clash.length) return null;
+              const at = toClock(form.coveragePeriods[clash[0]]?.endTime);
+              return (
+                <div aria-label="Turnover check" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 13, color: T.warning }}>
+                  <span>{clash.length === 1 ? `Block ${clash[0] + 1} turns` : `${clash.length} blocks turn`} over at {at}, but the call day starts at {hourLabel(startHour)}. Work between the two is filed under the new day.</span>
+                  <button onClick={() => setForm(f => ({ ...f, coveragePeriods: alignTurnovers(f.coveragePeriods, startHour) }))} style={{ padding: "4px 10px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 8, border: "none", backgroundColor: T.accentDim, color: T.accent, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>Use {hourLabel(startHour)}</button>
+                </div>
+              );
+            })()}
             {(form.coveragePeriods || []).length > 0 && (
               <div style={{ fontSize: 12, color: T.textDim }}>Times are optional: enter them when the agreement states them. A start time needs an end time.</div>
             )}

@@ -308,16 +308,16 @@ eq("the summary, four asks", sum2,
   + "- Ridgeway COI: Professional Liability COI, Harborline Specialty Insurance\n"
   + "- MMR dose #2: MMR (Measles, Mumps, Rubella) vaccination, MMR (Measles, Mumps, Rubella) vaccination\n"
   + "- TB form: not on file. The reply says nothing about it unless you add it.\n"
-  + "- Logs 12-months: follows separately (the app exports it)\n"
+  + "- Logs 12-months: the app prepares it from your records when you open the request (it says so if it cannot)\n"
   + "\n"
-  + "Packet ready: 3 documents. Open the app and tap Approve and send.\n"
+  + "Packet ready: 3 documents and 1 report the app prepares. Open the app and tap Approve and send.\n"
   + "https://credentialdomd.com/app/#requests (opens your requests)\n"
   + REQUESTS_HINT);
 // Since 2026-09-28 a proposal that may not go on one tap sends the physician
 // to Review, with what to check, and never names Approve and send.
 const review2 = physicianSummaryText({ requesterName: "Tara Example", requesterAddr: "tara@ridgeway-group.example", requesterFound: true, proposal: proposal2, appUrl: "https://credentialdomd.com/app/",
   review: 'Not on file: "TB form". The asks were read by keyword matching, so check the draft before it goes.' });
-ok("not one tap: Review, not Approve and send", review2.includes("\nDraft ready: 3 documents. Open the app and tap Review. Nothing goes to Tara Example until you send it.\n") && !review2.includes("Approve and send"));
+ok("not one tap: Review, not Approve and send", review2.includes("\nDraft ready: 3 documents and 1 report the app prepares. Open the app and tap Review. Nothing goes to Tara Example until you send it.\n") && !review2.includes("Approve and send"));
 ok("not one tap: what to check comes before the link", review2.includes('\nTo check: Not on file: "TB form". The asks were read by keyword matching, so check the draft before it goes.\nhttps://credentialdomd.com/app/#requests'));
 ok("oneTap absent reads as not one tap", !physicianSummaryText({ requesterName: "Tara", requesterAddr: "t@x.org", requesterFound: true, proposal: proposal2, appUrl: "u" }).includes("Approve and send"));
 const proposal1 = { v: 1, method: "rules", items: [{ ask: "board certificate", kind: "board_cert", status: "found", docIds: ["d9"], labels: ["Board Certification (AOA)"] }], docIds: ["d9"], missing: [], coverNote: "x" };
@@ -369,13 +369,19 @@ ok("an ask the rules could not name is a question for the physician, not 'not on
 ok("null proposal: the request is still announced and the fallback is the old path",
   physicianSummaryText({ requesterName: "Tara", requesterAddr: "t@x.org", requesterFound: true, proposal: null, appUrl: "u" })
     .includes("The packet could not be prepared automatically; open the request to choose the documents."));
-const nothing = physicianSummaryText({ requesterName: "Tara", requesterAddr: "t@x.org", requesterFound: true, proposal: { ...proposal2, items: proposal2.items.slice(2), docIds: [] }, appUrl: "u", oneTap: true });
-const nothingReview = physicianSummaryText({ requesterName: "Tara", requesterAddr: "t@x.org", requesterFound: true, proposal: { ...proposal2, items: proposal2.items.slice(2), docIds: [] }, appUrl: "u" });
+const nothing = physicianSummaryText({ requesterName: "Tara", requesterAddr: "t@x.org", requesterFound: true, proposal: { ...proposal2, items: proposal2.items.slice(2, 3), docIds: [] }, appUrl: "u", oneTap: true });
+const nothingReview = physicianSummaryText({ requesterName: "Tara", requesterAddr: "t@x.org", requesterFound: true, proposal: { ...proposal2, items: proposal2.items.slice(2, 3), docIds: [] }, appUrl: "u" });
 ok("nothing found, not one tap: Review", nothingReview.includes("Nothing on file to attach yet. Open the app and tap Review. Nothing goes to Tara until you send it.") && !nothingReview.includes("Send reply"));
 ok("nothing found: does not say 'Packet ready: 0 documents'", !nothing.includes("Packet ready") && nothing.includes("Nothing on file to attach yet"));
 // The button on the list card and on Home reads "Send reply (nothing to
 // attach)"; "reply from the request" sent the physician into the card to
 // find a button that was already on the list, one tap become three.
+// Ticket c3f23aa8: a report the app prepares (case logs) is part of the one
+// tap, never "follows separately"; an ask the app does not prepare still is.
+const reportOnly = physicianSummaryText({ requesterName: "Tara", requesterAddr: "t@x.org", requesterFound: true, proposal: { ...proposal2, items: proposal2.items.slice(3), docIds: [] }, appUrl: "u", oneTap: true });
+ok("c3f23aa8: a prepared report alone is a one-tap packet", reportOnly.includes("Packet ready: 1 report the app prepares. Open the app and tap Approve and send.") && !reportOnly.includes("follows separately") && !reportOnly.includes("Nothing on file"));
+const otherReport = physicianSummaryText({ requesterName: "Tara", requesterAddr: "t@x.org", requesterFound: true, proposal: { ...proposal2, items: [{ ask: "Peer letters", kind: "peer_letters", status: "report", docIds: [], labels: [] }], docIds: [] }, appUrl: "u", oneTap: true });
+ok("c3f23aa8: a report the app does not prepare still follows separately", otherReport.includes("- Peer letters: follows separately (the app exports it)"));
 ok("nothing found: names the button that is on the card and on Home", nothing.includes("Nothing on file to attach yet. Open the app and tap Send reply.\n") && !nothing.includes("reply from the request"));
 // The link opens the requests list itself (#requests); "(Home, or More >
 // Requests)" described two routes and a physician on a phone followed neither.

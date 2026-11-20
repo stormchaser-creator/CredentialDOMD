@@ -1,4 +1,5 @@
-import { computeBilling } from "./billing.js";
+import { computeBilling, callDayOf } from "./billing.js";
+import { isArchived } from "./contractsForDate.js";
 
 /**
  * Billing forecast: schedule future days per contract with an expected
@@ -45,7 +46,13 @@ export function actualByDate(data) {
     // Same call the invoice button makes (list = what's still unbilled,
     // allList = full history for the allowance math) — so this can never
     // show a number the real invoice wouldn't also produce.
-    const { lines } = computeBilling(c, unbilled, true, all, data.invoices || []);
+    // An archived agreement (replaced by a new one) counts only work logged
+    // under it: its coverage blocks must not sweep in a stipend day that its
+    // replacement now covers (ticket de954247: an archived Sanford contract
+    // added a phantom $3,000 to Nov 5).
+    const dayFilter = isArchived(c) ? new Set(unbilled.map(callDayOf)) : null;
+    if (dayFilter && dayFilter.size === 0) continue;
+    const { lines } = computeBilling(c, unbilled, true, all, data.invoices || [], dayFilter);
     for (const l of lines) {
       if (l.amount == null || !l.date) continue;
       map[l.date] = (map[l.date] || 0) + l.amount;
