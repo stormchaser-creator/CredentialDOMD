@@ -25,7 +25,9 @@ export const REQUIRED_EVENTS = Object.freeze([
   'charge.refunded', 'charge.refund.updated',
 ]);
 // Sent only on newer API versions; the handler takes them when they come.
-export const OPTIONAL_EVENTS = Object.freeze(['refund.updated', 'refund.failed']);
+// charge.dispute.created: the owner's dispute alert (20261120190000), alert
+// only, so an endpoint without it is reported, not refused.
+export const OPTIONAL_EVENTS = Object.freeze(['refund.updated', 'refund.failed', 'charge.dispute.created']);
 
 /** Which required events the limited-stripe-webhook endpoint(s) lack. */
 export function checkRefundEvents(endpoints) {

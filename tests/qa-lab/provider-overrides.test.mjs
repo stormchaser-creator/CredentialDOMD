@@ -91,6 +91,7 @@ const OVERRIDES = [
   ['_shared/limitedLaunchDependencies.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
   ['_shared/inviteToJoinDependencies.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
   ['_shared/invoiceEmailDependencies.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
+  ['_shared/payFirstDependencies.ts', 'RESEND_API_BASE', 'https://api.resend.com'],
 ];
 // The Clerk and Stripe overrides are read in one place each (tests above).
 const SINGLE_READERS = [

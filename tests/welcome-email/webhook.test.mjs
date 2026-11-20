@@ -307,7 +307,10 @@ test('limited-stripe-webhook entry: the hook secret header goes to the sweep, a 
 test('the webhook deployment serves the sweep from its own copy of the email', async () => {
   const fs = await import('node:fs');
   const entry = fs.readFileSync(new URL('../../supabase/functions/limited-stripe-webhook/index.ts', import.meta.url), 'utf8');
-  assert.match(entry, /serve\(withWelcomeSweep\(createLimitedLaunchHandlers\(deps, limitedLaunchConfig\(\)\)\.webhook, deps\.welcomeSweep\)\)/);
+  // The handlers are built once (pay-first sign-up shares their settlement, 20261120190000).
+  assert.match(entry, /const handlers = createLimitedLaunchHandlers\(deps, config\);/);
+  assert.match(entry, /const config = limitedLaunchConfig\(\);/);
+  assert.match(entry, /serve\(withWelcomeSweep\(handlers\.webhook, deps\.welcomeSweep\)\);/);
   const deps = fs.readFileSync(new URL('../../supabase/functions/_shared/limitedLaunchDependencies.ts', import.meta.url), 'utf8');
   assert.match(deps, /createWelcomeEmailSweep\(\{\s*secret: \(\) => Deno\.env\.get\('WELCOME_HOOK_SECRET'\)/);
   assert.match(deps, /pendingWelcomes: .*rpc\('welcome_email_pending', \{ p_livemode: live, p_fingerprint: fingerprint \}\)/);
