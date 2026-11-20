@@ -7,7 +7,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { actualByDate } from '../src/utils/forecast.js';
 import { deriveCallDay } from '../src/utils/billing.js';
-import { turnoverConflicts, alignTurnovers } from '../src/utils/coverageBlocks.js';
+import { turnoverConflicts, alignableTurnovers, alignTurnovers } from '../src/utils/coverageBlocks.js';
 
 const block = (extra = {}) => ({ tz: 'America/Chicago', start: '2026-11-05', end: '2026-11-12', startTime: '07:00', endTime: '07:00', ...extra });
 const stipend = (id, extra = {}) => ({ id, name: 'Synthetic Hospital', location: 'Fargo, ND', payModel: 'stipend', callStipend: 3000, stipendHours: 4, overageHourlyRate: 300, dayStartHour: 7, coveragePeriods: [block()], ...extra });
@@ -42,12 +42,12 @@ test('85f2d177: a 6:00 block files a 6:37 call under the new day; aligned to 7:0
   assert.deepEqual(turnoverConflicts(fixed.coveragePeriods, 7), []);
 });
 
-test('turnover check: only blocks with an end time that differs; a block with its own start time keeps it', () => {
+test('turnover check: flags any block whose end time differs; aligns only around-the-clock blocks, never changing covered hours', () => {
   const periods = [block(), block({ startTime: '16:00', endTime: '06:00' }), { start: '2026-12-01', end: '2026-12-03' }];
   assert.deepEqual(turnoverConflicts(periods, 7), [1]);
+  assert.deepEqual(alignableTurnovers(periods, 7), []);
   const out = alignTurnovers(periods, 7);
-  assert.equal(out[1].startTime, '16:00');
-  assert.equal(out[1].endTime, '07:00');
+  assert.equal(out[1], periods[1], 'a 16:00 to 06:00 block keeps the hours the agreement states');
   assert.equal(out[0], periods[0]);
   assert.equal(out[2], periods[2]);
 });

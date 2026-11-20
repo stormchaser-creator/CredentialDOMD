@@ -47,6 +47,14 @@ import { homeScreenHint } from "./homeScreenHint.ts";
  */
 export const PREPARED_REPORT_KINDS: readonly string[] = Object.freeze(["npi", "references", "work_history", "case_logs", "cv"]);
 const isPrepared = (it: { status?: string; kind?: string }) => it.status === "report" && PREPARED_REPORT_KINDS.includes(String(it.kind ?? ""));
+/**
+ * The prepared kinds the app attaches as a file (requestReports.js: case logs
+ * and the CV, how: "file"), which the app's button counts as documents
+ * (RequestPacket.js "Approve and send N documents"). The others (NPI,
+ * references, work history) are written into the reply's note.
+ */
+export const FILE_REPORT_KINDS: readonly string[] = Object.freeze(["case_logs", "cv"]);
+const isFileReport = (it: { status?: string; kind?: string }) => isPrepared(it) && FILE_REPORT_KINDS.includes(String(it.kind ?? ""));
 import { BUILT_IN_SECTIONS } from "./app/utils/sectionFields.js";
 import { withDegree } from "./app/utils/outgoingText.js";
 
@@ -591,7 +599,8 @@ export function physicianSummaryText(input: SummaryInput): string {
     for (const it of p.items) {
       const ask = String(it.ask ?? "").trim() || "(unnamed)";
       if (it.status === "found") lines.push(`- ${ask}: ${(it.labels ?? []).filter(Boolean).join(", ") || plural((it.docIds ?? []).length, "document", "documents")}`);
-      else if (isPrepared(it)) lines.push(`- ${ask}: the app prepares it from your records when you open the request (it says so if it cannot)`);
+      else if (isFileReport(it)) lines.push(`- ${ask}: the app prepares it from your records and attaches it (it says so if it cannot)`);
+      else if (isPrepared(it)) lines.push(`- ${ask}: the app writes it into the reply from your records (it says so if it cannot)`);
       else if (it.status === "report") lines.push(`- ${ask}: follows separately (the app exports it)`);
       // Neither of these is in the reply to the requester (requestPacket.ts
       // coverNoteFor): each is a question for the physician, asked here and
@@ -600,8 +609,10 @@ export function physicianSummaryText(input: SummaryInput): string {
       else lines.push(`- ${ask}: not on file. The reply says nothing about it unless you add it.`);
     }
     const n = Array.isArray(p.docIds) ? p.docIds.length : 0;
-    const r = p.items.filter(isPrepared).length;
-    const ready = [n > 0 ? plural(n, "document", "documents") : "", r > 0 ? plural(r, "report", "reports") + " the app prepares" : ""].filter(Boolean).join(" and ");
+    // As the app's button counts: stored documents plus the reports it
+    // attaches as files.
+    const r = p.items.filter(isFileReport).length;
+    const ready = plural(n + r, "document", "documents");
     lines.push("");
     if (!input.requesterFound) {
       // The Approve button is disabled in the app for this request, so

@@ -18,7 +18,7 @@ import { TAX_STATES, MODELED_STATES, NO_INCOME_TAX_STATES } from "../../../utils
 import { STATE_NAMES } from "../../../constants/states";
 import { isArchived, inForceAmongSiblings } from "../../../utils/contractsForDate";
 import { callDayStartHour, hourLabel, currentCallDay } from "../../../utils/billing";
-import { toClock, savedPeriod, periodProblem, coveragePeriodText, blockSummary, contractZone, deviceZone, validZone, isTimedPeriod, turnoverConflicts, alignTurnovers } from "../../../utils/coverageBlocks";
+import { toClock, savedPeriod, periodProblem, coveragePeriodText, blockSummary, contractZone, deviceZone, validZone, isTimedPeriod, turnoverConflicts, alignableTurnovers, alignTurnovers } from "../../../utils/coverageBlocks";
 import { facilityZone, sameClock, ZONE_NAMES } from "../../../utils/facilityZone";
 import { callPeriodsOf, callRate } from "../../../utils/dutyPay";
 import { resolveDocument } from "../../../utils/receiptFiles";
@@ -428,11 +428,13 @@ function Contracts() {
               const startHour = callDayStartHour(form);
               const clash = turnoverConflicts(form.coveragePeriods, startHour);
               if (!clash.length) return null;
-              const at = toClock(form.coveragePeriods[clash[0]]?.endTime);
+              const fixable = alignableTurnovers(form.coveragePeriods, startHour);
+              const clock = (v) => { const [h, m] = toClock(v).split(":").map(Number); return `${h % 12 || 12}:${String(m).padStart(2, "0")} ${h < 12 ? "AM" : "PM"}`; };
+              const times = [...new Set(clash.map(i => clock(form.coveragePeriods[i].endTime)))].join(", ");
               return (
                 <div aria-label="Turnover check" style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap", fontSize: 13, color: T.warning }}>
-                  <span>{clash.length === 1 ? `Block ${clash[0] + 1} turns` : `${clash.length} blocks turn`} over at {at}, but the call day starts at {hourLabel(startHour)}. Work between the two is filed under the new day.</span>
-                  <button onClick={() => setForm(f => ({ ...f, coveragePeriods: alignTurnovers(f.coveragePeriods, startHour) }))} style={{ padding: "4px 10px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 8, border: "none", backgroundColor: T.accentDim, color: T.accent, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>Use {hourLabel(startHour)}</button>
+                  <span>{clash.length === 1 ? `Block ${clash[0] + 1} turns` : `${clash.length} blocks turn`} over at {times}, not at the call day start ({hourLabel(startHour)}). Inside {clash.length === 1 ? "that block" : "those blocks"} the call day changes at the block's time. Entries already logged keep their call day.</span>
+                  {fixable.length > 0 && <button onClick={() => setForm(f => ({ ...f, coveragePeriods: alignTurnovers(f.coveragePeriods, startHour) }))} style={{ padding: "4px 10px", minHeight: isDesktop ? undefined : TAP_MIN, borderRadius: 8, border: "none", backgroundColor: T.accentDim, color: T.accent, cursor: "pointer", fontSize: 13, fontWeight: 700 }}>Use {hourLabel(startHour)}{fixable.length < clash.length ? ` for the ${fixable.length} around-the-clock block${fixable.length === 1 ? "" : "s"}` : ""}</button>}
                 </div>
               );
             })()}

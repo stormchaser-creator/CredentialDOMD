@@ -471,16 +471,20 @@ export function turnoverConflicts(periods, startHour) {
 }
 
 /**
- * The periods with each conflicting block moved to the call-day start hour:
- * its end time, and its start time too when it was the same clock time
- * (a 24-hour block, 6:00 to 6:00 becomes 7:00 to 7:00).
+ * The conflicting blocks that run around the clock (start time equals end
+ * time, 6:00 to 6:00): only these can move to the call-day start without
+ * changing the hours the agreement covers.
  */
+export function alignableTurnovers(periods, startHour) {
+  return turnoverConflicts(periods, startHour).filter((i) => {
+    const p = periods[i];
+    return clockMinutes(p.startTime) != null && clockMinutes(p.startTime) === clockMinutes(p.endTime);
+  });
+}
+
+/** The periods with each around-the-clock conflicting block moved to the call-day start (6:00 to 6:00 becomes 7:00 to 7:00). */
 export function alignTurnovers(periods, startHour) {
   const hh = `${String(startHour).padStart(2, "0")}:00`;
-  const idx = new Set(turnoverConflicts(periods, startHour));
-  return (periods || []).map((p, i) => {
-    if (!idx.has(i)) return p;
-    const same = clockMinutes(p.startTime) != null && clockMinutes(p.startTime) === clockMinutes(p.endTime);
-    return { ...p, endTime: hh, ...(same ? { startTime: hh } : {}) };
-  });
+  const idx = new Set(alignableTurnovers(periods, startHour));
+  return (periods || []).map((p, i) => (idx.has(i) ? { ...p, startTime: hh, endTime: hh } : p));
 }
