@@ -19,41 +19,32 @@
 -- account that only signed in, and every early_access_leads row.
 --
 -- What changes:
---   1. paid_member_profiles(), paid_founder_count(), founder_spots_left(),
---      lead_contact_count(): the shared definitions. Internal; no API grant
---      except paid_founder_count (see 3).
---   2. public_membership_offer() adds founderSpotsLeft while the phase is
---      founding: the program's capacity (100) minus founding places whose
---      first payment is verified (limited_founding_slots.state = 'paid').
---      Leads, accounts, promised, reserved and committed places never reduce
---      it. A paid place is not given back after a cancel or refund (owner
---      policy, 2026-09-20), so it keeps counting. The reviewed body is kept
---      behind a private name, as the founding capacity and practice
---      migrations did.
---   3. founding_cohort_count (read by the founding-count function) counted
---      profiles with a pre-launch founding_number and active access, none of
---      whom had paid. It now counts paid founding places only. Same view
---      name, column and grants.
---   4. admin_attention_snapshot() adds "leads": distinct lead addresses that
+--   1. paid_member_profiles(), lead_contact_count(): the shared definitions.
+--      Internal; no API grant.
+--   2. admin_attention_snapshot() adds "leads": distinct lead addresses that
 --      do not belong to a paid member. waitlist_waiting is unchanged.
---   5. admin_operations_report() adds an optional "people" block (paid
---      members, paid founders, founder spots left, leads, accounts without a
---      paid membership, new paid members in the window) and a per-day
---      paid_members count. schema_version stays 1: the deployed client ignores
---      extra fields, so this migration and the client can ship in either
---      order. The existing accounts/signups numbers are untouched; the client
---      relabels them as accounts, not members.
---   6. admin_account_memberships(): paid_active now uses the same rule (it
+--   3. admin_operations_report() adds an optional "people" block (paid
+--      members, leads, accounts without a paid membership, new paid members
+--      in the window) and a per-day paid_members count. schema_version stays
+--      1: the deployed client ignores extra fields, so this migration and the
+--      client can ship in either order. The existing accounts/signups numbers
+--      are untouched; the client relabels them as accounts, not members.
+--   4. admin_account_memberships(): paid_active now uses the same rule (it
 --      read membership_active alone, so a past_due or lapsed row could sort
 --      under "Paying members"), and a new founding_paid column separates a
 --      paid founding place from the legacy pre-launch badge.
+--
+-- Founder spots left (paid_founder_count(), founder_spots_left() and the
+-- founderSpotsLeft field of public_membership_offer()) belongs to
+-- 20261120150000_public_founder_spots_left.sql (PR #25), not this migration.
+-- Nothing here reads those functions, and founding_cohort_count is unchanged.
 --
 -- Nothing is deleted, merged or rewritten: no table, column or row changes.
 -- A lead that later pays has a profile with a paid subscription under the
 -- same address, so it leaves the lead count and enters the member count with
 -- no data change.
 --
--- Rerunnable: CREATE OR REPLACE, a guarded rename, DROP FUNCTION IF EXISTS
+-- Rerunnable: CREATE OR REPLACE, DROP FUNCTION IF EXISTS
 -- only for the one function whose result columns grow. No begin/commit:
 -- apply-migration.sh sends the file as one statement batch, which Postgres
 -- runs as one transaction.
@@ -77,31 +68,6 @@ comment on function public.paid_member_profiles() is
 revoke all on function public.paid_member_profiles() from public,anon,authenticated,service_role;
 grant execute on function public.paid_member_profiles() to service_role;
 
--- Founding places whose first payment is verified. Not given back after a
--- cancel or refund, so this never goes down.
-create or replace function public.paid_founder_count()
-returns integer language sql stable security definer set search_path='' as $$
-  select count(*)::integer from public.limited_founding_slots f where f.livemode and f.state='paid'
-$$;
-comment on function public.paid_founder_count() is
-  'Live founding places with a verified first payment. Leads, accounts, lifetime access and promised, reserved or committed places are not counted.';
-revoke all on function public.paid_founder_count() from public,anon,authenticated,service_role;
--- The founding_cohort_count view is security_invoker and already readable by
--- anon; the same number is public as founderSpotsLeft.
-grant execute on function public.paid_founder_count() to anon,authenticated,service_role;
-
--- Capacity comes from the sealed program row, never a literal here. Null
--- when no live founding program exists, so nothing is shown.
-create or replace function public.founder_spots_left()
-returns integer language sql stable security definer set search_path='' as $$
-  select greatest(g.capacity-public.paid_founder_count(),0)
-  from public.limited_founding_programs g where g.livemode
-$$;
-comment on function public.founder_spots_left() is
-  'Founding capacity minus paid founding places. Null when there is no live founding program.';
-revoke all on function public.founder_spots_left() from public,anon,authenticated,service_role;
-grant execute on function public.founder_spots_left() to service_role;
-
 -- A lead: an address in early_access_leads (waitlist or guide request) that
 -- does not belong to a paid member. One person asking for two guides is one
 -- lead. Rows are only counted, never changed.
@@ -119,36 +85,7 @@ comment on function public.lead_contact_count() is
 revoke all on function public.lead_contact_count() from public,anon,authenticated,service_role;
 grant execute on function public.lead_contact_count() to service_role;
 
--- ── 2. The public offer carries the founder countdown ────────────────────
-do $$ begin
- if to_regprocedure('public.public_membership_offer_before_spots()') is null then
-  alter function public.public_membership_offer() rename to public_membership_offer_before_spots;
- end if;
-end $$;
-create or replace function public.public_membership_offer()
-returns jsonb language plpgsql stable security definer set search_path=public,pg_temp as $$
-declare offer jsonb; spots integer;
-begin
- offer:=public.public_membership_offer_before_spots();
- -- Only while founding is what a new buyer is offered. The site shows the
- -- number only when checkout is open and it is a whole number from 1 to 100.
- if offer->>'phase'='founding' then
-  spots:=public.founder_spots_left();
-  if spots is not null then offer:=offer||jsonb_build_object('founderSpotsLeft',spots); end if;
- end if;
- return offer;
-end $$;
-revoke all on function public.public_membership_offer_before_spots(),public.public_membership_offer() from public,anon,authenticated,service_role;
-grant execute on function public.public_membership_offer() to service_role;
-
--- ── 3. The older public counter counts paid founders only ────────────────
-create or replace view public.founding_cohort_count with (security_invoker = true) as
-select public.paid_founder_count() as claimed;
-comment on view public.founding_cohort_count is
-  'Paid founding places (limited_founding_slots state paid). Before 2026-11-16 this counted pre-launch profiles with a founding_number, none of whom had paid.';
-grant select on public.founding_cohort_count to anon, authenticated;
-
--- ── 4. Attention counts: leads beside the waitlist ───────────────────────
+-- ── 2. Attention counts: leads beside the waitlist ───────────────────────
 -- Body as 20260925111000 with one added key.
 create or replace function public.admin_attention_snapshot(
   p_profile uuid,p_messages_seen_at timestamptz default null,p_errors_seen_at timestamptz default null
@@ -172,7 +109,7 @@ create or replace function public.admin_attention_snapshot(
 $$;
 revoke all on function public.admin_attention_snapshot(uuid,timestamptz,timestamptz) from public,anon,authenticated,service_role;
 
--- ── 5. The operations report: paid members and leads, apart from accounts ─
+-- ── 3. The operations report: paid members and leads, apart from accounts ─
 -- Body as 20260925111000 with paid_days, daily.paid_members and "people".
 create or replace function public.admin_operations_report(p_days integer default 30)
 returns jsonb language plpgsql stable security definer set search_path='' set timezone='UTC' as $$
@@ -239,8 +176,6 @@ begin
       from public.profiles p where p.deleted_at is null and not public.account_is_closed(p.id)),
     'people',jsonb_build_object(
       'paid_members',(select count(*) from public.paid_member_profiles()),
-      'paid_founders',public.paid_founder_count(),
-      'founder_spots_left',public.founder_spots_left(),
       'leads',public.lead_contact_count(),
       'accounts_not_paid',(select count(*) from public.profiles p
         where p.deleted_at is null and not public.account_is_closed(p.id)
@@ -263,7 +198,7 @@ comment on function public.admin_operations_report(integer) is
 revoke all on function public.admin_operations_report(integer) from public,anon,authenticated,service_role;
 grant execute on function public.admin_operations_report(integer) to authenticated;
 
--- ── 6. Admin > Accounts sorts by the same rule ───────────────────────────
+-- ── 4. Admin > Accounts sorts by the same rule ───────────────────────────
 -- The result gains a column, which CREATE OR REPLACE cannot do. Dropping the
 -- function removes no data; the deployed client reads columns by name.
 drop function if exists public.admin_account_memberships();

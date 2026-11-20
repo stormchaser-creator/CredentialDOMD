@@ -3,8 +3,6 @@ export const ADMIN_REPORT_FRESH_MS = 5 * 60 * 1000;
 
 export const ADMIN_REPORT_DEFINITIONS = Object.freeze({
   paid_members: "The only people counted as members, users or signups: accounts that are not deleted or closed with a live membership that is active and inside its paid period (Credential, or Credential + Practice). Lifetime, gifted and beta access, unpaid accounts and leads are not counted.",
-  paid_founders: "Founder places with a verified first payment. This is the only number that reduces the founder countdown. A paid place is not given back after a cancellation or refund.",
-  founder_spots_left: "Founder capacity minus paid founder members. Leads, accounts and unpaid checkouts never reduce it.",
   new_paid: "Memberships whose first payment was verified in the selected window. A later refund or cancellation does not remove the day it was paid.",
   leads: "Email addresses that asked for a state guide or joined the waitlist and do not belong to a paid member. One address counts once. Leads are not users, members or signups; a lead who pays moves to paid members.",
   accounts_not_paid: "Account profiles with a sign-in identity and email, excluding administrators and deleted or closed accounts, that have no paid membership. Includes lifetime, gifted and beta access. Not members.",
@@ -52,13 +50,12 @@ const timestamp = value => {
   return new Date(value).toISOString();
 };
 
-const PEOPLE_KEYS = ["paid_members", "paid_founders", "leads", "accounts_not_paid", "new_paid_in_period"];
+const PEOPLE_KEYS = ["paid_members", "leads", "accounts_not_paid", "new_paid_in_period"];
 
 /**
  * Paid members and leads, kept apart (owner rule 2026-11-16), or null when
- * absent or malformed. founder_spots_left is null when no founding program
- * is live. Paid founders are a history of paid places, so they may exceed
- * current paid members; nothing else is cross-checked.
+ * absent or malformed. Founder spots left is not part of this block; it is
+ * the public offer's count (20261120150000).
  */
 export function normalizeAdminPeople(input) {
   if (!input || typeof input !== "object" || Array.isArray(input)) return null;
@@ -67,9 +64,6 @@ export function normalizeAdminPeople(input) {
     if (!Number.isSafeInteger(input[key]) || input[key] < 0) return null;
     result[key] = input[key];
   }
-  const spots = input.founder_spots_left;
-  if (spots != null && (!Number.isSafeInteger(spots) || spots < 0 || spots > 100)) return null;
-  result.founder_spots_left = spots ?? null;
   return result;
 }
 
@@ -144,8 +138,6 @@ export function adminReportCsv(input, exportedAt = new Date().toISOString()) {
   add("Report", "Scope", "All records available to the server report; independent of directory display limits.", "Aggregate operational counts only. No personal information or revenue calculation.");
   if (report.people) {
     add("Snapshot", "Paid members", report.people.paid_members, ADMIN_REPORT_DEFINITIONS.paid_members);
-    add("Snapshot", "Paid founder members", report.people.paid_founders, ADMIN_REPORT_DEFINITIONS.paid_founders);
-    add("Snapshot", "Founder spots left", report.people.founder_spots_left ?? "Unavailable", ADMIN_REPORT_DEFINITIONS.founder_spots_left);
     add("Window", "New paid members", report.people.new_paid_in_period, ADMIN_REPORT_DEFINITIONS.new_paid);
     add("Snapshot", "Leads", report.people.leads, ADMIN_REPORT_DEFINITIONS.leads);
     add("Snapshot", "Accounts without a paid membership", report.people.accounts_not_paid, ADMIN_REPORT_DEFINITIONS.accounts_not_paid);

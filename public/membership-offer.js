@@ -77,10 +77,9 @@ export function offerPresentation(value) {
     heading: 'Create your account', phase: `${phase} membership`,
     rateNote: RATES[value.phase], bundleLabel: value.phase === 'founding' ? BUNDLE_LABELS.founding : BUNDLE_LABELS.later,
     availabilityOffer: AVAILABILITY[value.phase], rateLock: RATE_LOCKS[value.phase], phaseKey: value.phase,
-    // For the home page (homePresentation below). The server's count is 100
-    // minus PAID founding members only (20261116120000); leads and accounts
-    // never reduce it. Used only when it is a whole number from 1 to 100 while
-    // founding is open; a reply without one shows no number.
+    // For the home page (homePresentation below). The count is used only when
+    // the server sends a whole number from 1 to 100 while founding is open;
+    // a reply without one (the server does not send it today) shows no number.
     offerAvailability: value.availability,
     spots: value.phase === 'founding' && open ? founderSpotsText(value.founderSpotsLeft) : '' };
 }

@@ -33,25 +33,19 @@ merged or rewritten by any of this: when a lead pays, a paid subscription
 exists under the same address, so the person leaves the lead count and enters
 the member count with no data change.
 
-## Founder countdown
+## Founder spots left
 
-Spots left = founding capacity (the sealed `limited_founding_programs` row,
-100) minus `public.paid_founder_count()`: founding places with a verified
-first payment (`limited_founding_slots.state = 'paid'`).
-`public.founder_spots_left()` is the number; `public_membership_offer()` sends
-it as `founderSpotsLeft` while the phase is founding, and the
-`public-membership-offer` function passes it through unchanged. Leads,
-accounts, promised, reserved and committed places never reduce it. A paid
-place is not given back after a cancellation or refund (owner policy,
-September 20, 2026).
+Not part of this change. The public "spots left" count (capacity minus paid
+founding places) is `20261120150000_public_founder_spots_left.sql` (PR #25):
+`paid_founder_count()`, `founder_spots_left()` and
+`public_membership_offer().founderSpotsLeft`. The `founding_cohort_count`
+view is unchanged here.
 
 ## Where each number is used
 
 | Place | Number | Source |
 | --- | --- | --- |
-| Home page "N of 100 founder spots left" | founder spots left | `public_membership_offer().founderSpotsLeft` |
-| `founding-count` function | paid founders | `founding_cohort_count` view |
-| Admin > Overview & reports | paid members, new paid members, paid founders, founder spots left, leads, accounts without a paid membership | `admin_operations_report().people` |
+| Admin > Overview & reports | paid members, new paid members, leads, accounts without a paid membership | `admin_operations_report().people` |
 | Admin > Overview daily table and CSV | new paid members per day | `admin_operations_report().daily[].paid_members` |
 | Admin > Leads tab label | leads | `admin_attention_counts().leads` |
 | Admin > Accounts groups | paid members, free access, accounts without a paid membership | `admin_account_memberships().paid_active` |
@@ -65,8 +59,6 @@ the report for operations, labeled as not members.
 
 ```sql
 select (select count(*) from public.paid_member_profiles()) as paid_members,
-       public.paid_founder_count()  as paid_founders,
-       public.founder_spots_left()  as founder_spots_left,
        public.lead_contact_count()  as leads;
 ```
 

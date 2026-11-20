@@ -69,8 +69,6 @@ export default function AdminOperationsReport({ T = {}, onNavigate }) {
     ...(people ? [
       { label: "Paid members", value: people.paid_members, detail: ADMIN_REPORT_DEFINITIONS.paid_members, tab: "users" },
       { label: "New paid members", value: people.new_paid_in_period, detail: ADMIN_REPORT_DEFINITIONS.new_paid, tab: "users" },
-      { label: "Paid founder members", value: people.paid_founders, detail: ADMIN_REPORT_DEFINITIONS.paid_founders, tab: "users" },
-      ...(people.founder_spots_left === null ? [] : [{ label: "Founder spots left", value: people.founder_spots_left, detail: ADMIN_REPORT_DEFINITIONS.founder_spots_left, tab: "users" }]),
       { label: "Leads", value: people.leads, detail: ADMIN_REPORT_DEFINITIONS.leads, tab: "waitlist" },
       { label: "Accounts without a paid membership", value: people.accounts_not_paid, detail: ADMIN_REPORT_DEFINITIONS.accounts_not_paid, tab: "users" },
     ] : []),

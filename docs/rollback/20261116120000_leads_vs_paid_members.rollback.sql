@@ -3,18 +3,15 @@
 --
 -- Restores the previous bodies byte for byte (admin_attention_snapshot and
 -- admin_operations_report from 20260925111000, admin_account_memberships
--- from 20261114120000, founding_cohort_count from 20260902g with the
--- security_invoker setting of 20260913), renames the reviewed public offer
--- body back with its service_role grant, and drops the four shared
--- definitions. No table, column or row is touched in either direction, so
--- nothing is lost by running it. Idempotent.
+-- from 20261114120000) and drops the two shared definitions. No table,
+-- column or row is touched in either direction, so nothing is lost by
+-- running it. Idempotent.
 --
--- Order: revert the application first (the admin pages and
--- public-membership-offer function of the previous release), then run this
--- file. The previous client ignores the extra fields, so the order only
--- matters for tidiness: with the database rolled back first, the newer admin
--- pages show "not available yet" for paid members and leads, and the home
--- page shows its static founder line instead of a live count.
+-- Order: revert the application first (the admin pages of the previous
+-- release), then run this file. The previous client ignores the extra
+-- fields, so the order only matters for tidiness: with the database rolled
+-- back first, the newer admin pages show "not available yet" for paid
+-- members and leads.
 
 -- 1. Admin > Accounts facts as 20261114120000.
 drop function if exists public.admin_account_memberships();
@@ -158,29 +155,10 @@ comment on function public.admin_operations_report(integer) is
 revoke all on function public.admin_operations_report(integer) from public,anon,authenticated,service_role;
 grant execute on function public.admin_operations_report(integer) to authenticated;
 
--- 3. The older public counter as 20260902g / 20260913.
-create or replace view public.founding_cohort_count with (security_invoker = true) as
-select count(*)::integer as claimed
-  from public.profiles
- where founding_number is not null
-   and access_status = 'active';
-comment on view public.founding_cohort_count is null;
-grant select on public.founding_cohort_count to anon, authenticated;
-
--- 4. The public offer without founderSpotsLeft.
-do $$ begin
- if to_regprocedure('public.public_membership_offer_before_spots()') is not null then
-  drop function if exists public.public_membership_offer();
-  alter function public.public_membership_offer_before_spots() rename to public_membership_offer;
- end if;
-end $$;
-revoke all on function public.public_membership_offer() from public,anon,authenticated,service_role;
-grant execute on function public.public_membership_offer() to service_role;
-
--- 5. The shared definitions, last: nothing above reads them any more.
+-- 3. The shared definitions, last: nothing above reads them any more.
+-- paid_founder_count(), founder_spots_left() and public_membership_offer()
+-- belong to 20261120150000 (PR #25) and are left alone.
 drop function if exists public.lead_contact_count();
-drop function if exists public.founder_spots_left();
-drop function if exists public.paid_founder_count();
 drop function if exists public.paid_member_profiles();
 
 notify pgrst,'reload schema';

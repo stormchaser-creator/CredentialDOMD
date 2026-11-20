@@ -155,16 +155,17 @@ const last = out => out.split('\n').pop();
 const report = async (pg, days = 7) => JSON.parse(last(await pg.sql(asAdmin(`select public.admin_operations_report(${days})`))));
 const leadRows = pg => pg.sql('select count(*), md5(string_agg(id::text || email || coalesce(waitlist::text,\'\') || coalesce(guide_sent_at::text,\'\'), \',\' order by id)) from public.early_access_leads');
 
-test('paid members, leads and the founder countdown come from one definition', { skip: pgSkip(), timeout: withSlotWait(240000) }, async t => {
+test('paid members and leads come from one definition', { skip: pgSkip(), timeout: withSlotWait(240000) }, async t => {
   const pg = await startPostgres();
   t.after(() => pg.close());
   await pg.sql(BASE); await pg.apply(PRIOR);
   const leadsBefore = await leadRows(pg);
+  const offerBefore = await pg.sql('select public.public_membership_offer()');
 
-  // Before: the public counter counted a pre-launch badge nobody paid for,
-  // the offer carried no count, and a past_due row sorted as paying.
+  // Before: the public counter counts a pre-launch badge, the offer carries
+  // no count. Both belong to PR #25 / earlier migrations and stay as they are.
   assert.equal(await pg.sql('select claimed from public.founding_cohort_count'), '1');
-  assert.equal(JSON.parse(await pg.sql('select public.public_membership_offer()')).founderSpotsLeft, undefined);
+  assert.equal(JSON.parse(offerBefore).founderSpotsLeft, undefined);
 
   await pg.apply(MIGRATION);
   await pg.apply(MIGRATION); // rerunnable
@@ -176,33 +177,16 @@ test('paid members, leads and the founder countdown come from one definition', {
     assert.equal(members, 'sub_bundle:false,sub_founder:true');
   });
 
-  await t.test('founder spots left is capacity minus paid founders only', async () => {
-    // Two paid places (one later refunded: a paid place is not given back).
-    // The promised, reserved and committed places, six lead rows, the legacy
-    // badge and the test-mode place do not reduce it.
-    assert.equal(await pg.sql('select public.paid_founder_count()'), '2');
-    assert.equal(await pg.sql('select public.founder_spots_left()'), '98');
-    const offer = JSON.parse(await pg.sql('select public.public_membership_offer()'));
-    assert.deepEqual(offer, { schemaVersion: 1, phase: 'founding', annualCents: 9900, checkoutEnabled: true, availability: 'available', bundleAvailable: false, founderSpotsLeft: 98 });
-    // More leads change nothing.
-    assert.equal(await pg.sql(`begin; insert into public.early_access_leads(email, waitlist) select 'bulk' || n || '@example.invalid', false from generate_series(1,150) n; select public.founder_spots_left(); rollback;`), '98');
-    // A new verified payment does.
-    assert.equal(await pg.sql(`begin; update public.limited_founding_slots set state='paid' where livemode and slot=4; select public.founder_spots_left(); rollback;`), '97');
-    // Once founding is over the offer carries no count.
-    assert.equal(JSON.parse(last(await pg.sql(`begin; select set_config('app.phase','earlybird',true); select public.public_membership_offer(); rollback;`))).founderSpotsLeft, undefined);
-    // No live program: nothing to show, never a guess.
-    assert.equal(await pg.sql(`begin; delete from public.limited_founding_slots where livemode; delete from public.limited_founding_programs where livemode; select coalesce(public.founder_spots_left()::text,'null'); rollback;`), 'null');
-  });
-
-  await t.test('the older public counter counts paid founders, for the same readers', async () => {
-    assert.equal(await pg.sql('select claimed from public.founding_cohort_count'), '2');
-    assert.equal(await pg.sql('begin; set local role anon; select claimed from public.founding_cohort_count; commit;'), '2');
-    assert.equal(await pg.sql(`select reloptions::text from pg_class where oid='public.founding_cohort_count'::regclass`), '{security_invoker=true}');
+  await t.test('founder spots left is not touched here (PR #25 owns it)', async () => {
+    assert.equal(await pg.sql('select public.public_membership_offer()'), offerBefore);
+    assert.equal(await pg.sql('select claimed from public.founding_cohort_count'), '1');
+    assert.equal(await pg.sql(`select count(*) from pg_proc where pronamespace='public'::regnamespace and proname in
+      ('paid_founder_count','founder_spots_left','public_membership_offer_before_spots')`), '0');
   });
 
   await t.test('the report counts members and leads apart from accounts', async () => {
     const r = await report(pg);
-    assert.deepEqual(r.people, { paid_members: 2, paid_founders: 2, founder_spots_left: 98, leads: 4, accounts_not_paid: 8, new_paid_in_period: 2 });
+    assert.deepEqual(r.people, { paid_members: 2, leads: 4, accounts_not_paid: 8, new_paid_in_period: 2 });
     // Unchanged contract for the deployed client.
     assert.equal(r.schema_version, 1);
     assert.deepEqual(r.accounts, { total: 11, active: 11, new_in_period: 10 });
@@ -241,12 +225,7 @@ test('paid members, leads and the founder countdown come from one definition', {
     for (const role of ['anon', 'authenticated']) {
       await denied(role, 'count(*) from public.paid_member_profiles()');
       await denied(role, 'public.lead_contact_count()');
-      await denied(role, 'public.founder_spots_left()');
-      await denied(role, 'public.public_membership_offer()');
-      await denied(role, 'public.public_membership_offer_before_spots()');
     }
-    await denied('service_role', 'public.public_membership_offer_before_spots()');
-    assert.match(await pg.sql('begin; set local role service_role; select public.public_membership_offer(); commit;'), /"founderSpotsLeft": 98/);
     // A signed-in person who is not an administrator gets no report.
     await assert.rejects(pg.sql(`begin; set local role authenticated; select set_config('request.jwt.claims','{"sub":"user_synth9"}',true); select public.admin_operations_report(7); commit;`), /Administrator access required/);
     await assert.rejects(pg.sql(`begin; set local role authenticated; select set_config('request.jwt.claims','{"sub":"user_synth9"}',true); select count(*) from public.admin_account_memberships(); commit;`), /Administrator access required/);
@@ -260,9 +239,9 @@ test('paid members, leads and the founder countdown come from one definition', {
     await pg.apply(ROLLBACK);
     await pg.apply(ROLLBACK); // idempotent
     assert.equal(await pg.sql('select claimed from public.founding_cohort_count'), '1');
-    assert.equal(JSON.parse(await pg.sql('select public.public_membership_offer()')).founderSpotsLeft, undefined);
+    assert.equal(await pg.sql('select public.public_membership_offer()'), offerBefore);
     assert.equal(await pg.sql(`select count(*) from pg_proc where pronamespace='public'::regnamespace and proname in
-      ('paid_member_profiles','paid_founder_count','founder_spots_left','lead_contact_count','public_membership_offer_before_spots')`), '0');
+      ('paid_member_profiles','lead_contact_count')`), '0');
     const r = await report(pg);
     assert.equal(r.people, undefined);
     assert.equal(r.attention.leads, undefined);

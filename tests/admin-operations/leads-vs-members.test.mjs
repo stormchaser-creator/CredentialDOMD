@@ -6,17 +6,15 @@ import { fileURLToPath } from 'node:url';
 import { adminReportCsv, normalizeAdminAttention, normalizeAdminPeople, normalizeAdminReport, ADMIN_REPORT_DEFINITIONS } from '../../src/utils/adminOperationsReport.js';
 import { ACCOUNT_GROUPS, ADMIN_SOURCES, accountGroup, groupAdminAccounts, isFoundingAccount, isPaidFounder } from '../../src/utils/adminData.js';
 import { leadState, paidMemberEmails, waitlistView } from '../../src/utils/adminWaitlist.js';
-import { createPublicMembershipOfferHandler } from '../../supabase/functions/_shared/publicMembershipOffer.mjs';
 import { ownerNotifyMessage } from '../../supabase/functions/_shared/ownerNotify.mjs';
-import { offerPresentation } from '../../public/membership-offer.js';
 import { reportFixture } from './report-fixture.mjs';
 
 // Owner rule, 2026-11-16: only PAID members count as signed up, users or
 // members. Anyone who only gave an email for a guide or the waitlist is a
 // LEAD. The database side is leads-vs-paid-members-sql.test.mjs; this is the
-// admin pages, the public offer function and the owner notifications.
+// admin pages and the owner notifications.
 
-const people = { paid_members: 3, paid_founders: 4, founder_spots_left: 96, leads: 41, accounts_not_paid: 9, new_paid_in_period: 0 };
+const people = { paid_members: 3, leads: 41, accounts_not_paid: 9, new_paid_in_period: 0 };
 const withPeople = (days = 7, paidDays = [0, 2]) => {
   const input = reportFixture(days);
   input.daily.forEach((row, index) => { row.paid_members = paidDays.includes(index) ? 1 : 0; });
@@ -45,9 +43,8 @@ test('a malformed people block fails the report instead of reading as zero membe
   const variants = [
     value => { value.people.paid_members = '3'; },
     value => { value.people.leads = -1; },
-    value => { delete value.people.paid_founders; },
-    value => { value.people.founder_spots_left = 101; },
-    value => { value.people.founder_spots_left = 1.5; },
+    value => { delete value.people.accounts_not_paid; },
+    value => { value.people.leads = 1.5; },
     value => { value.people = []; },
     value => { delete value.daily[0].paid_members; },
     value => { value.people.new_paid_in_period = 5; }, // does not match the daily rows
@@ -56,22 +53,22 @@ test('a malformed people block fails the report instead of reading as zero membe
     const input = withPeople(); change(input);
     assert.throws(() => normalizeAdminReport(input, 7), /incomplete report/, change.toString());
   }
-  // No live founding program: spots left is absent, everything else stands.
-  const input = withPeople(); input.people.founder_spots_left = null;
-  assert.equal(normalizeAdminReport(input, 7).people.founder_spots_left, null);
+  // Founder counts are not part of this block (PR #25 owns spots left).
+  const input = withPeople(); input.people.founder_spots_left = 96;
+  assert.equal(Object.hasOwn(normalizeAdminReport(input, 7).people, 'founder_spots_left'), false);
   assert.equal(normalizeAdminPeople(null), null);
 });
 
 test('the CSV export names paid members and leads, and labels accounts as not members', () => {
   const csv = adminReportCsv(withPeople());
-  for (const line of ['"Snapshot","Paid members","","3"', '"Snapshot","Paid founder members","","4"', '"Snapshot","Founder spots left","","96"',
-    '"Window","New paid members","","2"', '"Snapshot","Leads","","41"', '"Snapshot","Accounts without a paid membership","","9"',
+  assert.doesNotMatch(csv, /Founder spots left|Paid founder members/);
+  for (const line of ['"Snapshot","Paid members","","3"', '"Window","New paid members","","2"', '"Snapshot","Leads","","41"', '"Snapshot","Accounts without a paid membership","","9"',
     '"Snapshot","Account profiles (not members)","","1000"', '"Window","New account profiles (not members)","","14"']) assert.ok(csv.includes(line), line);
   assert.equal(csv.match(/"Daily","New paid members"/g).length, 7);
   // Definitions may say "not signups"; no metric is named one.
   const metrics = csv.split('\r\n').map(line => line.split('","')[1] || '');
   assert.ok(metrics.every(name => !/signup/i.test(name)), 'no metric calls an unpaid account a signup');
-  for (const key of ['paid_members', 'leads', 'founder_spots_left']) assert.ok(ADMIN_REPORT_DEFINITIONS[key]);
+  for (const key of ['paid_members', 'leads', 'accounts_not_paid']) assert.ok(ADMIN_REPORT_DEFINITIONS[key]);
   assert.match(ADMIN_REPORT_DEFINITIONS.leads, /not users, members or signups/);
 });
 
@@ -132,33 +129,13 @@ test('Accounts: only the paying group is members, and the founder count is paid 
   assert.equal(isPaidFounder(undefined), null);
 });
 
-test('the public offer function passes the database count through and never makes one up', async () => {
-  const base = { schemaVersion: 1, phase: 'founding', annualCents: 9900, checkoutEnabled: true, availability: 'available', bundleAvailable: false };
-  const answer = async offer => (await createPublicMembershipOfferHandler({ readOffer: async () => offer })(new Request('https://x.example/', { method: 'GET' }))).json();
-  assert.equal((await answer({ ...base, founderSpotsLeft: 97 })).founderSpotsLeft, 97);
-  assert.equal((await answer({ ...base, founderSpotsLeft: 0 })).founderSpotsLeft, 0);
-  // No count from the database: none in the reply. Never a default or a literal.
-  assert.equal(Object.hasOwn(await answer(base), 'founderSpotsLeft'), false);
-  for (const bad of [-1, 101, 12.5, '97', null, NaN]) {
-    assert.equal(Object.hasOwn(await answer({ ...base, founderSpotsLeft: bad }), 'founderSpotsLeft'), false, String(bad));
-  }
-  // Founding is over: no founder count, whatever the database row says.
-  const later = await answer({ ...base, phase: 'earlybird', annualCents: 14900, bundleAvailable: true, founderSpotsLeft: 3 });
-  assert.equal(Object.hasOwn(later, 'founderSpotsLeft'), false);
-  // The site prints exactly what was sent.
-  assert.equal(offerPresentation({ ...base, founderSpotsLeft: 97 }).spots, '97 of 100 founder spots left');
-  const source = fs.readFileSync(new URL('../../supabase/functions/_shared/publicMembershipOffer.mjs', import.meta.url), 'utf8');
-  assert.doesNotMatch(source, /founderSpotsLeft:\s*\d/, 'no hard-coded count');
-});
-
-test('the migration computes spots left from capacity and paid places, with no literal count', () => {
+test('the migration leaves founder spots left to PR #25', () => {
   const sql = fs.readFileSync(new URL('../../supabase/migrations/20261116120000_leads_vs_paid_members.sql', import.meta.url), 'utf8');
-  const body = sql.slice(sql.indexOf('create or replace function public.founder_spots_left()'), sql.indexOf('comment on function public.founder_spots_left()'));
-  assert.match(body, /g\.capacity-public\.paid_founder_count\(\)/);
-  assert.doesNotMatch(body, /\b100\b/);
+  const statements = sql.replace(/--.*$/gm, '');
+  // 20261120150000_public_founder_spots_left.sql owns these.
+  assert.doesNotMatch(statements, /paid_founder_count|founder_spots_left|founderSpotsLeft|public_membership_offer|founding_cohort_count/);
   assert.match(sql, /f\.livemode and f\.state='paid'/);
   // Additive and reversible: no table is dropped, altered, deleted from or updated.
-  const statements = sql.replace(/--.*$/gm, '');
   assert.doesNotMatch(statements, /\b(drop\s+table|alter\s+table|truncate|delete\s+from|update\s+public\.|insert\s+into)\b/i);
   assert.ok(fs.existsSync(new URL('../../docs/rollback/20261116120000_leads_vs_paid_members.rollback.sql', import.meta.url)));
 });
