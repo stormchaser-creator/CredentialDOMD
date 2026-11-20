@@ -12,4 +12,6 @@ import { payFirstDependencies } from '../_shared/payFirstDependencies.ts';
 const deps = limitedLaunchDependencies();
 const config = limitedLaunchConfig();
 const handlers = createLimitedLaunchHandlers(deps, config);
-serve(createPayFirstSignup(payFirstDependencies(deps, handlers.settle), config).start);
+// The webhook's own settlement (non-enumerable on the handlers; not a route).
+const settle = (handlers as unknown as { settle: Parameters<typeof payFirstDependencies>[1] }).settle;
+serve(createPayFirstSignup(payFirstDependencies(deps, settle), config).start);

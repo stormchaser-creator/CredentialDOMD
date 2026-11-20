@@ -6,7 +6,7 @@ import { decodeJwt } from 'https://esm.sh/jose@5';
 import { clerkProfile } from './clerkAuth.ts';
 import { CLERK_API_BASE, PRODUCTION_CLERK_ISSUER, readProductionIdentity, initializeProductionProfile } from './clerkContinuity.ts';
 
-type Base = { mode: string; stripe: () => unknown; welcome?: unknown };
+type Base = { mode: string; stripe: () => unknown; welcome?: unknown; assertConfigured?: () => void };
 type Settle = (stripe: unknown, live: boolean, sub: unknown, event: { id: string; created: number }) => Promise<unknown>;
 
 export function payFirstDependencies(base: Base, settle: Settle) {
@@ -41,6 +41,7 @@ export function payFirstDependencies(base: Base, settle: Settle) {
 
   return {
     mode: base.mode,
+    assertConfigured: base.assertConfigured,
     stripe: base.stripe,
     welcome: base.welcome,
     settle,

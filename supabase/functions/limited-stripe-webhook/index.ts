@@ -13,5 +13,6 @@ const handlers = createLimitedLaunchHandlers(deps, config);
 // A pay-first Checkout's events make its account first (payFirstSignup.mjs).
 // Nothing reaches it unless a Checkout carries flow 'pay_first', which only
 // public-signup-checkout makes, and only with pay_first_signup_enabled on.
-(deps as Record<string, unknown>).payFirst = createPayFirstSignup(payFirstDependencies(deps, handlers.settle), config);
+const settle = (handlers as unknown as { settle: Parameters<typeof payFirstDependencies>[1] }).settle;
+(deps as Record<string, unknown>).payFirst = createPayFirstSignup(payFirstDependencies(deps, settle), config);
 serve(withWelcomeSweep(handlers.webhook, deps.welcomeSweep));
