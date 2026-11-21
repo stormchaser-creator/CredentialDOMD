@@ -935,3 +935,15 @@ export function standingScore({ items = [], missingRequired = [], stateComps = [
   const percent = total === 0 ? (tracked.length === 0 ? 0 : 100) : Math.round((good / total) * 100);
   return { percent, good, total, needsAction };
 }
+
+/**
+ * The CME rows of standingScore's needs-action list: a card short of its
+ * hours inside the reminder lead window, or overdue. Home shows its compact
+ * CME card only while this is non-empty (Eric, 2026-11-20), so Home, the ring
+ * and its rows cannot disagree: a met cycle, a shortfall still outside the
+ * window and a state held only by a Resolve licence (alertingStates) are
+ * never here.
+ */
+export function cmeDueRows(needsAction = []) {
+  return (Array.isArray(needsAction) ? needsAction : []).filter(n => n?.item?._sec === "cme" && String(n.item.id).startsWith("cme:"));
+}

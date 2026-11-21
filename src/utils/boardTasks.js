@@ -381,6 +381,31 @@ export function boardTaskAlerts(data, boards, lead, now = new Date()) {
 }
 
 /**
+ * The board cards Home names while they are due (Eric, 2026-11-20: "Show board
+ * and national cert cards on Home only when due"). A board is due on the same
+ * reminder lead window as CME: an hour shortfall whose cycle ends inside it or
+ * has passed, or a task openBoardTasks alerts. A rolling-window card has no
+ * cycle end (daysLeft null), so its shortfall alone never puts it on Home all
+ * year; a dated task on it still does. A met cycle, a subspecialty that follows
+ * its primary board and a PA's or NP's certification card (the ring's own
+ * "cert" rows, cmeDueRows) are left out. Every card stays on Credentials >
+ * CME progress. [{ board, days, short, tasks }], soonest first.
+ */
+export function boardDueRows(data, boards, lead, now = new Date()) {
+  const open = new Map(openBoardTasks(data, boards, lead, now).map(({ board, tasks }) => [board.id, tasks]));
+  const out = [];
+  for (const b of boards || []) {
+    if (b.followsParent || b.source === "CERT" || b.body) continue;
+    const short = b.required != null && !b.met && b.daysLeft != null && b.daysLeft <= lead;
+    const tasks = open.get(b.id) || [];
+    if (!short && !tasks.length) continue;
+    const days = Math.min(short ? b.daysLeft : Infinity, ...tasks.map(x => x.daysLeft));
+    out.push({ board: b, days, short, tasks });
+  }
+  return out.sort((a, b) => a.days - b.days);
+}
+
+/**
  * Every dated board step still ahead: status "due" or "upcoming" with a due
  * date on or after today, on every board card that has task data (the same
  * cards openBoardTasks reads). A step that is done, marked not required, past

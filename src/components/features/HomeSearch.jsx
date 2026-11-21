@@ -50,7 +50,7 @@ export const SECTIONS = [
 
 // One-time state topics due within a set time of licensure (stateDuties.js):
 // found the same way, opening the CME page where the state card lists them.
-const STATE_DEADLINES_SECTION = { key: "stateDeadlines", label: "State deadlines", tab: "credentials", sub: "cme" };
+const STATE_DEADLINES_SECTION = { key: "stateDeadlines", label: "State deadlines", tab: "credentials", sub: "cmeProgress" };
 
 /** The dated licensure deadlines still ahead as search hits. */
 function licensureHits(data, toks) {
@@ -66,7 +66,7 @@ function licensureHits(data, toks) {
 // Assessment) are not records of their own, so they are found here and open
 // the CME page, where each board card lists its steps. Kept out of SECTIONS:
 // that list names the record sections the app opens a record in.
-const BOARD_STEPS_SECTION = { key: "boardSteps", label: "Board steps", tab: "credentials", sub: "cme" };
+const BOARD_STEPS_SECTION = { key: "boardSteps", label: "Board steps", tab: "credentials", sub: "cmeProgress" };
 
 /** The dated board steps still ahead as search hits (boardTasks.js datedBoardSteps). */
 function boardStepHits(data, toks) {

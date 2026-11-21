@@ -102,7 +102,7 @@ import {
   EDUCATION_TYPES, WORK_HISTORY_TYPES, REFERENCE_RELATIONSHIPS, MALPRACTICE_OUTCOMES,
 } from "./constants";
 import { boardComplianceFor } from "./utils/boardCompliance";
-import { boardTaskSet } from "./utils/boardTasks";
+import { boardTaskSet, boardDueRows } from "./utils/boardTasks";
 import BoardTasks from "./components/shared/BoardTasks";
 import { StateCsrPrompt, CsrRuleNote } from "./components/shared/StateDuties";
 import { certificationCards, certificationRingComps } from "./utils/certCompliance";
@@ -118,7 +118,7 @@ import RecordQuestions from "./components/shared/RecordQuestions";
 import ProfessionReviewCard from "./components/shared/ProfessionReviewCard";
 import CmeReviewSummary from "./components/shared/CmeReviewSummary";
 import { cmeReviewSummary, cmeAssessmentLabel, totalHoursLabel, topicRecordLabel, needsPriorCompletionReview, PRIOR_COMPLETION_NOTE, rollingWindowLabel, appCardTitle, appRenewalLine, anchoredRenewalLine, certificationMetLine, mateStatusText } from "./utils/cmePresentation";
-import { complianceFor, complianceListFor, standingScore, cardWindowNotes, splitByCycle, alertingStates, resolvePendingLicense, undatedLicenseOnFile, cmeTopics } from "./utils/compliance";
+import { complianceFor, complianceListFor, standingScore, cmeDueRows, cardWindowNotes, splitByCycle, alertingStates, resolvePendingLicense, undatedLicenseOnFile, cmeTopics } from "./utils/compliance";
 import { topicTags, stillCountingTopics } from "./utils/cmeCore.js";
 import { isPracticeLicense, isAdvancedPractice } from "./constants/professions";
 import { getEducationTypes } from "./constants/credentialTypes";
@@ -1083,6 +1083,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
     leadDays: reminderLeadDays(data.settings.reminderLeadDays),
   }), [lapsingCreds, missingExpiration, ringComps, certRingComps, data.settings.reminderLeadDays]);
   const compliancePercent = standing.percent;
+  // Board cards due inside the same lead window (boardTasks.js boardDueRows):
+  // with the ring's CME rows (cmeDueRows), what Home's compact card names.
+  const boardDue = useMemo(() => boardDueRows(data, boardComps, reminderLeadDays(data.settings.reminderLeadDays)), [data, boardComps]);
 
   // Credential counts for ring stats
   // The tiles beside the ring count the things that EXPIRE, on exactly the
@@ -1208,10 +1211,529 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
     </div>
   );
 
+  /* ─── CME PROGRESS ───────────────────────────────────────── */
+  // The per-state and certification CME cards, their setup warnings and
+  // "the math". They used to sit on Home as an always-on CME Progress
+  // section; since 2026-11-20 they live on Credentials > CME progress, and
+  // Home shows one compact card only while the ring lists CME as due
+  // (cmeDueRows, compliance.js). One renderer, so the two cannot disagree.
+  // CME math — which entries counted, which didn't, and why
+  const renderCmeMathModal = () => (
+    <Modal open={!!cmeDetail} onClose={() => setCmeDetail(null)} title={cmeDetail ? (cmeDetail.comp?.profession ? `${appCardTitle(cmeDetail.comp)}: the math` : `${cmeDetail.st} CME: the math`) : "CME"}>
+      {cmeDetail && (() => {
+        const comp = complianceFor(data, cmeDetail.st, cmeDetail.kind);
+        const deg = data.settings.degreeType;
+        // The credit types the engine actually filtered on. This used to be
+        // recomputed here from the degree, which for a CA DO listed AMA PRA
+        // Category 1 as counting and green-tagged AMA entries "counts as
+        // Cat 1" while the engine excluded them. The modal exists to explain
+        // the math, so it has to read the math's own inputs.
+        const cat1Keys = comp.cat1Keywords || [];
+        // Every tag a mandate counts (PA pain management also takes opioid
+        // and addiction courses), so a counted course shows its tag.
+        const mandateTopics = comp.topicResults.flatMap(topicTags);
+        // The engine's own window test (cycleBucket), so a first-day entry
+        // is listed as counted, as the total counts it.
+        const { inWin, outWin } = splitByCycle(data.cme, comp.windowStart, comp.windowEnd);
+        return (
+          <>
+            <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginBottom: 12 }}>
+              <strong style={{ color: T.text }}>{comp.windowLabel}.</strong>
+              {(comp.periodDaysLeft ?? comp.daysLeft) != null && ` ${comp.periodDaysLeft ?? comp.daysLeft} days left.`} Only hours dated inside this window count toward this renewal.
+              {cardWindowNotes(comp).map((n, i) => (
+                <div key={i} style={{ marginTop: 4, color: comp.cycleStartIgnored && i === 1 ? T.warning : T.textDim }}>{n}</div>
+              ))}
+            </div>
+
+            <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 8 }}>{cmeAssessmentLabel(comp)}</div>
+            <ConditionalCmeTopics comp={comp} />
+            {/* Requirement scoreboard */}
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+              {!comp.noGeneralReq && comp.totalRequired != null && (
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
+                  <span style={{ color: T.text, fontWeight: 600 }}>Total logged hours</span>
+                  <span style={{ fontWeight: 800, color: comp.totalMet ? T.success : T.warning }}>{comp.totalEarned} / {comp.totalRequired}</span>
+                </div>
+              )}
+              {certificationMetLine(comp) && (
+                <div style={{ fontSize: 12.5, color: T.textMuted, padding: "0 10px" }}>{certificationMetLine(comp)}</div>
+              )}
+              {comp.cat1Required > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
+                  <span style={{ color: T.text, fontWeight: 600 }}>{cat1BucketLabel(cat1Keys, deg)}
+                    <span style={{ display: "block", fontSize: 11, color: T.textDim, fontWeight: 500 }}>counts: {cat1Keys.join(", ")}</span>
+                  </span>
+                  <span style={{ fontWeight: 800, color: comp.cat1Met ? T.success : T.warning }}>{comp.cat1Earned} / {comp.cat1Required}</span>
+                </div>
+              )}
+              {comp.topicResults.map(t => (
+                <div key={t.topic} style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
+                  <span style={{ color: T.text, fontWeight: 600 }}>{t.topic}{t.checklist ? " (required topic)" : ""}</span>
+                  <span style={{ fontWeight: 800, color: t.met ? T.success : T.warning }}>{t.metByBoardExemption ? "met by board certification exemption" : t.checklist ? (t.met ? "recorded" : "not recorded") : `${t.earned} / ${t.required}h recorded`}</span>
+                </div>
+              ))}
+              {comp.mate && (
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
+                  <span style={{ color: T.text, fontWeight: 600 }}>MATE Act (DEA registration, one time, any date)</span>
+                  <span style={{ fontWeight: 800, color: comp.mate.met ? T.success : T.warning }}>{mateStatusText(comp.mate)}</span>
+                </div>
+              )}
+              {needsPriorCompletionReview(comp) && <p style={{ fontSize: 12, color: T.textMuted }}>{PRIOR_COMPLETION_NOTE}</p>}
+            </div>
+
+            {/* What counted */}
+            <div style={{ fontSize: 12, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+              Counted this cycle ({inWin.length})
+            </div>
+            {inWin.length === 0 && <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>Nothing yet. Every hour you log dated inside the window lands here.</div>}
+            {inWin.map(c => (
+              <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, marginBottom: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13.5 }}>
+                  <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
+                  <span style={{ fontWeight: 800, color: T.text, flexShrink: 0 }}>{c.hours}h</span>
+                </div>
+                <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 3, alignItems: "center" }}>
+                  <span style={{ fontSize: 11, color: T.textDim }}>{c.date}</span>
+                  <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 8, backgroundColor: cat1Keys.includes(c.category) ? T.successDim : T.input, color: cat1Keys.includes(c.category) ? T.success : T.textMuted }}>
+                    {c.category || "no category"}{cat1Keys.includes(c.category) ? " · counts as Cat 1" : ""}
+                  </span>
+                  {cmeTopics(c).filter(t => mandateTopics.includes(t)).map(t => (
+                    <span key={t} style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 8, backgroundColor: T.accentDim, color: T.accent }}>{t}</span>
+                  ))}
+                </div>
+              </div>
+            ))}
+
+            {/* What didn't count */}
+            {outWin.length > 0 && (
+              <>
+                <div style={{ fontSize: 12, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0 6px" }}>
+                  Not counting toward this renewal ({outWin.length})
+                </div>
+                {outWin.map(c => {
+                  const stillCounts = stillCountingTopics(c, comp.topicResults, comp.windowEnd);
+                  return (
+                  <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px dashed ${T.border}`, marginBottom: 6, opacity: 0.75 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13 }}>
+                      <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
+                      <span style={{ fontWeight: 700, color: T.textMuted, flexShrink: 0 }}>{c.hours}h</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>
+                      {c._bucket === "before" ? `${c.date}, before this cycle opened`
+                        : c._bucket === "after" ? `${c.date}, after this renewal closes`
+                        : "No date on the entry. Add one so it can count."}
+                    </div>
+                    {stillCounts.length > 0 && (
+                      <div style={{ fontSize: 11, color: T.accent, fontWeight: 700, marginTop: 3 }}>
+                        Not counted in this renewal's hours, but still counts toward {stillCounts.join(", ")}.
+                      </div>
+                    )}
+                  </div>
+                  );
+                })}
+              </>
+            )}
+
+            {comp.notes && (
+              <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 10, lineHeight: 1.5 }}>{comp.notes}</div>
+            )}
+            <RuleProvenance
+              reportKey={cmeDetail.st}
+              subject={comp.profession ? appCardTitle(comp) : `${cmeDetail.st}${hasSeparateBoards(cmeDetail.st) ? ` (${deg || "MD"})` : ""}`}
+              citation={comp.source}
+              meta={STATE_REQS_META}
+              verified={comp.verified}
+              sourceUrl={comp.sourceUrl}
+              upcoming={comp.upcoming}
+            />
+          </>
+        );
+      })()}
+    </Modal>
+  );
+
+  const homeDeg = data.settings.degreeType;
+  const missingNoun = homeDeg === "PA" ? "physician assistant license" : homeDeg === "NP" ? "APRN or RN license" : "medical license";
+  const missingCe = homeDeg === "NP" ? "CE" : "CME";
+  // Setup warnings that sat above the CME cards: a state with a credential
+  // but no practice licence, the profession review, and a certification
+  // whose role is unanswered. Not the progress grid: Home keeps them too.
+  const cmeSetupWarnings = ({ onHome = false } = {}) => {
+    const licenseWarnings = statesMissingLicense.map(st => (
+      <button key={`ml-${st}`} onClick={() => { setTab("credentials"); setSubPage("licenses"); }} style={{
+        textAlign: "left", backgroundColor: T.warningDim, border: `1px solid ${T.warning}`,
+        borderRadius: 14, padding: "12px 14px", cursor: "pointer",
+      }}>
+        <div style={{ fontSize: 14, fontWeight: 700, color: T.warning }}>
+          {st}: no {missingNoun} on file
+        </div>
+        <div style={{ fontSize: 12, color: T.textMuted, marginTop: 3 }}>
+          You have a {st} credential (like a DEA registration) but the {st} {missingNoun} itself isn't in the app. Add it and {st} {missingCe} &amp; renewal tracking
+          turn on automatically. Tap to add it.
+        </div>
+      </button>
+    ));
+    // A PA or NP: records filed under the other profession's types, and
+    // certification records whose role is not answered yet (DESIGN 4.2,
+    // decision 16). An MD or DO holding a PA or NP typed record sees the
+    // review too.
+    if (professionMismatches(data).length) licenseWarnings.push(<ProfessionReviewCard key="profession-review" />);
+    for (const c of certRoleQuestions) {
+      const record = (data.licenses || []).find(l => l && l.id === c.recordId);
+      if (!record) continue;
+      licenseWarnings.push(
+        <div key={c.id} style={{ textAlign: "left", backgroundColor: T.card, border: `1px solid ${T.warning}`, borderRadius: 14, padding: "12px 14px" }}>
+          <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{c.label}</div>
+          <div style={{ fontSize: 12, color: T.textMuted, marginTop: 3 }}>This certifier also certifies other roles. Say which this is and its renewal card appears {onHome ? "under Credentials > CME progress" : "here"}.</div>
+          <RecordQuestions item={record} />
+        </div>
+      );
+    }
+    return licenseWarnings;
+  };
+  const renderStateCard = ({ st, key, kind, comp, lic }) => {
+    const unmetTopics = comp.topicResults.filter(t => !t.met);
+    const dl = comp.daysLeft;
+    const urgency = dl == null ? null : dl <= 60 ? "danger" : dl <= 180 ? "warning" : "ok";
+    // A licence here that is still a Resolve task is on file, just not dated.
+    const waiting = comp.windowAnchored ? null : resolvePendingLicense(data.licenses, st, kind || "medical");
+    // A PA or NP card: full state name and licence, the board link when a
+    // rule is not yet verified, and never a physician number.
+    const app = !!comp.profession;
+    return (
+      <div key={key ?? st} onClick={() => setCmeDetail({ st, kind, comp })} style={{
+        backgroundColor: T.card, borderRadius: 12, padding: "14px 16px",
+        boxShadow: T.shadow1, cursor: "pointer",
+        borderLeft: `3px solid ${comp.fullyCompliant ? T.success : comp.assessmentStatus === "needs-confirmation" ? T.border : T.warning}`,
+      }}>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{app ? appCardTitle(comp) : st}</span>
+            {st === data.settings.primaryState && (
+              <span style={{ fontSize: 10, fontWeight: 700, color: T.accent, backgroundColor: T.accentDim, padding: "2px 6px", borderRadius: 4 }}>PRIMARY</span>
+            )}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            {comp.noGeneralReq
+              ? <span style={{ fontSize: 13, color: T.textDim }}>Topic-specific</span>
+              : <span style={{ fontSize: 14, fontWeight: 700, color: comp.totalMet ? T.success : T.text }}>
+                  {totalHoursLabel(comp)}
+                </span>
+            }
+            <div style={{
+              width: 22, height: 22, borderRadius: 11,
+              backgroundColor: comp.fullyCompliant ? T.successDim : comp.assessmentStatus === "needs-confirmation" ? T.input : T.warningDim,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              color: comp.fullyCompliant ? T.success : comp.assessmentStatus === "needs-confirmation" ? T.textMuted : T.warning, fontSize: 13, fontWeight: 700,
+            }}>{comp.fullyCompliant ? "\u2713" : comp.assessmentStatus === "needs-confirmation" ? "?" : "!"}</div>
+          </div>
+        </div>
+        {/* Renewal deadline */}
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
+          <span style={{ fontSize: 12, color: T.textDim }}>
+            {comp.windowAnchored
+              ? anchoredRenewalLine(comp, lic.expirationDate)
+              : app ? appRenewalLine(comp, waiting ? lifecycleNote(waiting) : null, undatedLicenseOnFile(data.licenses, st, kind))
+              : rollingWindowLabel(st, comp.cycle, waiting ? lifecycleNote(waiting) : null)}
+          </span>
+          {dl != null && (
+            <span style={{
+              fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 8,
+              backgroundColor: urgency === "danger" ? T.dangerDim : urgency === "warning" ? T.warningDim : T.successDim,
+              color: urgency === "danger" ? T.danger : urgency === "warning" ? T.warning : T.success,
+            }}>
+              {dl <= 0 ? "OVERDUE" : `${dl} days`}
+            </span>
+          )}
+        </div>
+
+        {/* Which dates actually count. Tapping the card opens the
+            full explanation; this line means it is never a guess. */}
+        <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.4, marginBottom: 8 }}>
+          {comp.windowLabel}.
+          {comp.windowSource === "custom" && " Start set on this license."}
+          {comp.cycleStartIgnored && (
+            <span style={{ color: T.warning, fontWeight: 700 }}> CME cycle start on this license is on or after the renewal date, so it was not used.</span>
+          )}
+        </div>
+
+        <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>{cmeAssessmentLabel(comp)}</div>
+        {app && comp.boardUrl && (!comp.rulesVerified || (comp.unverifiedItems || []).length > 0) && (
+          <a href={comp.boardUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ display: "inline-block", fontSize: 12, fontWeight: 700, color: T.accent, padding: "9px 0", minHeight: 32, boxSizing: "border-box", marginBottom: 4 }}>
+            {comp.board || "Board website"} &rarr;
+          </a>
+        )}
+        {/* Unverified rules (the label says so) and unverified items both say
+            when no verified board link exists. */}
+        {app && !comp.boardUrl && comp.rulesVerified && (comp.unverifiedItems || []).length > 0 && (
+          <div style={{ fontSize: 12, color: T.textDim, marginBottom: 8 }}>Board link not yet verified.</div>
+        )}
+        <ConditionalCmeTopics comp={comp} />
+        <AppCardDetails comp={comp} lic={lic} />
+        {/* Progress bar */}
+        {!comp.noGeneralReq && comp.totalRequired > 0 && (
+          <div style={{ height: 6, backgroundColor: T.input, borderRadius: 3, overflow: "hidden", marginBottom: unmetTopics.length > 0 ? 8 : 0 }}>
+            <div style={{
+              height: "100%", borderRadius: 3,
+              width: Math.min(100, (comp.totalEarned / comp.totalRequired) * 100) + "%",
+              backgroundColor: comp.totalMet ? T.success : T.accent,
+              transition: "width 0.5s ease",
+            }} />
+          </div>
+        )}
+        {unmetTopics.length > 0 && (
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
+            {unmetTopics.map(t => (
+              <span key={t.topic} style={{
+                padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6,
+                backgroundColor: T.warningDim, color: T.warning,
+              }}>{topicRecordLabel(t)}</span>
+            ))}
+            <button onClick={(e) => { e.stopPropagation(); setTab("credentials"); setSubPage("findCme"); }} style={{
+              padding: "3px 10px", minHeight: 32, fontSize: 11, fontWeight: 700, borderRadius: 6,
+              border: "none", backgroundColor: T.accentDim, color: T.accent, cursor: "pointer",
+            }}>Find CME &rarr;</button>
+          </div>
+        )}
+        {!comp.cat1Met && comp.cat1Required > 0 && (
+          <div style={{ marginTop: 6 }}>
+            <span style={{ padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6, backgroundColor: T.dangerDim, color: T.danger }}>
+              {(comp.cat1Keywords || []).every(k => k.startsWith("AOA Category")) ? "AOA Cat 1" : "Cat 1"}: {comp.cat1Earned}/{comp.cat1Required}h recorded
+            </span>
+          </div>
+        )}
+        {comp.mate && !comp.mate.met && (
+          <div style={{ marginTop: 6 }}>
+            <span style={{ padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6, backgroundColor: T.dangerDim, color: T.danger }}>
+              MATE Act (one-time): {comp.mate.earned}/{comp.mate.required}h recorded
+            </span>
+          </div>
+        )}
+        {needsPriorCompletionReview(comp) && <p style={{ fontSize: 11.5, color: T.textMuted, lineHeight: 1.5 }}>{PRIOR_COMPLETION_NOTE}</p>}
+        <div style={{ marginTop: 8 }}>
+          <button onClick={(e) => { e.stopPropagation(); sendRenewalPacket(st, app ? kind : undefined); }} style={{
+            padding: "6px 12px", minHeight: 32, fontSize: 12, fontWeight: 700, borderRadius: 8,
+            border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.accent, cursor: "pointer",
+          }}>
+            {"\ud83d\udce4"} Renewal packet
+          </button>
+        </div>
+      </div>
+    );
+  };
+
+  // Board certification standing \u2014 cycle-windowed, from Settings \u2192
+  // Board Specialties, and a PA's or NP's national certification cards.
+  // They used to sit on Home whatever the standing; since 2026-11-20 they
+  // live on Credentials > CME progress under the state cards, and Home names
+  // one only while it is due (boardDueRows, cmeDueRows). One renderer.
+  const renderBoardSection = () => {
+    if (boardComps.length === 0) return null;
+    const boardCards = boardComps.filter(b => !b.followsParent).map(b => (
+      <div key={b.id} onClick={() => { if (!b.body) setBoardDetail(b); }} style={{
+        backgroundColor: T.card, borderRadius: 12, padding: "14px 16px", boxShadow: T.shadow1, cursor: b.body ? "default" : "pointer",
+        borderLeft: `3px solid ${b.met ? T.success : T.warning}`,
+      }}>
+        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
+          <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{b.label}</div>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: b.met ? T.success : T.warning, flexShrink: 0 }}>
+            {b.required == null ? "Not yet verified" : `${b.earned}/${b.required} ${b.unit === "credits" ? "credits" : "hrs"}`}
+          </div>
+        </div>
+        <div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>
+          {b.body ? (b.windowLabel || b.assessment) : `${b.unit} \u00b7 ${b.windowLabel}`}{b.daysLeft != null ? ` \u00b7 ${b.daysLeft} days left` : ""}
+        </div>
+        {b.required > 0 && (
+          <div style={{ height: 6, backgroundColor: T.input, borderRadius: 3, overflow: "hidden", marginTop: 8 }}>
+            <div style={{
+              height: "100%", borderRadius: 3,
+              width: Math.min(100, (b.earned / b.required) * 100) + "%",
+              backgroundColor: b.met ? T.success : T.accent,
+            }} />
+          </div>
+        )}
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8, alignItems: "center" }}>
+          {b.cat1aRequired > 0 && (
+            <span style={{
+              padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6,
+              backgroundColor: b.cat1aEarned >= b.cat1aRequired ? T.successDim : T.warningDim,
+              color: b.cat1aEarned >= b.cat1aRequired ? T.success : T.warning,
+            }}>AOA Cat 1-A: {b.cat1aEarned}/{b.cat1aRequired}h</span>
+          )}
+          {!b.met && (
+            <button onClick={(e) => { e.stopPropagation(); setTab("credentials"); setSubPage("findCme"); }} style={{
+              padding: "3px 10px", minHeight: 32, fontSize: 11, fontWeight: 700, borderRadius: 6,
+              border: "none", backgroundColor: T.accentDim, color: T.accent, cursor: "pointer",
+            }}>Find CME &rarr;</button>
+          )}
+        </div>
+        {b.assessment && !b.body && !boardTaskSet(b.id) && (
+          <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 6, lineHeight: 1.4 }}>
+            Also required: {b.assessment}
+          </div>
+        )}
+        {!b.body && <BoardTasks board={b} />}
+        {b.notes && (
+          <div style={{ fontSize: 11, color: T.textDim, marginTop: 3 }}>{b.notes}</div>
+        )}
+        {b.body && b.windowLabel && b.assessment && (
+          <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 6, lineHeight: 1.4 }}>{b.assessment}</div>
+        )}
+        {b.body && b.exam && <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 3 }}>{b.exam}</div>}
+        {b.body && (b.lines || []).map(line => <div key={line} style={{ fontSize: 11, color: T.textDim, marginTop: 3, lineHeight: 1.4 }}>{line}</div>)}
+        {b.body && b.url && (
+          <a href={b.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ display: "inline-block", fontSize: 12, fontWeight: 700, color: T.accent, padding: "9px 0", minHeight: 32, boxSizing: "border-box" }}>{b.body} renewal rules &rarr;</a>
+        )}
+      </div>
+    ));
+    const boardFollowNotes = boardComps.filter(b => b.followsParent).map(b => (
+      <div key={b.id} style={{ fontSize: 12, color: T.textDim, padding: "0 4px" }}>
+        {b.label}: CME follows the primary board above
+      </div>
+    ));
+    return (
+      <div style={{ marginTop: 24 }}>
+        <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 10 }}>{isAdvancedPractice(data.settings.degreeType) ? "National Certification" : "Board Certification"}</h3>
+        {boardCards.length > 0 && (isDesktop
+          ? <div className="cmd-responsive-grid-2" style={boardCards.length === 1 ? { gridTemplateColumns: "1fr" } : undefined}>{boardCards}</div>
+          : <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{boardCards}</div>)}
+        {boardFollowNotes.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>{boardFollowNotes}</div>
+        )}
+      </div>
+    );
+  };
+
+  // Board math — same transparency as the state cards
+  const renderBoardMathModal = () => (
+    <Modal open={!!boardDetail} onClose={() => setBoardDetail(null)} title={boardDetail ? `${boardDetail.name}: the math` : "Board"}>
+      {boardDetail && (() => {
+        const b = boardDetail;
+        const counts = (c) => !b.countRule || (c.category || "").includes(b.countRule);
+        const inWin = [], excluded = [];
+        for (const c of data.cme || []) {
+          if (c.date && b.from && c.date >= b.from && c.date <= b.to) {
+            if (counts(c)) inWin.push(c);
+            else excluded.push({ c, why: `category doesn't count for this board, which needs ${b.countRule}` });
+          } else {
+            excluded.push({ c, why: c.date ? "outside this cycle window" : "no date on the entry; add one so it can count" });
+          }
+        }
+        const fmtD = (d) => new Date(d + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
+        return (
+          <>
+            <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginBottom: 12 }}>
+              {b.label}. Cycle window: <strong style={{ color: T.text }}>{b.from ? fmtD(b.from) : "—"} – {b.to ? fmtD(b.to) : "—"}</strong>
+              {b.daysLeft != null && ` · ${b.daysLeft} days left`}. {b.countRule ? `Only ${b.countRule} credit counts for this board.` : "All CME categories count toward the total."}
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
+                <span style={{ color: T.text, fontWeight: 600 }}>Total hours ({b.unit})</span>
+                <span style={{ fontWeight: 800, color: b.met ? T.success : T.warning }}>{b.earned} / {b.required}</span>
+              </div>
+              {b.cat1aRequired > 0 && (
+                <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
+                  <span style={{ color: T.text, fontWeight: 600 }}>AOA Category 1-A minimum</span>
+                  <span style={{ fontWeight: 800, color: b.cat1aEarned >= b.cat1aRequired ? T.success : T.warning }}>{b.cat1aEarned} / {b.cat1aRequired}</span>
+                </div>
+              )}
+            </div>
+            <div style={{ fontSize: 12, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
+              Counted this cycle ({inWin.length})
+            </div>
+            {inWin.length === 0 && <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>Nothing yet. Hours dated inside the window land here.</div>}
+            {inWin.map(c => (
+              <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, marginBottom: 6 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13.5 }}>
+                  <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
+                  <span style={{ fontWeight: 800, color: T.text, flexShrink: 0 }}>{c.hours}h</span>
+                </div>
+                <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>{c.date} · {c.category || "no category"}</div>
+              </div>
+            ))}
+            {excluded.length > 0 && (
+              <>
+                <div style={{ fontSize: 12, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0 6px" }}>
+                  Not counting ({excluded.length})
+                </div>
+                {excluded.map(({ c, why }) => (
+                  <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px dashed ${T.border}`, marginBottom: 6, opacity: 0.75 }}>
+                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13 }}>
+                      <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
+                      <span style={{ fontWeight: 700, color: T.textMuted, flexShrink: 0 }}>{c.hours}h</span>
+                    </div>
+                    <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>{c.date ? `${c.date}: ${why}` : why}</div>
+                  </div>
+                ))}
+              </>
+            )}
+            {b.assessment && (
+              <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 10, lineHeight: 1.5 }}>Also required: {b.assessment}</div>
+            )}
+            {b.notes && <div style={{ fontSize: 11, color: T.textDim, marginTop: 4 }}>{b.notes}</div>}
+            <RuleProvenance
+              reportKey={`board:${b.code}`}
+              subject={b.label}
+              citation={b.citation}
+              meta={BOARD_REQS_META}
+              verified={b.verified}
+              compact
+            />
+          </>
+        );
+      })()}
+    </Modal>
+  );
+
+  // Credentials > CME progress, optionally with one card's math open on arrival.
+  const openCmeProgress = (detail = null) => {
+    setTab("credentials"); setSubPage("cmeProgress");
+    if (detail) setCmeDetail(detail);
+  };
+
+  // CME Compliance — shown for every tracked state even with zero CME
+  // logged; "30 hrs to go" is exactly what an empty cycle needs to say
+  const renderCmeProgress = () => {
+    const licenseWarnings = cmeSetupWarnings();
+    const stateCards = stateComps.map(renderStateCard);
+    return (
+      <div>
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 4 }}>
+          <h2 style={{ margin: 0, fontSize: 20, fontWeight: 700, color: T.text }}>CME progress</h2>
+          <button onClick={() => { setTab("credentials"); setSubPage("findCme"); }} style={{
+            background: "none", border: "none", fontSize: 13, fontWeight: 600,
+            color: T.accent, cursor: "pointer", padding: "0 0 0 12px", minHeight: 32,
+          }}>Find CME</button>
+        </div>
+        <div style={{ fontSize: 13, color: T.textDim, marginBottom: 14 }}>
+          Hours logged toward each renewal. Tap a card to see which entries counted.
+        </div>
+        {licenseWarnings.length > 0 && (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>{licenseWarnings}</div>
+        )}
+        {stateCards.length === 0 ? (
+          <EmptyState
+            icon={"📊"}
+            title={`No ${missingCe} renewals tracked yet`}
+            subtitle={`Add a license, or pick your states in Profile & settings, and each renewal's ${missingCe} card appears here.`}
+          />
+        ) : isDesktop ? (
+          <div className="cmd-responsive-grid-2">{stateCards}</div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>{stateCards}</div>
+        )}
+        {renderBoardSection()}
+        {renderCmeMathModal()}
+        {renderBoardMathModal()}
+      </div>
+    );
+  };
+
   /* ─── HOME PAGE ──────────────────────────────────────────── */
   const openFromSearch = (sec, id, dest) => {
-    // A board step is not a record: its board card on the CME page lists it.
-    if (sec.key === "boardSteps" || sec.key === "stateDeadlines") { setTab("credentials"); setSubPage("cme"); return; }
+    // A board step or a state deadline is not a record: its board or state
+    // card on Credentials > CME progress lists it.
+    if (sec.key === "boardSteps" || sec.key === "stateDeadlines") { openCmeProgress(); return; }
     if (sec.tab === "credentials") { setTab("credentials"); setSubPage(dest || sec.sub); setAutoEditTarget({ sec: sec.key, id }); return; }
     if (sec.tab === "documents") { setTab("documents"); setSubPage(null); return; }
     if (sec.tab === "locum") { setLocumSeed({ sub: sec.sub, id }); setTab("locum"); setSubPage(sec.sub); return; }
@@ -1225,8 +1747,9 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
 
   // Home is one set of pieces arranged two ways. The phone stacks them in
   // the order they have always had; the desk (spec 2.1) puts the hero and
-  // Action Required side by side, then the CME state cards three across,
-  // then the board cards with the Credentials preview beside them. Each
+  // Action Required side by side, then the compact CME card when CME or a
+  // board is due (the state and board cards are on Credentials > CME
+  // progress), then the Credentials preview. Each
   // piece is built once here and placed by both layouts, so a number on
   // the desk can never differ from the one on the phone.
   const renderHome = () => {
@@ -1327,24 +1850,32 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
     // Hero: Compliance Ring + Stats. The ring's companion numbers are read
     // by the phone's stat rows and the desk's stat tiles alike.
     const cmeSummary = cmeReviewSummary(ringComps);
-    // A PA or NP card opens with its own kind (an NP's RN card, not the APRN default).
-    const reviewCmeState = (st, kind) => setCmeDetail(kind ? { st, kind, comp: complianceFor(data, st, kind) } : { st });
+    // A PA or NP card opens with its own kind (an NP's RN card, not the APRN
+    // default). The card lives on Credentials > CME progress now, so the tap
+    // lands there with its math open.
+    const reviewCmeState = (st, kind) => openCmeProgress(kind ? { st, kind, comp: complianceFor(data, st, kind) } : { st });
     const openCmeProfile = () => { setTab("more"); setSubPage("settings"); };
     const openCmeLicenses = () => { setTab("credentials"); setSubPage("licenses"); };
     const allCurrent = credStats.active > 0 && credStats.expiring === 0 && credStats.expired === 0 && credStats.undated === 0;
     // What is holding the ring below 100, listed where the number is, each
     // line a tap to the record that fixes it. One renderer for both heroes.
+    // A ring row's words, shared by the rows under the ring and the compact
+    // CME card below it, so the two always name a renewal the same way.
+    const needsActionText = ({ item, days }) => {
+      const isCme = item._sec === "cme" && String(item.id).startsWith("cme:");
+      const label = isCme ? `${item.title || item.state} ${item.ceNoun || "CME"}${item.needsConfirmation ? ": confirm applicability" : ""}` : describeItem(item, data.settings.name, item._sec);
+      const when = item.needsConfirmation ? "review rule" : days == null ? (isCme ? "review records" : "no expiration date")
+        : days < 0 ? `expired ${-days} day${-days === 1 ? "" : "s"} ago`
+        : days === 0 ? "expires today" : `${days} day${days === 1 ? "" : "s"} left`;
+      const color = item.needsConfirmation ? T.textMuted : days != null && days < 0 ? T.danger : T.warning;
+      return { isCme, label, when, color };
+    };
     const needsActionList = (max) => standing.needsAction.length > 0 && (
       <div style={{ marginTop: 6, display: "flex", flexDirection: "column", gap: 0 }}>
         {standing.needsAction.slice(0, max).map(({ item, days }) => {
-          const isCme = item._sec === "cme" && String(item.id).startsWith("cme:");
-          const label = isCme ? `${item.title || item.state} ${item.ceNoun || "CME"}${item.needsConfirmation ? ": confirm applicability" : ""}` : describeItem(item, data.settings.name, item._sec);
-          const when = item.needsConfirmation ? "review rule" : days == null ? (isCme ? "review records" : "no expiration date")
-            : days < 0 ? `expired ${-days} day${-days === 1 ? "" : "s"} ago`
-            : days === 0 ? "expires today" : `${days} day${days === 1 ? "" : "s"} left`;
-          const color = item.needsConfirmation ? T.textMuted : days != null && days < 0 ? T.danger : T.warning;
+          const { isCme, label, when, color } = needsActionText({ item, days });
           const go = () => {
-            if (isCme && item.kind === "cert") { setTab("credentials"); setSubPage("cme"); return; }
+            if (isCme && item.kind === "cert") { openCmeProgress(); return; }
             if (isCme) { reviewCmeState(item.state, item.kind); return; }
             setTab("credentials"); setSubPage(item._rail || item._sec);
             setAutoEditTarget({ sec: item._sec, id: item.id, focus: "expirationDate", mode: "edit" });
@@ -1365,6 +1896,49 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
           <div style={{ fontSize: 12, color: T.textMuted }}>and {standing.needsAction.length - max} more below</div>
         )}
       </div>
+    );
+    // CME on Home only when it is due (Eric, 2026-11-20). The rows are the
+    // ring's own CME rows (cmeDueRows): a shortfall inside the reminder lead
+    // window or overdue, never a met cycle and never a state held only by a
+    // Resolve licence. One short card, not the progress grid, which lives on
+    // Credentials > CME progress. Board and national certification cards
+    // follow the same rule (Eric, 2026-11-20): a certification row (NCCPA, an
+    // NP certifier) is one of the ring's CME rows, and a board is named while
+    // boardDueRows lists it. Their full cards are on CME progress too, so the
+    // one card always opens it.
+    const cmeDue = cmeDueRows(standing.needsAction);
+    const boardDueText = ({ board: b, days, short, tasks }) => ({
+      label: short || !tasks.length ? `${b.label} CME` : `${b.label}: ${tasks[0].label}`,
+      when: days < 0 ? `${-days} day${-days === 1 ? "" : "s"} overdue` : days === 0 ? "due today" : `${days} day${days === 1 ? "" : "s"} left`,
+      color: days < 0 ? T.danger : T.warning,
+    });
+    const dueRows = [...cmeDue.map(needsActionText), ...boardDue.map(boardDueText)];
+    const cmeDueFirst = dueRows[0];
+    const cmeDueOverdue = cmeDue.some(({ days }) => days != null && days < 0) || boardDue.some(({ days }) => days < 0);
+    const cmeDueTitle = cmeDue.length === 0 ? "Board certification needs attention"
+      : boardDue.length === 0 ? `${missingCe} needs attention`
+      : `${missingCe} and board certification need attention`;
+    const cmeDueCard = dueRows.length > 0 && (
+      <button type="button" onClick={() => openCmeProgress()} style={{
+        display: "flex", alignItems: "center", gap: 12, width: "100%", textAlign: "left",
+        backgroundColor: T.card, border: `1px solid ${T.border}`, borderLeft: `3px solid ${cmeDueOverdue ? T.danger : T.warning}`,
+        borderRadius: 12, padding: "12px 16px", marginBottom: 20, cursor: "pointer", fontFamily: "inherit",
+        boxShadow: T.shadow1, minHeight: 44,
+      }}>
+        <span style={{ flex: 1, minWidth: 0 }}>
+          <span style={{ display: "block", fontSize: 14.5, fontWeight: 700, color: T.text }}>{cmeDueTitle}</span>
+          <span style={{ display: "block", fontSize: 12.5, color: T.textMuted, marginTop: 2, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            {cmeDueFirst.label}: <span style={{ fontWeight: 700, color: cmeDueFirst.color }}>{cmeDueFirst.when}</span>
+            {dueRows.length > 1 ? ` · and ${dueRows.length - 1} more` : ""}
+          </span>
+        </span>
+        <span style={{ fontSize: 13, fontWeight: 700, color: T.accent, flexShrink: 0 }}>See CME progress {"›"}</span>
+      </button>
+    );
+    // Setup warnings that used to sit above the CME cards stay on Home.
+    const cmeSetupCards = cmeSetupWarnings({ onHome: true });
+    const cmeSetupBlock = cmeSetupCards.length > 0 && (
+      <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 20 }}>{cmeSetupCards}</div>
     );
     // Subtle gradient glow behind the ring, shared by both hero cards
     const heroGlow = (
@@ -1707,218 +2281,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
     // immaterial; they render once in either layout.
     const homeModals = (
       <>
-        {/* CME math — which entries counted, which didn't, and why */}
-        <Modal open={!!cmeDetail} onClose={() => setCmeDetail(null)} title={cmeDetail ? (cmeDetail.comp?.profession ? `${appCardTitle(cmeDetail.comp)}: the math` : `${cmeDetail.st} CME: the math`) : "CME"}>
-          {cmeDetail && (() => {
-            const comp = complianceFor(data, cmeDetail.st, cmeDetail.kind);
-            const deg = data.settings.degreeType;
-            // The credit types the engine actually filtered on. This used to be
-            // recomputed here from the degree, which for a CA DO listed AMA PRA
-            // Category 1 as counting and green-tagged AMA entries "counts as
-            // Cat 1" while the engine excluded them. The modal exists to explain
-            // the math, so it has to read the math's own inputs.
-            const cat1Keys = comp.cat1Keywords || [];
-            // Every tag a mandate counts (PA pain management also takes opioid
-            // and addiction courses), so a counted course shows its tag.
-            const mandateTopics = comp.topicResults.flatMap(topicTags);
-            // The engine's own window test (cycleBucket), so a first-day entry
-            // is listed as counted, as the total counts it.
-            const { inWin, outWin } = splitByCycle(data.cme, comp.windowStart, comp.windowEnd);
-            return (
-              <>
-                <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginBottom: 12 }}>
-                  <strong style={{ color: T.text }}>{comp.windowLabel}.</strong>
-                  {(comp.periodDaysLeft ?? comp.daysLeft) != null && ` ${comp.periodDaysLeft ?? comp.daysLeft} days left.`} Only hours dated inside this window count toward this renewal.
-                  {cardWindowNotes(comp).map((n, i) => (
-                    <div key={i} style={{ marginTop: 4, color: comp.cycleStartIgnored && i === 1 ? T.warning : T.textDim }}>{n}</div>
-                  ))}
-                </div>
-
-                <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 8 }}>{cmeAssessmentLabel(comp)}</div>
-                <ConditionalCmeTopics comp={comp} />
-                {/* Requirement scoreboard */}
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
-                  {!comp.noGeneralReq && comp.totalRequired != null && (
-                    <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
-                      <span style={{ color: T.text, fontWeight: 600 }}>Total logged hours</span>
-                      <span style={{ fontWeight: 800, color: comp.totalMet ? T.success : T.warning }}>{comp.totalEarned} / {comp.totalRequired}</span>
-                    </div>
-                  )}
-                  {certificationMetLine(comp) && (
-                    <div style={{ fontSize: 12.5, color: T.textMuted, padding: "0 10px" }}>{certificationMetLine(comp)}</div>
-                  )}
-                  {comp.cat1Required > 0 && (
-                    <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
-                      <span style={{ color: T.text, fontWeight: 600 }}>{cat1BucketLabel(cat1Keys, deg)}
-                        <span style={{ display: "block", fontSize: 11, color: T.textDim, fontWeight: 500 }}>counts: {cat1Keys.join(", ")}</span>
-                      </span>
-                      <span style={{ fontWeight: 800, color: comp.cat1Met ? T.success : T.warning }}>{comp.cat1Earned} / {comp.cat1Required}</span>
-                    </div>
-                  )}
-                  {comp.topicResults.map(t => (
-                    <div key={t.topic} style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
-                      <span style={{ color: T.text, fontWeight: 600 }}>{t.topic}{t.checklist ? " (required topic)" : ""}</span>
-                      <span style={{ fontWeight: 800, color: t.met ? T.success : T.warning }}>{t.metByBoardExemption ? "met by board certification exemption" : t.checklist ? (t.met ? "recorded" : "not recorded") : `${t.earned} / ${t.required}h recorded`}</span>
-                    </div>
-                  ))}
-                  {comp.mate && (
-                    <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
-                      <span style={{ color: T.text, fontWeight: 600 }}>MATE Act (DEA registration, one time, any date)</span>
-                      <span style={{ fontWeight: 800, color: comp.mate.met ? T.success : T.warning }}>{mateStatusText(comp.mate)}</span>
-                    </div>
-                  )}
-                  {needsPriorCompletionReview(comp) && <p style={{ fontSize: 12, color: T.textMuted }}>{PRIOR_COMPLETION_NOTE}</p>}
-                </div>
-
-                {/* What counted */}
-                <div style={{ fontSize: 12, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
-                  Counted this cycle ({inWin.length})
-                </div>
-                {inWin.length === 0 && <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>Nothing yet. Every hour you log dated inside the window lands here.</div>}
-                {inWin.map(c => (
-                  <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, marginBottom: 6 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13.5 }}>
-                      <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
-                      <span style={{ fontWeight: 800, color: T.text, flexShrink: 0 }}>{c.hours}h</span>
-                    </div>
-                    <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 3, alignItems: "center" }}>
-                      <span style={{ fontSize: 11, color: T.textDim }}>{c.date}</span>
-                      <span style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 8, backgroundColor: cat1Keys.includes(c.category) ? T.successDim : T.input, color: cat1Keys.includes(c.category) ? T.success : T.textMuted }}>
-                        {c.category || "no category"}{cat1Keys.includes(c.category) ? " · counts as Cat 1" : ""}
-                      </span>
-                      {cmeTopics(c).filter(t => mandateTopics.includes(t)).map(t => (
-                        <span key={t} style={{ fontSize: 10.5, fontWeight: 700, padding: "2px 7px", borderRadius: 8, backgroundColor: T.accentDim, color: T.accent }}>{t}</span>
-                      ))}
-                    </div>
-                  </div>
-                ))}
-
-                {/* What didn't count */}
-                {outWin.length > 0 && (
-                  <>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0 6px" }}>
-                      Not counting toward this renewal ({outWin.length})
-                    </div>
-                    {outWin.map(c => {
-                      const stillCounts = stillCountingTopics(c, comp.topicResults, comp.windowEnd);
-                      return (
-                      <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px dashed ${T.border}`, marginBottom: 6, opacity: 0.75 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13 }}>
-                          <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
-                          <span style={{ fontWeight: 700, color: T.textMuted, flexShrink: 0 }}>{c.hours}h</span>
-                        </div>
-                        <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>
-                          {c._bucket === "before" ? `${c.date}, before this cycle opened`
-                            : c._bucket === "after" ? `${c.date}, after this renewal closes`
-                            : "No date on the entry. Add one so it can count."}
-                        </div>
-                        {stillCounts.length > 0 && (
-                          <div style={{ fontSize: 11, color: T.accent, fontWeight: 700, marginTop: 3 }}>
-                            Not counted in this renewal's hours, but still counts toward {stillCounts.join(", ")}.
-                          </div>
-                        )}
-                      </div>
-                      );
-                    })}
-                  </>
-                )}
-
-                {comp.notes && (
-                  <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 10, lineHeight: 1.5 }}>{comp.notes}</div>
-                )}
-                <RuleProvenance
-                  reportKey={cmeDetail.st}
-                  subject={comp.profession ? appCardTitle(comp) : `${cmeDetail.st}${hasSeparateBoards(cmeDetail.st) ? ` (${deg || "MD"})` : ""}`}
-                  citation={comp.source}
-                  meta={STATE_REQS_META}
-                  verified={comp.verified}
-                  sourceUrl={comp.sourceUrl}
-                  upcoming={comp.upcoming}
-                />
-              </>
-            );
-          })()}
-        </Modal>
-
-        {/* Board math — same transparency as the state cards */}
-        <Modal open={!!boardDetail} onClose={() => setBoardDetail(null)} title={boardDetail ? `${boardDetail.name}: the math` : "Board"}>
-          {boardDetail && (() => {
-            const b = boardDetail;
-            const counts = (c) => !b.countRule || (c.category || "").includes(b.countRule);
-            const inWin = [], excluded = [];
-            for (const c of data.cme || []) {
-              if (c.date && b.from && c.date >= b.from && c.date <= b.to) {
-                if (counts(c)) inWin.push(c);
-                else excluded.push({ c, why: `category doesn't count for this board, which needs ${b.countRule}` });
-              } else {
-                excluded.push({ c, why: c.date ? "outside this cycle window" : "no date on the entry; add one so it can count" });
-              }
-            }
-            const fmtD = (d) => new Date(d + "T12:00").toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" });
-            return (
-              <>
-                <div style={{ fontSize: 12.5, color: T.textMuted, lineHeight: 1.5, marginBottom: 12 }}>
-                  {b.label}. Cycle window: <strong style={{ color: T.text }}>{b.from ? fmtD(b.from) : "—"} – {b.to ? fmtD(b.to) : "—"}</strong>
-                  {b.daysLeft != null && ` · ${b.daysLeft} days left`}. {b.countRule ? `Only ${b.countRule} credit counts for this board.` : "All CME categories count toward the total."}
-                </div>
-                <div style={{ display: "flex", flexDirection: "column", gap: 6, marginBottom: 14 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
-                    <span style={{ color: T.text, fontWeight: 600 }}>Total hours ({b.unit})</span>
-                    <span style={{ fontWeight: 800, color: b.met ? T.success : T.warning }}>{b.earned} / {b.required}</span>
-                  </div>
-                  {b.cat1aRequired > 0 && (
-                    <div style={{ display: "flex", justifyContent: "space-between", padding: "8px 10px", borderRadius: 8, backgroundColor: T.input, fontSize: 13.5 }}>
-                      <span style={{ color: T.text, fontWeight: 600 }}>AOA Category 1-A minimum</span>
-                      <span style={{ fontWeight: 800, color: b.cat1aEarned >= b.cat1aRequired ? T.success : T.warning }}>{b.cat1aEarned} / {b.cat1aRequired}</span>
-                    </div>
-                  )}
-                </div>
-                <div style={{ fontSize: 12, fontWeight: 800, color: T.accent, textTransform: "uppercase", letterSpacing: 0.5, marginBottom: 6 }}>
-                  Counted this cycle ({inWin.length})
-                </div>
-                {inWin.length === 0 && <div style={{ fontSize: 13, color: T.textMuted, marginBottom: 10 }}>Nothing yet. Hours dated inside the window land here.</div>}
-                {inWin.map(c => (
-                  <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px solid ${T.border}`, marginBottom: 6 }}>
-                    <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13.5 }}>
-                      <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
-                      <span style={{ fontWeight: 800, color: T.text, flexShrink: 0 }}>{c.hours}h</span>
-                    </div>
-                    <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>{c.date} · {c.category || "no category"}</div>
-                  </div>
-                ))}
-                {excluded.length > 0 && (
-                  <>
-                    <div style={{ fontSize: 12, fontWeight: 800, color: T.textMuted, textTransform: "uppercase", letterSpacing: 0.5, margin: "10px 0 6px" }}>
-                      Not counting ({excluded.length})
-                    </div>
-                    {excluded.map(({ c, why }) => (
-                      <div key={c.id} style={{ padding: "8px 10px", borderRadius: 8, border: `1px dashed ${T.border}`, marginBottom: 6, opacity: 0.75 }}>
-                        <div style={{ display: "flex", justifyContent: "space-between", gap: 8, fontSize: 13 }}>
-                          <span style={{ fontWeight: 600, color: T.text, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.title || c.category}</span>
-                          <span style={{ fontWeight: 700, color: T.textMuted, flexShrink: 0 }}>{c.hours}h</span>
-                        </div>
-                        <div style={{ fontSize: 11, color: T.textDim, marginTop: 2 }}>{c.date ? `${c.date}: ${why}` : why}</div>
-                      </div>
-                    ))}
-                  </>
-                )}
-                {b.assessment && (
-                  <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 10, lineHeight: 1.5 }}>Also required: {b.assessment}</div>
-                )}
-                {b.notes && <div style={{ fontSize: 11, color: T.textDim, marginTop: 4 }}>{b.notes}</div>}
-                <RuleProvenance
-                  reportKey={`board:${b.code}`}
-                  subject={b.label}
-                  citation={b.citation}
-                  meta={BOARD_REQS_META}
-                  verified={b.verified}
-                  compact
-                />
-              </>
-            );
-          })()}
-        </Modal>
-
+        {/* A state card's or a board card's math opens on Credentials > CME progress (openCmeProgress). */}
         {/* Acknowledge an alert — "seen it, nothing to do yet" is a real state */}
         <Modal open={!!ackItem} onClose={() => setAckItem(null)} title="Acknowledge this alert">
           {ackItem && (() => {
@@ -2041,8 +2404,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
       );
     })();
 
-    // Credentials preview (Settings toggle, off by default): before the CME
-    // cards on the phone, beside the board cards at desk width.
+    // Credentials preview (Settings toggle, off by default): before the board
+    // cards on the phone, beside them at desk width.
     const showCredsPreview = allCreds.length > 0 && data.settings.showDashboardCredentials === true;
     const previewLead = reminderLeadDays(data.settings.reminderLeadDays);
     const credentialsPreviewInner = (
@@ -2096,250 +2459,6 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
       </>
     );
 
-    // CME Compliance — shown for every tracked state even with zero CME
-    // logged; "30 hrs to go" is exactly what an empty cycle needs to say
-    const cmeHeader = (
-      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, margin: 0 }}>CME Progress</h3>
-        <button onClick={() => { setTab("credentials"); setSubPage("findCme"); }} style={{
-          background: "none", border: "none", fontSize: 13, fontWeight: 600,
-          color: T.accent, cursor: "pointer", position: "relative", padding: "0 0 0 12px", minHeight: 32, margin: "-6px 0",
-        }}>Find CME</button>
-      </div>
-    );
-    const homeDeg = data.settings.degreeType;
-    const missingNoun = homeDeg === "PA" ? "physician assistant license" : homeDeg === "NP" ? "APRN or RN license" : "medical license";
-    const missingCe = homeDeg === "NP" ? "CE" : "CME";
-    const licenseWarnings = statesMissingLicense.map(st => (
-      <button key={`ml-${st}`} onClick={() => { setTab("credentials"); setSubPage("licenses"); }} style={{
-        textAlign: "left", backgroundColor: T.warningDim, border: `1px solid ${T.warning}`,
-        borderRadius: 14, padding: "12px 14px", cursor: "pointer",
-      }}>
-        <div style={{ fontSize: 14, fontWeight: 700, color: T.warning }}>
-          {st}: no {missingNoun} on file
-        </div>
-        <div style={{ fontSize: 12, color: T.textMuted, marginTop: 3 }}>
-          You have a {st} credential (like a DEA registration) but the {st} {missingNoun} itself isn't in the app. Add it and {st} {missingCe} &amp; renewal tracking
-          turn on automatically. Tap to add it.
-        </div>
-      </button>
-    ));
-    // A PA or NP: records filed under the other profession's types, and
-    // certification records whose role is not answered yet (DESIGN 4.2,
-    // decision 16). An MD or DO holding a PA or NP typed record sees the
-    // review too.
-    if (professionMismatches(data).length) licenseWarnings.push(<ProfessionReviewCard key="profession-review" />);
-    for (const c of certRoleQuestions) {
-      const record = (data.licenses || []).find(l => l && l.id === c.recordId);
-      if (!record) continue;
-      licenseWarnings.push(
-        <div key={c.id} style={{ textAlign: "left", backgroundColor: T.card, border: `1px solid ${T.warning}`, borderRadius: 14, padding: "12px 14px" }}>
-          <div style={{ fontSize: 14, fontWeight: 700, color: T.text }}>{c.label}</div>
-          <div style={{ fontSize: 12, color: T.textMuted, marginTop: 3 }}>This certifier also certifies other roles. Say which this is and its renewal card appears here.</div>
-          <RecordQuestions item={record} />
-        </div>
-      );
-    }
-    const renderStateCard = ({ st, key, kind, comp, lic }) => {
-      const unmetTopics = comp.topicResults.filter(t => !t.met);
-      const dl = comp.daysLeft;
-      const urgency = dl == null ? null : dl <= 60 ? "danger" : dl <= 180 ? "warning" : "ok";
-      // A licence here that is still a Resolve task is on file, just not dated.
-      const waiting = comp.windowAnchored ? null : resolvePendingLicense(data.licenses, st, kind || "medical");
-      // A PA or NP card: full state name and licence, the board link when a
-      // rule is not yet verified, and never a physician number.
-      const app = !!comp.profession;
-      return (
-        <div key={key ?? st} onClick={() => setCmeDetail({ st, kind, comp })} style={{
-          backgroundColor: T.card, borderRadius: 12, padding: "14px 16px",
-          boxShadow: T.shadow1, cursor: "pointer",
-          borderLeft: `3px solid ${comp.fullyCompliant ? T.success : comp.assessmentStatus === "needs-confirmation" ? T.border : T.warning}`,
-        }}>
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <span style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{app ? appCardTitle(comp) : st}</span>
-              {st === data.settings.primaryState && (
-                <span style={{ fontSize: 10, fontWeight: 700, color: T.accent, backgroundColor: T.accentDim, padding: "2px 6px", borderRadius: 4 }}>PRIMARY</span>
-              )}
-            </div>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              {comp.noGeneralReq
-                ? <span style={{ fontSize: 13, color: T.textDim }}>Topic-specific</span>
-                : <span style={{ fontSize: 14, fontWeight: 700, color: comp.totalMet ? T.success : T.text }}>
-                    {totalHoursLabel(comp)}
-                  </span>
-              }
-              <div style={{
-                width: 22, height: 22, borderRadius: 11,
-                backgroundColor: comp.fullyCompliant ? T.successDim : comp.assessmentStatus === "needs-confirmation" ? T.input : T.warningDim,
-                display: "flex", alignItems: "center", justifyContent: "center",
-                color: comp.fullyCompliant ? T.success : comp.assessmentStatus === "needs-confirmation" ? T.textMuted : T.warning, fontSize: 13, fontWeight: 700,
-              }}>{comp.fullyCompliant ? "\u2713" : comp.assessmentStatus === "needs-confirmation" ? "?" : "!"}</div>
-            </div>
-          </div>
-          {/* Renewal deadline */}
-          <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 8 }}>
-            <span style={{ fontSize: 12, color: T.textDim }}>
-              {comp.windowAnchored
-                ? anchoredRenewalLine(comp, lic.expirationDate)
-                : app ? appRenewalLine(comp, waiting ? lifecycleNote(waiting) : null, undatedLicenseOnFile(data.licenses, st, kind))
-                : rollingWindowLabel(st, comp.cycle, waiting ? lifecycleNote(waiting) : null)}
-            </span>
-            {dl != null && (
-              <span style={{
-                fontSize: 11, fontWeight: 800, padding: "2px 8px", borderRadius: 8,
-                backgroundColor: urgency === "danger" ? T.dangerDim : urgency === "warning" ? T.warningDim : T.successDim,
-                color: urgency === "danger" ? T.danger : urgency === "warning" ? T.warning : T.success,
-              }}>
-                {dl <= 0 ? "OVERDUE" : `${dl} days`}
-              </span>
-            )}
-          </div>
-
-          {/* Which dates actually count. Tapping the card opens the
-              full explanation; this line means it is never a guess. */}
-          <div style={{ fontSize: 11.5, color: T.textDim, lineHeight: 1.4, marginBottom: 8 }}>
-            {comp.windowLabel}.
-            {comp.windowSource === "custom" && " Start set on this license."}
-            {comp.cycleStartIgnored && (
-              <span style={{ color: T.warning, fontWeight: 700 }}> CME cycle start on this license is on or after the renewal date, so it was not used.</span>
-            )}
-          </div>
-
-          <div style={{ fontSize: 12, color: T.textMuted, marginBottom: 8 }}>{cmeAssessmentLabel(comp)}</div>
-          {app && comp.boardUrl && (!comp.rulesVerified || (comp.unverifiedItems || []).length > 0) && (
-            <a href={comp.boardUrl} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ display: "inline-block", fontSize: 12, fontWeight: 700, color: T.accent, padding: "9px 0", minHeight: 32, boxSizing: "border-box", marginBottom: 4 }}>
-              {comp.board || "Board website"} &rarr;
-            </a>
-          )}
-          {/* Unverified rules (the label says so) and unverified items both say
-              when no verified board link exists. */}
-          {app && !comp.boardUrl && comp.rulesVerified && (comp.unverifiedItems || []).length > 0 && (
-            <div style={{ fontSize: 12, color: T.textDim, marginBottom: 8 }}>Board link not yet verified.</div>
-          )}
-          <ConditionalCmeTopics comp={comp} />
-          <AppCardDetails comp={comp} lic={lic} />
-          {/* Progress bar */}
-          {!comp.noGeneralReq && comp.totalRequired > 0 && (
-            <div style={{ height: 6, backgroundColor: T.input, borderRadius: 3, overflow: "hidden", marginBottom: unmetTopics.length > 0 ? 8 : 0 }}>
-              <div style={{
-                height: "100%", borderRadius: 3,
-                width: Math.min(100, (comp.totalEarned / comp.totalRequired) * 100) + "%",
-                backgroundColor: comp.totalMet ? T.success : T.accent,
-                transition: "width 0.5s ease",
-              }} />
-            </div>
-          )}
-          {unmetTopics.length > 0 && (
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 4, alignItems: "center" }}>
-              {unmetTopics.map(t => (
-                <span key={t.topic} style={{
-                  padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6,
-                  backgroundColor: T.warningDim, color: T.warning,
-                }}>{topicRecordLabel(t)}</span>
-              ))}
-              <button onClick={(e) => { e.stopPropagation(); setTab("credentials"); setSubPage("findCme"); }} style={{
-                padding: "3px 10px", minHeight: 32, fontSize: 11, fontWeight: 700, borderRadius: 6,
-                border: "none", backgroundColor: T.accentDim, color: T.accent, cursor: "pointer",
-              }}>Find CME &rarr;</button>
-            </div>
-          )}
-          {!comp.cat1Met && comp.cat1Required > 0 && (
-            <div style={{ marginTop: 6 }}>
-              <span style={{ padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6, backgroundColor: T.dangerDim, color: T.danger }}>
-                {(comp.cat1Keywords || []).every(k => k.startsWith("AOA Category")) ? "AOA Cat 1" : "Cat 1"}: {comp.cat1Earned}/{comp.cat1Required}h recorded
-              </span>
-            </div>
-          )}
-          {comp.mate && !comp.mate.met && (
-            <div style={{ marginTop: 6 }}>
-              <span style={{ padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6, backgroundColor: T.dangerDim, color: T.danger }}>
-                MATE Act (one-time): {comp.mate.earned}/{comp.mate.required}h recorded
-              </span>
-            </div>
-          )}
-          {needsPriorCompletionReview(comp) && <p style={{ fontSize: 11.5, color: T.textMuted, lineHeight: 1.5 }}>{PRIOR_COMPLETION_NOTE}</p>}
-          <div style={{ marginTop: 8 }}>
-            <button onClick={(e) => { e.stopPropagation(); sendRenewalPacket(st, app ? kind : undefined); }} style={{
-              padding: "6px 12px", minHeight: 32, fontSize: 12, fontWeight: 700, borderRadius: 8,
-              border: `1px solid ${T.border}`, backgroundColor: "transparent", color: T.accent, cursor: "pointer",
-            }}>
-              {"\ud83d\udce4"} Renewal packet
-            </button>
-          </div>
-        </div>
-      );
-    };
-    const stateCards = stateComps.map(renderStateCard);
-
-    // Board certification standing \u2014 cycle-windowed, from Settings \u2192
-    // Board Specialties. Replaces the old lifetime-sum AOA card.
-    const boardHeading = (
-      <h3 style={{ fontSize: 15, fontWeight: 700, color: T.text, marginBottom: 10 }}>{isAdvancedPractice(data.settings.degreeType) ? "National Certification" : "Board Certification"}</h3>
-    );
-    const boardCards = boardComps.filter(b => !b.followsParent).map(b => (
-      <div key={b.id} onClick={() => { if (!b.body) setBoardDetail(b); }} style={{
-        backgroundColor: T.card, borderRadius: 12, padding: "14px 16px", boxShadow: T.shadow1, cursor: b.body ? "default" : "pointer",
-        borderLeft: `3px solid ${b.met ? T.success : T.warning}`,
-      }}>
-        <div style={{ display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 8 }}>
-          <div style={{ fontSize: 15, fontWeight: 700, color: T.text }}>{b.label}</div>
-          <div style={{ fontSize: 13.5, fontWeight: 800, color: b.met ? T.success : T.warning, flexShrink: 0 }}>
-            {b.required == null ? "Not yet verified" : `${b.earned}/${b.required} ${b.unit === "credits" ? "credits" : "hrs"}`}
-          </div>
-        </div>
-        <div style={{ fontSize: 12, color: T.textDim, marginTop: 2 }}>
-          {b.body ? (b.windowLabel || b.assessment) : `${b.unit} \u00b7 ${b.windowLabel}`}{b.daysLeft != null ? ` \u00b7 ${b.daysLeft} days left` : ""}
-        </div>
-        {b.required > 0 && (
-          <div style={{ height: 6, backgroundColor: T.input, borderRadius: 3, overflow: "hidden", marginTop: 8 }}>
-            <div style={{
-              height: "100%", borderRadius: 3,
-              width: Math.min(100, (b.earned / b.required) * 100) + "%",
-              backgroundColor: b.met ? T.success : T.accent,
-            }} />
-          </div>
-        )}
-        <div style={{ display: "flex", flexWrap: "wrap", gap: 4, marginTop: 8, alignItems: "center" }}>
-          {b.cat1aRequired > 0 && (
-            <span style={{
-              padding: "3px 8px", fontSize: 11, fontWeight: 600, borderRadius: 6,
-              backgroundColor: b.cat1aEarned >= b.cat1aRequired ? T.successDim : T.warningDim,
-              color: b.cat1aEarned >= b.cat1aRequired ? T.success : T.warning,
-            }}>AOA Cat 1-A: {b.cat1aEarned}/{b.cat1aRequired}h</span>
-          )}
-          {!b.met && (
-            <button onClick={(e) => { e.stopPropagation(); setTab("credentials"); setSubPage("findCme"); }} style={{
-              padding: "3px 10px", minHeight: 32, fontSize: 11, fontWeight: 700, borderRadius: 6,
-              border: "none", backgroundColor: T.accentDim, color: T.accent, cursor: "pointer",
-            }}>Find CME &rarr;</button>
-          )}
-        </div>
-        {b.assessment && !b.body && !boardTaskSet(b.id) && (
-          <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 6, lineHeight: 1.4 }}>
-            Also required: {b.assessment}
-          </div>
-        )}
-        {!b.body && <BoardTasks board={b} />}
-        {b.notes && (
-          <div style={{ fontSize: 11, color: T.textDim, marginTop: 3 }}>{b.notes}</div>
-        )}
-        {b.body && b.windowLabel && b.assessment && (
-          <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 6, lineHeight: 1.4 }}>{b.assessment}</div>
-        )}
-        {b.body && b.exam && <div style={{ fontSize: 11.5, color: T.textMuted, marginTop: 3 }}>{b.exam}</div>}
-        {b.body && (b.lines || []).map(line => <div key={line} style={{ fontSize: 11, color: T.textDim, marginTop: 3, lineHeight: 1.4 }}>{line}</div>)}
-        {b.body && b.url && (
-          <a href={b.url} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} style={{ display: "inline-block", fontSize: 12, fontWeight: 700, color: T.accent, padding: "9px 0", minHeight: 32, boxSizing: "border-box" }}>{b.body} renewal rules &rarr;</a>
-        )}
-      </div>
-    ));
-    const boardFollowNotes = boardComps.filter(b => b.followsParent).map(b => (
-      <div key={b.id} style={{ fontSize: 12, color: T.textDim, padding: "0 4px" }}>
-        {b.label}: CME follows the primary board above
-      </div>
-    ));
-
     // All clear.
     //
     // "urgent" excludes anything acknowledged, so this banner can render while
@@ -2388,37 +2507,17 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
           {checklist}
           {hasActionColumn ? (
             // marginBottom matches every other desk section; without it the
-            // CME Progress heading sat flush against this row.
+            // next section sat flush against this row.
             <div className="cmd-responsive-grid-2" style={{ marginBottom: 20 }}>
               <div style={{ minWidth: 0 }}>{leftStack}</div>
               <div style={{ minWidth: 0 }}>{actionSection}</div>
             </div>
           ) : leftStack}
           {homeModals}
-          {allTrackedStates.length > 0 && (
-            <div style={{ marginBottom: 20 }}>
-              {cmeHeader}
-              {licenseWarnings.length > 0 && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 8, marginBottom: 12 }}>{licenseWarnings}</div>
-              )}
-              <div className="cmd-responsive-grid-3">{stateCards}</div>
-            </div>
-          )}
-          {(boardComps.length > 0 || showCredsPreview) && (
-            <div className={boardCards.length === 1 && showCredsPreview ? "cmd-responsive-grid-2" : "cmd-responsive-grid-3"} style={{ marginBottom: 20 }}>
-              {boardComps.length > 0 && (
-                <div style={{ minWidth: 0, gridColumn: showCredsPreview && boardCards.length > 1 ? "span 2" : boardCards.length === 1 && showCredsPreview ? undefined : "1 / -1" }}>
-                  {boardHeading}
-                  <div className={showCredsPreview ? "cmd-responsive-grid-2" : "cmd-responsive-grid-3"} style={boardCards.length === 1 ? { gridTemplateColumns: "1fr" } : undefined}>{boardCards}</div>
-                  {boardFollowNotes.length > 0 && (
-                    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 10 }}>{boardFollowNotes}</div>
-                  )}
-                </div>
-              )}
-              {showCredsPreview && (
-                <div style={{ minWidth: 0, gridColumn: boardComps.length > 0 ? undefined : "1 / -1" }}>{credentialsPreviewInner}</div>
-              )}
-            </div>
+          {allTrackedStates.length > 0 && cmeSetupBlock}
+          {cmeDueCard}
+          {showCredsPreview && (
+            <div style={{ marginBottom: 20 }}>{credentialsPreviewInner}</div>
           )}
           {allClear}
         </div>
@@ -2444,24 +2543,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
             {credentialsPreviewInner}
           </div>
         )}
-        {allTrackedStates.length > 0 && (
-          <div style={{ marginBottom: 20 }}>
-            {cmeHeader}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {licenseWarnings}
-              {stateCards}
-            </div>
-          </div>
-        )}
-        {boardComps.length > 0 && (
-          <div style={{ marginBottom: 20 }}>
-            {boardHeading}
-            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {boardCards}
-              {boardFollowNotes}
-            </div>
-          </div>
-        )}
+        {allTrackedStates.length > 0 && cmeSetupBlock}
+        {cmeDueCard}
         {allClear}
       </div>
     );
@@ -2556,7 +2639,10 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
       { id: "privileges", label: "Privileges", icon: "\ud83c\udfe5", count: data.privileges.length, pro: true },
       { id: "insurance", label: "Insurance", icon: "\ud83d\udee1\ufe0f", count: data.insurance.length, pro: true },
     ]},
+    // CME progress is the status view the Home CME cards became (2026-11-20).
+    // Pinned so the phone list keeps it first though it has no count.
     { title: "Continuing Education", items: [
+      { id: "cmeProgress", label: "CME progress", icon: "📊", pinned: true, alertCount: cmeDueRows(standing.needsAction).length + boardDue.length, summary: "Hours toward each renewal and certification" },
       { id: "cme", label: "CME Credits", icon: "\ud83c\udf93", count: data.cme.length },
       { id: "findCme", label: "Find CME", icon: "\ud83d\udd17", accent: true },
     ]},
@@ -2713,6 +2799,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
         ]} items={data.licenses} {...crud("licenses")} onShare={openShare} emptyIcon={"\ud83e\udea3"} emptyTitle="No licenses" emptySub={data.settings.degreeType === "PA" ? "Add your physician assistant license, DEA, and certifications." : data.settings.degreeType === "NP" ? "Add your APRN and RN licenses, DEA, and certifications." : data.settings.degreeType ? "Add your medical licenses, DEA, and certifications." : "Add your licenses, DEA, and certifications."} fields={licenseFields({ degreeType: data.settings.degreeType, records: data.licenses, physicianName: data.settings.name })} prefillItem={licenseDraft} onPrefillDone={() => setLicenseDraft(null)} renderExtra={item => <><RenewalInfo item={item} /><CsrRuleNote item={item} />{/medical license/i.test(item.type || "") && !isInactive(item) && <StateCsrPrompt state={item.state} />}<RecordQuestions item={item} /></>} />
       </>);
     }
+    if (sub === "cmeProgress") return renderCmeProgress();
     if (sub === "cme") return <CMESection onShare={openShare} {...crudTarget("cme")} />;
     if (sub === "findCme") return <CMEResourcesSection />;
     if (sub === "matrix") return <MultiStateMatrix onAddLicense={() => openAddIn("licenses")} />;
@@ -2866,7 +2953,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
                   {group.items.map(p => {
                     // Acknowledging an alert only snoozes the Home nag — the category
                     // badge should keep flagging it until the underlying date changes.
-                    const hasUrgent = [...expired, ...soon, ...snoozed].filter(i => (i._rail || i._sec) === p.id).length;
+                    const hasUrgent = p.alertCount ?? [...expired, ...soon, ...snoozed].filter(i => (i._rail || i._sec) === p.id).length;
                     const locked = p.pro && !isPro;
                     const selected = activeRailId === p.id;
                     return (
@@ -2910,7 +2997,8 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
             <span style={{ color: T.textDim, fontSize: 18 }}>{"\u203a"}</span>
           </button>
           {credGroups.map(group => {
-            const sorted = [...group.items].sort((a, b) => ((b.count || 0) > 0 ? 1 : 0) - ((a.count || 0) > 0 ? 1 : 0));
+            const listed = (p) => (p.pinned || (p.count || 0) > 0 ? 1 : 0);
+            const sorted = [...group.items].sort((a, b) => listed(b) - listed(a));
             return (
               <div key={group.title}>
                 <div style={{ fontSize: 11, fontWeight: 700, color: T.textDim, textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 6, paddingLeft: 2 }}>{group.title}</div>
@@ -2918,7 +3006,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
                   {sorted.map(p => {
                     // Same as the desktop rail: acknowledging snoozes the Home nag,
                     // not the category badge — an acked item is still outstanding.
-                    const hasUrgent = [...expired, ...soon, ...snoozed].filter(i => (i._rail || i._sec) === p.id).length;
+                    const hasUrgent = p.alertCount ?? [...expired, ...soon, ...snoozed].filter(i => (i._rail || i._sec) === p.id).length;
                     const locked = p.pro && !isPro;
                     return (
                       <button key={p.id} onClick={() => setSubPage(p.id)} className="cmd-card-hover" style={{
@@ -2936,6 +3024,7 @@ function AppInner({ tab, setTab, subPage, setSubPage, navRecord, deepLink = "", 
                             ? <div style={{ fontSize: 12, color: "#10b981", fontWeight: 600 }}>Pro feature. Upgrade to unlock</div>
                             : p.count !== undefined
                               ? <div style={{ fontSize: 13, color: T.textDim }}>{p.count} item{p.count !== 1 ? "s" : ""}</div>
+                              : p.summary ? <div style={{ fontSize: 13, color: T.textDim }}>{p.summary}</div>
                               : p.accent && <div style={{ fontSize: 13, color: T.textMuted }}>Browse accredited CME providers</div>
                           }
                         </div>
