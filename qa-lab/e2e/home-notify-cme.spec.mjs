@@ -1,4 +1,5 @@
-// CME on Home, as a member renewing in Texas reads it: the state card and its
+// CME progress (Credentials > CME progress, where the state and board cards
+// moved from Home on 2026-11-20), as a member renewing in Texas reads it: the state card and its
 // math (what counted, what did not and why, the rule it comes from), Find CME,
 // the renewal packet (the share sheet and the download, and the explanation
 // when a state has nothing to send), the board certification cards with a
@@ -7,15 +8,17 @@
 import { readFileSync } from 'node:fs';
 import { shareSheet } from './support/cred-helpers.mjs';
 import { test } from './support/fixtures.mjs';
-import { openMore, pendingOps, profileOf, rows, sleep, syncWarnings } from './support/lab.mjs';
+import { openCredentials, openMore, pendingOps, profileOf, rows, sleep, syncWarnings } from './support/lab.mjs';
 import {
   bodyText, day, home, memberWithPlace, pageTitle, pdfText, recordShares, reloadApp, seed, shared,
 } from './support/home-notify-helpers.mjs';
 
-/** The Home state card for `st` (the card's first line is the state code). */
+/** The CME progress state card for `st` (the card's first line is the state code). */
+/** Credentials > CME progress: every state card, then the board cards. */
+const progress = async (page) => { await openCredentials(page, 'CME progress'); await sleep(700); };
 const stateCard = (page, st) => page.locator('div[style*="cursor: pointer"]').filter({ has: page.getByText(new RegExp(`^${st}$`)) }).filter({ has: page.getByRole('button', { name: /Renewal packet/ }) }).last();
 
-test('CME on Home: math, Find CME, renewal packet, boards, rules changed', {
+test('CME progress: math, Find CME, renewal packet, boards, rules changed', {
   tag: ['@HOME-016', '@HOME-017', '@HOME-018', '@HOME-024'],
 }, async ({ page, qa }) => {
   test.setTimeout(8 * 60 * 1000);
@@ -39,7 +42,7 @@ test('CME on Home: math, Find CME, renewal packet, boards, rules changed', {
   await sleep(1500);
 
   await qa.feature('HOME-016', 'State card: the math shows the window, the scoreboard, counted and excluded entries with reasons, the source; Find CME', async () => {
-    await home(page);
+    await progress(page);
     const card = stateCard(page, 'TX');
     const ct = (await card.innerText().catch(() => '')).replace(/\s+/g, ' ');
     await qa.shot('tx card');
@@ -66,14 +69,14 @@ test('CME on Home: math, Find CME, renewal packet, boards, rules changed', {
       await sleep(900);
       qa.check('"Find CME →" opens Credentials > Find CME', (await pageTitle(page)) === 'Credentials' && await page.locator('[data-desk-search]').count() > 0, (await bodyText(page)).slice(0, 120));
     }
-    await home(page);
+    await progress(page);
     await page.getByRole('button', { name: 'Find CME', exact: true }).click();
     await sleep(900);
-    qa.check('the section header\'s "Find CME" opens Credentials > Find CME', (await pageTitle(page)) === 'Credentials' && await page.locator('[data-desk-search]').count() > 0);
+    qa.check('the CME progress header\'s "Find CME" opens Credentials > Find CME', (await pageTitle(page)) === 'Credentials' && await page.locator('[data-desk-search]').count() > 0);
   }, { soft: true });
 
   await qa.feature('HOME-017', 'Renewal packet: a board-ready PDF to the share sheet or a download; an empty state explains', async () => {
-    await home(page);
+    await progress(page);
     // Select the no-share-sheet branch explicitly; desktop WebKit can share.
     await shareSheet(page, { absent: true });
     const consoleMark = qa.report.console.length;
@@ -132,7 +135,10 @@ test('CME on Home: math, Find CME, renewal packet, boards, rules changed', {
     const specs = profileOf(user.id).specialties || [];
     qa.check('profiles.specialties holds both picks', specs.includes('ABMS:ABNS') && specs.some((s) => /^UCNS:Autonomic Disorders/.test(s)), JSON.stringify(specs));
     await reloadApp(page);
+    // Home carries no board grid now; the cards are on CME progress, under the state cards.
     await home(page);
+    qa.check('Home shows no board card grid (no hours line, no follow note)', !/12\/20 hrs|CME follows the primary board above/.test(await bodyText(page)));
+    await progress(page);
     const text = await bodyText(page);
     const card = page.locator('div[style*="cursor: pointer"]').filter({ hasText: /^Neurological Surgery, ABMS ABNS/ }).last();
     const ct = (await card.innerText().catch(() => '')).replace(/\s+/g, ' ');
@@ -172,7 +178,7 @@ test('CME on Home: math, Find CME, renewal packet, boards, rules changed', {
     const proposals = () => rows(`select section, label, sample, status from public.field_proposals where user_id = '${profile.id}' order by created_at`);
     const tickets = () => rows(`select id from public.support_tickets where user_id = '${profile.id}'`).length;
     const ticketsBefore = tickets();
-    await home(page);
+    await progress(page);
     await stateCard(page, 'TX').getByText(/^TX$/).click();
     const math = page.getByRole('dialog', { name: 'TX CME: the math', exact: true });
     await math.waitFor({ timeout: 10000 });

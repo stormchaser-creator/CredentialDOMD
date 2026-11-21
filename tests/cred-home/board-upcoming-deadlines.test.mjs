@@ -118,15 +118,15 @@ test('Vera can answer "when is my QI attestation due"', async () => {
   assert.match(systemStaticFor('DO'), /snapshot\.boardSteps/);
 });
 
-test('Home search finds a board step by its name and opens the CME page', async () => {
+test('Home search finds a board step by its name and opens CME progress, where its board card is', async () => {
   const { searchRecords } = await bundle('src/components/features/HomeSearch.jsx', { 'context/AppContext$': 'export const useApp=()=>({});' });
   const groups = searchRecords(doData(), 'qi');
   const g = groups.find(x => x.sec.key === 'boardSteps');
   assert.ok(g, 'a Board steps group');
   assert.equal(g.hits[0].label, 'AOBS QI attestation');
   assert.equal(g.hits[0].sub, 'due 2027-12-31');
-  assert.equal(g.sec.sub, 'cme');
-  assert.match(read('src/App.jsx'), /sec\.key === "boardSteps" \|\| sec\.key === "stateDeadlines"\) \{ setTab\("credentials"\); setSubPage\("cme"\); return; \}/);
+  assert.equal(g.sec.sub, 'cmeProgress');
+  assert.match(read('src/App.jsx'), /sec\.key === "boardSteps" \|\| sec\.key === "stateDeadlines"\) \{ openCmeProgress\(\); return; \}/);
 });
 
 test('the Notification Center lists upcoming board steps apart from the alerts, never counted', () => {

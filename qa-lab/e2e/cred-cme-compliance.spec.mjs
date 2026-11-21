@@ -6,7 +6,7 @@ import { checkNoUnexpectedRecovery } from './support/recovery-acceptance.mjs';
 // that falls on the renewal date), and Find CME's search, filters and links.
 import { test } from './support/fixtures.mjs';
 import {
-  chooseFiles, goTab, newMember, openCredentials, openMore, row, sleep, syntheticPng, tableRow, waitFor, waitForMemberApp,
+  chooseFiles, newMember, openCredentials, openMore, row, sleep, syntheticPng, tableRow, waitFor, waitForMemberApp,
 } from './support/lab.mjs';
 import {
   addCme, addLicense, day, dbWait, download, fillField, openAdd, pdfText, saveDialog, shareSheet, shared, stubExternalPages,
@@ -20,10 +20,10 @@ const QUESTION = 'Do you own or provide care at an Ohio pain management clinic c
 /** A date string minus whole years (the engine's cycle start: setFullYear - N). */
 const yearsBack = (iso, n) => { const d = new Date(`${iso}T00:00:00`); d.setFullYear(d.getFullYear() - n); return d.toISOString().slice(0, 10); };
 
-/** Home's CME Progress cards: state -> "Total logged: x/yh" and the card's text. */
+/** The CME progress cards (Credentials > CME progress; on Home until 2026-11-20): state -> "Total logged: x/yh" and the card's text. */
 async function homeCmeCards(page) {
-  await goTab(page, 'Home');
-  await page.getByText('CME Progress').first().waitFor({ timeout: 20000 }).catch(() => {});
+  await openCredentials(page, 'CME progress');
+  await page.getByRole('heading', { name: 'CME progress' }).first().waitFor({ timeout: 20000 }).catch(() => {});
   return page.evaluate(() => {
     const out = {};
     for (const el of document.querySelectorAll('span')) {
