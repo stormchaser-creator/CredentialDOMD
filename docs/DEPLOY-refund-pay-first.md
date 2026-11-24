@@ -56,6 +56,7 @@ test and in live:
   `customer.subscription.deleted`, `invoice.paid`, `invoice.payment_failed`.
 - New and required: `charge.refunded`, `charge.refund.updated`.
 - New, sent only on newer API versions (add them if the dashboard offers them): `refund.updated`, `refund.failed`.
+- Optional, for the owner's dispute alert (one-step sign-up, 20261120190000; alert only): `charge.dispute.created`.
 
 Without the refund events a refund that fails after Stripe accepted it keeps
 reading "on its way" in Profile and never reaches `needs_support`, and a

@@ -153,6 +153,8 @@ export function limitedLaunchDependencies() {
       // (20261014100000_checkout_recovery.sql). Nothing is sent from here.
       recordCheckoutRecovery: (session: string, live: boolean, attempt: string, url: string, expiresAt: string) => checked(db().rpc('record_checkout_recovery', { p_session_id: session, p_livemode: live, p_attempt_id: attempt, p_recovery_url: url, p_recovery_expires_at: expiresAt })),
       recordCheckoutRecovered: (recoveredFrom: string, live: boolean, session: string) => checked(db().rpc('record_checkout_recovered', { p_recovered_from: recoveredFrom, p_livemode: live, p_session_id: session })),
+      // charge.dispute.created, alert only (20261120190000_pay_first_signup.sql).
+      recordDispute: (dispute: string, live: boolean, charge: string | null, amount: number | null, reason: string | null, customer: string | null) => checked(db().rpc('record_billing_dispute', { p_dispute_id: dispute, p_livemode: live, p_charge_id: charge, p_amount_cents: amount, p_reason: reason, p_customer_id: customer })),
       settleLimited: async (args: Record<string, unknown>, quote: string, proof: unknown) => {
         const result = await checked(db().rpc('settle_limited_billing_subscription', { p_args: args, p_quote_id: quote, p_paid_proof: proof }));
         if (!['applied', 'duplicate'].includes(result as string)) throw Error('Limited billing settlement failed');

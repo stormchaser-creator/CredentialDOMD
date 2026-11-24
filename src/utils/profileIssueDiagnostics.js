@@ -11,7 +11,7 @@ const CODES = new Map([
     'continuity_invalid_binding', 'continuity_invalid_journal', 'continuity_storage_unavailable',
     'continuity_digest_failed', 'continuity_invalid_digest', 'continuity_invalid_adapter',
     'continuity_journal_conflict', 'continuity_recovery_conflict', 'continuity_retirement_unavailable',
-    'profile_missing', 'profile_mismatch'].map(code => [code, code.replace(/^continuity_/, '').replace(/^membership_information_/, '').toUpperCase()]),
+    'profile_missing', 'profile_mismatch', 'signup_requires_payment'].map(code => [code, code.replace(/^continuity_/, '').replace(/^membership_information_/, '').toUpperCase()]),
   ...['42501', '42P17', 'PGRST301', 'PGRST302', 'PGRST303'].map(code => [code, code]),
 ]);
 const BROWSER_ERRORS = new Map([

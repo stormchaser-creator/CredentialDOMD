@@ -88,6 +88,8 @@ function stubDb(f) {
       if (f.failRpc?.[name]) return { data: null, error: { message: f.failRpc[name] } };
       if (name === 'clerk_continuity_candidate') return { data: null, error: null };
       if (name === 'initialize_clerk_profile') {
+        // Pay-first sign-up on and this email unpaid (20261124120000): no profile.
+        if (f.unpaid) return { data: { state: 'signup_requires_payment' }, error: null };
         // What the SQL does for a new sign-up: create the profile, bound to
         // the verified primary it was handed. It never sets verified_email.
         if (!f.tables.profiles.some((r) => r.auth_user_id === args.p_target_subject)) {
@@ -309,6 +311,18 @@ test('a continuity failure stays retryable (503) with CONTINUITY_UNAVAILABLE', a
   const response = await f.deliver('user.created');
   assert.equal(response.status, 503);
   assert.match(onlyFailure(f, 'CONTINUITY_UNAVAILABLE', 503), /: continuity_unavailable$/);
+});
+
+test('pay-first sign-up on and no payment: acknowledged, no profile, mailbox or beta write', async () => {
+  const f = fixture();
+  f.unpaid = true;
+  const before = f.tables.profiles.length;
+  const response = await f.deliver('user.created');
+  assert.equal(response.status, 200, 'Clerk does not resend it for days');
+  assert.equal(await response.text(), 'Awaiting payment');
+  assert.equal(f.tables.profiles.length, before);
+  assert.deepEqual(f.rpcs.map((r) => r.name), ['clerk_continuity_candidate', 'initialize_clerk_profile']);
+  assert.equal(f.calls.length, 0);
 });
 
 test('continuity switched off answers 503 with CONTINUITY_DISABLED, before any read', async () => {

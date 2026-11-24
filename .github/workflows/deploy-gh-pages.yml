@@ -153,6 +153,8 @@ jobs:
           VITE_CLERK_PUBLISHABLE_KEY: ${{ secrets.VITE_CLERK_PUBLISHABLE_KEY }}
           VITE_LIMITED_LAUNCH_ACCESS_ENABLED: "true"
           VITE_PUBLIC_SELF_SERVICE_SIGNUP_ENABLED: "true"
+          # One-step sign-up and pay (docs/pay-first-signup.md). Owner enabled it 2026-11-24.
+          VITE_PAY_FIRST_SIGNUP_ENABLED: "true"
           VITE_CLERK_CONTINUITY_ENABLED: "true"
           VITE_SUPPORT_OPERATIONS_ENABLED: "false"
           # Administrator access. "true" turns on the owner screen AND the

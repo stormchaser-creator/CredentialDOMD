@@ -106,7 +106,8 @@ export async function initializeProductionProfile(
   if (error || !data || typeof data !== "object" || Array.isArray(data)) throw new Error("continuity_unavailable");
   const result = data as Record<string, unknown>;
   if (!["bound", "current"].includes(String(result.state))) {
-    const safe = ["disabled", "identity_conflict", "account_unavailable", "verified_primary_required", "source_identity_unavailable"];
+    // signup_requires_payment: no new profile without payment while pay-first sign-up is on (20261124120000).
+    const safe = ["disabled", "identity_conflict", "account_unavailable", "verified_primary_required", "source_identity_unavailable", "signup_requires_payment"];
     throw new Error(safe.includes(String(result.state)) ? String(result.state) : "continuity_unavailable");
   }
   if (result.schemaVersion !== 1 || result.subject !== identity.subject || result.issuer !== issuer

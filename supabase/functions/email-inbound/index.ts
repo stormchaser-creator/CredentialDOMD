@@ -888,6 +888,28 @@ async function intakeRefusal(profile: MatchedProfile | null, ledgerId: string, r
   return json({ ok: true, route, result: access.error });
 }
 
+// An account made from the email a buyer typed into Stripe Checkout (pay-first
+// sign-up, 20261120190000) files nothing from mail until its owner signs in
+// once with the email code: Stripe never checks that the buyer reads that
+// mailbox, and a mistyped address would otherwise receive someone else's
+// forwarded documents. Every other account answers false. Before the
+// migration (PGRST202) nothing is held back; any other failure stops the route
+// so the message is retried, never filed on a guess.
+async function emailUnproven(profile: MatchedProfile): Promise<boolean> {
+  const { data, error } = await db.rpc("pay_first_email_unproven", { p_profile_id: profile.id });
+  if (error) {
+    if ((error as { code?: string }).code === "PGRST202") return false;
+    throw new Error(`email proof lookup: ${error.message}`);
+  }
+  return data === true;
+}
+const EMAIL_UNPROVEN_REPLY = `Log in once with your email code to turn on docs@.
+
+Open the app: ${APP_URL}
+
+CredentialDOMD
+https://credentialdomd.com`;
+
 async function assertIntakeWrite(profile: MatchedProfile, scope: "credential" | "practice" = "credential") {
   const access = await accessWriteDecision(db, profile.id, profile.auth_user_id, scope);
   if (!access.allowed) throw new Error(access.error);
@@ -1647,6 +1669,9 @@ Open the app: ${APP_URL} (More > Profile & settings > Email)
 CredentialDOMD
 https://credentialdomd.com`);
   }
+  if (await emailUnproven(profile)) {
+    return await replyUnregistered(ledgerId, "cme", email, from, FROM_CME, replySubject, replyHeaders, EMAIL_UNPROVEN_REPLY);
+  }
 
   const authFail = senderAuthFailure(authResultsFromHeaders(email));
   if (authFail) {
@@ -1778,6 +1803,9 @@ Open the app: ${APP_URL} (More > Profile & settings > Email)
 
 CredentialDOMD
 https://credentialdomd.com`);
+  }
+  if (await emailUnproven(profile)) {
+    return await replyUnregistered(ledgerId, "contacts", email, from, FROM_CONTACTS, replySubject, replyHeaders, EMAIL_UNPROVEN_REPLY);
   }
 
   // The evidence read the way docs@ reads it: an explicit failure in the raw
@@ -2503,6 +2531,9 @@ Open the app: ${APP_URL}
 CredentialDOMD
 https://credentialdomd.com`);
   }
+  if (await emailUnproven(profile)) {
+    return await replyUnregistered(ledgerId, "docs", email, from, FROM_DOCS, replySubject, replyHeaders, EMAIL_UNPROVEN_REPLY);
+  }
 
   // Two readings, kept apart. The filing refusal reads both: an explicit
   // failure in the raw top-most header OR in the header map (ARC included)
@@ -3118,6 +3149,7 @@ async function handleTicketReply(ledgerId: string, emailId: string, from: string
   const profile = await matchProfile(from);
   if (!profile || profile.id !== ticket.user_id) return relay("the sender is not a confirmed address of the ticket's owner");
   if (profile.access_status !== "active") return relay("the ticket owner's account is not active");
+  if (await emailUnproven(profile)) return relay("the ticket owner has not signed in with their email code yet");
   // An admin's message is a support reply to the database, which takes one
   // only from the app or a verified writer (20260928161000); relay it.
   const { data: adminRow, error: adminErr } = await db.from("app_admins").select("profile_id").eq("profile_id", profile.id).maybeSingle();

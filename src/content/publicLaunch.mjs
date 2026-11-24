@@ -1,7 +1,9 @@
 /** Public marketing presentation only. This cannot enable billing or grant access. */
 export const PUBLIC_LAUNCH_MODE = Object.freeze({
   enabled: true,
-  signupHref: '/app/', // Protected verified-primary signup and explicit paid opt-in.
+  // Every site Sign up opens the app's sign-up-and-pay page (pay-first build).
+  // A build without pay-first ignores ?start=signup and shows today's screen.
+  signupHref: '/app/?start=signup',
 });
 
 // Static generators still own the listed surfaces. Move an ID into
@@ -23,12 +25,14 @@ function reviewedSignupHref(value) {
     throw new Error('Paid launch requires a reviewed signup destination');
   }
   const url = new URL(value, SITE_ORIGIN);
+  // The one query allowed: the app's sign-up-and-pay page.
+  const startSignup = url.pathname === '/app/' && url.search === '?start=signup';
   if (url.origin !== SITE_ORIGIN || url.username || url.password
     || !['/app/', '/signup/', '/join/'].some(route => url.pathname === route || url.pathname === route.slice(0, -1))
-    || url.search || url.hash) {
+    || (url.search && !startSignup) || url.hash) {
     throw new Error('Signup destination must be a reviewed same-site app/signup route without query data or fragments');
   }
-  return url.pathname;
+  return startSignup ? '/app/?start=signup' : url.pathname;
 }
 
 /** A build refuses an accidental partial launch before touching packaged output. */

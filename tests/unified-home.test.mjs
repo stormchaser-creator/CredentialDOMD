@@ -95,7 +95,9 @@ function assertFounderState(document, label) {
 function assertSignupLinks(document, label) {
   assert.equal(document.links('Sign up today').length, 5, label);
   assert.equal(document.links('Sign up').length, 2, label);
-  for (const link of [...document.links('Sign up today'), ...document.links('Sign up'), ...document.links('Log in')]) assert.equal(link.attrs.href, '/app/', label);
+  // Sign up opens the sign-up-and-pay page (owner, 2026-11-24); Log in the app.
+  for (const link of [...document.links('Sign up today'), ...document.links('Sign up')]) assert.equal(link.attrs.href, '/app/?start=signup', label);
+  for (const link of document.links('Log in')) assert.equal(link.attrs.href, '/app/', label);
   assert.ok(document.links('Log in').length >= 3, label);
 }
 

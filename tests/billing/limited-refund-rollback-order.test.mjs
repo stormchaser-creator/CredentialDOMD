@@ -18,7 +18,7 @@ const entrypoints = fs.readdirSync(new URL('supabase/functions/', root), { withF
   .map(d => d.name).filter(name => SHARED.test(read(`supabase/functions/${name}/index.ts`))).sort();
 
 test('the ledger rollback says what to undo first: the app, every function built from the shared modules, then limited-refund', () => {
-  assert.deepEqual(entrypoints, ['activate-billing-invitation', 'billing-quote', 'limited-checkout', 'limited-customer-portal', 'limited-refund', 'limited-stripe-webhook']);
+  assert.deepEqual(entrypoints, ['activate-billing-invitation', 'billing-quote', 'limited-checkout', 'limited-customer-portal', 'limited-refund', 'limited-stripe-webhook', 'public-signup-checkout', 'public-signup-status']);
   const rollback = read('docs/rollback/20260930070000_limited_refunds.rollback.sql');
   const header = rollback.split('\n').filter(line => line.startsWith('--')).join('\n');
   const at = phrase => { const i = header.indexOf(phrase); assert.ok(i >= 0, `the header names: ${phrase}`); return i; };

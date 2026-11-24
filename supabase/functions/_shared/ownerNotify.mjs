@@ -20,6 +20,9 @@ export const OWNER_NOTIFY_FROM = 'CredentialDOMD Notifier <whit@credentialdomd.c
 const SIGNUP_KINDS = ['waitlist', 'founding', 'app profile'];
 const ACTIVITY_PREFIXES = ['TICKET', 'CLIENT', 'BETA', 'guide only', 'FEEDBACK', 'FIXED'];
 const MONEY = [
+  ['PAID, NO LOGIN YET', 'paid, no login yet', 'paid, no login yet'],
+  ['SIGN-UP NEEDS YOU', 'paid sign-up needing you', 'paid sign-ups needing you'],
+  ['DISPUTE OPENED', 'dispute opened', 'disputes opened'],
   ['PAID', 'paid', 'paid'],
   ['CHECKOUT STARTED', 'checkout started', 'checkouts started'],
   ['SUBSCRIPTION ACTIVE', 'subscription active without a recorded payment', 'subscriptions active without a recorded payment'],

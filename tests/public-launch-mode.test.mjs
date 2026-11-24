@@ -4,13 +4,14 @@ import { PUBLIC_LAUNCH_MODE, REQUIRED_LAUNCH_SURFACES, WIRED_LAUNCH_SURFACES, as
 
 test('production mode opens protected app signup without collecting a waitlist request', () => {
   assert.equal(PUBLIC_LAUNCH_MODE.enabled, true);
-  assert.equal(PUBLIC_LAUNCH_MODE.signupHref, '/app/');
+  // Owner, 2026-11-24: every Sign up opens the sign-up-and-pay page.
+  assert.equal(PUBLIC_LAUNCH_MODE.signupHref, '/app/?start=signup');
   assert.deepEqual(WIRED_LAUNCH_SURFACES, REQUIRED_LAUNCH_SURFACES);
   assert.doesNotThrow(() => assertPublicLaunchReady());
   const view = publicLaunchPresentation();
   assert.equal(view.mode, 'founding-signup');
   assert.deepEqual(view.primaryAction, {
-    kind: 'navigation', label: 'Sign up today', shortLabel: 'Sign up', href: '/app/', collectEmail: false,
+    kind: 'navigation', label: 'Sign up today', shortLabel: 'Sign up', href: '/app/?start=signup', collectEmail: false,
   });
   assert.equal(view.guideCapture.purpose, 'requested-guide');
   assert.doesNotMatch(JSON.stringify(view), /waitlist/i, 'the waitlist was retired 2026-11-20');
@@ -31,6 +32,13 @@ test('explicit OFF fixture has no primary action and no waitlist to send anyone 
   assert.match(view.guideCapture.note, /requests one guide/);
   assert.match(view.availability, /Checkout is not open/);
   assert.doesNotMatch(JSON.stringify(view), /waitlist|#join|invitation list/i);
+});
+
+test('?start=signup on /app/ is the only query a signup destination may carry', () => {
+  for (const href of ['/app/?start=other', '/app/?start=signup&x=1', '/signup/?start=signup', '/app/?start=signup#top', 'https://evil.example/app/?start=signup']) {
+    assert.throws(() => assertPublicLaunchReady({ enabled: true, signupHref: href }), /reviewed same-site/, href);
+  }
+  assert.equal(publicLaunchPresentation({ enabled: true, signupHref: '/app/' }).primaryAction.href, '/app/');
 });
 
 test('an accidental flag flip cannot package a partial paid launch', () => {

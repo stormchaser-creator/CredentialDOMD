@@ -13,7 +13,9 @@
 --      the changed shared modules (limitedLaunchHandlers.mjs,
 --      limitedLaunchDependencies.ts): limited-checkout, billing-quote,
 --      limited-customer-portal, activate-billing-invitation and
---      limited-stripe-webhook.
+--      limited-stripe-webhook (and, once deployed, public-signup-checkout and
+--      public-signup-status, pay-first sign-up 20261120190000; delete those
+--      two if they predate nothing to go back to).
 --   3. Delete the limited-refund edge function.
 --   4. Roll back 20260930072000 (the sweep) and 20260930071000 (tickets),
 --      in that order.
