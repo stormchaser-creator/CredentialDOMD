@@ -12,7 +12,7 @@ from the email Stripe collected. Everything new is **off** until both flags are 
 | Flag | Where | Default |
 |---|---|---|
 | `access_policy_settings.pay_first_signup_enabled` | database | `false` |
-| `VITE_PAY_FIRST_SIGNUP_ENABLED` | site build | unset (off) |
+| `VITE_PAY_FIRST_SIGNUP_ENABLED` | site build | unset (off); `"true"` in `.github/workflows/deploy-gh-pages.yml` since 2026-11-24 |
 
 Build flag off: the sign-in screen is exactly as today (`?start=signup` is ignored).
 Build flag on: the Clerk form only signs in, always. There is no account-first fallback:
@@ -65,6 +65,9 @@ again (for up to 3 days); the sweep and the return page finish the job anyway.
    endpoint also sends `charge.dispute.created`; that is optional and not part of this build.
 5. Site build with `VITE_PAY_FIRST_SIGNUP_ENABLED=true`, then turn on the database flag (owner's
    own words for each). Between the two, Sign up says it is not open; Log in works.
+   Owner approved go-live 2026-11-24 ("Yes, have Claude take the one-step sign-up live"):
+   the build flag is the `VITE_PAY_FIRST_SIGNUP_ENABLED: "true"` line in the deploy
+   workflow's build env, and the database flag is turned on as soon as that build serves.
 
 ## Rollback
 
@@ -73,7 +76,8 @@ again (for up to 3 days); the sweep and the return page finish the job anyway.
    site build still up, Sign up says it is not open until step 3.
 2. Leave the functions and the sweep deployed until Admin > Accounts shows no paid sign-up
    to finish.
-3. Revert the site build.
+3. Revert the site build (remove the `VITE_PAY_FIRST_SIGNUP_ENABLED` line from the deploy
+   workflow, or revert the merge).
 4. `docs/rollback/20261124120000_pay_first_profile_gate.rollback.sql` (if it was applied), then
    `docs/rollback/20261120190000_pay_first_signup.rollback.sql` (refuses while the gate exists,
    or while any hold is paid but unfinished, or still open).
