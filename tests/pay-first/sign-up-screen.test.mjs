@@ -24,7 +24,7 @@ async function compile(env) {
       builder.onResolve({ filter: /^@clerk\/clerk-react$/ }, () => ({ path: 'clerk', namespace: 'fixture' }));
       builder.onLoad({ filter: /.*/, namespace: 'fixture' }, () => ({ contents: `
         import React from 'react';
-        export const SignIn = props => React.createElement('div', { 'data-clerk-widget': 'SignIn', 'data-with-sign-up': String(props.withSignUp) });
+        export const SignIn = props => React.createElement('div', { 'data-clerk-widget': 'SignIn', 'data-with-sign-up': String(props.withSignUp), 'data-footer-action': JSON.stringify(props.appearance?.elements?.footerAction ?? null) });
         export const useClerk = () => null;
         export const useSignIn = () => ({ isLoaded: false, signIn: null });
         export const useSignUp = () => ({ isLoaded: false, signUp: null });
@@ -50,6 +50,8 @@ test('flag off: the screen is login first, exactly as before', async () => {
   const page = await compile({});
   const html = render(page, { offer: OFFER });
   assert.match(html, /data-with-sign-up="true"/);
+  // Clerk's footer Sign up link is left alone on the login-first path.
+  assert.match(html, /data-footer-action="null"/);
   assert.doesNotMatch(html, /data-pay-first/);
   assert.match(html, /Already have an account\? Use the same email address/);
   // A return link does nothing either.
@@ -61,6 +63,8 @@ test('flag on with a live offer: Sign up in the offer box, the form only signs i
   const html = render(page, { offer: OFFER });
   assert.match(html, /<button[^>]*data-pay-first-signup=""[^>]*>Sign up<\/button>/);
   assert.match(html, /data-with-sign-up="false"/);
+  // Clerk's own "Don't have an account? Sign up" footer is hidden; ours stays.
+  assert.match(html, /data-footer-action="{&quot;display&quot;:&quot;none&quot;}"/);
   assert.match(html, /Already a member\? <strong[^>]*>Log in<\/strong>/);
   assert.match(html, /Just paid\? Log in with the email you used at checkout\./);
   assert.match(html, /Credentials for DOs, MDs, NPs and PAs/);
@@ -79,6 +83,7 @@ test('flag on, no account-first fallback: no offer, a paused offer, or the serve
     for (const search of ['', '?start=signup']) {
       const html = render(page, { ...state, search });
       assert.match(html, /data-with-sign-up="false"/, label);
+      assert.match(html, /data-footer-action="{&quot;display&quot;:&quot;none&quot;}"/, label);
       assert.doesNotMatch(html, /data-with-sign-up="true"/, label);
       assert.doesNotMatch(html, /data-pay-first-signup/, label);
       assert.match(html, /data-pay-first-closed=""[^>]*>Sign up is not open right now\. Try again soon\.</, label);
@@ -104,6 +109,7 @@ test('flag on: /app/?start=signup is the sign-up-and-pay page, Log in folded awa
   assert.match(html, /<button[^>]*data-pay-first-signup=""[^>]*>Sign up<\/button>/);
   assert.match(html, /data-auth-widget="" style="display:none/);
   assert.match(html, /data-with-sign-up="false"/);
+  assert.match(html, /data-footer-action="{&quot;display&quot;:&quot;none&quot;}"/);
   assert.match(html, /Already a member\? <button[^>]*data-pay-first-show-login=""[^>]*>Log in<\/button>/);
   const shown = render(page, { offer: OFFER, search: '?start=signup', pf: { showLogIn: true } });
   assert.match(shown, /data-auth-widget="" style="display:flex/);
