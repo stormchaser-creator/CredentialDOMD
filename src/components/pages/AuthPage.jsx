@@ -322,6 +322,9 @@ function AuthPage() {
                   // Keep the alternate sign-in method easy to find.
                   alternativeMethodsBlockButton: { width: "100%", justifyContent: "center", padding: "10px 12px", borderRadius: 10, border: `1px solid ${T.accent}`, fontWeight: 700 },
                   footerActionLink: { fontWeight: 700 },
+                  // Pay first: hide Clerk's "Don't have an account? Sign up";
+                  // our own Sign up (offer box, /app/?start=signup) is the way in.
+                  ...(signInOnly ? { footerAction: { display: "none" } } : {}),
                 },
                 variables: {
                   colorPrimary: "#10b981",
