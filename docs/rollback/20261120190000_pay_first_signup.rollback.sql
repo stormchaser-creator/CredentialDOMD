@@ -17,6 +17,10 @@
 
 do $$ declare waiting boolean;
 begin
+ -- The sign-up gate (20261124120000) reads pay_first_signups: roll it back first.
+ if to_regprocedure('public.pay_first_new_profile_allowed(text)') is not null then
+  raise exception 'run docs/rollback/20261124120000_pay_first_profile_gate.rollback.sql first';
+ end if;
  if to_regclass('public.pay_first_signups') is null then return; end if;
  execute $q$select exists(select 1 from public.pay_first_signups
    where state in ('paid','provisioning','needs_owner') or (state in ('creating','open') and clock_timestamp()<expires_at+interval '15 minutes'))$q$ into waiting;

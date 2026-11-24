@@ -1,9 +1,11 @@
 // One step, pay first sign-up (owner decision 2026-11-20): Sign up opens
 // Stripe Checkout at once, and the account is made from the email paid with
 // (supabase/functions/_shared/payFirstSignup.mjs). Off unless this build has
-// VITE_PAY_FIRST_SIGNUP_ENABLED and the database has pay_first_signup_enabled;
-// with either off the sign-in screen is login first, exactly as before (a
-// refused start turns it back at once).
+// VITE_PAY_FIRST_SIGNUP_ENABLED and the database has pay_first_signup_enabled.
+// Without the build flag the sign-in screen is login first, exactly as before.
+// With it, the Clerk form only ever signs in: there is no account-first
+// fallback (owner, 2026-11-24: "should be reconciled into one step"), and a
+// refused start says sign up is not open.
 
 export const PAY_FIRST_SIGNUP_ENABLED = import.meta.env?.VITE_PAY_FIRST_SIGNUP_ENABLED === "true";
 
@@ -30,6 +32,12 @@ export const PAY_FIRST_COPY = Object.freeze({
   // The existing "temporarily full" status line (public/membership-offer.js), first sentence.
   full: "Founding checkout is temporarily unavailable.",
   unavailable: "Sign up did not open. Try again in a minute.",
+  closed: "Sign up is not open right now. Try again soon.",
+  // The Terms tick, on this page (not in Stripe): "I agree to the Terms and the renewal terms above."
+  termsBefore: "I agree to the ",
+  termsLink: "Terms",
+  termsAfter: " and the renewal terms above.",
+  termsNeeded: "Tick the box to agree to the Terms first.",
 });
 
 /** The Checkout a return names (/app/?signup=cs_...), or null. */
@@ -56,7 +64,7 @@ export function withoutSigninLink({ pathname = "/", search = "", hash = "" } = {
   return `${pathname}${rest ? `?${rest}` : ""}${hash || ""}`;
 }
 
-/** /app/?start=signup: a home page Sign up that goes straight to Checkout. */
+/** /app/?start=signup: every site Sign up opens the sign-up-and-pay page (Terms tick, then Checkout). */
 export function readStartSignup(search) {
   try { return new URLSearchParams(typeof search === "string" ? search : "").get("start") === "signup"; } catch { return false; }
 }
@@ -116,19 +124,22 @@ async function post(url, body, fetchImpl, timeoutMs = 15000) {
 }
 
 /**
- * Sign up: hold a place and open Checkout. { url } to go to, or { error }:
- * "disabled" (turn back to login first), "full", or "unavailable".
+ * Sign up: hold a place and open Checkout, only once the Terms box on this
+ * page is ticked. { url } to go to, or { error }: "terms" (not ticked),
+ * "disabled" (sign up is not open), "full", or "unavailable".
  */
-export async function startSignup({ supabaseUrl, fetchImpl = globalThis.fetch, storage = globalThis.localStorage, cryptoImpl = globalThis.crypto } = {}) {
+export async function startSignup({ supabaseUrl, termsAccepted = false, fetchImpl = globalThis.fetch, storage = globalThis.localStorage, cryptoImpl = globalThis.crypto } = {}) {
   try {
+    if (termsAccepted !== true) return { error: "terms" };
     if (!supabaseUrl) return { error: "disabled" };
     const nonce = makeNonce(cryptoImpl);
-    const { status, data } = await post(new URL(START_PATH, supabaseUrl).href, { nonceDigest: await nonceDigest(nonce, cryptoImpl) }, fetchImpl);
+    const { status, data } = await post(new URL(START_PATH, supabaseUrl).href, { nonceDigest: await nonceDigest(nonce, cryptoImpl), terms: "accepted" }, fetchImpl);
     if (status === 200 && typeof data?.url === "string" && /^https:\/\/checkout\.stripe\.com\//.test(data.url) && /^[0-9a-f-]{36}$/.test(data.signupId || "")) {
       keep(storage, data.signupId, nonce);
       return { url: data.url };
     }
     if (data?.error === "signup_disabled") return { error: "disabled" };
+    if (data?.error === "terms_required") return { error: "terms" };
     if (data?.error === "founding_full") return { error: "full" };
     return { error: "unavailable" };
   } catch { return { error: "unavailable" }; }

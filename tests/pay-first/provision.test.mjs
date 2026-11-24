@@ -7,7 +7,7 @@ import { EMAILED_SIGN_IN_LINK } from '../../supabase/functions/_shared/payFirstS
 
 const status = (w, s, nonce) => w.post(w.payFirst.status, { sessionId: s, nonce });
 
-test('Sign up opens a founding Checkout with the Terms tick and no account', async () => {
+test('Sign up opens a founding Checkout with no account; the Terms tick was ours, not Stripe\'s', async () => {
   const w = world();
   const s = await w.start();
   assert.match(s.url, /^https:\/\/checkout\.stripe\.com\//);
@@ -16,9 +16,13 @@ test('Sign up opens a founding Checkout with the Terms tick and no account', asy
   assert.deepEqual(args.line_items, [{ price: 'price_Founding', quantity: 1 }]);
   assert.equal(args.payment_method_collection, 'always');
   assert.deepEqual(args.payment_method_types, ['card', 'link']);
-  assert.deepEqual(args.consent_collection, { terms_of_service: 'required' });
-  assert.match(args.custom_text.terms_of_service_acceptance.message, /\[Terms\]\(https:\/\/credentialdomd\.com\/terms\)/);
+  // No Stripe Dashboard Terms URL is needed (owner, 2026-11-24): Checkout
+  // asks for no Terms tick; the reviewed renewal terms stay by the pay button.
+  assert.equal(args.consent_collection, undefined);
+  assert.deepEqual(Object.keys(args.custom_text), ['submit']);
   assert.match(args.custom_text.submit.message, /^Credential: USD 99 due now, then USD 99 each year/);
+  // The hold keeps the reviewed consent the Sign up page's tick agreed to.
+  assert.match(w.rows.get(s.signupId).consent_text, /^Credential: USD 99 due now/);
   assert.equal(args.success_url, 'https://credentialdomd.com/app/?signup={CHECKOUT_SESSION_ID}');
   assert.equal(args.cancel_url, 'https://credentialdomd.com/?signup=canceled#pricing');
   assert.equal(args.metadata.flow, 'pay_first');
@@ -36,13 +40,24 @@ test('Sign up opens a founding Checkout with the Terms tick and no account', asy
 test('Sign up refuses while off, full or malformed', async () => {
   const w = world();
   w.store.disabled = true;
-  assert.equal((await w.post(w.payFirst.start, { nonceDigest: sha(newNonce()) })).status, 503);
+  assert.equal((await w.post(w.payFirst.start, { nonceDigest: sha(newNonce()), terms: 'accepted' })).status, 503);
   w.store.disabled = false; w.store.full = true;
-  const full = await w.post(w.payFirst.start, { nonceDigest: sha(newNonce()) });
+  const full = await w.post(w.payFirst.start, { nonceDigest: sha(newNonce()), terms: 'accepted' });
   assert.equal(full.status, 409);
   assert.equal((await full.json()).error, 'founding_full');
-  assert.equal((await w.post(w.payFirst.start, { nonceDigest: 'nope' })).status, 400);
-  assert.equal((await w.post(w.payFirst.start, { nonceDigest: sha('x'), email: 'a@b.co' })).status, 400);
+  assert.equal((await w.post(w.payFirst.start, { nonceDigest: 'nope', terms: 'accepted' })).status, 400);
+  assert.equal((await w.post(w.payFirst.start, { nonceDigest: sha('x'), terms: 'accepted', email: 'a@b.co' })).status, 400);
+  assert.equal(w.count('stripe.session.create'), 0);
+});
+
+test('Sign up without the Terms tick on our page holds nothing and opens no Checkout', async () => {
+  const w = world();
+  for (const body of [{ nonceDigest: sha(newNonce()) }, { nonceDigest: sha(newNonce()), terms: true }, { nonceDigest: sha(newNonce()), terms: 'declined' }]) {
+    const r = await w.post(w.payFirst.start, body);
+    assert.equal(r.status, 400);
+    assert.equal((await r.json()).error, 'terms_required');
+  }
+  assert.equal(w.rows.size, 0, 'no place held');
   assert.equal(w.count('stripe.session.create'), 0);
 });
 
@@ -107,9 +122,8 @@ test('not paid yet: 202 setting up, with no Clerk call', async () => {
   assert.equal(w.rows.get(s.signupId).state, 'open');
 });
 
-test('refusals before any Clerk call: no Terms tick, unpaid, wrong mode, catalog or app', async () => {
+test('refusals before any Clerk call: unpaid, wrong mode, catalog or app', async () => {
   const cases = [
-    ['terms not accepted', (w, sid) => w.pay(sid, { terms: null }), 'needs_owner'],
     ['payment not paid', (w, sid) => w.pay(sid, { paid: false }), 'not_paid'],
     ['wrong livemode', (w, sid) => { w.pay(sid); w.sessions.get(sid).livemode = true; }, 'mismatch'],
     ['catalog mismatch', (w, sid) => { w.pay(sid); w.sessions.get(sid).metadata.catalog_version = 'other'; }, 'mismatch'],
@@ -125,6 +139,15 @@ test('refusals before any Clerk call: no Terms tick, unpaid, wrong mode, catalog
     assert.equal(w.count('clerk.find') + w.count('clerk.create'), 0, label);
     assert.equal(w.settled.length, 0, label);
   }
+});
+
+test('a paid Checkout with no Stripe Terms tick (none is asked for) is provisioned', async () => {
+  const w = world();
+  const s = await w.start();
+  w.pay(s.sessionId, { terms: null });
+  const result = await w.payFirst.provision({ sessionId: s.sessionId, signupId: s.signupId, via: 'webhook' });
+  assert.equal(result.state, 'provisioned');
+  assert.equal(w.rows.get(s.signupId).state, 'provisioned');
 });
 
 test('a Clerk create whose answer was lost: the retry finds the user, no duplicate', async () => {

@@ -192,7 +192,7 @@ export function world({ live = false } = {}) {
   /** A visitor presses Sign up: { nonce, signupId, sessionId }. */
   const start = async () => {
     const nonce = newNonce();
-    const r = await post(payFirst.start, { nonceDigest: sha(nonce) });
+    const r = await post(payFirst.start, { nonceDigest: sha(nonce), terms: 'accepted' });
     const body = await r.json();
     if (r.status !== 200) return { status: r.status, body };
     return { nonce, signupId: body.signupId, sessionId: body.url.split('/').pop(), url: body.url };

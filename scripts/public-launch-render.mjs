@@ -108,7 +108,7 @@ export function assertFounderHome(html) {
   if (banned) throw Error(`Founder home page must not print: ${banned[0]}`);
   if (!visible.includes('DOs, MDs, NPs and PAs')) throw Error('Founder home page must name DOs, MDs, NPs and PAs');
   for (const [, attrs, label] of visible.matchAll(/<a\b([^>]*)>\s*(Sign up today|Sign up|Log in)\s*<\/a>/g)) {
-    if (!/\shref="\/(?:app|signup|join)\/"/.test(attrs)) throw Error(`Founder home page ${label} link must open the app`);
+    if (!/\shref="\/(?:app|signup|join)\/(?:\?start=signup)?"/.test(attrs)) throw Error(`Founder home page ${label} link must open the app`);
   }
   if (!/>Sign up today<\/a>/.test(visible) || !/>Sign up<\/a>/.test(visible) || !/>Log in<\/a>/.test(visible)) throw Error('Founder home page needs Sign up today, Sign up and Log in links');
   return html;

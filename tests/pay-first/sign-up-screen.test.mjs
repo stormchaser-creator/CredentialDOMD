@@ -1,6 +1,6 @@
-// The signed-out screen with one step, pay first sign-up: Sign up opens
-// Checkout, the Clerk form only signs in, and every fallback is login first
-// exactly as before. Plus the client helper (utils/payFirstSignup.js).
+// The signed-out screen with one step, pay first sign-up: Sign up (after the
+// Terms tick on this page) opens Checkout, the Clerk form only signs in, and
+// with the build flag on there is no account-first fallback. Plus the client helper (utils/payFirstSignup.js).
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import crypto from 'node:crypto';
@@ -71,14 +71,47 @@ test('flag on with a live offer: Sign up in the offer box, the form only signs i
   assert.deepEqual([...new Set(html.match(/\$\d+/g))], ['$99']);
 });
 
-test('flag on, fallbacks are login first: no offer, a paused offer, or the server says off', async () => {
+test('flag on, no account-first fallback: no offer, a paused offer, or the server says off', async () => {
+  // Owner, 2026-11-24: one step. With the build flag on the Clerk form never
+  // offers sign-up; when Sign up cannot open the screen says so, and Log in works.
   const page = await compile({ VITE_PAY_FIRST_SIGNUP_ENABLED: 'true' });
-  for (const [label, state] of [['offer failed', { offer: null }], ['paused offer', { offer: { headline: 'h', status: 'Paused.' } }], ['server off', { offer: OFFER, pf: { disabled: true } }]]) {
-    const html = render(page, state);
-    assert.match(html, /data-with-sign-up="true"/, label);
-    assert.doesNotMatch(html, /data-pay-first-signup/, label);
-    assert.match(html, /Already have an account\? Use the same email address/, label);
+  for (const [label, state] of [['offer failed', { offer: null }], ['paused offer', { offer: { headline: 'h', status: 'Paused.' } }], ['server off', { offer: OFFER, pf: { closed: true } }]]) {
+    for (const search of ['', '?start=signup']) {
+      const html = render(page, { ...state, search });
+      assert.match(html, /data-with-sign-up="false"/, label);
+      assert.doesNotMatch(html, /data-with-sign-up="true"/, label);
+      assert.doesNotMatch(html, /data-pay-first-signup/, label);
+      assert.match(html, /data-pay-first-closed=""[^>]*>Sign up is not open right now\. Try again soon\.</, label);
+      assert.doesNotMatch(html, /Already have an account\? Use the same email address/, label);
+    }
   }
+});
+
+test('flag on: the Terms tick is on our page, before Checkout', async () => {
+  const page = await compile({ VITE_PAY_FIRST_SIGNUP_ENABLED: 'true' });
+  const html = render(page, { offer: OFFER });
+  assert.match(html, /data-pay-first-terms=""[\s\S]*?<input type="checkbox"/);
+  assert.match(html, /I agree to the <a href="\/terms"[^>]*>Terms<\/a> and the renewal terms above\./);
+  // The tick comes before the button, and the renewal line before both.
+  assert.ok(html.indexOf(OFFER.renewal) < html.indexOf('data-pay-first-terms'));
+  assert.ok(html.indexOf('data-pay-first-terms') < html.indexOf('data-pay-first-signup'));
+  assert.match(render(page, { offer: OFFER, pf: { error: PAY_FIRST_COPY.termsNeeded } }), /role="alert"[^>]*>Tick the box to agree to the Terms first\.</);
+});
+
+test('flag on: /app/?start=signup is the sign-up-and-pay page, Log in folded away', async () => {
+  const page = await compile({ VITE_PAY_FIRST_SIGNUP_ENABLED: 'true' });
+  const html = render(page, { offer: OFFER, search: '?start=signup' });
+  assert.match(html, /<button[^>]*data-pay-first-signup=""[^>]*>Sign up<\/button>/);
+  assert.match(html, /data-auth-widget="" style="display:none/);
+  assert.match(html, /data-with-sign-up="false"/);
+  assert.match(html, /Already a member\? <button[^>]*data-pay-first-show-login=""[^>]*>Log in<\/button>/);
+  const shown = render(page, { offer: OFFER, search: '?start=signup', pf: { showLogIn: true } });
+  assert.match(shown, /data-auth-widget="" style="display:flex/);
+  assert.match(shown, /data-with-sign-up="false"/);
+  // Without the build flag the address changes nothing: today's screen.
+  const off = render(await compile({}), { offer: OFFER, search: '?start=signup' });
+  assert.match(off, /data-with-sign-up="true"/);
+  assert.doesNotMatch(off, /data-pay-first/);
 });
 
 test('flag on: a failed start says so in plain words', async () => {
@@ -126,13 +159,14 @@ test('the nonce stays in the browser; only its sha256 is sent', async () => {
   const kept = new Map();
   const storage = { setItem: (k, v) => kept.set(k, v), getItem: k => kept.get(k) ?? null, removeItem: k => kept.delete(k) };
   let sent;
-  const r = await startSignup({ supabaseUrl: 'https://db.example', storage, fetchImpl: async (url, init) => {
+  const r = await startSignup({ supabaseUrl: 'https://db.example', termsAccepted: true, storage, fetchImpl: async (url, init) => {
     sent = { url, body: JSON.parse(init.body) };
     return new Response(JSON.stringify({ url: 'https://checkout.stripe.com/c/pay/cs_test_1', signupId: '11111111-1111-4111-8111-111111111111' }), { status: 200 });
   } });
   assert.equal(r.url, 'https://checkout.stripe.com/c/pay/cs_test_1');
   assert.equal(sent.url, 'https://db.example/functions/v1/public-signup-checkout');
-  assert.deepEqual(Object.keys(sent.body), ['nonceDigest']);
+  assert.deepEqual(Object.keys(sent.body), ['nonceDigest', 'terms']);
+  assert.equal(sent.body.terms, 'accepted');
   const nonceKept = keptNonce(storage);
   assert.equal(sent.body.nonceDigest, crypto.createHash('sha256').update(nonceKept).digest('hex'));
 });
@@ -140,9 +174,14 @@ test('the nonce stays in the browser; only its sha256 is sent', async () => {
 test('start and status answers map to what the screen does', async () => {
   const answer = (status, body) => async () => new Response(JSON.stringify(body), { status });
   const storage = { setItem() {}, getItem: () => null, removeItem() {} };
-  assert.deepEqual(await startSignup({ supabaseUrl: 'https://db.example', storage, fetchImpl: answer(503, { error: 'signup_disabled' }) }), { error: 'disabled' });
-  assert.deepEqual(await startSignup({ supabaseUrl: 'https://db.example', storage, fetchImpl: answer(409, { error: 'founding_full' }) }), { error: 'full' });
-  assert.deepEqual(await startSignup({ supabaseUrl: 'https://db.example', storage, fetchImpl: answer(200, { url: 'https://evil.example/', signupId: 'x' }) }), { error: 'unavailable' });
+  let asked = 0;
+  assert.deepEqual(await startSignup({ supabaseUrl: 'https://db.example', storage, fetchImpl: async () => { asked += 1; } }), { error: 'terms' });
+  assert.equal(asked, 0, 'no request without the tick');
+  const start = fetchImpl => startSignup({ supabaseUrl: 'https://db.example', termsAccepted: true, storage, fetchImpl });
+  assert.deepEqual(await start(answer(400, { error: 'terms_required' })), { error: 'terms' });
+  assert.deepEqual(await startSignup({ supabaseUrl: 'https://db.example', termsAccepted: true, storage, fetchImpl: answer(503, { error: 'signup_disabled' }) }), { error: 'disabled' });
+  assert.deepEqual(await start(answer(409, { error: 'founding_full' })), { error: 'full' });
+  assert.deepEqual(await start(answer(200, { url: 'https://evil.example/', signupId: 'x' })), { error: 'unavailable' });
   const ask = fetchImpl => signupStatus({ supabaseUrl: 'https://db.example', sessionId: 'cs_test_1', nonce: 'n', fetchImpl });
   assert.deepEqual(await ask(answer(200, { state: 'ready', ticket: 'tkt' })), { state: 'ready', ticket: 'tkt' });
   assert.deepEqual(await ask(answer(202, { state: 'setting_up' })), { state: 'setting_up' });

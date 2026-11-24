@@ -45,7 +45,7 @@ const ERROR_CODE = /^[a-z][a-z0-9_]{0,63}$/;
 export const SIGN_IN_TOKEN_SECONDS = 600;
 const SWEEP_LIMIT = 10, SWEEP_BUDGET_MS = 45000;
 // Errors that need the owner, not another try (initializeProductionProfile's safe codes).
-const OWNER_ERRORS = new Set(['account_unavailable', 'identity_conflict', 'verified_primary_required', 'source_identity_unavailable']);
+const OWNER_ERRORS = new Set(['account_unavailable', 'identity_conflict', 'verified_primary_required', 'source_identity_unavailable', 'signup_requires_payment']);
 
 /**
  * The optional emailed sign-in link (build brief section 3): for a payer who
@@ -118,7 +118,11 @@ export function createPayFirstSignup(deps, config = LIMITED_LAUNCH) {
   const start = route(async req => {
     const mode = live();
     const data = await body(req);
-    if (Object.keys(data).some(k => k !== 'nonceDigest') || !/^[a-f0-9]{64}$/.test(data.nonceDigest || '')) refuse(400, 'invalid_request');
+    if (Object.keys(data).some(k => !['nonceDigest', 'terms'].includes(k)) || !/^[a-f0-9]{64}$/.test(data.nonceDigest || '')) refuse(400, 'invalid_request');
+    // The Terms tick is on our own Sign up page (owner, 2026-11-24: no Stripe
+    // Dashboard change), so no place is held without it. The hold then keeps
+    // the reviewed consent (version, text, hash) that adopt checks again.
+    if (data.terms !== 'accepted') refuse(400, 'terms_required');
     const stripe = deps.stripe();
     const o = offer();
     const list = await stripe.prices.list({ lookup_keys: [o.lookupKey], active: true, limit: 2, expand: ['data.product'] });
@@ -137,11 +141,10 @@ export function createPayFirstSignup(deps, config = LIMITED_LAUNCH) {
       payment_method_collection: 'always', payment_method_types: [...CHECKOUT_PAYMENT_METHOD_TYPES],
       success_url: `${origin}/app/?signup={CHECKOUT_SESSION_ID}`, cancel_url: `${origin}/?signup=canceled#pricing`,
       expires_at: expiresAt, client_reference_id: hold.signup_id,
-      // The consent tick moves into Checkout (owner decision 2026-11-20). Stripe
-      // shows the checkbox only once a Terms URL is set in the Dashboard's
-      // public details; the renewal terms are the reviewed consent, unchanged.
-      consent_collection: { terms_of_service: 'required' },
-      custom_text: { terms_of_service_acceptance: { message: `I agree to the [Terms](${origin}/terms).` }, submit: { message: hold.consent_text } },
+      // No Stripe Terms checkbox: it needs a Terms URL in the Dashboard, and
+      // the tick was taken on our page before the hold. The reviewed renewal
+      // terms still show beside Checkout's pay button.
+      custom_text: { submit: { message: hold.consent_text } },
       metadata: meta, subscription_data: { metadata: meta },
       // No recovery link: a copy of an expired founding Checkout could charge
       // for a place its expiry gave back (checkoutRecoverable).
@@ -159,7 +162,6 @@ export function createPayFirstSignup(deps, config = LIMITED_LAUNCH) {
       || m.catalog_version !== config.version || m.pricing_policy_version !== config.policyVersion || m.flow !== 'pay_first'
       || m.pay_first_signup_id !== signupId || m.price_phase !== 'founding' || m.offer_id !== 'core') return 'session_mismatch';
     if (session.status !== 'complete' || session.payment_status !== 'paid') return 'not_paid';
-    if (session.consent?.terms_of_service !== 'accepted') return 'terms_not_accepted';
     if (!/^sub_[A-Za-z0-9]+$/.test(id(session.subscription) || '') || !/^cus_[A-Za-z0-9]+$/.test(id(session.customer) || '')) return 'session_incomplete';
     if (!normalEmail(session.customer_details?.email)) return 'email_missing';
     return null;
@@ -223,7 +225,7 @@ export function createPayFirstSignup(deps, config = LIMITED_LAUNCH) {
       const session = await stripe.checkout.sessions.retrieve(sessionId);
       const wrong = checkSession(session, sessionId, signupId, mode);
       if (wrong === 'not_paid' || wrong === 'session_mismatch') { await finish(null, wrong); return { state: wrong === 'not_paid' ? 'not_paid' : 'mismatch' }; }
-      // Paid without the Terms tick, or with no usable email: the owner looks.
+      // Paid with no usable email: the owner looks.
       if (wrong) return await owner(wrong);
       const email = normalEmail(session.customer_details.email);
       const subId = id(session.subscription), customerId = id(session.customer);

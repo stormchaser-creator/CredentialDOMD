@@ -29,7 +29,7 @@ test('explicit OFF mode leaves source HTML bytes intact, and no source has a wai
 });
 
 test('production defaults render every packaged surface with the real app signup route', async () => {
-  assert.deepEqual(PUBLIC_LAUNCH_MODE, { enabled: true, signupHref: '/app/' });
+  assert.deepEqual(PUBLIC_LAUNCH_MODE, { enabled: true, signupHref: '/app/?start=signup' });
   for (const [path, surface] of [['index', 'home'], ['locums', 'locums'], ['help', 'help'], ['cme', 'cme'], ['states/ohio', 'state-guides'], ['states/index', 'state-index'], ['terms', 'legal-navigation']]) {
     // The packager first compiles the mode-specific help knowledge; raw authored
     // help intentionally remains the OFF fixture and must not bypass that step.
@@ -37,7 +37,7 @@ test('production defaults render every packaged surface with the real app signup
       ? renderHelp(publicLaunchHelp(JSON.parse(await read('public/knowledge/credentialdo-help.json'))), await loadVideoCatalog(root))
       : await read(`landing/${path}.html`);
     const output = renderPublicLaunch(html, surface);
-    assert.equal(output, renderPublicLaunch(html, surface, { enabled: true, signupHref: '/app/' }), path);
+    assert.equal(output, renderPublicLaunch(html, surface, { enabled: true, signupHref: '/app/?start=signup' }), path);
     assert.match(output, /data-public-launch="founding-signup"/, path);
     assert.equal((output.match(/src="\/membership-offer\.js"/g) || []).length, 1, path);
     // Owner, 2026-11-16: every surface's signup links are printed as plain
@@ -46,7 +46,9 @@ test('production defaults render every packaged surface with the real app signup
     assert.match(output, />Sign up(?: today)?(?: <svg\b[\s\S]*?<\/svg>)?<\/a>/, path);
     assert.doesNotMatch(output, /Create your account|data-membership-action|Join for \$|>Sign in</, path);
     assert.doesNotMatch(output.replace(/\$149&ndash;\$1,206/, ''), /\$\s?(?:149|199|245)\b/, path);
-    assert.match(output, /href="\/app\/"/, path);
+    // Every Sign up opens the sign-up-and-pay page (owner, 2026-11-24: one step).
+    assert.match(output, /href="\/app\/\?start=signup"/, path);
+    for (const [, href] of output.matchAll(/<a\b[^>]*href="([^"]*)"[^>]*>\s*Sign up(?: today)?\b/g)) assert.equal(href, '/app/?start=signup', path);
     assert.doesNotMatch(output, /href="\/signup\/"|href="\/#join"|<!-- public-launch:/, path);
     assert.doesNotMatch(output, /<form\b[^>]*class="[^"]*\bwl-form\b|<fieldset\b[^>]*class="guide-choice"/, path);
   }
@@ -104,17 +106,17 @@ test('home shows the Founder plan before sign-in, with its signup link right und
   assert.match(hero, /Your rate stays locked for life while your membership is active/);
   assert.match(hero, /<span class="spots" data-founder-spots>Limited Founder spots at \$99\/year<\/span>/, 'no number is printed');
   const offer = hero.indexOf('data-founder-spots');
-  const signup = hero.indexOf('<a class="btn" href="/app/">Sign up today</a>');
+  const signup = hero.indexOf('<a class="btn" href="/app/?start=signup">Sign up today</a>');
   assert.ok(offer > 0 && signup > offer && signup < hero.indexOf('Take a look inside'), 'after the offer box, before the tour link');
   assert.match(hero, /100% money-back guarantee, any time/);
   const header = output.slice(output.indexOf('<header'), output.indexOf('</header>'));
-  assert.match(header, /<a class="login" href="\/app\/">Log in<\/a>\s*<a class="btn sm" href="\/app\/">Sign up<\/a>/);
+  assert.match(header, /<a class="login" href="\/app\/">Log in<\/a>\s*<a class="btn sm" href="\/app\/\?start=signup">Sign up<\/a>/);
   assert.match(header, /<a href="#pricing">Pricing<\/a>/);
   // Links to the previous home page's sections still land.
   for (const id of ['planned-pricing', 'how-it-works', 'features', 'founder', 'faq', 'join', 'early-access']) assert.match(output, new RegExp(`\\bid="${id}"`), id);
   const card = output.slice(output.indexOf('<div class="price-card" data-founder-only>'), output.indexOf('<div class="terms">'));
   assert.match(card, /<div class="price">\$99<small>\/year<\/small><\/div>/);
-  assert.ok(card.indexOf('class="price"') < card.indexOf('href="/app/"'), 'the price is above the signup link');
+  assert.ok(card.indexOf('class="price"') < card.indexOf('href="/app/?start=signup"'), 'the price is above the signup link');
   assert.match(output, /<span data-home-status role="status" aria-live="polite">Your offer is confirmed before payment\./);
   assert.doesNotMatch(output, /data-membership-(?!endpoint)/, 'none of the hooks that repaint the older wording');
 });

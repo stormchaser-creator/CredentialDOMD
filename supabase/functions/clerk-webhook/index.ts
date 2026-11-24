@@ -422,6 +422,9 @@ async function handle(req: Request, ctx: EventContext): Promise<Response> {
           // before they prove their email. Acknowledge only that exact pending
           // migration, without creating a profile, granting access or routing mail.
           const reason = error instanceof Error ? error.message : String(error);
+          // Pay-first sign-up is on and this email has not paid: no profile is
+          // made (20261124120000). Acknowledged, so Clerk does not resend it.
+          if (reason === "signup_requires_payment") return new Response("Awaiting payment", { status: 200 });
           if (reason === "verified_primary_required") {
             try {
               if (await canDeferReservedContinuity(supabase, user.id, {

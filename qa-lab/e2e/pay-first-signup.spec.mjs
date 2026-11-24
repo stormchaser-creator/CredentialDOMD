@@ -1,9 +1,9 @@
 // One step, pay first sign-up, end to end in Stripe TEST mode (build brief
 // section 7). NOT RUN in the build PR: it needs a deployed test stack with
 // pay_first_signup_enabled on, the client built with
-// VITE_PAY_FIRST_SIGNUP_ENABLED=true, a Terms URL in the test account's
-// Dashboard public details, and only the test keys the QA environment
-// already has. It adds no secret and never touches live mode.
+// VITE_PAY_FIRST_SIGNUP_ENABLED=true, and only the test keys the QA
+// environment already has (no Stripe Dashboard change: the Terms tick is on
+// our Sign up page, not in Checkout). It adds no secret and never touches live mode.
 //
 //   PAY_FIRST_E2E=1 PAY_FIRST_APP_URL=https://<test app origin>/app/ \
 //   PAY_FIRST_SQL=<psql connection to the TEST database> \
@@ -26,7 +26,9 @@ test.describe('pay-first sign-up (Stripe test mode)', () => {
   test.skip(!ON, 'Set PAY_FIRST_E2E=1, PAY_FIRST_APP_URL and PAY_FIRST_SQL against a test stack.');
 
   async function checkout(page, { address, card = '4242424242424242', submit = true }) {
-    await page.goto(APP);
+    // Every site Sign up opens this page; the Terms tick is ours.
+    await page.goto(`${APP}?start=signup`);
+    await page.getByRole('checkbox', { name: /I agree to the Terms/ }).check();
     await page.getByRole('button', { name: 'Sign up' }).click();
     await page.waitForURL(/checkout\.stripe\.com/);
     await page.getByLabel('Email').fill(address);
@@ -37,9 +39,8 @@ test.describe('pay-first sign-up (Stripe test mode)', () => {
     if (await name.count()) await name.fill('Synthetic Buyer');
     const zip = page.getByPlaceholder('ZIP');
     if (await zip.count()) await zip.fill('94107');
-    // The Terms tick (consent_collection) and the reviewed renewal terms.
+    // The reviewed renewal terms by the pay button; Checkout asks for no Terms tick.
     await expect(page.getByText(/Credential: USD 99 due now, then USD 99 each year/)).toBeVisible();
-    await page.getByRole('checkbox', { name: /Terms/ }).check();
     if (submit) await page.getByTestId('hosted-payment-submit-button').click();
   }
 
@@ -74,7 +75,8 @@ test.describe('pay-first sign-up (Stripe test mode)', () => {
   });
 
   test('4. an abandoned Checkout gives its place back after expiry', async ({ page }) => {
-    await page.goto(APP);
+    await page.goto(`${APP}?start=signup`);
+    await page.getByRole('checkbox', { name: /I agree to the Terms/ }).check();
     await page.getByRole('button', { name: 'Sign up' }).click();
     await page.waitForURL(/checkout\.stripe\.com/);
     const session = new URL(page.url()).pathname.split('/').find(p => p.startsWith('cs_test_'));
@@ -113,17 +115,15 @@ test.describe('pay-first sign-up (Stripe test mode)', () => {
     expect(sql(`select state from limited_founding_slots where attempt_id='${r.attempt_id}'`)).toBe('paid');
   });
 
-  test('8. with the flag off the sign-in screen is login first, unchanged', async ({ page }) => {
+  test('8. with the database flag off, Sign up says it is not open and makes nothing', async ({ page }) => {
     sql(`update access_policy_settings set pay_first_signup_enabled=false where singleton`);
     try {
-      await page.goto(APP);
-      const signUp = page.getByRole('button', { name: 'Sign up' });
-      if (await signUp.count()) {
-        await signUp.click();
-        // The server refuses and the screen turns back to login first.
-        await expect(signUp).toHaveCount(0);
-      }
-      await expect(page.getByText('Already have an account? Use the same email address.')).toBeVisible();
+      await page.goto(`${APP}?start=signup`);
+      await page.getByRole('checkbox', { name: /I agree to the Terms/ }).check();
+      await page.getByRole('button', { name: 'Sign up' }).click();
+      // No account-first fallback: the form still only signs in.
+      await expect(page.getByText('Sign up is not open right now. Try again soon.')).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Sign up' })).toHaveCount(0);
     } finally {
       sql(`update access_policy_settings set pay_first_signup_enabled=true where singleton`);
     }

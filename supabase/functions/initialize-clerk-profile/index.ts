@@ -40,7 +40,7 @@ serve(async (req) => {
     return json(200, receipt);
   } catch (error) {
     const code = error instanceof Error ? error.message : "continuity_unavailable";
-    const safe = ["identity_conflict", "account_unavailable", "verified_primary_required", "source_identity_unavailable"];
+    const safe = ["identity_conflict", "account_unavailable", "verified_primary_required", "source_identity_unavailable", "signup_requires_payment"];
     return json(safe.includes(code) ? 409 : 503, { error: safe.includes(code) ? code : "continuity_unavailable" });
   }
 });

@@ -10,6 +10,7 @@ import { watchChunkFailures, chunkRecoveryStep, CHUNK_RETRY_DELAY_MS } from "../
 import { resolveChunkFailure } from "../../lib/errorReport.js";
 import { PAY_FIRST_SIGNUP_ENABLED, PAY_FIRST_COPY, readSigninLink, readSignupReturn, readStartSignup, startSignup } from "../../utils/payFirstSignup.js";
 import PayFirstReturn from "./PayFirstReturn.jsx";
+import { inlineLinkTap } from "../shared/actionButton.js";
 
 /**
  * Auth landing page — wraps Clerk's unified <SignIn withSignUp /> component
@@ -157,44 +158,40 @@ function AuthPage() {
     return () => { alive = false; };
   }, []);
 
-  // One step, pay first sign-up (utils/payFirstSignup.js). Off: the screen is
-  // exactly as before. On, with a live offer: Sign up opens Checkout and the
-  // Clerk form only signs in. A refused start ("disabled") turns it back to
-  // login first at once.
+  // One step, pay first sign-up (utils/payFirstSignup.js). Build flag off:
+  // the screen is exactly as before. On: Sign up is the only way to a new
+  // account (Terms tick here, then Checkout for email and card; the account
+  // is made after payment), and the Clerk form only ever signs in. There is
+  // no account-first fallback: a paused offer or a refused start says sign up
+  // is not open, and Log in still works for members.
   const supabaseUrl = import.meta.env?.VITE_SUPABASE_URL;
-  // One state object: { disabled, starting, error, showLogIn }.
+  // One state object: { closed, starting, error, showLogIn, terms }.
   const [pf, setPf] = useState(() => ({}));
-  const payFirst = PAY_FIRST_SIGNUP_ENABLED && !pf.disabled;
+  const payFirst = PAY_FIRST_SIGNUP_ENABLED;
   // Back from a pay-first Checkout, or an emailed sign-in link (sent only
   // once the owner approves it): either way the return screen signs in.
-  const signupSession = PAY_FIRST_SIGNUP_ENABLED ? readSignupReturn(window.location.search) : null;
-  const signinLink = PAY_FIRST_SIGNUP_ENABLED ? readSigninLink(window.location.search) : null;
+  const signupSession = payFirst ? readSignupReturn(window.location.search) : null;
+  const signinLink = payFirst ? readSigninLink(window.location.search) : null;
   const signupReturn = signupSession || signinLink;
-  const { starting, error: startError, showLogIn } = pf;
+  const { starting, error: startError, showLogIn, terms, closed } = pf;
   const setShowLogIn = value => setPf(previous => ({ ...previous, showLogIn: value }));
+  // /app/?start=signup (every Sign up on the site): the sign-up-and-pay page,
+  // with the Log in form folded away until asked for.
+  const signUpPage = payFirst && !signupReturn && readStartSignup(window.location.search);
   // Only with the live price line: a paused or unreadable offer leaves it out.
-  const signUpOffered = payFirst && !!offer?.action;
-  // The Clerk form signs in only while Sign up is (or is about to be) offered,
-  // or on the return from a pay-first Checkout. While the offer loads it
-  // assumes Sign up, so the form is not mounted twice in the usual case.
-  const signInOnly = payFirst && (!!signupReturn || offer === undefined || signUpOffered);
+  const signUpOffered = payFirst && !closed && !!offer?.action;
+  const signInOnly = payFirst;
   const beginSignup = async () => {
     if (starting) return;
+    if (!terms) { setPf(previous => ({ ...previous, error: PAY_FIRST_COPY.termsNeeded })); return; }
     setPf(previous => ({ ...previous, starting: true, error: null }));
-    const r = await startSignup({ supabaseUrl });
+    const r = await startSignup({ supabaseUrl, termsAccepted: terms === true });
     if (r.url) { window.location.assign(r.url); return; }
     setPf(previous => ({ ...previous, starting: false,
-      ...(r.error === "disabled" ? { disabled: true } : { error: r.error === "full" ? PAY_FIRST_COPY.full : PAY_FIRST_COPY.unavailable }) }));
+      ...(r.error === "disabled" ? { closed: true, error: null }
+        : { error: r.error === "terms" ? PAY_FIRST_COPY.termsNeeded : r.error === "full" ? PAY_FIRST_COPY.full : PAY_FIRST_COPY.unavailable }) }));
   };
-  // /app/?start=signup from a home page Sign up: straight to Checkout, once.
-  const autoStarted = useRef(false);
-  useEffect(() => {
-    if (!signUpOffered || signupReturn || autoStarted.current || !readStartSignup(window.location.search)) return;
-    autoStarted.current = true;
-    beginSignup();
-    // beginSignup reads only state guarded above; the ref makes this once.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [signUpOffered, signupReturn]);
+  const formHidden = (!!signupReturn || signUpPage) && !showLogIn;
 
   useEffect(() => {
     const onHashChange = () => {
@@ -253,6 +250,12 @@ function AuthPage() {
             <p style={{ margin: "4px 0 0", fontSize: 12.5, color: T.textMuted, lineHeight: 1.5 }}>{offer.status}</p>
             {signUpOffered && !signupReturn && (
               <>
+                <label data-pay-first-terms="" style={{ display: "flex", gap: 10, alignItems: "flex-start", margin: "12px 0 0", textAlign: "left", fontSize: 13.5, color: T.text, lineHeight: 1.5, cursor: "pointer" }}>
+                  <input type="checkbox" checked={terms === true} disabled={starting}
+                    onChange={e => { const ticked = e.target.checked; setPf(previous => ({ ...previous, terms: ticked, error: null })); }}
+                    style={{ width: 20, height: 20, margin: "1px 0 0", flex: "none", accentColor: T.accent }} />
+                  <span>{PAY_FIRST_COPY.termsBefore}<a href="/terms" target="_blank" rel="noopener" style={{ color: T.accent, fontWeight: 700, ...inlineLinkTap }}>{PAY_FIRST_COPY.termsLink}</a>{PAY_FIRST_COPY.termsAfter}</span>
+                </label>
                 <button type="button" data-pay-first-signup="" onClick={beginSignup} disabled={starting} style={{
                   marginTop: 12, width: "100%", minHeight: 48, padding: "12px 16px", borderRadius: 10, border: "none",
                   background: T.accent, color: "#fff", fontWeight: 800, fontSize: 16, fontFamily: "inherit", cursor: starting ? "default" : "pointer", opacity: starting ? 0.8 : 1,
@@ -262,12 +265,18 @@ function AuthPage() {
             )}
           </div>
         )}
+        {payFirst && !signupReturn && offer !== undefined && !signUpOffered && (
+          <p data-pay-first-closed="" role="status" style={{ margin: "0 0 14px", fontSize: 13.5, color: T.text, lineHeight: 1.5, textAlign: "center" }}>{PAY_FIRST_COPY.closed}</p>
+        )}
         {signupReturn && (
           <PayFirstReturn sessionId={signupSession} linkTicket={signinLink} supabaseUrl={supabaseUrl} onLogIn={() => setShowLogIn(true)} T={T} />
         )}
-        {signUpOffered && !signupReturn ? (
+        {payFirst && !signupReturn ? (
           <p data-pay-first-login-heading="" style={{ margin: "0 0 16px", color: T.textMuted, fontSize: 13, lineHeight: 1.6, textAlign: "center" }}>
-            {PAY_FIRST_COPY.alreadyMember} <strong style={{ color: T.text }}>{PAY_FIRST_COPY.logIn}</strong>
+            {PAY_FIRST_COPY.alreadyMember}{" "}
+            {formHidden
+              ? <button type="button" data-pay-first-show-login="" onClick={() => setShowLogIn(true)} style={{ border: "none", background: "none", padding: "8px 4px", minHeight: 44, color: T.accent, fontWeight: 700, fontSize: 13, fontFamily: "inherit", cursor: "pointer", textDecoration: "underline" }}>{PAY_FIRST_COPY.logIn}</button>
+              : <strong style={{ color: T.text }}>{PAY_FIRST_COPY.logIn}</strong>}
           </p>
         ) : !signupReturn && (
           <p style={{ margin: "0 0 16px", color: T.textMuted, fontSize: 13, lineHeight: 1.6, textAlign: "center" }}>
@@ -285,15 +294,15 @@ function AuthPage() {
           </div>
         )}
         {/* Clerk widget */}
-        <div ref={widgetRef} data-auth-widget="" style={{ display: signupReturn && !showLogIn ? "none" : "flex", justifyContent: "center", minHeight: signupReturn && !showLogIn ? 0 : reserved.widget }}>
+        <div ref={widgetRef} data-auth-widget="" style={{ display: formHidden ? "none" : "flex", justifyContent: "center", minHeight: formHidden ? 0 : reserved.widget }}>
           <SessionActivationGuard />
           {entry.ready && (
             <SignIn
-              // A switch back to login first mounts the form afresh.
               key={`${entry.version}:${signInOnly ? "in" : "up"}`}
               routing="hash"
-              // Pay first: accounts are made after payment, so the form only
-              // signs in. Login first (the default and the fallback): as before.
+              // Pay first: accounts are made only after payment, so the form
+              // only signs in, always (the database refuses a new unpaid
+              // profile too: 20261124120000). Login first (flag off): as before.
               withSignUp={!signInOnly}
               signUpFallbackRedirectUrl="/app/"
               fallbackRedirectUrl="/app/"
@@ -324,7 +333,7 @@ function AuthPage() {
             />
           )}
         </div>
-        {signInOnly && offer !== undefined && (!signupReturn || showLogIn) && (
+        {signInOnly && offer !== undefined && !formHidden && (
           <p data-pay-first-just-paid="" style={{ margin: "12px 0 0", color: T.textMuted, fontSize: 13, lineHeight: 1.6, textAlign: "center" }}>
             {PAY_FIRST_COPY.justPaid}
           </p>
